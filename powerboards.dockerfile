@@ -24,7 +24,8 @@ COPY ./meshagent-sdk/meshagent-luau /meshagent-sdk/meshagent-luau
 COPY ./meshagent-sdk/meshagent-dart-service /meshagent-sdk/meshagent-dart-service
 COPY ./meshagent-sdk/meshagent-git-credentials /meshagent-sdk/meshagent-git-credentials
 
-WORKDIR powerboards
+WORKDIR /powerboards
+RUN ls
 RUN flutter build web \
   --no-tree-shake-icons \
   --pwa-strategy none \
