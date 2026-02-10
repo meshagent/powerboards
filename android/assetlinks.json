@@ -1,0 +1,14 @@
+[
+    {
+        "relation": [
+            "delegate_permission/common.handle_all_urls"
+        ],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.timu.powerboards",
+            "sha256_cert_fingerprints": [
+                "98:B7:11:FC:3F:7E:A2:64:52:98:85:10:30:B4:7E:12:63:CF:72:31:E6:55:DA:2D:2C:90:68:0F:C1:75:B1:13"
+            ]
+        }
+    }
+]

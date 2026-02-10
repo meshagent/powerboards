@@ -1,0 +1,70 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+ext {
+    compileSdkVersion = 36
+    targetSdkVersion = 36
+    minSdkVersion = 24
+}
+
+rootProject.buildDir = '../build'
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                if (namespace == null) {
+                    namespace project.group
+                }
+            }
+        }
+    }
+}
+
+subprojects {
+    afterEvaluate{
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile) {
+            if (project.plugins.hasPlugin("com.android.application") || project.plugins.hasPlugin("com.android.library")) {
+                kotlinOptions.jvmTarget = android.compileOptions.sourceCompatibility
+            } else {
+                kotlinOptions.jvmTarget = sourceCompatibility
+            }
+        }
+    }
+}
+
+subprojects { p ->
+    afterEvaluate {
+        def isAndroid = p.plugins.hasPlugin('com.android.library') || p.plugins.hasPlugin('com.android.application')
+        if (isAndroid && p.hasProperty('android')) {
+            p.android.compileSdkVersion rootProject.ext.compileSdkVersion
+            if (p.android.defaultConfig != null) {
+                p.android.defaultConfig.targetSdkVersion rootProject.ext.targetSdkVersion
+                p.android.defaultConfig.minSdkVersion rootProject.ext.minSdkVersion
+            }
+            
+            p.android.compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+            if (p.hasProperty('kotlinOptions')) {
+                p.kotlinOptions.jvmTarget = '17'
+            }            
+        }
+    }
+}
+
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
