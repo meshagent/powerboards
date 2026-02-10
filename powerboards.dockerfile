@@ -22,6 +22,7 @@ COPY ./meshagent-sdk/meshagent-flutter-dev /meshagent-sdk/meshagent-flutter-dev
 COPY ./meshagent-sdk/meshagent-luau /meshagent-sdk/meshagent-luau
 COPY ./meshagent-sdk/meshagent-dart-service /meshagent-sdk/meshagent-dart-service
 COPY ./meshagent-sdk/meshagent-git-credentials /meshagent-sdk/meshagent-git-credentials
+COPY ./meshagent-sdk/meshagent-accounts /meshagent-sdk/meshagent-accounts
 
 WORKDIR powerboards
 RUN flutter build web \
