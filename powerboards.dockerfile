@@ -20,6 +20,7 @@ COPY ./meshagent-sdk/meshagent-flutter-shadcn /meshagent-sdk/meshagent-flutter-s
 COPY ./meshagent-sdk/meshagent-super-editor /meshagent-sdk/meshagent-super-editor
 COPY ./meshagent-sdk/meshagent-flutter-dev /meshagent-sdk/meshagent-flutter-dev
 COPY ./meshagent-sdk/meshagent-luau /meshagent-sdk/meshagent-luau
+COPY ./meshagent-sdk/meshagent-dart-service /meshagent-sdk/meshagent-dart-service
 
 WORKDIR powerboards
 RUN flutter build web \
