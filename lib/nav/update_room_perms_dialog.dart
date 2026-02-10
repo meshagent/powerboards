@@ -260,25 +260,19 @@ class _PermissionDialogState extends State<_PermissionDialog> {
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            final maxHeight = isMobile
-                ? constraints.maxHeight
-                : (constraints.maxHeight > 700.0 ? constraints.maxHeight - 100 : constraints.maxHeight);
-            final minHeight = isMobile ? constraints.maxHeight : (constraints.maxHeight > 700.0 ? 600.0 : constraints.maxHeight - 100);
-            final maxWidth = isMobile ? constraints.maxWidth : 512.0;
-            final minWidth = isMobile ? constraints.maxWidth : 512.0;
+            final width = isMobile ? constraints.maxWidth : 512.0;
+            final height = isMobile ? constraints.maxHeight : (constraints.maxHeight > 700.0 ? 600.0 : constraints.maxHeight - 100);
 
             return ShadDialog(
               scrollable: true,
-              useSafeArea: false,
               titlePinned: true,
               descriptionPinned: true,
               actionsPinned: true,
-              constraints: BoxConstraints(minWidth: minWidth, maxWidth: maxWidth, minHeight: minHeight, maxHeight: maxHeight),
-              title: Text(widget.title, style: ShadTheme.of(context).textTheme.h4),
-              description: Padding(padding: const EdgeInsets.only(bottom: 20), child: Text(widget.description)),
+              constraints: BoxConstraints(minWidth: width, maxWidth: width, minHeight: height, maxHeight: height),
+              title: Text(widget.title),
+              description: Text(widget.description),
               actions: [
                 ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Close')),
-
                 if (canEdit)
                   ShadButton(
                     onPressed: widget.onAddUser,
@@ -290,18 +284,14 @@ class _PermissionDialogState extends State<_PermissionDialog> {
                 constraints: const BoxConstraints(minHeight: 420),
                 child: (state == _LoadingState.loading)
                     ? const Center(child: CircularProgressIndicator())
-                    : ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 480),
-                        child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (myGrant != null) _userRowBuilder(context, myGrant!),
+                    : Column(
+                        mainAxisSize: .min,
+                        crossAxisAlignment: .stretch,
+                        children: [
+                          if (myGrant != null) _userRowBuilder(context, myGrant!),
 
-                              ...sortedGrants.map((g) => _userRowBuilder(context, g)),
-                            ],
-                          ),
-                        ),
+                          ...sortedGrants.map((g) => _userRowBuilder(context, g)),
+                        ],
                       ),
               ),
             );
@@ -478,21 +468,17 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            final maxHeight = isMobile
-                ? constraints.maxHeight
-                : (constraints.maxHeight > 700.0 ? constraints.maxHeight - 100 : constraints.maxHeight);
-            final minHeight = isMobile ? constraints.maxHeight : (constraints.maxHeight > 700.0 ? 600.0 : constraints.maxHeight - 100);
-            final maxWidth = isMobile ? constraints.maxWidth : 512.0;
-            final minWidth = isMobile ? constraints.maxWidth : 512.0;
+            final width = isMobile ? constraints.maxWidth : 512.0;
+            final height = isMobile ? constraints.maxHeight : (constraints.maxHeight > 700.0 ? 600.0 : constraints.maxHeight - 100);
 
             return ShadDialog(
               scrollable: true,
               titlePinned: true,
               descriptionPinned: true,
               actionsPinned: true,
-              constraints: BoxConstraints(minWidth: minWidth, maxWidth: maxWidth, minHeight: minHeight, maxHeight: maxHeight),
-              title: Text(widget.title, style: theme.textTheme.h4),
-              description: Text(widget.description),
+              constraints: BoxConstraints(minWidth: width, maxWidth: width, minHeight: height, maxHeight: height),
+              title: Text(widget.title),
+              description: Padding(padding: .only(bottom: 15.0), child: Text(widget.description)),
               actions: [
                 if (widget.onBack != null)
                   ShadButton.outline(
@@ -510,7 +496,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                 ),
               ],
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 420),
+                constraints: const BoxConstraints(minHeight: 415),
                 child: SignalBuilder(
                   builder: (context, _) {
                     final selected = selectedUsers.value;
@@ -590,7 +576,10 @@ class _AddUserDialogState extends State<AddUserDialog> {
                             final text = textEditingValue.text.trim();
                             final isEmail = SelectUsersController.emailRegex.hasMatch(text);
                             final items = isEmail ? [...selected, AddedUser(email: text, role: GrantRole.nonOwner)] : selected;
-                            final usersNotInProject = items.where((u) => !projUsersMap.containsKey(u.email.toLowerCase())).toList();
+                            final usersNotInProject = items
+                                .where((u) => !projUsersMap.containsKey(u.email.toLowerCase()))
+                                .map((u) => u.email)
+                                .join(', ');
 
                             if (usersNotInProject.isEmpty) {
                               return const SizedBox.shrink();
@@ -607,23 +596,29 @@ class _AddUserDialogState extends State<AddUserDialog> {
                                   icon: Icon(LucideIcons.triangleAlert),
                                   iconColor: textColor,
                                   iconSize: 24,
-                                  description: Text(
-                                    'These users are not currently project members. '
-                                    'Adding these users to the room, will add them to the project.',
-                                    style: TextStyle(color: textColor),
+                                  description: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(color: textColor),
+                                      children: [
+                                        TextSpan(
+                                          text: 'The following email addresses',
+                                          style: TextStyle(color: textColor, height: 1.4),
+                                        ),
+                                        TextSpan(
+                                          text: ' ($usersNotInProject) ',
+                                          style: TextStyle(fontWeight: .bold, color: textColor, height: 1.4),
+                                        ),
+                                        TextSpan(
+                                          text: 'are not project members. Adding them to the room will add them as members to the project.',
+                                          style: TextStyle(color: textColor, height: 1.4),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   decoration: ShadDecoration(
                                     color: backgroundColor,
                                     border: .all(color: textColor),
                                   ),
-                                ),
-
-                                Column(
-                                  crossAxisAlignment: .start,
-                                  spacing: 8.0,
-                                  children: usersNotInProject.map((addedUser) {
-                                    return Text(addedUser.email);
-                                  }).toList(),
                                 ),
                               ],
                             );
@@ -642,75 +637,6 @@ class _AddUserDialogState extends State<AddUserDialog> {
     );
   }
 }
-
-/*
-class AddUserDialogRow extends StatelessWidget {
-  const AddUserDialogRow({
-    super.key,
-    required this.isMyself,
-    required this.isMeAdmin,
-    required this.inProject,
-    required this.addedUser,
-    required this.changeGroup,
-  });
-
-  final bool isMyself;
-  final bool isMeAdmin;
-  final bool inProject;
-  final AddedUser addedUser;
-  final void Function(GrantRole) changeGroup;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final cs = theme.colorScheme;
-    final tt = theme.textTheme;
-    final willBeAdded = isMeAdmin && !inProject;
-
-    return Row(
-      spacing: 8,
-      children: [
-        Expanded(
-          child: willBeAdded
-              ? Column(
-                  mainAxisSize: .min,
-                  crossAxisAlignment: .start,
-                  children: [
-                    Text(addedUser.email, overflow: .ellipsis),
-                    Text(
-                      "(will be added to project)",
-                      style: tt.small.copyWith(fontStyle: .italic, color: cs.primary),
-                    ),
-                  ],
-                )
-              : Text(addedUser.email, overflow: .ellipsis),
-        ),
-        if (isMyself)
-          Container(
-            padding: const .symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(borderRadius: .circular(4)),
-            child: Text(
-              'You (${addedUser.role.displayName})',
-              style: TextStyle(fontStyle: .italic, color: theme.colorScheme.primary),
-            ),
-          )
-        else
-          ShadSelect<GrantRole>(
-            initialValue: addedUser.role,
-            selectedOptionBuilder: (context, selected) => Text(selected.displayName),
-            onChanged: (role) {
-              if (role != null) changeGroup(role);
-            },
-            options: [
-              ShadOption(value: GrantRole.nonOwner, child: Text(GrantRole.nonOwner.displayName)),
-              ShadOption(value: GrantRole.owner, child: Text(GrantRole.owner.displayName)),
-            ],
-          ),
-      ],
-    );
-  }
-}
-*/
 
 Future<void> showUpdateRoomPermsDialog(BuildContext context, {required String projectId, required Room room}) async {
   if (context.mounted == false) return;
