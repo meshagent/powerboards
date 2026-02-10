@@ -12,6 +12,7 @@ RUN mkdir -p meshagent-sdk
 COPY ./pubspec.yaml /
 # Remove the studio from the workspace file
 RUN sed -i '/- meshagent-studio/d' pubspec.yaml
+RUN sed -i '/- meshagent-accounts/d' pubspec.yaml
 COPY ./meshagent-sdk/meshagent-dart /meshagent-sdk/meshagent-dart
 COPY ./meshagent-sdk/meshagent-flutter /meshagent-sdk/meshagent-flutter
 COPY ./meshagent-sdk/meshagent-flutter-widgets /meshagent-sdk/meshagent-flutter-widgets 
@@ -20,8 +21,10 @@ COPY ./meshagent-sdk/meshagent-flutter-shadcn /meshagent-sdk/meshagent-flutter-s
 COPY ./meshagent-sdk/meshagent-super-editor /meshagent-sdk/meshagent-super-editor
 COPY ./meshagent-sdk/meshagent-flutter-dev /meshagent-sdk/meshagent-flutter-dev
 COPY ./meshagent-sdk/meshagent-luau /meshagent-sdk/meshagent-luau
+COPY ./meshagent-sdk/meshagent-dart-service /meshagent-sdk/meshagent-dart-service
+COPY ./meshagent-sdk/meshagent-git-credentials /meshagent-sdk/meshagent-git-credentials
 
-WORKDIR powerboards
+WORKDIR /powerboards
 RUN flutter build web \
   --no-tree-shake-icons \
   --pwa-strategy none \
