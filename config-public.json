@@ -1,0 +1,13 @@
+{
+    "SERVER_URL": "https://api.meshagent.com",
+    "APP_URL": "https://app.powerboards.com",
+    "BILLING_URL": "https://accounts.meshagent.com",
+    "OAUTH_CALLBACK_URL": "https://app.powerboards.com/mauth/callback",
+    "OAUTH_CLIENT_ID": "RJQBqvFp7dEUrRs15Xx_pUl5K3Smtu24",
+    "OAUTH_MOBILE_CALLBACK_URL": "powerboards:/mauth/callback",
+    "OAUTH_MOBILE_CLIENT_ID": "tQ_59LpzrKP7JswrcCCYwnEgvNydSqRI",
+    "SENTRY_ENABLED": "false",
+    "MESHAGENT_DOMAIN": "meshagent.com",
+    "MESHAGENT_MAIL_DOMAIN": "mail.meshagent.com",
+    "IMAGE_TAG_PREFIX": "us-central1-docker.pkg.dev/meshagent-public/images/"
+}
