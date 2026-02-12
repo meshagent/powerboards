@@ -298,28 +298,51 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
         } on NotFoundException catch (_) {
           await ma.createMailbox(projectId: projectId, address: email, room: widget.roomName!, queue: emailQueue ?? email, public: public);
         }
+      }
+      final roomConnection = await ma.connectRoom(projectId: projectId, roomName: widget.roomName!);
 
-        final roomConnection = await ma.connectRoom(projectId: projectId, roomName: widget.roomName!);
+      final roomClient = RoomClient(
+        protocol: WebSocketClientProtocol(url: roomConnection.roomUrl, token: roomConnection.jwt),
+      );
+      try {
+        roomClient.start();
+        await roomClient.ready;
 
-        final roomClient = RoomClient(
-          protocol: WebSocketClientProtocol(url: roomConnection.roomUrl, token: roomConnection.jwt),
-        );
-        try {
-          roomClient.start();
-          await roomClient.ready;
-          for (final a in service.agents) {
-            final databaseAnnotation = a.annotations["meshagent.agent.database.schema"];
-            if (databaseAnnotation != null) {
-              final databaseDef = jsonDecode(a.annotations["meshagent.agent.database.schema"]) as Map<String, dynamic>;
-              for (final t in databaseDef["tables"]) {
-                final table = RequiredTable.fromJson(t);
-                await installTable(roomClient, table);
-              }
+        for (final variable in widget.manifest.variables ?? <ServiceTemplateVariable>[]) {
+          final secretId = variable.annotations?["meshagent.secret.id"];
+
+          if (secretId != null) {
+            final secretIdentity = variable.annotations?["meshagent.secret.identity"];
+            final secretName = variable.annotations?["meshagent.secret.name"];
+            final secretType = variable.annotations?["meshagent.secret.type"];
+
+            if (secretIdentity == null) {
+              throw RoomServerException("meshagent.secret.identity is missing");
+            }
+
+            debugPrint("installing $secretId, $secretName, $secretType, ${_vars[variable.name]}, $secretIdentity");
+            await roomClient.secrets.setSecret(
+              secretId: secretId,
+              name: secretName,
+              mimeType: secretType,
+              data: utf8.encode(_vars[variable.name] ?? ""),
+              forIdentity: secretIdentity,
+            );
+          }
+        }
+
+        for (final a in service.agents) {
+          final databaseAnnotation = a.annotations["meshagent.agent.database.schema"];
+          if (databaseAnnotation != null) {
+            final databaseDef = jsonDecode(a.annotations["meshagent.agent.database.schema"]) as Map<String, dynamic>;
+            for (final t in databaseDef["tables"]) {
+              final table = RequiredTable.fromJson(t);
+              await installTable(roomClient, table);
             }
           }
-        } finally {
-          roomClient.dispose();
         }
+      } finally {
+        roomClient.dispose();
       }
 
       if (widget.serviceId != null) {
