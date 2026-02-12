@@ -16,9 +16,10 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/outbound_delivery_status.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
-import 'package:powerboards/meshagent/wait_for_agent_participant_builder.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/meshagent/wait_for_agent_participant_builder.dart';
+import 'package:powerboards/web_context_menu_manager/enable_web_context_menu.dart';
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
   MeshagentRoomChatThreadController({required super.room, required this.agentName});
@@ -132,9 +133,7 @@ class _ChatThreadSender extends State<ChatThreadSender> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return widget.child;
-  }
+  Widget build(context) => widget.child;
 }
 
 class MeshagentThreadView extends StatefulWidget {
@@ -263,9 +262,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       child: ChatThreadLoader(
         key: ValueKey(_documentPath),
         room: widget.client,
-        loadingBuilder: (context) {
-          return Container();
-        },
+        loadingBuilder: (context) => const SizedBox.shrink(),
         path: _documentPath,
         builder: (context, document) => ChatThreadSender(
           controller: _chatController,
@@ -310,83 +307,85 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                               children: [
                                 ListenableBuilder(
                                   listenable: _chatController,
-                                  builder: (context, _) => ChatThreadInput(
-                                    onClear: () {
-                                      final participant = widget.client.messaging.remoteParticipants.firstWhereOrNull(
-                                        (x) => x.getAttribute("name") == widget.agentName,
-                                      );
-                                      if (participant != null) {
-                                        widget.client.messaging.sendMessage(
-                                          to: participant,
-                                          type: "clear",
-                                          message: {"path": _documentPath},
+                                  builder: (context, _) => EnableWebContextMenu(
+                                    child: ChatThreadInput(
+                                      onClear: () {
+                                        final participant = widget.client.messaging.remoteParticipants.firstWhereOrNull(
+                                          (x) => x.getAttribute("name") == widget.agentName,
                                         );
-                                      }
-                                    },
-                                    placeholder: widget.agentName == null
-                                        ? Text("Message")
-                                        : _chatController.notifyOnSend
-                                        ? Text("Send a message or @$agentName")
-                                        : Text("Send a message to everyone except the $agentName"),
-                                    leading: _chatController.toolkits.isEmpty
-                                        ? buildTools(context, widget.client, agentName, _chatController, snapshot, widget.services)
-                                        : null,
-                                    footer: _chatController.toolkits.isEmpty
-                                        ? null
-                                        : Padding(
-                                            padding: EdgeInsets.only(top: 8),
-                                            child: buildTools(
-                                              context,
-                                              widget.client,
-                                              agentName,
-                                              _chatController,
-                                              snapshot,
-                                              widget.services,
-                                            ),
-                                          ),
-                                    trailing: snapshot.thinking.isNotEmpty
-                                        ? ShadGestureDetector(
-                                            cursor: SystemMouseCursors.click,
-                                            onTapDown: (_) {
-                                              _chatController.cancel(_documentPath, document);
-                                            },
-                                            child: ShadTooltip(
-                                              builder: (context) => Text("Stop"),
-                                              child: Container(
-                                                width: 22,
-                                                height: 22,
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: ShadTheme.of(context).colorScheme.foreground,
-                                                ),
-                                                child: Icon(LucideIcons.x, color: ShadTheme.of(context).colorScheme.background),
+                                        if (participant != null) {
+                                          widget.client.messaging.sendMessage(
+                                            to: participant,
+                                            type: "clear",
+                                            message: {"path": _documentPath},
+                                          );
+                                        }
+                                      },
+                                      placeholder: widget.agentName == null
+                                          ? Text("Message")
+                                          : _chatController.notifyOnSend
+                                          ? Text("Send a message or @$agentName")
+                                          : Text("Send a message to everyone except the $agentName"),
+                                      leading: _chatController.toolkits.isEmpty
+                                          ? buildTools(context, widget.client, agentName, _chatController, snapshot, widget.services)
+                                          : null,
+                                      footer: _chatController.toolkits.isEmpty
+                                          ? null
+                                          : Padding(
+                                              padding: EdgeInsets.only(top: 8),
+                                              child: buildTools(
+                                                context,
+                                                widget.client,
+                                                agentName,
+                                                _chatController,
+                                                snapshot,
+                                                widget.services,
                                               ),
                                             ),
-                                          )
-                                        : null,
-                                    room: widget.client,
-                                    onSend: (value, attachments) {
-                                      final message = ma.ChatMessage(
-                                        id: const Uuid().v4(),
-                                        text: value,
-                                        attachments: attachments.map((x) => x.path).toList(),
-                                      );
+                                      trailing: snapshot.thinking.isNotEmpty
+                                          ? ShadGestureDetector(
+                                              cursor: SystemMouseCursors.click,
+                                              onTapDown: (_) {
+                                                _chatController.cancel(_documentPath, document);
+                                              },
+                                              child: ShadTooltip(
+                                                builder: (context) => Text("Stop"),
+                                                child: Container(
+                                                  width: 22,
+                                                  height: 22,
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    color: ShadTheme.of(context).colorScheme.foreground,
+                                                  ),
+                                                  child: Icon(LucideIcons.x, color: ShadTheme.of(context).colorScheme.background),
+                                                ),
+                                              ),
+                                            )
+                                          : null,
+                                      room: widget.client,
+                                      onSend: (value, attachments) {
+                                        final message = ma.ChatMessage(
+                                          id: const Uuid().v4(),
+                                          text: value,
+                                          attachments: attachments.map((x) => x.path).toList(),
+                                        );
 
-                                      _chatController.send(
-                                        thread: document,
-                                        path: _documentPath,
-                                        message: message,
-                                        onMessageSent: _onMessageSent,
-                                      );
-                                    },
-                                    onChanged: (value, attachments) {
-                                      for (final part in snapshot.online) {
-                                        if (part.id != widget.client.localParticipant?.id) {
-                                          widget.client.messaging.sendMessage(to: part, type: "typing", message: {"path": _documentPath});
+                                        _chatController.send(
+                                          thread: document,
+                                          path: _documentPath,
+                                          message: message,
+                                          onMessageSent: _onMessageSent,
+                                        );
+                                      },
+                                      onChanged: (value, attachments) {
+                                        for (final part in snapshot.online) {
+                                          if (part.id != widget.client.localParticipant?.id) {
+                                            widget.client.messaging.sendMessage(to: part, type: "typing", message: {"path": _documentPath});
+                                          }
                                         }
-                                      }
-                                    },
-                                    controller: _chatController,
+                                      },
+                                      controller: _chatController,
+                                    ),
                                   ),
                                 ),
                                 if (agentName != null)
