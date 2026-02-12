@@ -1,12 +1,5 @@
 import 'package:flutter/material.dart';
 
-class Coordinates {
-  final double latitude;
-  final double longitude;
-
-  Coordinates(this.latitude, this.longitude);
-}
-
 class EnableWebContextRegistry {
   static final _registry = <UniqueKey, Rect>{};
 
