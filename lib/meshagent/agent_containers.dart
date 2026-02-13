@@ -237,6 +237,8 @@ class ConfigureServiceTemplate extends StatefulWidget {
 class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
   final _formKey = GlobalKey<ShadFormState>();
   late Map<String, String> _vars; // {varName: value}
+  late Map<String, String> _routeSubdomains; // {varName: subdomain}
+  late Map<String, String> _routeSuffixes; // {varName: suffix}
 
   bool _saving = false;
   bool _removing = false;
@@ -253,6 +255,71 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
       initial.addAll(widget.prefilledVars!);
     }
     _vars = initial;
+    _routeSubdomains = {};
+    _routeSuffixes = {};
+    _initRouteParts();
+  }
+
+  List<String> get _routeDomains => MeshagentConfig.current?.domains ?? const <String>[];
+
+  void _initRouteParts() {
+    final suffixes = _routeDomains;
+    if (suffixes.isEmpty) return;
+    for (final variable in widget.manifest.variables ?? <ServiceTemplateVariable>[]) {
+      if (variable.type != "route") continue;
+      final rawValue = _vars[variable.name]?.trim() ?? "";
+      final matchedSuffix = _matchRouteSuffix(rawValue, suffixes) ?? (suffixes.isNotEmpty ? suffixes.first : "");
+      _routeSuffixes[variable.name] = matchedSuffix;
+      _routeSubdomains[variable.name] = _routeSubdomain(rawValue, matchedSuffix);
+      _syncRouteValue(variable.name);
+    }
+  }
+
+  String? _matchRouteSuffix(String value, List<String> suffixes) {
+    if (value.isEmpty) return null;
+    final sorted = List<String>.from(suffixes)..sort((a, b) => b.length.compareTo(a.length));
+    for (final suffix in sorted) {
+      if (value == suffix) return suffix;
+      if (value.endsWith(".$suffix")) return suffix;
+    }
+    return null;
+  }
+
+  String _routeSubdomain(String value, String suffix) {
+    if (value.isEmpty || suffix.isEmpty) return value;
+    final suffixWithDot = ".$suffix";
+    if (!value.endsWith(suffixWithDot)) return value;
+    return value.substring(0, value.length - suffixWithDot.length);
+  }
+
+  void _syncRouteValue(String name) {
+    final subdomain = _routeSubdomains[name]?.trim() ?? "";
+    final suffix = _routeSuffixes[name]?.trim() ?? "";
+    if (subdomain.isEmpty || suffix.isEmpty) {
+      _vars[name] = "";
+      return;
+    }
+    _vars[name] = "$subdomain.$suffix";
+  }
+
+  Set<String> _servicePorts() {
+    final ports = <String>{};
+    for (final port in widget.manifest.ports) {
+      final value = port.num.value;
+      if (value != null) {
+        ports.add(value.toString());
+      }
+    }
+    return ports;
+  }
+
+  Future<List<Domain>> _domainsToDelete(Meshagent client) async {
+    if (widget.roomName == null) return [];
+    final ports = _servicePorts();
+    if (ports.isEmpty) return [];
+    final room = await client.getRoom(projectId: widget.projectId, name: widget.roomName!);
+    final domains = await client.listRoomRoutes(projectId: widget.projectId, roomId: room.id);
+    return domains.where((domain) => ports.contains(domain.port)).toList();
   }
 
   Future<void> _saveOrUpdate() async {
@@ -297,6 +364,33 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
           ma.updateMailbox(projectId: projectId, address: email, room: widget.roomName!, queue: emailQueue ?? email, public: public);
         } on NotFoundException catch (_) {
           await ma.createMailbox(projectId: projectId, address: email, room: widget.roomName!, queue: emailQueue ?? email, public: public);
+        }
+      }
+
+      final routeRequests = <({String domain, String port})>[];
+      for (final variable in widget.manifest.variables ?? <ServiceTemplateVariable>[]) {
+        if (variable.type != "route") continue;
+        final domain = (_vars[variable.name] ?? "").trim();
+        if (domain.isEmpty) continue;
+        final port = variable.annotations?["meshagent.route.port"]?.trim();
+        if (port == null || port.isEmpty) {
+          throw RoomServerException("meshagent.route.port is missing for ${variable.name}");
+        }
+        routeRequests.add((domain: domain, port: port));
+      }
+
+      if (routeRequests.isNotEmpty) {
+        final room = await client.getRoom(projectId: projectId, name: widget.roomName!);
+        for (final route in routeRequests) {
+          try {
+            final existing = await client.getRoute(projectId: projectId, domain: route.domain);
+            if (existing.roomId != room.id) {
+              throw RoomServerException("Domain ${route.domain} has already been assigned to another room");
+            }
+            await client.updateRoute(projectId: projectId, domain: route.domain, roomId: room.id, port: route.port);
+          } on NotFoundException catch (_) {
+            await client.createRoute(projectId: projectId, domain: route.domain, roomId: room.id, port: route.port);
+          }
         }
       }
       final roomConnection = await ma.connectRoom(projectId: projectId, roomName: widget.roomName!);
@@ -433,7 +527,48 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
     try {
       final client = getMeshagentClient();
 
+      final domainsToDelete = await _domainsToDelete(client);
+      if (domainsToDelete.isNotEmpty) {
+        if (!mounted) return;
+        final confirmed = await showShadDialog<bool>(
+          context: context,
+          builder: (context) => ShadDialog.alert(
+            title: const Text("Delete routes?"),
+            actions: [
+              ShadButton(
+                onPressed: () {
+                  Navigator.of(context).pop(false);
+                },
+                child: const Text("Cancel"),
+              ),
+              ShadButton.destructive(
+                onPressed: () {
+                  Navigator.of(context).pop(true);
+                },
+                child: const Text("Delete and uninstall"),
+              ),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              child: Text(
+                "This agent has ${domainsToDelete.length} route(s) mapped to its ports. Uninstalling will delete: ${domainsToDelete.map((d) => d.domain).join(", ")}",
+              ),
+            ),
+          ),
+        );
+        if (confirmed != true) {
+          if (mounted) setState(() => _removing = false);
+          return;
+        }
+      }
+
       await client.deleteRoomService(projectId: widget.projectId, serviceId: widget.serviceId!, roomName: widget.roomName!);
+
+      if (domainsToDelete.isNotEmpty) {
+        for (final domain in domainsToDelete) {
+          await client.deleteRoute(projectId: widget.projectId, domain: domain.domain);
+        }
+      }
 
       if (widget.manifest.agents.where((x) => x.annotations["meshagent.agent.schedule"] != null).isNotEmpty) {
         try {
@@ -522,6 +657,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
   Widget build(BuildContext context) {
     final labelStyle = Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600);
     final suffix = "@${const String.fromEnvironment("MESHAGENT_MAIL_DOMAIN")}";
+    final routeDomains = _routeDomains;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 16,
@@ -561,6 +697,53 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
                           if (v.description != null) Padding(padding: EdgeInsets.symmetric(vertical: 7), child: Text(v.description ?? '')),
                         ],
                       ),
+                      "route" => Column(
+                        mainAxisSize: .min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (routeDomains.isEmpty)
+                            ShadInputFormField(
+                              id: "${v.name}_domain",
+                              label: Text('${v.name} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
+                              initialValue: _vars[v.name] ?? "",
+                              description: v.description == null ? null : Text(v.description ?? ''),
+                              validator: v.optional ? null : (txt) => (txt.trim().isEmpty) ? '${v.name} is required' : null,
+                              onChanged: (txt) => setState(() => _vars[v.name] = txt.trim()),
+                            )
+                          else ...[
+                            Row(
+                              crossAxisAlignment: .end,
+                              children: [
+                                ShadInputFormField(
+                                  constraints: BoxConstraints(maxWidth: 300),
+                                  padding: EdgeInsets.only(left: 8),
+                                  gap: 0,
+                                  id: "${v.name}_subdomain",
+                                  crossAxisAlignment: .center,
+                                  label: Text('${v.name} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
+                                  initialValue: _routeSubdomains[v.name] ?? "",
+                                  validator: v.optional ? null : (txt) => (txt.trim().isEmpty) ? '${v.name} is required' : null,
+                                  onChanged: (txt) {
+                                    setState(() {
+                                      _routeSubdomains[v.name] = txt.trim();
+                                      _syncRouteValue(v.name);
+                                    });
+                                  },
+                                  trailing: Container(
+                                    color: ShadTheme.of(context).colorScheme.muted,
+                                    padding: EdgeInsets.all(8),
+                                    child: Text(".${routeDomains.first}"),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            if (v.description != null)
+                              Padding(padding: EdgeInsets.symmetric(vertical: 7), child: Text(v.description ?? '')),
+                          ],
+                        ],
+                      ),
+
                       _ =>
                         v.enumValues == null
                             ? ShadInputFormField(

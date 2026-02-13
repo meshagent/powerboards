@@ -25,6 +25,7 @@
     "SENTRY_ENVIRONMENT": "powerboards-com",
     "SENTRY_DSN": "https://51b5e2abbaf0f7c30109360dc4f190bd@o4508179472384000.ingest.us.sentry.io/4508179645267968",
     "MESHAGENT_DOMAIN": "meshagent.com",
+    "DOMAINS": "meshagent.app",
     "MESHAGENT_MAIL_DOMAIN": "mail.meshagent.com",
     "IMAGE_TAG_PREFIX": "us-central1-docker.pkg.dev/meshagent-public/images/"
 }

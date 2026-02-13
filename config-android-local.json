@@ -29,5 +29,6 @@
     "FIREBASE_IOS_BUNDLE_ID": "com.timu.powerboards-prototype",
     "FIREBASE_VAPID_KEY": "BBLFbU4rdmf7BxM3-RKizVxI5-c7XWtJvw-ju7WUhNfsmGMoXwCkiBw6wR43iGul-N7zV4PbRxPu3dlIzbffIDY",
     "MESHAGENT_DOMAIN": "meshagent.life",
+    "DOMAINS": "meshagent.life",
     "MESHAGENT_MAIL_DOMAIN": "mail.meshagent.life"
 }
