@@ -29,6 +29,7 @@
     "FIREBASE_VAPID_KEY": "BBLFbU4rdmf7BxM3-RKizVxI5-c7XWtJvw-ju7WUhNfsmGMoXwCkiBw6wR43iGul-N7zV4PbRxPu3dlIzbffIDY",
     "SENTRY_ENABLED": "false",
     "MESHAGENT_DOMAIN": "meshagent.life",
+    "DOMAINS": "meshagent.dev",
     "MESHAGENT_MAIL_DOMAIN": "mail.meshagent.life",
     "IMAGE_TAG_PREFIX": "us-central1-docker.pkg.dev/meshagent-life/meshagent-public/"
 }

@@ -27,6 +27,7 @@ class MeshagentConfig {
     required this.oauthCallbackUrl,
     required this.oauthClientId,
     required this.imageTagPrefix,
+    required this.domains,
   });
 
   final Uri serverUrl;
@@ -35,6 +36,7 @@ class MeshagentConfig {
   final Uri oauthCallbackUrl;
   final String oauthClientId;
   final String imageTagPrefix;
+  final List<String> domains;
 
   Uri getWsUrl(String roomName) {
     final scheme = serverUrl.scheme == "http" ? "ws" : "wss";
@@ -43,6 +45,7 @@ class MeshagentConfig {
   }
 
   factory MeshagentConfig.fromEnvironment() {
+    final domains = _parseEnvList(const String.fromEnvironment("DOMAINS"));
     if (kIsWeb) {
       return MeshagentConfig(
         serverUrl: Uri.parse(const String.fromEnvironment("SERVER_URL")),
@@ -51,6 +54,7 @@ class MeshagentConfig {
         oauthClientId: const String.fromEnvironment("OAUTH_CLIENT_ID"),
         billingUrl: Uri.parse(const String.fromEnvironment("BILLING_URL")),
         imageTagPrefix: const String.fromEnvironment("IMAGE_TAG_PREFIX"),
+        domains: domains,
       );
     }
 
@@ -61,10 +65,15 @@ class MeshagentConfig {
       oauthClientId: const String.fromEnvironment("OAUTH_MOBILE_CLIENT_ID"),
       billingUrl: Uri.parse(const String.fromEnvironment("BILLING_URL")),
       imageTagPrefix: const String.fromEnvironment("IMAGE_TAG_PREFIX"),
+      domains: domains,
     );
   }
 
   static MeshagentConfig? current;
+}
+
+List<String> _parseEnvList(String raw) {
+  return raw.split(",").map((entry) => entry.trim()).where((entry) => entry.isNotEmpty).toList();
 }
 
 Meshagent getMeshagentClient() {
