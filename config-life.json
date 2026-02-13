@@ -29,6 +29,7 @@
     "SENTRY_ENVIRONMENT": "powerboards-life",
     "SENTRY_DSN": "https://3748fd9a056cae5a5254d9a2f3054646@o4508179472384000.ingest.us.sentry.io/4508179524354048",
     "MESHAGENT_DOMAIN": "meshagent.life",
+    "DOMAINS": "meshagent.dev",
     "MESHAGENT_MAIL_DOMAIN": "mail.meshagent.life",
     "IMAGE_TAG_PREFIX": "us-central1-docker.pkg.dev/meshagent-life/meshagent-public/"
 }

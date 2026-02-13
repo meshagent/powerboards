@@ -34,6 +34,7 @@ import 'ui/link_listener.dart';
 import 'ui/meeting_view.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
+import 'web_context_menu_manager/web_context_menu_manager.dart';
 
 final uiRoot = GlobalKey();
 
@@ -117,7 +118,10 @@ Future<void> startApp() async {
   runApp(
     Screenshot(
       controller: screenshotController,
-      child: Material(color: Colors.white, child: MyApp(uri)),
+      child: Material(
+        color: Colors.white,
+        child: WebContextMenuManager(child: MyApp(uri)),
+      ),
     ),
   );
 }

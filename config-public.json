@@ -8,6 +8,7 @@
     "OAUTH_MOBILE_CLIENT_ID": "tQ_59LpzrKP7JswrcCCYwnEgvNydSqRI",
     "SENTRY_ENABLED": "false",
     "MESHAGENT_DOMAIN": "meshagent.com",
+    "DOMAINS": "meshagent.app",
     "MESHAGENT_MAIL_DOMAIN": "mail.meshagent.com",
     "IMAGE_TAG_PREFIX": "us-central1-docker.pkg.dev/meshagent-public/images/"
 }
