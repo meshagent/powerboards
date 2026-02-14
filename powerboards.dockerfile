@@ -7,12 +7,14 @@ ARG FLUTTER_SOURCE_MAPS_FLAG=
 
 COPY ./powerboards /powerboards
 
-
 RUN mkdir -p meshagent-sdk
 COPY ./pubspec.yaml /
-# Remove the studio from the workspace file
+# Remove uneeded items from the workspace file or the flutter build will fail
 RUN sed -i '/- meshagent-studio/d' pubspec.yaml
 RUN sed -i '/- meshagent-accounts/d' pubspec.yaml
+RUN sed -i '/- meshagent-sdk\/meshagent-dart-service/d' pubspec.yaml
+RUN sed -i '/- meshagent-sdk\/meshagent-git-credentials/d' pubspec.yaml
+
 COPY ./meshagent-sdk/meshagent-dart /meshagent-sdk/meshagent-dart
 COPY ./meshagent-sdk/meshagent-flutter /meshagent-sdk/meshagent-flutter
 COPY ./meshagent-sdk/meshagent-flutter-widgets /meshagent-sdk/meshagent-flutter-widgets 
@@ -21,8 +23,6 @@ COPY ./meshagent-sdk/meshagent-flutter-shadcn /meshagent-sdk/meshagent-flutter-s
 COPY ./meshagent-sdk/meshagent-super-editor /meshagent-sdk/meshagent-super-editor
 COPY ./meshagent-sdk/meshagent-flutter-dev /meshagent-sdk/meshagent-flutter-dev
 COPY ./meshagent-sdk/meshagent-luau /meshagent-sdk/meshagent-luau
-COPY ./meshagent-sdk/meshagent-dart-service /meshagent-sdk/meshagent-dart-service
-COPY ./meshagent-sdk/meshagent-git-credentials /meshagent-sdk/meshagent-git-credentials
 
 WORKDIR /powerboards
 RUN flutter build web \
@@ -30,14 +30,6 @@ RUN flutter build web \
   --pwa-strategy none \
   --dart-define-from-file=$DART_DEFINE_CONFIG \
   --base-href="/" $FLUTTER_SOURCE_MAPS_FLAG $RELEASE_TYPE
-
-
-# FROM golang:1.23.1-alpine AS builder
-# WORKDIR /workspace
-# COPY ./powerboards/server server
-# WORKDIR /workspace/server
-# RUN go mod download
-# RUN go build -o server
 
 # --- Build Server ---
 FROM dart:stable AS builder
