@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:meshagent/agent.dart';
-import 'package:meshagent/client.dart';
+import 'package:meshagent/client.dart' as meshagent_client;
 import 'package:meshagent/participant_token.dart';
 import 'package:meshagent/protocol.dart';
 import 'package:meshagent/room_server_client.dart';
@@ -313,12 +313,11 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
     return ports;
   }
 
-  Future<List<Domain>> _domainsToDelete(Meshagent client) async {
+  Future<List<meshagent_client.Route>> _domainsToDelete(meshagent_client.Meshagent client) async {
     if (widget.roomName == null) return [];
     final ports = _servicePorts();
     if (ports.isEmpty) return [];
-    final room = await client.getRoom(projectId: widget.projectId, name: widget.roomName!);
-    final domains = await client.listRoomRoutes(projectId: widget.projectId, roomId: room.id);
+    final domains = await client.listRoomRoutes(projectId: widget.projectId, roomName: widget.roomName!);
     return domains.where((domain) => ports.contains(domain.port)).toList();
   }
 
@@ -334,6 +333,12 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
       final client = getMeshagentClient();
       final projectId = widget.projectId;
       var service = widget.manifest.toServiceSpec(values: _vars);
+
+      var serviceId = service.metadata.annotations["meshagent.service.id"];
+
+      if (serviceId == null) {
+        throw RoomServerException("service is missing meshagent.service.id annotation");
+      }
 
       String? email;
       String? emailQueue;
@@ -361,9 +366,23 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
             throw RoomServerException("Mailbox has already been assigned to another room");
           }
 
-          ma.updateMailbox(projectId: projectId, address: email, room: widget.roomName!, queue: emailQueue ?? email, public: public);
-        } on NotFoundException catch (_) {
-          await ma.createMailbox(projectId: projectId, address: email, room: widget.roomName!, queue: emailQueue ?? email, public: public);
+          ma.updateMailbox(
+            projectId: projectId,
+            address: email,
+            room: widget.roomName!,
+            queue: emailQueue ?? email,
+            public: public,
+            annotations: {"meshagent.service.id": serviceId},
+          );
+        } on meshagent_client.NotFoundException catch (_) {
+          await ma.createMailbox(
+            projectId: projectId,
+            address: email,
+            room: widget.roomName!,
+            queue: emailQueue ?? email,
+            public: public,
+            annotations: {"meshagent.service.id": serviceId},
+          );
         }
       }
 
@@ -384,12 +403,24 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
         for (final route in routeRequests) {
           try {
             final existing = await client.getRoute(projectId: projectId, domain: route.domain);
-            if (existing.roomId != room.id) {
+            if (existing.roomName != room.name) {
               throw RoomServerException("Domain ${route.domain} has already been assigned to another room");
             }
-            await client.updateRoute(projectId: projectId, domain: route.domain, roomId: room.id, port: route.port);
-          } on NotFoundException catch (_) {
-            await client.createRoute(projectId: projectId, domain: route.domain, roomId: room.id, port: route.port);
+            await client.updateRoute(
+              projectId: projectId,
+              domain: route.domain,
+              roomName: room.name,
+              port: route.port,
+              annotations: {"meshagent.service.id": serviceId},
+            );
+          } on meshagent_client.NotFoundException catch (_) {
+            await client.createRoute(
+              projectId: projectId,
+              domain: route.domain,
+              roomName: room.name,
+              port: route.port,
+              annotations: {"meshagent.service.id": serviceId},
+            );
           }
         }
       }
