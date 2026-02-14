@@ -145,7 +145,6 @@ class _NavState extends State<Nav> {
     } else if (lastConstraints!.maxWidth != constraints.maxWidth) {
       resizeDebounceTimer?.cancel();
       resizeDebounceTimer = Timer(const Duration(milliseconds: 30), () {
-
         final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
         final mainPanel = resizeController.panelsInfo.where((panel) => panel.id == "main").firstOrNull;
         if (navPanel == null || mainPanel == null) {
@@ -161,7 +160,7 @@ class _NavState extends State<Nav> {
         // Don't change the size - prevent flickering
         final currentSize = (navPanel.size * lastConstraints!.maxWidth) / constraints.maxWidth;
         if (currentSize > minSize && currentSize < maxSize) {
-           newPanel.size = currentSize;
+          newPanel.size = currentSize;
         }
 
         lastConstraints = constraints;
