@@ -2,7 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:responsive_framework/responsive_framework.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:localstorage/localstorage.dart';
+
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
+import 'package:meshagent/client.dart';
+
+import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/powerboards_router/powerboards_router.dart';
 
 class EmptyRooms extends StatelessWidget {
   const EmptyRooms({super.key, this.onCreateRoom});
@@ -251,6 +259,92 @@ class BalanceLowWarning extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class UserForbiddenWarning extends StatelessWidget {
+  const UserForbiddenWarning({super.key});
+
+  Widget _body(BuildContext context, ShadColorScheme cs, ShadTextTheme tt) {
+    final user = MeshagentAuth.current.getUser();
+
+    return Column(
+      mainAxisSize: .min,
+      children: [
+        Container(
+          width: 64.0,
+          height: 64.0,
+          decoration: BoxDecoration(color: cs.destructiveForeground, borderRadius: .circular(12)),
+          child: Icon(LucideIcons.x, size: 28.0, color: cs.destructive),
+        ),
+        const SizedBox(height: 16),
+        Text("Access Denied", style: tt.h4, textAlign: .center),
+        const SizedBox(height: 8),
+        RichText(
+          textAlign: .center,
+          text: TextSpan(
+            style: tt.muted.copyWith(height: 1.5),
+            children: [
+              TextSpan(text: "Your user "),
+              TextSpan(
+                text: user?['email'],
+                style: TextStyle(fontWeight: .bold),
+              ),
+              TextSpan(
+                text:
+                    " does not have permission to access this project. "
+                    "Please check user's permissions or contact an admin for assistance.",
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        ShadButton(
+          onPressed: () {
+            MeshagentAuth.current.signOut();
+            localStorage.clear();
+
+            final returnUrl = MeshagentConfig.current!.appUrl;
+            final signOutUrl = MeshagentConfig.current!.serverUrl
+                .resolve("/signout")
+                .replace(queryParameters: {if (MeshagentConfig.current?.appUrl != null) "return_url": returnUrl.toString()});
+
+            if (kIsWeb) {
+              launchUrl(signOutUrl, webOnlyWindowName: "_self");
+            } else {
+              context.go("/");
+            }
+          },
+          child: const Text("Sign out"),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final cs = theme.colorScheme;
+    final tt = theme.textTheme;
+
+    final isMobile = context.breakpoint < theme.breakpoints.sm;
+
+    if (isMobile) {
+      return Padding(
+        padding: const .all(20),
+        child: Center(child: _body(context, cs, tt)),
+      );
+    }
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const .all(20),
+          child: ShadCard(child: _body(context, cs, tt)),
         ),
       ),
     );

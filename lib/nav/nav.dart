@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -27,9 +28,11 @@ import 'package:meshagent/meshagent.dart';
 import 'chrome_visibility.dart';
 import 'nav_rooms.dart';
 
-// $2
+const double _navBarMinWidth = 280.0;
+const double _navBarMaxWidth = 560.0;
+
 const double balanceLowThreshold = 200.0;
-double navBarWidth = 280.0;
+const double navBarWidth = 280.0;
 
 class NavController extends Controller {
   bool _hideNav = false;
@@ -60,6 +63,10 @@ class Nav extends StatefulWidget {
 }
 
 class _NavState extends State<Nav> {
+  final resizeController = ShadResizableController();
+  BoxConstraints? lastConstraints;
+  Timer? resizeDebounceTimer;
+
   final childKey = GlobalKey();
   Resource<List<Project>> get projects {
     return widget.projects;
@@ -73,7 +80,11 @@ class _NavState extends State<Nav> {
 
     final client = getMeshagentClient();
 
-    return client.getProjectRole(widget.projectId!);
+    try {
+      return await client.getProjectRole(widget.projectId!);
+    } on ForbiddenException {
+      return ProjectRole.none;
+    }
   });
 
   late final balanceRes = Resource<Balance?>(() async {
@@ -86,14 +97,6 @@ class _NavState extends State<Nav> {
     return null;
   }, source: role);
 
-  // Minimum and maximum width for the navbar
-  final double _navBarMinWidth = 280.0;
-  final double _navBarMaxWidth = 560.0;
-  double dragWidth = navBarWidth;
-
-  SystemMouseCursor cursor = SystemMouseCursors.basic;
-  bool resizingNavBar = false;
-
   String filter = "";
   late final rooms = Resource<List<Room>>(() async {
     final projectId = widget.projectId ?? localStorage.getItem("lastProjectId");
@@ -103,10 +106,19 @@ class _NavState extends State<Nav> {
 
   late final canCreateRooms = Resource<bool>(() async {
     final projectId = widget.projectId;
-    if (projectId == null) return false;
 
-    return getMeshagentClient().canCreateRooms(projectId);
-  });
+    if (projectId == null) {
+      return false;
+    }
+
+    if (role.state.value == ProjectRole.none) {
+      return false;
+    }
+
+    final client = getMeshagentClient();
+
+    return await client.canCreateRooms(projectId);
+  }, source: role);
 
   void setFilter(String value) {
     setState(() {
@@ -125,6 +137,36 @@ class _NavState extends State<Nav> {
     final redirectUrl = uri.replace(path: "/p/$pid").replace(queryParameters: {"ref": "low_balance_warning"});
 
     launchUrl(redirectUrl, webOnlyWindowName: "_self");
+  }
+
+  void debounceResize(BoxConstraints constraints) {
+    if (lastConstraints == null) {
+      lastConstraints = constraints;
+    } else if (lastConstraints!.maxWidth != constraints.maxWidth) {
+      resizeDebounceTimer?.cancel();
+      resizeDebounceTimer = Timer(const Duration(milliseconds: 30), () {
+        final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
+        final mainPanel = resizeController.panelsInfo.where((panel) => panel.id == "main").firstOrNull;
+        if (navPanel == null || mainPanel == null) {
+          return;
+        }
+
+        final minSize = _navBarMinWidth / constraints.maxWidth;
+        final maxSize = _navBarMaxWidth / constraints.maxWidth;
+        final defaultSize = navBarWidth / constraints.maxWidth;
+
+        final newPanel = ShadPanelInfo(id: "nav", minSize: minSize, maxSize: maxSize, defaultSize: defaultSize);
+
+        // Don't change the size - prevent flickering
+        final currentSize = (navPanel.size * lastConstraints!.maxWidth) / constraints.maxWidth;
+        if (currentSize > minSize && currentSize < maxSize) {
+          newPanel.size = currentSize;
+        }
+
+        lastConstraints = constraints;
+        resizeController.update([newPanel, mainPanel]);
+      });
+    }
   }
 
   @override
@@ -211,6 +253,22 @@ class _NavState extends State<Nav> {
     super.dispose();
   }
 
+  Widget desktopBody(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
+    if (userRole == ProjectRole.none) {
+      return forbiddenView(context);
+    }
+
+    if (balanceLow) {
+      if (userRole == null) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      return BalanceLowWarning(onAddCredits: onAddCredits, role: userRole);
+    }
+
+    return Container(key: childKey, child: widget.child);
+  }
+
   Widget desktopView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
@@ -219,81 +277,31 @@ class _NavState extends State<Nav> {
 
     final hidden = navController.isNavHidden || !chromeVisible;
 
-    return MouseRegion(
-      cursor: cursor,
-      opaque: resizingNavBar,
-      hitTestBehavior: resizingNavBar ? HitTestBehavior.opaque : HitTestBehavior.translucent,
-      child: IgnorePointer(
-        ignoring: resizingNavBar,
-        child: Stack(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final minRatio = _navBarMinWidth / constraints.maxWidth;
+        final maxRatio = _navBarMaxWidth / constraints.maxWidth;
+        final defaultSize = navBarWidth / constraints.maxWidth;
+
+        // Debounce resize to avoid excessive rebuilds when resizing the window
+        debounceResize(constraints);
+
+        return ShadResizablePanelGroup(
+          axis: .horizontal,
+          showHandle: true,
+          controller: resizeController,
           children: [
-            Positioned(
-              key: const Key("main"),
-              top: 0,
-              bottom: 0,
-              right: 0,
-              left: hidden ? 0 : navBarWidth + 10,
-              child: balanceLow
-                  ? (userRole == null
-                        ? const Center(child: CircularProgressIndicator())
-                        : BalanceLowWarning(onAddCredits: onAddCredits, role: userRole))
-                  : SizedBox(key: childKey, child: widget.child),
-            ),
-
-            // This is the dragbar that sits between the room nav bar on the left and the room feed on the right.
+            // left nav
             if (!hidden)
-              Positioned(
-                top: 0,
-                left: navBarWidth,
-                bottom: 0,
-                child: GestureDetector(
-                  onHorizontalDragEnd: (details) {
-                    // When dragging is over reset the cursor.
-                    setState(() {
-                      cursor = SystemMouseCursors.basic;
-                      resizingNavBar = false;
-                    });
-                  },
-                  onHorizontalDragUpdate: (details) {
-                    // While dragging show the resize cursor and
-                    // determine what the width of the navbar should be
-                    setState(() {
-                      resizingNavBar = true;
-                      cursor = SystemMouseCursors.resizeColumn;
-
-                      dragWidth += details.delta.dx;
-
-                      if (dragWidth > _navBarMinWidth && dragWidth < _navBarMaxWidth) {
-                        navBarWidth = dragWidth;
-                      }
-                    });
-                  },
-
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.resizeColumn,
-                    child: Container(
-                      width: 10, // Width of the draggable area
-                      decoration: BoxDecoration(
-                        color: Colors.white, // Visual for the drag handle
-                        border: Border(left: BorderSide(color: cs.border, width: 1)),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-            // The left panel with the room nav
-            if (chromeVisible)
-              Positioned(
-                key: const Key("nav"),
-                top: 0,
-                left: hidden ? -navBarWidth : 0,
-                bottom: 0,
-                width: navBarWidth,
+              ShadResizablePanel(
+                id: "nav",
+                defaultSize: defaultSize,
+                minSize: minRatio,
+                maxSize: maxRatio,
                 child: ColoredBox(
-                  color: ShadTheme.of(context).colorScheme.accent,
+                  color: cs.accent,
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: .min,
                     children: [
                       _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
 
@@ -315,17 +323,31 @@ class _NavState extends State<Nav> {
                   ),
                 ),
               ),
-            // if (settings.document.status != ConnectionStatus.connected) Positioned.fill(child: ConnectionStatusOverlay(document: settings.document)),
+
+            // main content
+            ShadResizablePanel(
+              id: "main",
+              defaultSize: 1.0 - defaultSize,
+              child: desktopBody(context, userRole, balanceLow, canCreateRooms),
+            ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget mobileView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
+    if (userRole == ProjectRole.none) {
+      return forbiddenView(context);
+    }
+
     if (balanceLow) {
       if (userRole == null) {
         return const Center(child: CircularProgressIndicator());
+      }
+
+      if (userRole == ProjectRole.none) {
+        return forbiddenView(context);
       }
 
       return Column(
@@ -359,7 +381,7 @@ class _NavState extends State<Nav> {
         ),
       );
     } else {
-      return SizedBox(key: childKey, child: widget.child);
+      return Container(key: childKey, child: widget.child);
     }
   }
 
@@ -430,6 +452,36 @@ class _NavState extends State<Nav> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget forbiddenView(BuildContext context) {
+    final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+
+    if (isSmallDisplay) {
+      return SafeArea(
+        child: Column(
+          children: [
+            _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
+            const Expanded(child: UserForbiddenWarning()),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const .all(12.0),
+          child: Row(
+            children: [
+              Spacer(),
+              UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
+            ],
+          ),
+        ),
+        const Expanded(child: UserForbiddenWarning()),
+      ],
     );
   }
 
@@ -702,7 +754,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            ShadSeparator.horizontal(margin: EdgeInsets.zero),
+                            ShadSeparator.horizontal(margin: .zero),
                             ShadButton.ghost(
                               onPressed: widget.onCreateProject,
                               leading: Icon(LucideIcons.plus, size: 16),
