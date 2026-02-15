@@ -87,7 +87,7 @@ class EmptyRooms extends StatelessWidget {
                       spacing: 8,
                       children: [
                         Text('•'),
-                        Expanded(child: Text('Manage agents')),
+                        Expanded(child: Text('Manage agents and services')),
                       ],
                     ),
                   ],

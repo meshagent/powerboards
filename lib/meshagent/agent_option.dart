@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -10,8 +11,9 @@ import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-
+import 'package:meshagent/meshagent.dart' as ma;
 import 'package:meshagent/room_server_client.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'agent_config.dart';
 
@@ -52,6 +54,8 @@ class AgentOptionTile extends StatefulWidget {
   final String? version;
   final bool versionHasUpdate;
   final String? actionTextOverride;
+  final List<Mailbox> mailboxes;
+  final List<ma.Route> routes;
 
   const AgentOptionTile({
     super.key,
@@ -63,6 +67,8 @@ class AgentOptionTile extends StatefulWidget {
     this.version,
     this.actionTextOverride,
     this.versionHasUpdate = false,
+    required this.mailboxes,
+    required this.routes,
   });
 
   @override
@@ -128,6 +134,7 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
             children: [
               Expanded(
                 child: Column(
+                  spacing: 6,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -135,13 +142,54 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 6),
+
                     Text(
                       widget.option.subtitle,
                       style: Theme.of(
                         context,
                       ).textTheme.bodyMedium?.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.8)),
                     ),
+
+                    if (widget.mailboxes.isNotEmpty || widget.routes.isNotEmpty) SizedBox(height: 0),
+
+                    for (final mailbox in widget.mailboxes)
+                      ShadButton.link(
+                        onPressed: () {
+                          launchUrl(Uri.parse("mailto:${mailbox.address}"), mode: LaunchMode.externalApplication);
+                        },
+                        padding: EdgeInsets.all(0),
+
+                        trailing: ShadIconButton.ghost(
+                          width: 22,
+                          height: 22,
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: mailbox.address));
+                          },
+                          icon: Icon(LucideIcons.copy, size: 16, color: ShadTheme.of(context).colorScheme.mutedForeground),
+                        ),
+                        child: Text(mailbox.address),
+                      ),
+
+                    for (final route in widget.routes)
+                      ShadButton.link(
+                        onPressed: () {
+                          launchUrl(Uri.parse("https://${route.domain}"), mode: LaunchMode.externalApplication);
+                        },
+                        padding: EdgeInsets.all(0),
+                        trailing: ShadIconButton.ghost(
+                          width: 22,
+                          height: 22,
+                          padding: EdgeInsets.zero,
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: "https://${route.domain}"));
+                          },
+                          icon: Icon(LucideIcons.copy, size: 16, color: ShadTheme.of(context).colorScheme.mutedForeground),
+                        ),
+                        child: Text("https://${route.domain}"),
+                      ),
+
+                    if (widget.mailboxes.isNotEmpty || widget.routes.isNotEmpty) SizedBox(height: 0),
                   ],
                 ),
               ),
@@ -228,19 +276,36 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
     if (!mounted) return;
     _pollTimer = Timer(Duration(seconds: 1), () {
       if (!mounted) return;
-      services.refresh();
+      setState(() {});
       _scheduleNextPoll();
     });
   }
 
   Future<void> _load() async {
+    services.refresh();
+    routes.refresh();
+    mailboxes.refresh();
     _scheduleNextPoll();
   }
 
   late final services = Resource(() async {
     final projectId = widget.projectId;
 
-    return await getMeshagentClient().listRoomServices(projectId: projectId, roomName: widget.room.roomName!);
+    final s = await getMeshagentClient().listRoomServices(projectId: projectId, roomName: widget.room.roomName!);
+    s.sort((a, b) => a.metadata.name.toLowerCase().compareTo(b.metadata.name.toLowerCase()));
+    return s;
+  });
+
+  late final routes = Resource(() async {
+    final projectId = widget.projectId;
+
+    return await getMeshagentClient().listRoomRoutes(projectId: projectId, roomName: widget.room.roomName!);
+  });
+
+  late final mailboxes = Resource(() async {
+    final projectId = widget.projectId;
+
+    return await getMeshagentClient().listRoomMailboxes(projectId: projectId, roomName: widget.room.roomName!);
   });
 
   late final availableAgents = Resource(() async {
@@ -372,7 +437,10 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context, _) {
-        if (availableAgents.state.value == null || services.state.value == null) {
+        if (availableAgents.state.value == null ||
+            services.state.value == null ||
+            mailboxes.state.value == null ||
+            routes.state.value == null) {
           return const Center(child: CircularProgressIndicator());
         }
 
@@ -414,7 +482,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
           constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height - 150, maxWidth: 500),
           crossAxisAlignment: CrossAxisAlignment.start,
           titlePinned: true,
-          title: const Text('Manage room agents'),
+          title: const Text('Agents & Services'),
           actions: [
             ShadButton.outline(onPressed: _openCustomDialog, child: const Text('Install custom agent')),
             ShadButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Close')),
@@ -449,6 +517,24 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                         option: option,
                         inRoom: inRoom,
                         status: status,
+                        mailboxes:
+                            (mailboxes.state.value
+                                ?.where(
+                                  (x) =>
+                                      x.annotations["meshagent.service.id"] != null &&
+                                      x.annotations["meshagent.service.id"] == service?.metadata.annotations["meshagent.service.id"],
+                                )
+                                .toList()) ??
+                            [],
+                        routes:
+                            (routes.state.value
+                                ?.where(
+                                  (x) =>
+                                      x.annotations["meshagent.service.id"] != null &&
+                                      x.annotations["meshagent.service.id"] == service?.metadata.annotations["meshagent.service.id"],
+                                )
+                                .toList()) ??
+                            [],
                         busy: false,
                         version: "latest",
                         versionHasUpdate: false,

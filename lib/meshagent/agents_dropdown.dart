@@ -60,7 +60,12 @@ class AgentsDropdown extends StatelessWidget {
 
     if (onManageAgents != null) {
       entries.add(
-        AppMenuEntry(title: 'Manage agents', description: 'Install or remove agents.', icon: LucideIcons.blocks, onPressed: onManageAgents),
+        AppMenuEntry(
+          title: 'Manage agents',
+          description: 'Install or remove agents and services.',
+          icon: LucideIcons.blocks,
+          onPressed: onManageAgents,
+        ),
       );
     }
 
