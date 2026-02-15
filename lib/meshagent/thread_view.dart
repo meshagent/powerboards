@@ -290,6 +290,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       ChatThreadMessages(
+                        path: widget.documentPath,
                         room: widget.client,
                         messages: snapshot.messages,
                         online: snapshot.online,
