@@ -12,7 +12,6 @@ import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:meshagent/meshagent.dart' as ma;
-import 'package:meshagent/room_server_client.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'agent_config.dart';
