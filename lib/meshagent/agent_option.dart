@@ -341,7 +341,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
       builder: (dialogContext) => ShadDialog(
         useSafeArea: false,
         constraints: BoxConstraints(maxWidth: 800),
-        title: const Text("Install custom agent"),
+        title: const Text("Install"),
         child: SizedBox(
           width: double.infinity,
           height: MediaQuery.of(dialogContext).size.height - 250,
@@ -407,7 +407,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
           : ShadDialog(
               useSafeArea: false,
               constraints: BoxConstraints(maxWidth: 800),
-              title: const Text("Install custom agent"),
+              title: const Text("Install"),
               child: SizedBox(
                 width: double.infinity,
                 height: MediaQuery.of(dialogContext).size.height - 250,
@@ -483,7 +483,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
           titlePinned: true,
           title: const Text('Agents & Services'),
           actions: [
-            ShadButton.outline(onPressed: _openCustomDialog, child: const Text('Install custom agent')),
+            ShadButton.outline(onPressed: _openCustomDialog, child: const Text('Install')),
             ShadButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Close')),
           ],
           child: Padding(
