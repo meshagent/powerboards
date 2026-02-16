@@ -56,7 +56,7 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
 
       bool added = false;
       void waitForAgent() async {
-        if (agentName != null && getOfflineParticipants(thread).where((x) => x == agentName).isNotEmpty) {
+        if (agentName != null && room.messaging.remoteParticipants.where((x) => x.getAttribute("namme") == agentName).isEmpty) {
           if (!added) {
             room.messaging.addListener(waitForAgent);
             added = true;
