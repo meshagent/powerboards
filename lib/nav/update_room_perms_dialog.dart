@@ -376,43 +376,101 @@ class _AddUserDialogState extends State<AddUserDialog> {
   Future<void> onAdded() async {
     setState(() => submitting = true);
 
-    await projectUsersMap.untilReady();
-
-    final client = getMeshagentClient();
-
-    // get users not in project
-    final selected = selectedUsers.value;
-    final projUsersMap = projectUsersMap.state.value ?? {};
-    final usersToAddToProject = selected.where((u) => !projUsersMap.containsKey(u.email.toLowerCase()));
-
-    final roomGrantsMap = grants.state.value ?? {};
-
-    final usersInRoomMap = {};
-    for (final user in projUsersMap.values) {
-      final grants = roomGrantsMap[user.id];
-      if (grants != null) {
-        usersInRoomMap[user.email.toLowerCase()] = grants;
-      }
-    }
-
     try {
-      // add users to project if needed
-      await Future.wait(usersToAddToProject.map((u) => client.addUserToProjectByEmail(widget.projectId, u.email, canCreateRooms: true)));
+      await projectUsersMap.untilReady();
+
+      final client = getMeshagentClient();
+
+      // get users not in project
+      final selected = selectedUsers.value;
+      final projUsersMap = projectUsersMap.state.value ?? {};
+
+      final usersToAddToProject = selected.where((u) => !projUsersMap.containsKey(u.email.toLowerCase()));
+
+      final myUser = MeshagentAuth.current.getUser();
+      final myUserId = (myUser?['id'] as String?) ?? '';
+      final me = projUsersMap.values.firstWhereOrNull((u) => u.id == myUserId);
+      final isMeAdmin = me?.isAdmin ?? false;
+
+      final roomGrantsMap = grants.state.value ?? {};
+
+      final usersInRoomMap = {};
+      for (final user in projUsersMap.values) {
+        final grants = roomGrantsMap[user.id];
+        if (grants != null) {
+          usersInRoomMap[user.email.toLowerCase()] = grants;
+        }
+      }
+
+      if (selected.isEmpty) {
+        setState(() => submitting = false);
+
+        widget.onSaved?.call();
+        widget.onBack?.call();
+
+        return;
+      }
+
+      if (isMeAdmin) {
+        // add users to project if needed
+        await Future.wait(usersToAddToProject.map((u) => client.addUserToProjectByEmail(widget.projectId, u.email, canCreateRooms: true)));
+      } else {
+        if (!mounted) return;
+
+        final emails = usersToAddToProject.map((u) => u.email).join(', ');
+        final plural = usersToAddToProject.length > 1;
+
+        final cont = await showShadDialog<bool>(
+          context: context,
+          builder: (context) => ShadDialog.alert(
+            title: plural ? Text('Users are not in project') : Text('User is not in project'),
+            description: Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: RichText(
+                text: TextSpan(
+                  style: TextStyle(height: 1.4),
+                  children: [
+                    TextSpan(text: plural ? 'The following users with emails ' : 'The user with email '),
+                    TextSpan(
+                      text: emails,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    TextSpan(
+                      text: plural
+                          ? ' do not have access to the project. Only users who are already part of the project can be added to rooms. Please ask a project admin to add these users to the project first.'
+                          : ' does not have access to the project. Only users who are already part of the project can be added to rooms. Please ask a project admin to add this user to the project first.',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
+              ShadButton(child: const Text('Continue'), onPressed: () => Navigator.of(context).pop(true)),
+            ],
+          ),
+        );
+
+        if (cont != true) {
+          setState(() => submitting = false);
+
+          return;
+        }
+      }
+
+      final Set<String> excludedUsers = isMeAdmin ? <String>{} : usersToAddToProject.map((u) => u.email.toLowerCase()).toSet();
 
       // add grants for all selected users
       await Future.wait(
         selected.map((u) {
           final lcEmail = u.email.toLowerCase();
 
-          if (usersInRoomMap.containsKey(lcEmail)) {
-            final grant = usersInRoomMap[u.email.toLowerCase()]!;
+          if (excludedUsers.contains(lcEmail)) {
+            return Future.value();
+          }
 
-            return client.updateRoomGrant(
-              projectId: widget.projectId,
-              roomId: widget.room.id,
-              userId: grant.userId,
-              permissions: u.role.apiScope,
-            );
+          if (usersInRoomMap.containsKey(lcEmail)) {
+            return Future.value();
           }
 
           return client.createRoomGrantByEmail(
@@ -459,8 +517,8 @@ class _AddUserDialogState extends State<AddUserDialog> {
     final theme = ShadTheme.of(context);
     final inputLabelStyle = theme.decoration.labelStyle?.copyWith(fontWeight: .w700);
 
-    final myUser = MeshagentAuth.current.getUser();
-    final myUserId = (myUser?['id'] as String?) ?? '';
+    // final myUser = MeshagentAuth.current.getUser();
+    // final myUserId = (myUser?['id'] as String?) ?? '';
 
     return ShadResponsiveBuilder(
       builder: (context, breakpoint) {
@@ -503,8 +561,9 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
                     final roomGrants = grants.state.value ?? {};
                     final projUsersMap = projectUsersMap.state.value ?? {};
-                    final me = projUsersMap.values.firstWhereOrNull((u) => u.id == myUserId);
-                    final isMeAdmin = me?.isAdmin ?? false;
+
+                    // final me = projUsersMap.values.firstWhereOrNull((u) => u.id == myUserId);
+                    // final isMeAdmin = me?.isAdmin ?? false;
 
                     return Column(
                       mainAxisSize: .min,
@@ -538,8 +597,11 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
                                 updated.add(AddedUser(email: email, role: role));
                               } else {
+                                updated.add(AddedUser(email: email, role: GrantRole.nonOwner));
+                              }
+
+                              /*
                                 if (isMeAdmin) {
-                                  updated.add(AddedUser(email: email, role: GrantRole.nonOwner));
                                 } else {
                                   showShadDialog(
                                     context: context,
@@ -563,7 +625,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                                     controller.remove(email);
                                   });
                                 }
-                              }
+                              */
                             }
 
                             selectedUsers.value = updated;
