@@ -140,9 +140,9 @@ class _NavState extends State<Nav> {
   }
 
   void debounceResize(BoxConstraints constraints) {
-    if (lastConstraints == null) {
-      lastConstraints = constraints;
-    } else if (lastConstraints!.maxWidth != constraints.maxWidth) {
+    if (lastConstraints == null || lastConstraints!.maxWidth != constraints.maxWidth) {
+      lastConstraints ??= constraints;
+
       resizeDebounceTimer?.cancel();
       resizeDebounceTimer = Timer(const Duration(milliseconds: 30), () {
         final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
@@ -337,6 +337,8 @@ class _NavState extends State<Nav> {
   }
 
   Widget mobileView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
+    lastConstraints = null;
+
     if (userRole == ProjectRole.none) {
       return forbiddenView(context);
     }

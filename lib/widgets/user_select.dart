@@ -22,7 +22,9 @@ class _UserSelectState extends State<UserSelect> {
   String searchValue = "";
 
   late final users = Resource<List<Map<String, dynamic>>>(() async {
-    return await getMeshagentClient().getUsersInProject(widget.projectId);
+    final client = getMeshagentClient();
+
+    return await client.getUsersInProject(widget.projectId);
   });
 
   final popoverController = ShadPopoverController();
@@ -38,6 +40,7 @@ class _UserSelectState extends State<UserSelect> {
 
   Map<String, dynamic>? _firstStartsWith(List<Map<String, dynamic>> list) {
     final lower = searchValue.toLowerCase();
+
     return list.firstWhereOrNull((user) => (user["email"] as String).toLowerCase().startsWith(lower));
   }
 
