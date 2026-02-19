@@ -284,14 +284,17 @@ class _PermissionDialogState extends State<_PermissionDialog> {
                 constraints: const BoxConstraints(minHeight: 420),
                 child: (state == _LoadingState.loading)
                     ? const Center(child: CircularProgressIndicator())
-                    : Column(
-                        mainAxisSize: .min,
-                        crossAxisAlignment: .stretch,
-                        children: [
-                          if (myGrant != null) _userRowBuilder(context, myGrant!),
+                    : Padding(
+                        padding: const .symmetric(vertical: 8.0),
+                        child: Column(
+                          mainAxisSize: .min,
+                          crossAxisAlignment: .stretch,
+                          children: [
+                            if (myGrant != null) _userRowBuilder(context, myGrant!),
 
-                          ...sortedGrants.map((g) => _userRowBuilder(context, g)),
-                        ],
+                            ...sortedGrants.map((g) => _userRowBuilder(context, g)),
+                          ],
+                        ),
                       ),
               ),
             );
