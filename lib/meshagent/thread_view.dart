@@ -16,6 +16,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/outbound_delivery_status.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
+import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/meshagent/wait_for_agent_participant_builder.dart';
@@ -614,7 +615,7 @@ Widget buildTools(
               return agent.getAttribute('name') == agentName;
             })
             as RemoteParticipant,
-        Uri.parse("${const String.fromEnvironment('STUDIO_URL')}/oauth2/callback"),
+        Uri.parse("${MeshagentConfig.current?.appUrl}/oauth2/callback"),
       );
     },
     availableConnectors: [
