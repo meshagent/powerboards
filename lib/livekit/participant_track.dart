@@ -13,8 +13,7 @@ class ParticipantTrack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CameraBox(
-      decoration: null,
-      camera: Positioned.fill(child: IgnorePointer(ignoring: true, child: track)),
+      camera: IgnorePointer(ignoring: true, child: track),
       showName: showName,
       participantName: participant.name,
       muted: participant.isMuted,

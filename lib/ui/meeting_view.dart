@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -16,7 +17,7 @@ import 'package:powerboards/livekit/device_preview.dart';
 import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
 
-import 'meeting_body.dart';
+// import 'meeting_body.dart';
 
 enum MeetingViewState { preview, joined, ended }
 
@@ -50,7 +51,7 @@ class MeetingView extends StatelessWidget {
   final VoidCallback onCancel;
   final void Function() joinMeeting;
 
-  Widget _rightStripBuilder(BuildContext context) {
+  Widget _cameraStripBuilder(BuildContext context, bool horizontal) {
     final room = VideoRoomModel.maybeOf(context)?.room;
     if (room == null) return const SizedBox.shrink();
 
@@ -64,10 +65,11 @@ class MeetingView extends StatelessWidget {
         if (!hasShare) return const SizedBox.shrink();
 
         return SizedBox(
-          width: 250,
+          width: horizontal ? null : 250,
+          height: horizontal ? 100 : null,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            child: CameraStrip(room: room),
+            padding: EdgeInsets.fromLTRB(5, 0, horizontal ? 0 : 5, horizontal ? 5 : 0),
+            child: CameraStrip(room: room, horizontal: horizontal),
           ),
         );
       },
@@ -76,10 +78,7 @@ class MeetingView extends StatelessWidget {
 
   Widget _mainBuilder(BuildContext context) {
     final room = VideoRoomModel.maybeOf(context)?.room;
-
-    if (room == null) {
-      return const SizedBox();
-    }
+    if (room == null) return const SizedBox();
 
     return VideoRoomParticipantsBuilder(room: room, builder: (context, participants) => cameraGridBuilder(context, participants));
   }
@@ -115,7 +114,22 @@ class MeetingView extends StatelessWidget {
             ),
           );
         } else if (meetingViewController.state == MeetingViewState.joined) {
-          return MeetingBodyLayout(rightStripBuilder: _rightStripBuilder, mainBuilder: _mainBuilder);
+          final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+          return isMobile
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _cameraStripBuilder(context, true),
+                    Expanded(child: _mainBuilder(context)),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: _mainBuilder(context)),
+                    _cameraStripBuilder(context, false),
+                  ],
+                );
         } else if (meetingViewController.state == MeetingViewState.ended) {
           return Center(
             child: Column(
