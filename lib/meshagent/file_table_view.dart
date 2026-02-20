@@ -371,8 +371,7 @@ class _FileTableViewState extends State<FileTableView> {
   bool _sortAscending = true;
 
   final popoverController = ShadPopoverController();
-
-  late final uploadNotifications = UploadProgressNotifications(sonner: ShadSonner.of(context), popoverController: popoverController);
+  late final uploadNotifications = UploadProgressNotifications(popoverController: popoverController);
 
   Future<List<StorageEntry>> getEntries() async {
     await storageEntries.untilReady();
@@ -426,56 +425,6 @@ class _FileTableViewState extends State<FileTableView> {
     final upload = MeshagentFileUpload(room: widget.client, path: fileName, dataStream: stream);
 
     uploadNotifications.addUpload(upload, totalBytes);
-
-    /*
-    final sonner = ShadSonner.of(context);
-    final toaster = ShadToaster.of(context);
-
-    final id = UniqueKey();
-
-    if (totalBytes > 0) {
-      late ShadToast toast;
-
-      toast = ShadToast(
-        id: id,
-        description: AnimatedBuilder(
-          animation: upload,
-          builder: (context, _) {
-            final percent = (upload.bytesUploaded / totalBytes).clamp(0.0, 1.0);
-
-            return Column(
-              crossAxisAlignment: .start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(LucideIcons.upload, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('Uploading $fileName…')),
-                    Text('${(percent * 100).toStringAsFixed(0)}%'),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(value: percent),
-              ],
-            );
-          },
-        ),
-        duration: Duration(minutes: 5), // stay until timeout or completion
-      );
-
-      sonner.show(toast);
-    }
-
-    try {
-      await upload.done;
-      storageEntries.refresh();
-      await Future.delayed(Duration(seconds: 3));
-      await sonner.hide(id);
-    } catch (e) {
-      await sonner.hide(id);
-      toaster.show(ShadToast.destructive(description: Text('Upload failed: $e'), duration: Duration(seconds: 5)));
-    }
-*/
   }
 
   Future<void> addPhotos(String path) async {
@@ -717,6 +666,86 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
+  Widget popover(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final tt = theme.textTheme;
+
+    return ValueListenableBuilder<List<UploadProgressItem>>(
+      valueListenable: uploadNotifications.uploadsVN,
+      builder: (context, uploads, _) {
+        if (uploads.isEmpty) {
+          return SizedBox.shrink();
+        }
+
+        return ValueListenableBuilder<bool>(
+          valueListenable: uploadNotifications.isCompletedVN,
+          builder: (context, isCompleted, _) {
+            return SizedBox(
+              width: 320,
+              child: Column(
+                mainAxisSize: .min,
+                crossAxisAlignment: .start,
+                spacing: 12,
+                children: [
+                  Padding(
+                    padding: const .only(top: 20, left: 16, right: 16, bottom: 12),
+                    child: Text(
+                      "Upload${isCompleted ? 'ed' : 'ing'}  ${uploads.length} file${uploads.length > 1 ? 's' : ''}",
+                      style: tt.small.copyWith(fontWeight: .w700),
+                    ),
+                  ),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: 200),
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          mainAxisSize: .min,
+                          crossAxisAlignment: .start,
+                          spacing: 12,
+                          children: uploads.map((item) {
+                            final upload = item.upload;
+                            final totalBytes = item.totalBytes;
+
+                            return AnimatedBuilder(
+                              animation: upload,
+                              builder: (context, _) {
+                                final percent = (upload.bytesUploaded / totalBytes).clamp(0.0, 1.0);
+
+                                return Padding(
+                                  padding: const .only(bottom: 8),
+                                  child: Column(
+                                    crossAxisAlignment: .start,
+                                    children: [
+                                      Text(upload.path.split('/').last, style: TextStyle(fontSize: 12)),
+                                      const SizedBox(height: 4),
+                                      LinearProgressIndicator(value: percent),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const .only(top: 0, left: 16, right: 16, bottom: 20),
+                    child: Row(
+                      mainAxisAlignment: .end,
+                      children: [ShadButton.outline(onPressed: uploadNotifications.hide, child: const Text("Close"))],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
@@ -727,7 +756,7 @@ class _FileTableViewState extends State<FileTableView> {
         controller: popoverController,
         padding: .zero,
         anchor: ShadAnchor(childAlignment: .bottomRight, overlayAlignment: .bottomRight, offset: const Offset(-20.0, -20.0)),
-        popover: uploadNotifications.popover,
+        popover: popover,
         child: Container(
           margin: const .fromLTRB(8, 0, 8, 8),
           decoration: BoxDecoration(
@@ -868,137 +897,74 @@ class _FileTableViewState extends State<FileTableView> {
   }
 }
 
-class _UploadFileItem {
-  _UploadFileItem({required this.upload, required this.totalBytes});
+class UploadProgressItem {
+  const UploadProgressItem({required this.upload, required this.totalBytes});
 
-  final int totalBytes;
   final MeshagentFileUpload upload;
+  final int totalBytes;
 }
 
 class UploadProgressNotifications {
-  UploadProgressNotifications({required this.sonner, required this.popoverController});
+  UploadProgressNotifications({required this.popoverController});
 
-  final ShadSonnerState sonner;
   final ShadPopoverController popoverController;
 
-  final _uploads = Signal<List<_UploadFileItem>>([]);
+  final _uploads = Signal<List<UploadProgressItem>>([]);
   final _isCompleted = Signal<bool>(false);
-  final List<Future<void>> _activeUploads = [];
+  final _activeUploads = <Future<void>>[];
+
+  late final isCompletedVN = _isCompleted.toValueNotifier();
+  late final uploadsVN = _uploads.toValueNotifier();
+
+  bool _running = false;
+  bool _resetUploads = true;
+  Timer? _autoHideTimer;
 
   void addUpload(MeshagentFileUpload upload, int totalBytes) {
-    _uploads.value = [..._uploads.value, _UploadFileItem(upload: upload, totalBytes: totalBytes)];
+    _autoHideTimer?.cancel();
+    _isCompleted.value = false;
+
+    final item = UploadProgressItem(upload: upload, totalBytes: totalBytes);
+    _uploads.value = _resetUploads ? [item] : [..._uploads.value, item];
+    _resetUploads = false;
     _activeUploads.add(upload.done);
 
-    _isCompleted.value = false;
-    _start();
-  }
-
-  Widget popover(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final tt = theme.textTheme;
-
-    return SignalBuilder(
-      builder: (context, _) {
-        final uploads = _uploads.value;
-        final isCompleted = _isCompleted.value;
-
-        if (uploads.isEmpty) {
-          return SizedBox.shrink();
-        }
-
-        return SizedBox(
-          width: 320,
-          child: Column(
-            mainAxisSize: .min,
-            crossAxisAlignment: .start,
-            spacing: 12,
-            children: [
-              Padding(
-                padding: const .only(top: 20, left: 16, right: 16, bottom: 12),
-                child: Text(
-                  "Upload${isCompleted ? 'ed' : 'ing'}  ${uploads.length} file${uploads.length > 1 ? 's' : ''}",
-                  style: tt.small.copyWith(fontWeight: .w700),
-                ),
-              ),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: 200),
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      mainAxisSize: .min,
-                      crossAxisAlignment: .start,
-                      spacing: 12,
-                      children: uploads.map((item) {
-                        final upload = item.upload;
-                        final totalBytes = item.totalBytes;
-
-                        return AnimatedBuilder(
-                          animation: upload,
-                          builder: (context, _) {
-                            final percent = (upload.bytesUploaded / totalBytes).clamp(0.0, 1.0);
-
-                            return Padding(
-                              padding: const .only(bottom: 8),
-                              child: Column(
-                                crossAxisAlignment: .start,
-                                children: [
-                                  Text(upload.path.split('/').last, style: TextStyle(fontSize: 12)),
-                                  const SizedBox(height: 4),
-                                  LinearProgressIndicator(value: percent),
-                                ],
-                              ),
-                            );
-                          },
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const .only(top: 0, left: 16, right: 16, bottom: 20),
-                child: Row(
-                  mainAxisAlignment: .end,
-                  children: [ShadButton.outline(onPressed: hide, child: const Text("Close"))],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    _ensureRunning();
   }
 
   void dispose() {
+    _autoHideTimer?.cancel();
     _uploads.dispose();
+    _isCompleted.dispose();
   }
 
-  Future<void> _start() async {
-    if (popoverController.isOpen) {
-      return;
-    }
+  void _ensureRunning() {
+    if (_running) return;
 
-    show();
-
-    while (_activeUploads.isNotEmpty) {
-      await _activeUploads.removeAt(0);
-    }
-    _isCompleted.value = true;
-
-    await Future.delayed(Duration(seconds: 3));
-
-    hide();
+    _running = true;
+    _run();
   }
 
-  void show() {
-    popoverController.show();
+  Future<void> _run() async {
+    if (!popoverController.isOpen) {
+      popoverController.show();
+    }
+
+    try {
+      while (_activeUploads.isNotEmpty) {
+        await _activeUploads.removeAt(0);
+      }
+      _resetUploads = true;
+      _isCompleted.value = true;
+      _autoHideTimer?.cancel();
+      _autoHideTimer = Timer(Duration(seconds: 3), hide);
+    } finally {
+      _running = false;
+    }
   }
 
   void hide() {
+    _autoHideTimer?.cancel();
     popoverController.hide();
-
-    _activeUploads.clear();
-    _uploads.value = [];
   }
 }
