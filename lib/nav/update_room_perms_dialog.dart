@@ -566,9 +566,6 @@ class _AddUserDialogState extends State<AddUserDialog> {
                     final roomGrants = grants.state.value ?? {};
                     final projUsersMap = projectUsersMap.state.value ?? {};
 
-                    // final me = projUsersMap.values.firstWhereOrNull((u) => u.id == myUserId);
-                    // final isMeAdmin = me?.isAdmin ?? false;
-
                     return Column(
                       mainAxisSize: .min,
                       crossAxisAlignment: .stretch,
@@ -603,33 +600,6 @@ class _AddUserDialogState extends State<AddUserDialog> {
                               } else {
                                 updated.add(AddedUser(email: email, role: GrantRole.nonOwner));
                               }
-
-                              /*
-                                if (isMeAdmin) {
-                                } else {
-                                  showShadDialog(
-                                    context: context,
-                                    builder: (context) => ShadDialog.alert(
-                                      title: Text('User $email is not in project'),
-                                      description: Padding(
-                                        padding: EdgeInsets.only(bottom: 8),
-                                        child: Text(
-                                          'User with email $email does not have access to the project. '
-                                          'Only users who are already part of the project can be added to rooms. '
-                                          'Please ask a project admin to add this user to the project first.',
-                                        ),
-                                      ),
-                                      actions: [
-                                        ShadButton.outline(child: const Text('Close'), onPressed: () => Navigator.of(context).pop(false)),
-                                      ],
-                                    ),
-                                  ).then((_) {
-                                    if (!mounted) return;
-
-                                    controller.remove(email);
-                                  });
-                                }
-                              */
                             }
 
                             selectedUsers.value = updated;
