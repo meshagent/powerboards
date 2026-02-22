@@ -3,19 +3,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:powerboards/meshagent/document_pane.dart';
-import 'package:powerboards/meshagent/path.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_icon/file_icon.dart';
+import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
+import 'package:powerboards/meshagent/document_pane.dart';
+import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
@@ -125,12 +126,14 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _cycleFile(int offset) async {
-    var entries = await _fileTableViewKey.currentState?.getChildren(_currentFolder) ?? [];
+    List<StorageEntry> entries = await _fileTableViewKey.currentState?.getEntries() ?? [];
+
     if (widget.hideSystem) {
       entries = entries.where((e) => !e.name.startsWith('.')).toList();
     }
 
     final files = entries.where((e) => !e.isFolder).map((e) => _currentFolder.isEmpty ? e.name : '$_currentFolder/${e.name}').toList();
+
     if (files.isEmpty || _openedFile == null) return;
 
     final currentIndex = files.indexOf(_openedFile!);
@@ -153,13 +156,13 @@ class _FileManagerViewState extends State<FileManagerView> {
     return FileDropArea(
       onFileDrop: _upload,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: .start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            padding: const .fromLTRB(8, 0, 8, 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: .spaceBetween,
+              crossAxisAlignment: .center,
               spacing: 8,
               children: [
                 if (_openedFile != null) ...[
@@ -353,41 +356,57 @@ class FileTableView extends StatefulWidget {
   const FileTableView({super.key, required this.client, required this.onOpen, required this.currentPath, this.hideSystem = false});
 
   @override
-  State<FileTableView> createState() => _FileTableViewState();
+  State createState() => _FileTableViewState();
 }
 
 class _FileTableViewState extends State<FileTableView> {
-  static TextStyle breadcrumbLinkStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600);
-  static TextStyle dataStyle = GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: Color.fromARGB(255, 0x22, 0x22, 0x22));
-  static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: Color.fromARGB(255, 0x66, 0x66, 0x66));
+  static TextStyle breadcrumbLinkStyle = GoogleFonts.inter(fontSize: 16, fontWeight: .w600);
+  static TextStyle dataStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x22, 0x22, 0x22));
+  static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x66, 0x66, 0x66));
+
+  late final storageEntries = Resource(() => getChildren(widget.currentPath));
 
   late StreamSubscription<RoomEvent> sub;
-  final Map<String, List<StorageEntry>> _cache = {};
   int _sortColumnIndex = 0;
   bool _sortAscending = true;
+
+  final popoverController = ShadPopoverController();
+  late final uploadNotifications = UploadProgressNotifications(popoverController: popoverController);
+
+  Future<List<StorageEntry>> getEntries() async {
+    await storageEntries.untilReady();
+
+    return storageEntries.state.value ?? [];
+  }
 
   @override
   void initState() {
     super.initState();
 
     sub = widget.client.listen(onRoomMessage);
-
-    _refresh();
   }
 
   @override
   void didUpdateWidget(FileTableView oldWidget) {
     super.didUpdateWidget(oldWidget);
+
     if (oldWidget.currentPath != widget.currentPath) {
-      _refresh();
+      storageEntries.refresh();
     }
   }
 
   @override
   void dispose() {
     sub.cancel();
+    storageEntries.dispose();
 
     super.dispose();
+  }
+
+  Future<void> _refreshPath(String path) async {
+    if (path.startsWith(widget.currentPath)) {
+      storageEntries.refresh();
+    }
   }
 
   void onRoomMessage(RoomEvent event) {
@@ -398,49 +417,14 @@ class _FileTableViewState extends State<FileTableView> {
     }
   }
 
-  Future<void> upload(Stream<Uint8List> stream, String fileName, int totalBytes) async {
-    final toaster = ShadToaster.of(context);
+  Future<List<StorageEntry>> getChildren(String folderPath) async {
+    return await widget.client.storage.list(folderPath);
+  }
 
+  Future<void> upload(Stream<Uint8List> stream, String fileName, int totalBytes) async {
     final upload = MeshagentFileUpload(room: widget.client, path: fileName, dataStream: stream);
 
-    if (totalBytes > 0) {
-      late ShadToast toast;
-
-      toast = ShadToast(
-        description: AnimatedBuilder(
-          animation: upload,
-          builder: (context, _) {
-            final percent = (upload.bytesUploaded / totalBytes).clamp(0.0, 1.0);
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(LucideIcons.upload, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('Uploading $fileName…')),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                LinearProgressIndicator(value: percent),
-              ],
-            );
-          },
-        ),
-        duration: Duration(minutes: 5), // stay until timeout or completion
-      );
-
-      toaster.show(toast);
-    }
-
-    try {
-      await upload.done;
-      await toaster.hide(animate: false);
-    } catch (e) {
-      await toaster.hide(animate: false);
-      toaster.show(ShadToast.destructive(description: Text('Upload failed: $e'), duration: Duration(seconds: 5)));
-    }
+    uploadNotifications.addUpload(upload, totalBytes);
   }
 
   Future<void> addPhotos(String path) async {
@@ -516,11 +500,12 @@ class _FileTableViewState extends State<FileTableView> {
     final fileName = joinPaths(path, "$result/.placeholder");
     await upload(Stream.empty(), fileName, 0);
 
-    await _refresh();
+    storageEntries.refresh();
   }
 
   Future<void> downloadFile(String path) async {
     final url = await widget.client.storage.downloadUrl(path);
+
     launchUrl(Uri.parse(url));
   }
 
@@ -529,46 +514,17 @@ class _FileTableViewState extends State<FileTableView> {
   }
 
   Future<void> _deleteFolder(String folderPath) async {
-    final children = await getChildren(folderPath, useCache: false);
+    final children = await getChildren(folderPath);
 
     for (final child in children) {
       final childPath = joinPaths(folderPath, child.name);
+
       if (child.isFolder) {
-        await _deleteFolder(childPath);
+        _deleteFolder(childPath);
       } else {
-        await widget.client.storage.delete(childPath);
+        _deleteFile(childPath);
       }
     }
-
-    await _refreshPath(folderPath);
-  }
-
-  Future<void> _refresh() async {
-    await getChildren(widget.currentPath, useCache: false);
-    setState(() => {});
-  }
-
-  Future<void> _refreshPath(String path) async {
-    var folderPath = "";
-    final lastSlash = path.lastIndexOf('/');
-    if (lastSlash > 0) {
-      folderPath = path.substring(0, lastSlash);
-    }
-
-    if (folderPath.isNotEmpty) {
-      folderPath = "$folderPath/";
-    }
-
-    await getChildren(folderPath, useCache: false);
-    setState(() => {});
-  }
-
-  Future<List<StorageEntry>> getChildren(String folderPath, {bool useCache = true}) async {
-    if (!useCache || !_cache.containsKey(folderPath)) {
-      _cache[folderPath] = await widget.client.storage.list(folderPath);
-    }
-
-    return _cache[folderPath]!;
   }
 
   Widget _buildActionsMenu(String fullPath, bool isFolder) {
@@ -644,7 +600,7 @@ class _FileTableViewState extends State<FileTableView> {
       ),
     );
 
-    if (confirmDelete == true) {
+    if (confirmDelete) {
       if (isFolder) {
         await _deleteFolder(fullPath);
       } else {
@@ -652,6 +608,7 @@ class _FileTableViewState extends State<FileTableView> {
       }
       return true;
     }
+
     return false;
   }
 
@@ -696,7 +653,7 @@ class _FileTableViewState extends State<FileTableView> {
       height: iconSize,
       child: iconData != null
           ? Center(
-              child: Icon(iconData, size: paddedIconSize, color: (entry.isFolder ? Color.fromARGB(0xff, 0xe0, 0xa0, 0x30) : null)),
+              child: Icon(iconData, size: paddedIconSize, color: (entry.isFolder ? .fromARGB(0xff, 0xe0, 0xa0, 0x30) : null)),
             )
           : FileIcon(entry.name, size: iconSize),
     );
@@ -704,20 +661,124 @@ class _FileTableViewState extends State<FileTableView> {
 
   Widget _getLabel(String text) {
     return Padding(
-      padding: const EdgeInsets.only(right: 5),
+      padding: const .only(right: 5),
       child: Text(text, style: headerStyle),
+    );
+  }
+
+  Widget popover(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final tt = theme.textTheme;
+
+    return ValueListenableBuilder<List<UploadProgressItem>>(
+      valueListenable: uploadNotifications.uploadsVN,
+      builder: (context, uploads, _) {
+        if (uploads.isEmpty) {
+          return SizedBox.shrink();
+        }
+
+        return ValueListenableBuilder<bool>(
+          valueListenable: uploadNotifications.isCompletedVN,
+          builder: (context, isCompleted, _) {
+            return SizedBox(
+              width: 320,
+              child: Column(
+                mainAxisSize: .min,
+                crossAxisAlignment: .start,
+                spacing: 12,
+                children: [
+                  Padding(
+                    padding: const .only(top: 20, left: 16, right: 16, bottom: 12),
+                    child: Text(
+                      "Upload${isCompleted ? 'ed' : 'ing'}  ${uploads.length} file${uploads.length > 1 ? 's' : ''}",
+                      style: tt.small.copyWith(fontWeight: .w700),
+                    ),
+                  ),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: 200),
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          mainAxisSize: .min,
+                          crossAxisAlignment: .start,
+                          spacing: 12,
+                          children: uploads.map((item) {
+                            final upload = item.upload;
+                            final totalBytes = item.totalBytes;
+
+                            return AnimatedBuilder(
+                              animation: upload,
+                              builder: (context, _) {
+                                final percent = (upload.bytesUploaded / totalBytes).clamp(0.0, 1.0);
+
+                                return Padding(
+                                  padding: const .only(bottom: 8),
+                                  child: Column(
+                                    crossAxisAlignment: .start,
+                                    children: [
+                                      Text(upload.path.split('/').last, style: TextStyle(fontSize: 12)),
+                                      const SizedBox(height: 4),
+                                      LinearProgressIndicator(value: percent),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const .only(top: 0, left: 16, right: 16, bottom: 20),
+                    child: Row(
+                      mainAxisAlignment: .end,
+                      children: [ShadButton.outline(onPressed: uploadNotifications.hide, child: const Text("Close"))],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final entries = _cache[widget.currentPath];
+    final theme = ShadTheme.of(context);
 
-    if (entries == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return IconTheme(
+      data: IconThemeData(color: theme.colorScheme.primary),
+      child: ShadPopover(
+        controller: popoverController,
+        padding: .zero,
+        anchor: ShadAnchor(childAlignment: .bottomRight, overlayAlignment: .bottomRight, offset: const Offset(-20.0, -20.0)),
+        popover: popover,
+        child: Container(
+          margin: const .fromLTRB(8, 0, 8, 8),
+          decoration: BoxDecoration(
+            border: .all(color: Colors.grey.shade300),
+            borderRadius: .circular(8.0),
+          ),
+          child: SignalBuilder(
+            builder: (context, _) {
+              return storageEntries.state.when(
+                ready: _buildTable,
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, st) => Center(child: Text("Error loading files: $e")),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
 
-    var displayEntries = entries.toList();
+  Widget _buildTable(List<StorageEntry> entries) {
+    List<StorageEntry> displayEntries = entries;
 
     if (widget.hideSystem) {
       displayEntries = displayEntries.where((e) => !e.name.startsWith('.')).toList();
@@ -754,8 +815,6 @@ class _FileTableViewState extends State<FileTableView> {
 
       return _sortAscending ? cmp : -cmp;
     });
-
-    final colorScheme = ShadTheme.of(context).colorScheme;
 
     final rows = displayEntries.map((entry) {
       final fullPath = widget.currentPath.isEmpty ? entry.name : joinPaths(widget.currentPath, entry.name);
@@ -796,54 +855,116 @@ class _FileTableViewState extends State<FileTableView> {
 
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
-    return IconTheme(
-      data: IconThemeData(color: colorScheme.primary),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(8.0),
+    return DataTable2(
+      showCheckboxColumn: false,
+      columnSpacing: 12,
+      horizontalMargin: 12,
+      sortColumnIndex: _sortColumnIndex,
+      sortAscending: _sortAscending,
+      columns: [
+        DataColumn2(
+          label: _getLabel("Name"),
+          size: ColumnSize.L,
+          onSort: (columnIndex, ascending) {
+            setState(() {
+              _sortColumnIndex = columnIndex;
+              _sortAscending = ascending;
+            });
+          },
         ),
-        child: DataTable2(
-          showCheckboxColumn: false,
-          columnSpacing: 12,
-          horizontalMargin: 12,
-          sortColumnIndex: _sortColumnIndex,
-          sortAscending: _sortAscending,
-          columns: [
-            DataColumn2(
-              label: _getLabel("Name"),
-              size: ColumnSize.L,
-              onSort: (columnIndex, ascending) {
-                setState(() {
-                  _sortColumnIndex = columnIndex;
-                  _sortAscending = ascending;
-                });
-              },
-            ),
-            // DataColumn2(
-            //   label: _getLabel("Size"),
-            //   onSort: (i, asc) => _sort((e) => e.isFolder ? 0 : 111111, i, asc),
-            // ),
-            // DataColumn2(
-            //   label: _getLabel("Updated by"),
-            //   onSort: (i, asc) => _sort((e) => "updated by", i, asc),
-            // ),
-            DataColumn2(
-              label: _getLabel("Modified"),
-              fixedWidth: isMobile ? 125 : 170,
-              onSort: (columnIndex, ascending) {
-                setState(() {
-                  _sortColumnIndex = columnIndex;
-                  _sortAscending = ascending;
-                });
-              },
-            ),
-            DataColumn2(label: Text("", style: headerStyle), fixedWidth: 50),
-          ],
-          rows: rows,
+        // DataColumn2(
+        //   label: _getLabel("Size"),
+        //   onSort: (i, asc) => _sort((e) => e.isFolder ? 0 : 111111, i, asc),
+        // ),
+        // DataColumn2(
+        //   label: _getLabel("Updated by"),
+        //   onSort: (i, asc) => _sort((e) => "updated by", i, asc),
+        // ),
+        DataColumn2(
+          label: _getLabel("Modified"),
+          fixedWidth: isMobile ? 125 : 170,
+          onSort: (columnIndex, ascending) {
+            setState(() {
+              _sortColumnIndex = columnIndex;
+              _sortAscending = ascending;
+            });
+          },
         ),
-      ),
+        DataColumn2(label: Text("", style: headerStyle), fixedWidth: 50),
+      ],
+      rows: rows,
     );
+  }
+}
+
+class UploadProgressItem {
+  const UploadProgressItem({required this.upload, required this.totalBytes});
+
+  final MeshagentFileUpload upload;
+  final int totalBytes;
+}
+
+class UploadProgressNotifications {
+  UploadProgressNotifications({required this.popoverController});
+
+  final ShadPopoverController popoverController;
+
+  final _uploads = Signal<List<UploadProgressItem>>([]);
+  final _isCompleted = Signal<bool>(false);
+  final _activeUploads = <Future<void>>[];
+
+  late final isCompletedVN = _isCompleted.toValueNotifier();
+  late final uploadsVN = _uploads.toValueNotifier();
+
+  bool _running = false;
+  bool _resetUploads = true;
+  Timer? _autoHideTimer;
+
+  void addUpload(MeshagentFileUpload upload, int totalBytes) {
+    _autoHideTimer?.cancel();
+    _isCompleted.value = false;
+
+    final item = UploadProgressItem(upload: upload, totalBytes: totalBytes);
+    _uploads.value = _resetUploads ? [item] : [..._uploads.value, item];
+    _resetUploads = false;
+    _activeUploads.add(upload.done);
+
+    _ensureRunning();
+  }
+
+  void dispose() {
+    _autoHideTimer?.cancel();
+    _uploads.dispose();
+    _isCompleted.dispose();
+  }
+
+  void _ensureRunning() {
+    if (_running) return;
+
+    _running = true;
+    _run();
+  }
+
+  Future<void> _run() async {
+    if (!popoverController.isOpen) {
+      popoverController.show();
+    }
+
+    try {
+      while (_activeUploads.isNotEmpty) {
+        await _activeUploads.removeAt(0);
+      }
+      _resetUploads = true;
+      _isCompleted.value = true;
+      _autoHideTimer?.cancel();
+      _autoHideTimer = Timer(Duration(seconds: 3), hide);
+    } finally {
+      _running = false;
+    }
+  }
+
+  void hide() {
+    _autoHideTimer?.cancel();
+    popoverController.hide();
   }
 }
