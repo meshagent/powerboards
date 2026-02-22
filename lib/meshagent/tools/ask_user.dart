@@ -131,7 +131,7 @@ class AskUser extends Tool {
   }
 
   @override
-  Future<Response> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<Chunk> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final result = await showShadDialog<Map<String, dynamic>>(
       context: this.context,
       builder: (context) {
@@ -183,7 +183,7 @@ class AskUser extends Tool {
     } else if (result["user_feedback"] != null) {
       throw Exception("The user cancelled the request");
     }
-    return JsonResponse(json: result["result"]);
+    return JsonChunk(json: result["result"]);
   }
 }
 

@@ -39,7 +39,7 @@ class MeshagentUploadFoldernameService implements UploadFoldernameService {
                 "prompt": "Generate a directory name for given file: $filename",
               },
             )
-            as JsonResponse;
+            as JsonChunk;
 
     return response.json['folder'];
     */

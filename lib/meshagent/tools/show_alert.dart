@@ -24,7 +24,7 @@ class ShowAlert extends Tool {
   final BuildContext context;
 
   @override
-  Future<EmptyResponse> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<EmptyChunk> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final title = arguments["title"];
     final description = arguments["description"];
 
@@ -45,7 +45,7 @@ class ShowAlert extends Tool {
       },
     );
 
-    return EmptyResponse();
+    return EmptyChunk();
   }
 }
 
@@ -60,7 +60,7 @@ class ShowErrorAlert extends Tool {
   final BuildContext context;
 
   @override
-  Future<EmptyResponse> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<EmptyChunk> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final title = arguments["title"];
     final description = arguments["description"];
 
@@ -81,6 +81,6 @@ class ShowErrorAlert extends Tool {
       },
     );
 
-    return EmptyResponse();
+    return EmptyChunk();
   }
 }

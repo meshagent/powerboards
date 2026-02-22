@@ -23,7 +23,7 @@ class DisplayDocument extends Tool {
   final BuildContext context;
 
   @override
-  Future<EmptyResponse> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<EmptyChunk> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final path = arguments["path"];
 
     if (path.isNotEmpty) {
@@ -33,6 +33,6 @@ class DisplayDocument extends Tool {
       }
     }
 
-    return EmptyResponse();
+    return EmptyChunk();
   }
 }

@@ -23,7 +23,7 @@ class MeshagentTitleService implements TitleService {
                 "prompt": "Generate a title for the post: $message",
               },
             )
-            as JsonResponse;
+            as JsonChunk;
 
     return response.json['title'];
     */
