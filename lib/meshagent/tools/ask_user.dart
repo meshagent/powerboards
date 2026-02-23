@@ -119,7 +119,7 @@ final askUserSchema = {
   },
 };
 
-class AskUser extends Tool {
+class AskUser extends FunctionTool {
   AskUser({required this.context, super.name = "ask_user", super.description = "ask the user a question", super.title = "ask user"})
     : super(inputSchema: askUserSchema);
 

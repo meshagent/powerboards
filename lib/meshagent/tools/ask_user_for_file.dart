@@ -19,7 +19,7 @@ final askUserForFileSchema = {
   },
 };
 
-class AskUserForFile extends Tool {
+class AskUserForFile extends FunctionTool {
   AskUserForFile({
     required this.context,
     super.name = "ask_user_for_file",

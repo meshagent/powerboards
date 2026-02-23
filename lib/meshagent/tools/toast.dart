@@ -13,7 +13,7 @@ final toastSchema = {
   },
 };
 
-class Toast extends Tool {
+class Toast extends FunctionTool {
   Toast({
     required this.context,
     super.name = "show_toast",

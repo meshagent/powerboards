@@ -13,7 +13,7 @@ final showAlertSchema = {
   },
 };
 
-class ShowAlert extends Tool {
+class ShowAlert extends FunctionTool {
   ShowAlert({
     required this.context,
     super.name = "show_alert",
@@ -49,7 +49,7 @@ class ShowAlert extends Tool {
   }
 }
 
-class ShowErrorAlert extends Tool {
+class ShowErrorAlert extends FunctionTool {
   ShowErrorAlert({
     required this.context,
     super.name = "show_error_alert",

@@ -12,7 +12,7 @@ final displayDocumentSchema = {
   },
 };
 
-class DisplayDocument extends Tool {
+class DisplayDocument extends FunctionTool {
   DisplayDocument({
     required this.context,
     super.name = "display_document",
