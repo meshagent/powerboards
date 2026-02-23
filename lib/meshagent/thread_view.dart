@@ -48,6 +48,7 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
     required MeshDocument thread,
     required String path,
     required ma.ChatMessage message,
+    String messageType = "chat",
     void Function(ma.ChatMessage)? onMessageSent,
   }) async {
     if (message.text.trim().isNotEmpty || message.attachments.isNotEmpty) {
@@ -68,7 +69,7 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
           }
           if (notifyOnSend) {
             for (final participant in getOnlineParticipants(thread)) {
-              sendMessageToParticipant(participant: participant, path: path, message: message);
+              sendMessageToParticipant(participant: participant, path: path, message: message, messageType: messageType);
             }
           }
           outboundStatus.markDelivered(message.id);
@@ -295,9 +296,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                         room: widget.client,
                         messages: snapshot.messages,
                         online: snapshot.online,
-                        showTyping: (snapshot.threadStatus?.trim().isNotEmpty ?? false) && snapshot.listening.isEmpty,
+                        showTyping: (snapshot.threadStatusMode != null) && snapshot.listening.isEmpty,
                         showListening: snapshot.listening.isNotEmpty,
                         threadStatus: snapshot.threadStatus,
+                        threadStatusMode: snapshot.threadStatusMode,
+                        onCancel: () {
+                          _chatController.cancel(_documentPath, document);
+                        },
                         fileInThreadBuilder: (context, path) => _fileInThreadBuilder(context, path, snapshot.messages),
                         currentStatusEntry: _currentStatusEntry,
                       ),
@@ -345,28 +350,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                                 widget.services,
                                               ),
                                             ),
-                                      trailing: (snapshot.threadStatus?.trim().isNotEmpty ?? false)
-                                          ? ShadGestureDetector(
-                                              cursor: SystemMouseCursors.click,
-                                              onTapDown: (_) {
-                                                _chatController.cancel(_documentPath, document);
-                                              },
-                                              child: ShadTooltip(
-                                                builder: (context) => Text("Stop"),
-                                                child: Container(
-                                                  width: 22,
-                                                  height: 22,
-                                                  decoration: BoxDecoration(
-                                                    shape: BoxShape.circle,
-                                                    color: ShadTheme.of(context).colorScheme.foreground,
-                                                  ),
-                                                  child: Icon(LucideIcons.x, color: ShadTheme.of(context).colorScheme.background),
-                                                ),
-                                              ),
-                                            )
-                                          : null,
+                                      trailing: null,
                                       room: widget.client,
                                       onSend: (value, attachments) {
+                                        final messageType = snapshot.threadStatusMode == "steerable" ? "steer" : "chat";
                                         final message = ma.ChatMessage(
                                           id: const Uuid().v4(),
                                           text: value,
@@ -377,6 +364,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                           thread: document,
                                           path: _documentPath,
                                           message: message,
+                                          messageType: messageType,
                                           onMessageSent: _onMessageSent,
                                         );
                                       },
