@@ -5,15 +5,16 @@ import 'participant_track.dart';
 import 'hover_builder.dart';
 
 class CameraStrip extends StatelessWidget {
-  const CameraStrip({super.key, required this.room, this.gap = 5});
+  const CameraStrip({super.key, required this.room, this.gap = 5, this.horizontal = false});
 
   final lk.Room room;
   final double gap;
+  final bool horizontal;
 
   Widget displayWrapper(Object key, bool selected, Widget child) {
     return Container(
       key: ObjectKey(key),
-      margin: EdgeInsets.only(bottom: gap),
+      margin: EdgeInsets.only(bottom: horizontal ? 0 : gap, right: horizontal ? gap : 0),
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
       foregroundDecoration: selected
           ? BoxDecoration(
@@ -22,10 +23,7 @@ class CameraStrip extends StatelessWidget {
             )
           : null,
       clipBehavior: Clip.antiAlias,
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: MouseRegion(cursor: SystemMouseCursors.click, child: child),
-      ),
+      child: AspectRatio(aspectRatio: 16 / 9, child: child),
     );
   }
 
@@ -53,6 +51,7 @@ class CameraStrip extends StatelessWidget {
                 // );
               },
               child: HoverBuilder(
+                cursor: SystemMouseCursors.basic,
                 builder: (hovered) {
                   final track = videoTrack.track as lk.VideoTrack;
                   return Container(
@@ -117,6 +116,7 @@ class CameraStrip extends StatelessWidget {
               child: const Text("audio stats"), // AudioStats(room: VideoRoomModel.of(context).room, participant: participant),
             )
           : HoverBuilder(
+              cursor: SystemMouseCursors.basic,
               builder: (hovered) {
                 return Container(
                   color: Colors.transparent,
@@ -143,6 +143,7 @@ class CameraStrip extends StatelessWidget {
       listenable: room,
       builder: (context, _) {
         return ListView(
+          scrollDirection: horizontal ? Axis.horizontal : Axis.vertical,
           children: [
             for (final participant in <lk.Participant>[
               ...(room.remoteParticipants.values),
