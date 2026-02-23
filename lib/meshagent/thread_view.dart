@@ -295,8 +295,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                         room: widget.client,
                         messages: snapshot.messages,
                         online: snapshot.online,
-                        showTyping: (snapshot.typing.isNotEmpty || snapshot.thinking.isNotEmpty) && snapshot.listening.isEmpty,
+                        showTyping: (snapshot.threadStatus?.trim().isNotEmpty ?? false) && snapshot.listening.isEmpty,
                         showListening: snapshot.listening.isNotEmpty,
+                        threadStatus: snapshot.threadStatus,
                         fileInThreadBuilder: (context, path) => _fileInThreadBuilder(context, path, snapshot.messages),
                         currentStatusEntry: _currentStatusEntry,
                       ),
@@ -344,7 +345,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                                 widget.services,
                                               ),
                                             ),
-                                      trailing: snapshot.thinking.isNotEmpty
+                                      trailing: (snapshot.threadStatus?.trim().isNotEmpty ?? false)
                                           ? ShadGestureDetector(
                                               cursor: SystemMouseCursors.click,
                                               onTapDown: (_) {
