@@ -30,7 +30,7 @@ class AskUserForFile extends FunctionTool {
   final BuildContext context;
 
   @override
-  Future<FileChunk> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<FileContent> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final result = await showShadDialog<FilePickerResult>(
       context: this.context,
       builder: (context) {
@@ -76,7 +76,7 @@ class AskUserForFile extends FunctionTool {
     } else {
       final file = result.files[0];
 
-      return FileChunk(data: file.bytes!, name: file.name, mimeType: lookupMimeType(file.name) ?? "application/octet-stream");
+      return FileContent(data: file.bytes!, name: file.name, mimeType: lookupMimeType(file.name) ?? "application/octet-stream");
     }
   }
 }

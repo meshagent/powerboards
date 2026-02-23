@@ -24,7 +24,7 @@ class Toast extends FunctionTool {
   final BuildContext context;
 
   @override
-  Future<EmptyChunk> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<EmptyContent> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final title = arguments["title"];
     final description = arguments["description"];
 
@@ -36,6 +36,6 @@ class Toast extends FunctionTool {
       ),
     );
 
-    return EmptyChunk();
+    return EmptyContent();
   }
 }
