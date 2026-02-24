@@ -284,14 +284,17 @@ class _PermissionDialogState extends State<_PermissionDialog> {
                 constraints: const BoxConstraints(minHeight: 420),
                 child: (state == _LoadingState.loading)
                     ? const Center(child: CircularProgressIndicator())
-                    : Column(
-                        mainAxisSize: .min,
-                        crossAxisAlignment: .stretch,
-                        children: [
-                          if (myGrant != null) _userRowBuilder(context, myGrant!),
+                    : Padding(
+                        padding: const .symmetric(vertical: 8.0),
+                        child: Column(
+                          mainAxisSize: .min,
+                          crossAxisAlignment: .stretch,
+                          children: [
+                            if (myGrant != null) _userRowBuilder(context, myGrant!),
 
-                          ...sortedGrants.map((g) => _userRowBuilder(context, g)),
-                        ],
+                            ...sortedGrants.map((g) => _userRowBuilder(context, g)),
+                          ],
+                        ),
                       ),
               ),
             );
@@ -411,50 +414,54 @@ class _AddUserDialogState extends State<AddUserDialog> {
         return;
       }
 
-      if (isMeAdmin) {
-        // add users to project if needed
-        await Future.wait(usersToAddToProject.map((u) => client.addUserToProjectByEmail(widget.projectId, u.email, canCreateRooms: true)));
-      } else {
-        if (!mounted) return;
+      if (usersToAddToProject.isNotEmpty) {
+        if (isMeAdmin) {
+          // add users to project if needed
+          await Future.wait(
+            usersToAddToProject.map((u) => client.addUserToProjectByEmail(widget.projectId, u.email, canCreateRooms: true)),
+          );
+        } else {
+          if (!mounted) return;
 
-        final emails = usersToAddToProject.map((u) => u.email).join(', ');
-        final plural = usersToAddToProject.length > 1;
+          final emails = usersToAddToProject.map((u) => u.email).join(', ');
+          final plural = usersToAddToProject.length > 1;
 
-        final cont = await showShadDialog<bool>(
-          context: context,
-          builder: (context) => ShadDialog.alert(
-            title: plural ? Text('Users are not in project') : Text('User is not in project'),
-            description: Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: RichText(
-                text: TextSpan(
-                  style: TextStyle(height: 1.4),
-                  children: [
-                    TextSpan(text: plural ? 'The following users with emails ' : 'The user with email '),
-                    TextSpan(
-                      text: emails,
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    TextSpan(
-                      text: plural
-                          ? ' do not have access to the project. Only users who are already part of the project can be added to rooms. Please ask a project admin to add these users to the project first.'
-                          : ' does not have access to the project. Only users who are already part of the project can be added to rooms. Please ask a project admin to add this user to the project first.',
-                    ),
-                  ],
+          final cont = await showShadDialog<bool>(
+            context: context,
+            builder: (context) => ShadDialog.alert(
+              title: plural ? Text('Users are not in project') : Text('User is not in project'),
+              description: Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: RichText(
+                  text: TextSpan(
+                    style: TextStyle(height: 1.4),
+                    children: [
+                      TextSpan(text: plural ? 'The following users with emails ' : 'The user with email '),
+                      TextSpan(
+                        text: emails,
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(
+                        text: plural
+                            ? ' do not have access to the project. Only users who are already part of the project can be added to rooms. Please ask a project admin to add these users to the project first.'
+                            : ' does not have access to the project. Only users who are already part of the project can be added to rooms. Please ask a project admin to add this user to the project first.',
+                      ),
+                    ],
+                  ),
                 ),
               ),
+              actions: [
+                ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
+                ShadButton(child: const Text('Continue'), onPressed: () => Navigator.of(context).pop(true)),
+              ],
             ),
-            actions: [
-              ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
-              ShadButton(child: const Text('Continue'), onPressed: () => Navigator.of(context).pop(true)),
-            ],
-          ),
-        );
+          );
 
-        if (cont != true) {
-          setState(() => submitting = false);
+          if (cont != true) {
+            setState(() => submitting = false);
 
-          return;
+            return;
+          }
         }
       }
 
@@ -516,9 +523,6 @@ class _AddUserDialogState extends State<AddUserDialog> {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final inputLabelStyle = theme.decoration.labelStyle?.copyWith(fontWeight: .w700);
-
-    // final myUser = MeshagentAuth.current.getUser();
-    // final myUserId = (myUser?['id'] as String?) ?? '';
 
     return ShadResponsiveBuilder(
       builder: (context, breakpoint) {
