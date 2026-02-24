@@ -13,7 +13,7 @@ final showAlertSchema = {
   },
 };
 
-class ShowAlert extends Tool {
+class ShowAlert extends FunctionTool {
   ShowAlert({
     required this.context,
     super.name = "show_alert",
@@ -24,7 +24,7 @@ class ShowAlert extends Tool {
   final BuildContext context;
 
   @override
-  Future<EmptyResponse> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<EmptyContent> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final title = arguments["title"];
     final description = arguments["description"];
 
@@ -45,11 +45,11 @@ class ShowAlert extends Tool {
       },
     );
 
-    return EmptyResponse();
+    return EmptyContent();
   }
 }
 
-class ShowErrorAlert extends Tool {
+class ShowErrorAlert extends FunctionTool {
   ShowErrorAlert({
     required this.context,
     super.name = "show_error_alert",
@@ -60,7 +60,7 @@ class ShowErrorAlert extends Tool {
   final BuildContext context;
 
   @override
-  Future<EmptyResponse> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<EmptyContent> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final title = arguments["title"];
     final description = arguments["description"];
 
@@ -81,6 +81,6 @@ class ShowErrorAlert extends Tool {
       },
     );
 
-    return EmptyResponse();
+    return EmptyContent();
   }
 }
