@@ -12,7 +12,7 @@ final displayDocumentSchema = {
   },
 };
 
-class DisplayDocument extends Tool {
+class DisplayDocument extends FunctionTool {
   DisplayDocument({
     required this.context,
     super.name = "display_document",
@@ -23,7 +23,7 @@ class DisplayDocument extends Tool {
   final BuildContext context;
 
   @override
-  Future<EmptyResponse> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<EmptyContent> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final path = arguments["path"];
 
     if (path.isNotEmpty) {
@@ -33,6 +33,6 @@ class DisplayDocument extends Tool {
       }
     }
 
-    return EmptyResponse();
+    return EmptyContent();
   }
 }
