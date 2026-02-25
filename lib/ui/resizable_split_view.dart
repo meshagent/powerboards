@@ -1,32 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+const double _collapsedWidth = 58;
+const double _minAreaWidth = 450;
+const String _area1Id = 'area1';
+const String _area2Id = 'area2';
+
 class ResizableSplitView extends StatefulWidget {
+  const ResizableSplitView({super.key, required this.area1, required this.area2, required this.split, required this.allowCollapse});
+
   final Widget area1;
   final Widget area2;
   final bool split;
   final bool allowCollapse;
 
-  const ResizableSplitView({super.key, required this.area1, required this.area2, required this.split, required this.allowCollapse});
-
   @override
-  State createState() => _ResizableSplitViewState();
+  State<ResizableSplitView> createState() => _ResizableSplitViewState();
 }
 
 class _ResizableSplitViewState extends State<ResizableSplitView> {
-  double? _area1Width;
-  bool _dragging = false;
+  final ShadResizableController _resizeController = ShadResizableController();
+
   bool _collapsed = false;
+  double? _area1Ratio;
+  String? _panelKeyToken;
 
-  static const double _collapsedWidth = 58;
-  static const double _minAreaWidth = 450;
-  static const double _dragWidth = 10;
+  @override
+  void initState() {
+    super.initState();
 
-  void _toggleCollapsed() {
-    setState(() {
-      _collapsed = !_collapsed;
-      _dragging = false;
-    });
+    _resizeController.addListener(_storeArea1Ratio);
+  }
+
+  @override
+  void dispose() {
+    _resizeController
+      ..removeListener(_storeArea1Ratio)
+      ..dispose();
+
+    super.dispose();
   }
 
   @override
@@ -35,109 +47,120 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
     if (oldWidget.split && !widget.split) {
       _collapsed = false;
-      _dragging = false;
+      _clearController();
     }
+
+    if (!widget.allowCollapse && _collapsed) {
+      _collapsed = false;
+    }
+  }
+
+  void _storeArea1Ratio() {
+    if (_resizeController.panelsInfo.length < 2) return;
+    final area1Panel = _resizeController.panelsInfo.first;
+    if (area1Panel.id != _area1Id) return;
+    _area1Ratio = area1Panel.size;
+  }
+
+  void _toggleCollapsed() {
+    if (!widget.allowCollapse) return;
+    setState(() {
+      _collapsed = !_collapsed;
+      if (_collapsed) _clearController();
+    });
+  }
+
+  double _minRatioForWidth(double width) {
+    if (width <= 0) return 0.5;
+    return (_minAreaWidth / width).clamp(0.0, 0.5);
+  }
+
+  void _clearController() {
+    _resizeController.clear();
+    _panelKeyToken = null;
+  }
+
+  Widget _buildArea1Panel({required bool collapsed}) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
+
+    return Stack(
+      children: [
+        ClipRect(
+          child: Align(alignment: Alignment.centerLeft, child: widget.area1),
+        ),
+        if (collapsed)
+          Positioned.fill(
+            child: AbsorbPointer(child: ColoredBox(color: colorScheme.background)),
+          ),
+        if (widget.split && widget.allowCollapse)
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Tooltip(
+              message: collapsed ? 'Expand' : 'Collapse',
+              child: ShadIconButton.ghost(
+                icon: Icon(collapsed ? LucideIcons.chevronsRight : LucideIcons.chevronsLeft),
+                onPressed: _toggleCollapsed,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = ShadTheme.of(context).colorScheme;
+    final collapsed = widget.split && widget.allowCollapse && _collapsed;
+
+    if (!widget.split) {
+      return _buildArea1Panel(collapsed: false);
+    }
+
+    if (collapsed) {
+      return Row(
+        children: [
+          SizedBox(width: _collapsedWidth, child: _buildArea1Panel(collapsed: true)),
+          Expanded(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(left: BorderSide(color: colorScheme.border)),
+              ),
+              child: widget.area2,
+            ),
+          ),
+        ],
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxW = constraints.maxWidth;
+        final minRatio = _minRatioForWidth(constraints.maxWidth);
+        final maxRatio = 1 - minRatio;
+        final defaultArea1Ratio = (_area1Ratio ?? minRatio).clamp(minRatio, maxRatio);
+        final panelKeyToken = minRatio.toStringAsFixed(6);
 
-        final bool split = widget.split;
-        final bool collapsed = split && _collapsed && widget.allowCollapse;
-
-        final double dragW = (split && !collapsed) ? _dragWidth : 0.0;
-
-        double area1W;
-        if (!split) {
-          area1W = maxW;
-        } else if (collapsed) {
-          area1W = _collapsedWidth;
-        } else {
-          area1W = _area1Width ?? _minAreaWidth;
-          final maxArea1 = (maxW - _minAreaWidth - dragW).clamp(_minAreaWidth, maxW);
-          area1W = area1W.clamp(_minAreaWidth, maxArea1);
+        if (_panelKeyToken != panelKeyToken) {
+          _resizeController.clear();
+          _panelKeyToken = panelKeyToken;
         }
 
-        double area2W;
-        if (!split) {
-          area2W = 0.0;
-        } else {
-          area2W = maxW - area1W - dragW;
-          final minArea2 = _minAreaWidth - dragW;
-          if (area2W < minArea2) {
-            area2W = minArea2;
-            final minArea1 = collapsed ? _collapsedWidth : _minAreaWidth;
-            area1W = (maxW - dragW - area2W).clamp(minArea1, maxW);
-          }
-        }
-
-        final area1 = SizedBox(
-          width: area1W,
-          child: Stack(
-            children: [
-              ClipRect(
-                child: Align(alignment: Alignment.centerLeft, child: widget.area1),
-              ),
-              if (collapsed)
-                Positioned.fill(
-                  child: AbsorbPointer(child: Container(color: colorScheme.background)),
-                ),
-              if (split && widget.allowCollapse)
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Tooltip(
-                    message: collapsed ? "Expand" : "Collapse",
-                    child: ShadIconButton.ghost(
-                      icon: Icon(collapsed ? LucideIcons.chevronsRight : LucideIcons.chevronsLeft),
-                      onPressed: _toggleCollapsed,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+        return ShadResizablePanelGroup(
+          key: ValueKey<String>('resizable-split-$panelKeyToken'),
+          axis: .horizontal,
+          showHandle: true,
+          controller: _resizeController,
+          children: [
+            ShadResizablePanel(
+              id: _area1Id,
+              defaultSize: defaultArea1Ratio,
+              minSize: minRatio,
+              maxSize: maxRatio,
+              child: _buildArea1Panel(collapsed: false),
+            ),
+            ShadResizablePanel(id: _area2Id, defaultSize: 1 - defaultArea1Ratio, minSize: minRatio, maxSize: maxRatio, child: widget.area2),
+          ],
         );
-
-        final handle = SizedBox(
-          width: dragW,
-          child: (split && !collapsed)
-              ? MouseRegion(
-                  cursor: SystemMouseCursors.resizeLeftRight,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onHorizontalDragStart: (_) => setState(() => _dragging = true),
-                    onHorizontalDragUpdate: (details) {
-                      setState(() {
-                        final next = (_area1Width ?? area1W) + details.delta.dx;
-                        final maxArea1 = (maxW - _minAreaWidth - dragW).clamp(_minAreaWidth, maxW);
-                        _area1Width = next.clamp(_minAreaWidth, maxArea1);
-                      });
-                    },
-                    onHorizontalDragEnd: (_) => setState(() => _dragging = false),
-                    child: Container(color: _dragging ? colorScheme.border : Colors.transparent),
-                  ),
-                )
-              : const SizedBox.shrink(),
-        );
-
-        final area2 = SizedBox(
-          width: area2W,
-          child: area2W == 0
-              ? const SizedBox.shrink()
-              : Container(
-                  decoration: BoxDecoration(
-                    border: Border(left: BorderSide(color: colorScheme.border)),
-                  ),
-                  child: widget.area2,
-                ),
-        );
-
-        return Row(children: [area1, handle, area2]);
       },
     );
   }
