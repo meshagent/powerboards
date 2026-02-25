@@ -42,9 +42,57 @@ gcloud storage buckets update gs://www.my-powerboards.com --web-main-page-suffix
 ```
 gcloud storage cp -r ./build/web/* gs://www.my-powerboards.com
 ```
-
 - Create a google load balancer and use the storage bucket for the backend configuration
-- Update your DNS with the ip address of the load balancer.
+```
+# Replace these values with your configuration
+
+PROJECT_ID="my-powerboards"
+DOMAIN="www.my-powerboards.com"
+LB_NAME="mypowerboards-lb"
+BUCKET="mypowerboardsbucket"
+
+gcloud compute addresses create "${LB_NAME}-ip" --global
+
+IP_ADDR="$(gcloud compute addresses describe "${LB_NAME}-ip" --global --format='get(address)')"
+echo "Load balancer IP: ${IP_ADDR}"
+```
+
+- Update your DNS for www.my-powerboards.com with the IP Address.
+
+```
+# Create the backend bucket
+gcloud compute backend-buckets create "${LB_NAME}-backend" --gcs-bucket-name="${BUCKET}"
+
+gcloud compute url-maps create "${LB_NAME}-https-map" --default-backend-bucket="${LB_NAME}-backend"
+
+gcloud compute ssl-certificates create "${LB_NAME}-cert" --domains="${DOMAIN}" --global
+
+gcloud compute target-https-proxies create "${LB_NAME}-https-proxy" --ssl-certificates="${LB_NAME}-cert" --url-map="${LB_NAME}-https-map"
+
+gcloud compute forwarding-rules create "${LB_NAME}-https-fr" --global --address="${LB_NAME}-ip" --target-https-proxy="${LB_NAME}-https-proxy" --ports=443
+
+cat <<EOF > temp-http-redirect-map.yaml
+name: ${LB_NAME}-http-redirect-map
+defaultUrlRedirect:
+  httpsRedirect: true
+  redirectResponseCode: MOVED_PERMANENTLY_DEFAULT
+  stripQuery: false
+EOF
+
+gcloud compute url-maps import "${LB_NAME}-http-redirect-map" \
+  --global \
+  --source temp-http-redirect-map.yaml
+
+
+gcloud compute target-http-proxies create "${LB_NAME}-http-proxy" \
+  --url-map="${LB_NAME}-http-redirect-map"
+
+gcloud compute forwarding-rules create "${LB_NAME}-http-fr" \
+  --global \
+  --address="${LB_NAME}-ip" \
+  --target-http-proxy="${LB_NAME}-http-proxy" \
+  --ports=80
+```
 
 ### Building and Deploying to Cloud Run
 
@@ -102,6 +150,13 @@ gcloud beta run domain-mappings describe --domain $POWERBOARDS_DOMAIN --region $
 In the output of the `gcloud beta run domain-mappings describe` command above, look for the section `resourceRecords`. Take these values and use them for the DNS records.
 
 ## Building the web app locally
+The powerboards pubspec.yaml is currently configured to build in a workspace. [Pub workspaces](https://dart.dev/tools/pub/workspaces)
+
+You can either:
+- Put powerboards in your pub workspace
+- Remove this line `resolution: workspace` in the pubspec.yaml file
+- Create a pubspec_overrides.yaml with the line `resolution:`
+
 Before building, replace the --dart-define values for APP_URL, OAUTH_CALLBACK_URL, OAUTH_CLIENT_ID and OAUTH_MOBILE_CLIENT_ID
  
 ```
@@ -122,6 +177,7 @@ flutter build web \
   --dart-define=MESHAGENT_MAIL_DOMAIN=mail.meshagent.com \
   --dart-define=IMAGE_TAG_PREFIX=us-central1-docker.pkg.dev/meshagent-public/images/
 ```
+
 ## Sample dockerfile
 
 Before building, replace the --dart-define values for APP_URL, OAUTH_CALLBACK_URL, OAUTH_CLIENT_ID and OAUTH_MOBILE_CLIENT_ID

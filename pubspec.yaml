@@ -78,7 +78,6 @@ dependencies:
   meshagent_flutter_shadcn: ^0.28.2
   meshagent_flutter_dev: ^0.28.2
   meshagent_flutter_auth: ^0.28.2
-  meshagent_luau: ^0.28.2
 
   data_table_2: ^2.6.0
   file_icon: ^1.0.0
