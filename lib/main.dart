@@ -16,8 +16,6 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 import 'package:url_strategy/url_strategy.dart';
-// ignore: depend_on_referenced_packages
-import 'package:meshagent_luau/meshagent_luau.dart';
 
 // ignore: depend_on_referenced_packages
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -55,10 +53,6 @@ const breakpointsLandscape = [
 ];
 
 void main() async {
-  if (kIsWeb) {
-    Luau.init();
-  }
-
   SolidartConfig.assertSignalBuilderWithoutDependencies = false;
 
   const sentryEnabled = bool.fromEnvironment('SENTRY_ENABLED', defaultValue: false);
