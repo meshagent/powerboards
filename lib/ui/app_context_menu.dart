@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class AppMenuEntry {
-  const AppMenuEntry({required this.title, required this.description, this.onPressed, this.icon, this.leading, this.selected = false});
+  const AppMenuEntry({required this.title, this.description, this.onPressed, this.icon, this.leading, this.selected = false});
 
   final String title;
-  final String description;
+  final String? description;
   final VoidCallback? onPressed;
   final IconData? icon;
   final Widget? leading;
@@ -87,8 +87,8 @@ Widget _menuItem(AppMenuEntry e, {required int index, required int count, requir
 
   return ShadContextMenuItem.inset(
     padding: EdgeInsets.zero,
-    leadingPadding: const EdgeInsets.only(right: 14),
-    insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+    leadingPadding: const .only(right: 14),
+    insetPadding: const .symmetric(horizontal: 14, vertical: 0),
     height: 80,
     onPressed: e.onPressed,
     decoration: ShadDecoration(border: ShadBorder.all(radius: itemRadius)),
@@ -97,20 +97,28 @@ Widget _menuItem(AppMenuEntry e, {required int index, required int count, requir
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          e.title,
-          style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600),
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 6),
-        Text(
-          e.description,
-          style: GoogleFonts.inter(fontSize: 14, height: 1.2, fontWeight: FontWeight.w500, color: const Color(0xFF666666)),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 2,
-        ),
-      ],
+      children: e.description == null
+          ? [
+              Text(
+                e.title,
+                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ]
+          : [
+              Text(
+                e.title,
+                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                e.description!,
+                style: GoogleFonts.inter(fontSize: 14, height: 1.2, fontWeight: FontWeight.w500, color: const Color(0xFF666666)),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+            ],
     ),
   );
 }
