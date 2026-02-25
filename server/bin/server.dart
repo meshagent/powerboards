@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:args/args.dart';
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
@@ -33,7 +34,7 @@ Middleware corsControlMiddleware() {
   };
 }
 
-Middleware redirectWwwToApp() {
+Middleware handleRedirects() {
   return (Handler inner) {
     return (Request request) async {
       final host = request.headers['host'];
@@ -48,13 +49,13 @@ Middleware redirectWwwToApp() {
 
       final hasSubdomain = '.'.allMatches(host).length >= 2;
       if (!hasSubdomain) {
-        final newHost = 'app.$host';
+        final newHost = redirectToApp ? 'app.$host' : 'www.$host';
         final newUri = request.requestedUri.replace(host: newHost);
 
         return Response.found(newUri.toString());
       }
 
-      if (host.startsWith('www.')) {
+      if (host.startsWith('www.') && redirectToApp) {
         final newHost = 'app.${host.substring(4)}';
         final newUri = request.requestedUri.replace(host: newHost);
 
@@ -126,10 +127,23 @@ Router setupRoutes() {
   return router;
 }
 
+bool redirectToApp = false;
 void main(List<String> arguments) async {
+  final parser =
+      ArgParser()..addFlag(
+        'redirect-to-app',
+        defaultsTo: false, // 👈 explicit default
+        negatable: false, // prevents --no-redirect-to-app
+        help: 'Redirect www.example.com to app.example.com',
+      );
+
+  final results = parser.parse(arguments);
+
+  redirectToApp = results['redirect-to-app'] as bool;
+
   final handler = const Pipeline()
       .addMiddleware(logRequests())
-      .addMiddleware(redirectWwwToApp())
+      .addMiddleware(handleRedirects())
       .addMiddleware(corsControlMiddleware())
       .addHandler(setupRoutes().call);
 
