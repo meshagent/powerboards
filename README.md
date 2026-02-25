@@ -224,6 +224,7 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 WORKDIR /app
 COPY --from=builder /workspace/server/server server
 COPY --from=flutter /powerboards/build/web public
+RUN mkdir -p public/.well-known/
 
 EXPOSE 80
 ENTRYPOINT ["./server"]
