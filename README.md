@@ -184,7 +184,7 @@ Before building, replace the --dart-define values for APP_URL, OAUTH_CALLBACK_UR
 
 ```
 FROM ghcr.io/cirruslabs/flutter:3.38.4 AS flutter
-RUN apt update && apt install -y git unzip curl
+RUN apt update && apt install -y git
 
 COPY . /powerboards
 
@@ -212,14 +212,13 @@ RUN flutter build web \
 # --- Build Server ---
 FROM dart:stable AS builder
 WORKDIR /workspace
-COPY ./powerboards/server server
+COPY ./server server
 WORKDIR /workspace/server
 RUN dart pub get
 RUN dart compile exe bin/server.dart -o server
 
 # --- Final Stage ---
 FROM debian:bookworm-slim AS final
-ARG AASA_FILE=
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
