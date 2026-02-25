@@ -9,7 +9,6 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
-import 'package:meshagent_flutter_widgets/meshagent_flutter_widgets.dart';
 
 import 'package:powerboards/meshagent/loader.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -81,146 +80,140 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   @override
   Widget build(BuildContext context) {
     return ShadToaster(
-      child: LuauConsoleScope(
-        child: RoomConnectionScope(
-          key: ValueKey("room-connection-${widget.roomName}-$conectionNumber"),
-          authorization: () {
-            final client = getMeshagentClient();
+      child: RoomConnectionScope(
+        key: ValueKey("room-connection-${widget.roomName}-$conectionNumber"),
+        authorization: () {
+          final client = getMeshagentClient();
 
-            return client.connectRoom(projectId: widget.projectId, roomName: widget.roomName);
-          },
-          notFoundBuilder: (context) => RoomNotFound(),
-          oauthTokenRequestHandler: (RoomClient client, request) async {
-            showShadDialog(
+          return client.connectRoom(projectId: widget.projectId, roomName: widget.roomName);
+        },
+        notFoundBuilder: (context) => RoomNotFound(),
+        oauthTokenRequestHandler: (RoomClient client, request) async {
+          showShadDialog(
+            context: context,
+            builder: (context) => ShadDialog(
+              title: Text("An agent would like permission to use one of your accounts"),
+              description: Text("You will be redirected to the third party service to login (${request.authorizationEndpoint})."),
+              actions: [
+                ShadButton.destructive(
+                  onPressed: () {
+                    client.secrets.rejectOAuthAuthorization(requestId: request.requestId, error: "cancelled");
+
+                    Navigator.of(context).pop();
+                  },
+                  child: Text("Cancel"),
+                ),
+
+                ShadButton(
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+
+                    final code = oauth2AuthorizationCode(
+                      await oauth2Authenticate(
+                        request,
+                        Uri.parse("${MeshagentConfig.current?.appUrl}/oauth2/callback"),
+                        jsonEncode({"room_name": widget.roomName, "request_id": request.requestId}),
+                      ),
+                    );
+
+                    client.secrets.provideOAuthAuthorization(requestId: request.requestId, code: code!);
+                  },
+                  child: Text("Continue"),
+                ),
+              ],
+            ),
+          );
+        },
+        secretRequestHandler: (RoomClient client, SecretRequest request) async {
+          if (!context.mounted) return;
+
+          if (request.type == "git") {
+            final secretValue = {};
+            final value = await showShadDialog<Map>(
               context: context,
-              builder: (context) => ShadDialog(
-                title: Text("An agent would like permission to use one of your accounts"),
-                description: Text("You will be redirected to the third party service to login (${request.authorizationEndpoint})."),
+              builder: (context) => ShadDialog.alert(
+                title: Text("Secret requested"),
+                description: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 8,
+                  children: [
+                    Text("An agent requested credentials for ${request.url}"),
+                    SizedBox(height: 8),
+                    ShadInputFormField(label: Text("Username"), obscureText: false, onChanged: (value) => secretValue["username"] = value),
+                    ShadInputFormField(
+                      label: Text("Password / Personal Access Token"),
+                      obscureText: true,
+                      onChanged: (value) => secretValue["password"] = value,
+                    ),
+                  ],
+                ),
                 actions: [
-                  ShadButton.destructive(
-                    onPressed: () {
-                      client.secrets.rejectOAuthAuthorization(requestId: request.requestId, error: "cancelled");
-
-                      Navigator.of(context).pop();
-                    },
-                    child: Text("Cancel"),
-                  ),
-
-                  ShadButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-
-                      final code = oauth2AuthorizationCode(
-                        await oauth2Authenticate(
-                          request,
-                          Uri.parse("${MeshagentConfig.current?.appUrl}/oauth2/callback"),
-                          jsonEncode({"room_name": widget.roomName, "request_id": request.requestId}),
-                        ),
-                      );
-
-                      client.secrets.provideOAuthAuthorization(requestId: request.requestId, code: code!);
-                    },
-                    child: Text("Continue"),
-                  ),
+                  ShadButton.secondary(onPressed: () => Navigator.of(context).pop(), child: Text("Cancel")),
+                  ShadButton(onPressed: () => Navigator.of(context).pop(secretValue), child: Text("Provide")),
                 ],
               ),
             );
-          },
-          secretRequestHandler: (RoomClient client, SecretRequest request) async {
-            if (!context.mounted) return;
 
-            if (request.type == "git") {
-              final secretValue = {};
-              final value = await showShadDialog<Map>(
-                context: context,
-                builder: (context) => ShadDialog.alert(
-                  title: Text("Secret requested"),
-                  description: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 8,
-                    children: [
-                      Text("An agent requested credentials for ${request.url}"),
-                      SizedBox(height: 8),
-                      ShadInputFormField(
-                        label: Text("Username"),
-                        obscureText: false,
-                        onChanged: (value) => secretValue["username"] = value,
-                      ),
-                      ShadInputFormField(
-                        label: Text("Password / Personal Access Token"),
-                        obscureText: true,
-                        onChanged: (value) => secretValue["password"] = value,
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    ShadButton.secondary(onPressed: () => Navigator.of(context).pop(), child: Text("Cancel")),
-                    ShadButton(onPressed: () => Navigator.of(context).pop(secretValue), child: Text("Provide")),
-                  ],
-                ),
-              );
-
-              if (value == null) {
-                await client.secrets.rejectSecret(requestId: request.requestId, error: "cancelled");
-              } else {
-                await client.secrets.provideSecret(requestId: request.requestId, data: Uint8List.fromList(utf8.encode(jsonEncode(value))));
-              }
+            if (value == null) {
+              await client.secrets.rejectSecret(requestId: request.requestId, error: "cancelled");
             } else {
-              String secretValue = "";
-              final value = await showShadDialog<String>(
-                context: context,
-                builder: (context) => ShadDialog.alert(
-                  title: Text("Secret requested"),
-                  description: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("An agent requested a secret value."),
-                      SizedBox(height: 8),
-                      Text("Key: ${request.url}"),
-                      Text("Type: ${request.type}"),
-                      SizedBox(height: 16),
-                      ShadInputFormField(label: Text("Secret"), obscureText: true, onChanged: (value) => secretValue = value),
-                    ],
-                  ),
-                  actions: [
-                    ShadButton.secondary(onPressed: () => Navigator.of(context).pop(), child: Text("Cancel")),
-                    ShadButton(onPressed: () => Navigator.of(context).pop(secretValue), child: Text("Provide")),
+              await client.secrets.provideSecret(requestId: request.requestId, data: Uint8List.fromList(utf8.encode(jsonEncode(value))));
+            }
+          } else {
+            String secretValue = "";
+            final value = await showShadDialog<String>(
+              context: context,
+              builder: (context) => ShadDialog.alert(
+                title: Text("Secret requested"),
+                description: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("An agent requested a secret value."),
+                    SizedBox(height: 8),
+                    Text("Key: ${request.url}"),
+                    Text("Type: ${request.type}"),
+                    SizedBox(height: 16),
+                    ShadInputFormField(label: Text("Secret"), obscureText: true, onChanged: (value) => secretValue = value),
                   ],
                 ),
-              );
-
-              if (value == null) {
-                await client.secrets.rejectSecret(requestId: request.requestId, error: "cancelled");
-              } else {
-                await client.secrets.provideSecret(requestId: request.requestId, data: Uint8List.fromList(utf8.encode(value)));
-              }
-            }
-          },
-          authorizingBuilder: (context) => Center(child: CircularProgressIndicator(key: loadingKey)),
-          connectingBuilder: (context, client) => Center(child: CircularProgressIndicator(key: loadingKey)),
-          doneBuilder: (context, error) {
-            return SafeArea(
-              child: _loadingBody(
-                RoomEndedCard(
-                  onReconnect: () {
-                    setState(() {
-                      conectionNumber += 1;
-                    });
-                  },
-                ),
+                actions: [
+                  ShadButton.secondary(onPressed: () => Navigator.of(context).pop(), child: Text("Cancel")),
+                  ShadButton(onPressed: () => Navigator.of(context).pop(secretValue), child: Text("Provide")),
+                ],
               ),
             );
-          },
-          builder: (context, client) {
-            return FutureBuilder(
-              future: client.ready,
-              builder: (context, snapshot) =>
-                  snapshot.hasData ? widget.builder(context, client) : Center(child: CircularProgressIndicator(key: loadingKey)),
-            );
-          },
-        ),
+
+            if (value == null) {
+              await client.secrets.rejectSecret(requestId: request.requestId, error: "cancelled");
+            } else {
+              await client.secrets.provideSecret(requestId: request.requestId, data: Uint8List.fromList(utf8.encode(value)));
+            }
+          }
+        },
+        authorizingBuilder: (context) => Center(child: CircularProgressIndicator(key: loadingKey)),
+        connectingBuilder: (context, client) => Center(child: CircularProgressIndicator(key: loadingKey)),
+        doneBuilder: (context, error) {
+          return SafeArea(
+            child: _loadingBody(
+              RoomEndedCard(
+                onReconnect: () {
+                  setState(() {
+                    conectionNumber += 1;
+                  });
+                },
+              ),
+            ),
+          );
+        },
+        builder: (context, client) {
+          return FutureBuilder(
+            future: client.ready,
+            builder: (context, snapshot) =>
+                snapshot.hasData ? widget.builder(context, client) : Center(child: CircularProgressIndicator(key: loadingKey)),
+          );
+        },
       ),
     );
   }

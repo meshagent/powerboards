@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
@@ -17,9 +16,7 @@ import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:meshagent_flutter_dev/developer_console.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
-import 'package:meshagent_flutter_shadcn/viewers/viewers.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
-import 'package:meshagent_flutter_widgets/meshagent_flutter_widgets.dart';
 
 import 'package:powerboards/chat/hangup_button.dart';
 import 'package:powerboards/livekit/room.dart' as room;
@@ -568,57 +565,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildWidgetArea(BuildContext context, String? agentName, List<Widget> actions, String widgetUrl) {
-    final user = MeshagentAuth.current.getUser();
-    final userId = user!['id'] as String;
-
-    return _ResourceFetcher<WidgetConfig>(
-      uri: Uri.parse(widgetUrl),
-      key: ValueKey(widgetUrl),
-      mapper: (data) {
-        final widgetJsonStr = utf8.decode(data);
-
-        final widgetJson = jsonDecode(widgetJsonStr);
-
-        final initialJson = widgetJson["initial_json"];
-        final schema = MeshSchema.fromJson(widgetJson["schema"]);
-
-        return WidgetConfig(initialJson: initialJson, schema: schema);
-      },
-      builder: (context, data, err) => data == null
-          ? Center(child: CircularProgressIndicator())
-          : EditorSelection(
-              child: EditMode(
-                editing: false,
-                child: Column(
-                  children: [
-                    ActionsRow(actions: actions),
-                    _buildAgentsActionRow(context),
-                    Expanded(
-                      child: DocumentConnectionScope(
-                        room: widget.room,
-                        path: "agents/$agentName/index.widget",
-                        initialJson: data.initialJson,
-                        schema: data.schema,
-                        key: ValueKey(getDocumentPath(userId, agentName)),
-                        builder: (context, doc, error) {
-                          if (doc == null) {
-                            return Center(child: CircularProgressIndicator());
-                          }
-                          return ChangeNotifierBuilder(
-                            source: doc,
-                            builder: (context) => MeshWidgetRoot(element: doc.root, room: widget.room),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-    );
-  }
-
   Widget _buildVoiceArea(BuildContext context, String agentName, List<Widget> actions) {
     return Column(
       children: [
@@ -730,11 +676,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         }
 
         final type = _serviceType(service);
-        final widgetJsonStr = service.agents.firstOrNull?.annotations["meshagent.agent.widget"];
-
-        if (widgetJsonStr != null) {
-          return _buildWidgetArea(context, service.agents[0].name, actions, widgetJsonStr);
-        } else if (type == "ChatBot") {
+        if (type == "ChatBot") {
           return _buildChatArea(context, service.agents[0].name, actions);
         } else if (type == "VoiceBot") {
           return _buildVoiceArea(context, service.agents[0].name, actions);

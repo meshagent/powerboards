@@ -10,7 +10,6 @@ import 'package:meshagent_flutter_shadcn/viewers/document.dart';
 import 'package:meshagent_flutter_shadcn/viewers/gallery.dart';
 import 'package:meshagent_flutter_shadcn/viewers/presentation.dart';
 import 'package:meshagent_flutter_shadcn/viewers/transcript.dart';
-import 'package:meshagent_flutter_widgets/widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -107,20 +106,7 @@ class _DocumentPane extends State<DocumentPane> {
                               child: PresentationViewer(client: widget.room, document: document),
                             ),
                             "transcript" => TranscriptViewer(document: document),
-                            "widget" => SingleChildScrollView(
-                              child: Builder(
-                                builder: (context) {
-                                  final element = document.root.getElementsByTagName("widgets").firstOrNull;
-                                  if (element == null) return Container();
-                                  return Center(
-                                    child: EditMode(
-                                      editing: false,
-                                      child: MeshWidgetRoot(element: element, room: widget.room),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
+
                             "form" => SingleChildScrollView(
                               child: FormDocumentViewer(client: widget.room, document: document),
                             ),
