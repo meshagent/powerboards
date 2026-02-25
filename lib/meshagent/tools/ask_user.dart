@@ -119,7 +119,7 @@ final askUserSchema = {
   },
 };
 
-class AskUser extends Tool {
+class AskUser extends FunctionTool {
   AskUser({required this.context, super.name = "ask_user", super.description = "ask the user a question", super.title = "ask user"})
     : super(inputSchema: askUserSchema);
 
@@ -131,7 +131,7 @@ class AskUser extends Tool {
   }
 
   @override
-  Future<Response> execute(ToolContext context, Map<String, dynamic> arguments) async {
+  Future<Content> execute(ToolContext context, Map<String, dynamic> arguments) async {
     final result = await showShadDialog<Map<String, dynamic>>(
       context: this.context,
       builder: (context) {
@@ -183,7 +183,7 @@ class AskUser extends Tool {
     } else if (result["user_feedback"] != null) {
       throw Exception("The user cancelled the request");
     }
-    return JsonResponse(json: result["result"]);
+    return JsonContent(json: result["result"]);
   }
 }
 

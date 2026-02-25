@@ -216,7 +216,11 @@ class _MeetingActions extends State<MeetingToolkits> {
                   widget.room.agents.invokeTool(
                     toolkit: transcription!.name,
                     tool: startRecording.name,
-                    arguments: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                    input: ToolContentInput(
+                      JsonContent(
+                        json: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                      ),
+                    ),
                   );
                 },
                 child: Text("Start Transcription"),
@@ -227,7 +231,11 @@ class _MeetingActions extends State<MeetingToolkits> {
                 leading: Icon(LucideIcons.captionsOff),
 
                 onPressed: () async {
-                  widget.room.agents.invokeTool(toolkit: transcription!.name, tool: stopRecording.name, arguments: {"breakout_room": ""});
+                  widget.room.agents.invokeTool(
+                    toolkit: transcription!.name,
+                    tool: stopRecording.name,
+                    input: ToolContentInput(JsonContent(json: {"breakout_room": ""})),
+                  );
                 },
                 child: Text("Stop Transcription"),
               ),
