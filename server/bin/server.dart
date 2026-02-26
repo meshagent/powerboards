@@ -129,13 +129,13 @@ Router setupRoutes() {
 
 bool redirectToApp = false;
 void main(List<String> arguments) async {
-  final parser =
-      ArgParser()..addFlag(
-        'redirect-to-app',
-        defaultsTo: false, // 👈 explicit default
-        negatable: false, // prevents --no-redirect-to-app
-        help: 'Redirect www.example.com to app.example.com',
-      );
+  final parser = ArgParser()
+    ..addFlag(
+      'redirect-to-app',
+      defaultsTo: false, // 👈 explicit default
+      negatable: false, // prevents --no-redirect-to-app
+      help: 'Redirect www.example.com to app.example.com',
+    );
 
   final results = parser.parse(arguments);
 

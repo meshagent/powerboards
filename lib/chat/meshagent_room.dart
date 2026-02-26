@@ -46,9 +46,10 @@ import 'package:powerboards/ui/resizable_split_view.dart';
 const defaultDebugSize = 0.4;
 
 class ParticipantsButton extends StatefulWidget {
-  const ParticipantsButton({super.key, required this.participants});
+  const ParticipantsButton({super.key, required this.participants, required this.localParticipant});
 
   final List<RemoteParticipant> participants;
+  final LocalParticipant? localParticipant;
 
   @override
   State createState() => _ParticipantsButtonState();
@@ -80,6 +81,14 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
     final user = MeshagentAuth.current.getUser();
     final myEmail = ((user?['email'] as String?) ?? "").toLowerCase().trim();
 
+    if (widget.localParticipant != null) {
+      final name = widget.localParticipant!.getAttribute("name") as String?;
+
+      if (name != null && name.isNotEmpty) {
+        nameSet.add(name);
+      }
+    }
+
     if (nameSet.isEmpty) {
       return SizedBox.shrink();
     }
@@ -104,21 +113,20 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
               mainAxisSize: .min,
               mainAxisAlignment: .start,
               crossAxisAlignment: .start,
-              children: nameSet
-                  .sorted((a, b) => a.toLowerCase().compareTo(b.toLowerCase()))
-                  .map(
-                    (name) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: Row(
-                        children: [
-                          Icon(LucideIcons.user, size: 16),
-                          SizedBox(width: 8),
-                          Flexible(child: Text(name == myEmail ? "$name (You)" : name, overflow: TextOverflow.ellipsis)),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(),
+              children: nameSet.sorted((a, b) => a.toLowerCase().compareTo(b.toLowerCase())).map((name) {
+                final isMe = name.toLowerCase().trim() == myEmail;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.user, size: 16),
+                      SizedBox(width: 8),
+                      Flexible(child: Text(isMe ? "$name (You)" : name, overflow: .ellipsis)),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
           ],
         ),
@@ -862,7 +870,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           onManageAgents: isOwner.state.value != true ? null : showManageAgents,
                                         ),
 
-                                        ParticipantsButton(participants: participants),
+                                        ParticipantsButton(participants: participants, localParticipant: widget.room.localParticipant),
 
                                         if (!split) ...actions,
                                       ]),
