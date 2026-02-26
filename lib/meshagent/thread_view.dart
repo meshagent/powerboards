@@ -575,14 +575,45 @@ final storage = StaticToolkitBuilderOption(
 );
 
 String? getBaseUrl(ServiceSpec s, PortSpec p, EndpointSpec e) {
-  if (s.external != null) {
-    if (s.external?.url == null) {
+  final endpointPath = e.path.startsWith('/') ? e.path : '/${e.path}';
+  final port = p.num.value;
+
+  if (s.external == null) {
+    if (port == null) {
+      return Uri(scheme: 'http', host: 'localhost', path: endpointPath).toString();
+    }
+    return Uri(scheme: 'http', host: 'localhost', port: port, path: endpointPath).toString();
+  }
+
+  final externalUrl = s.external?.url;
+  if (externalUrl == null || externalUrl.isEmpty) {
+    return null;
+  }
+
+  var baseUri = Uri.tryParse(externalUrl);
+  if (baseUri == null) {
+    return null;
+  }
+  if (!baseUri.hasScheme) {
+    final withDefaultScheme = Uri.tryParse('https://$externalUrl');
+    if (withDefaultScheme == null) {
       return null;
     }
-    return "${s.external!.url}:${p.num}${e.path}";
-  } else {
-    return "http://localhost:${p.num}${e.path}";
+    baseUri = withDefaultScheme;
   }
+  if (!baseUri.hasAuthority) {
+    return null;
+  }
+
+  final normalizedBasePath = baseUri.path.endsWith('/') ? baseUri.path.substring(0, baseUri.path.length - 1) : baseUri.path;
+  final joinedPath = normalizedBasePath.isEmpty || normalizedBasePath == '/' ? endpointPath : '$normalizedBasePath$endpointPath';
+
+  final baseWithPath = baseUri.replace(path: joinedPath);
+  if (port == null) {
+    return baseWithPath.toString();
+  }
+
+  return baseWithPath.replace(port: port).toString();
 }
 
 Widget buildTools(
