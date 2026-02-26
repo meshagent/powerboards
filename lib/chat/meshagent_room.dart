@@ -46,9 +46,10 @@ import 'package:powerboards/ui/resizable_split_view.dart';
 const defaultDebugSize = 0.4;
 
 class ParticipantsButton extends StatefulWidget {
-  const ParticipantsButton({super.key, required this.participants});
+  const ParticipantsButton({super.key, required this.participants, required this.localParticipant});
 
   final List<RemoteParticipant> participants;
+  final LocalParticipant? localParticipant;
 
   @override
   State createState() => _ParticipantsButtonState();
@@ -56,6 +57,56 @@ class ParticipantsButton extends StatefulWidget {
 
 class _ParticipantsButtonState extends State<ParticipantsButton> {
   late final popoverController = ShadPopoverController();
+  final statesController = ShadStatesController();
+
+  String _initialFromText(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return "U";
+
+    return String.fromCharCode(trimmed.runes.first).toUpperCase();
+  }
+
+  String _initialsFromName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return "U";
+
+    final localPart = trimmed.split("@").first;
+    final parts = localPart.split(RegExp(r"[._\- ]+")).where((part) => part.isNotEmpty).toList();
+
+    if (parts.length >= 2) {
+      return "${_initialFromText(parts[0])}${_initialFromText(parts[1])}";
+    }
+
+    if (parts.length == 1) {
+      return _initialFromText(parts[0]);
+    }
+
+    return _initialFromText(trimmed);
+  }
+
+  Widget _buildOverlapAvatars(List<String> names, Set<ShadState> states) {
+    const avatarSize = 38.0;
+    const overlapOffset = 24.0;
+    final width = avatarSize + (names.length - 1) * overlapOffset;
+    final hovered = states.contains(ShadState.hovered);
+
+    return SizedBox(
+      width: width,
+      height: avatarSize,
+      child: Stack(
+        children: List.generate(names.length, (index) {
+          final name = names[index];
+          return Positioned(
+            left: index * overlapOffset,
+            child: Tooltip(
+              message: name,
+              child: UserAvatarCircle(initials: _initialsFromName(name), size: avatarSize, hovered: hovered),
+            ),
+          );
+        }),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -66,6 +117,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
+    final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final nameSet = <String>{};
 
@@ -80,9 +132,34 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
     final user = MeshagentAuth.current.getUser();
     final myEmail = ((user?['email'] as String?) ?? "").toLowerCase().trim();
 
+    if (widget.localParticipant != null) {
+      final name = widget.localParticipant!.getAttribute("name") as String?;
+
+      if (name != null && name.isNotEmpty) {
+        nameSet.add(name);
+      }
+    }
+
     if (nameSet.isEmpty) {
       return SizedBox.shrink();
     }
+
+    final sortedNames = nameSet.sorted((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final trigger = sortedNames.length <= 3
+        ? ValueListenableBuilder(
+            valueListenable: statesController,
+            builder: (BuildContext context, Set<ShadState> states, Widget? child) {
+              return ShadButton.ghost(
+                statesController: statesController,
+                hoverBackgroundColor: cs.background,
+                padding: .zero,
+                onPressed: popoverController.toggle,
+                decoration: .none,
+                child: _buildOverlapAvatars(sortedNames, states),
+              );
+            },
+          )
+        : ShadButton.outline(leading: Icon(LucideIcons.users), onPressed: popoverController.toggle, child: Text("+${nameSet.length}"));
 
     return ShadPopover(
       controller: popoverController,
@@ -97,33 +174,32 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text("People in this room", style: tt.large),
+              child: Text("People here right now", style: tt.large),
             ),
             Column(
               spacing: 8,
               mainAxisSize: .min,
               mainAxisAlignment: .start,
               crossAxisAlignment: .start,
-              children: nameSet
-                  .sorted((a, b) => a.toLowerCase().compareTo(b.toLowerCase()))
-                  .map(
-                    (name) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      child: Row(
-                        children: [
-                          Icon(LucideIcons.user, size: 16),
-                          SizedBox(width: 8),
-                          Flexible(child: Text(name == myEmail ? "$name (You)" : name, overflow: TextOverflow.ellipsis)),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(),
+              children: sortedNames.map((name) {
+                final isMe = name.toLowerCase().trim() == myEmail;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.user, size: 16),
+                      SizedBox(width: 8),
+                      Flexible(child: Text(isMe ? "$name (You)" : name, overflow: .ellipsis)),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
           ],
         ),
       ),
-      child: ShadButton.outline(leading: Icon(LucideIcons.users), onPressed: popoverController.toggle, child: Text("+${nameSet.length}")),
+      child: trigger,
     );
   }
 }
@@ -862,7 +938,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           onManageAgents: isOwner.state.value != true ? null : showManageAgents,
                                         ),
 
-                                        ParticipantsButton(participants: participants),
+                                        ParticipantsButton(participants: participants, localParticipant: widget.room.localParticipant),
 
                                         if (!split) ...actions,
                                       ]),
