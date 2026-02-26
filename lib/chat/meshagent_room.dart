@@ -106,7 +106,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text("People in this room", style: tt.large),
+              child: Text("People here right now", style: tt.large),
             ),
             Column(
               spacing: 8,
