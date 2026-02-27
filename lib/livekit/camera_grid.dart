@@ -62,26 +62,39 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
       context,
       participants,
       frameBuilder: (context, participant, track, child) {
-        final isShare = track?.source == TrackSource.screenShareVideo;
-
-        if (!isShare || numberOfShares == 1 || (numberOfVideos == 1 && numberOfShares == 0)) {
-          return child;
-        }
-
         final isExpanded = expandedIdentity != null && participant.identity == expandedIdentity;
 
-        return _ExpandableShareTile(isExpanded: isExpanded, onToggle: () => _toggleExpanded(participant.identity), child: child);
+        if (numberOfShares >= 2) {
+          return _ExpandableShareTile(
+            isSharing: true,
+            isExpanded: isExpanded,
+            onToggle: () => _toggleExpanded(participant.identity),
+            child: child,
+          );
+        }
+
+        if (numberOfShares == 0 && numberOfVideos >= 2) {
+          return _ExpandableShareTile(
+            isSharing: false,
+            isExpanded: isExpanded,
+            onToggle: () => _toggleExpanded(participant.identity),
+            child: child,
+          );
+        }
+
+        return child;
       },
     );
   }
 }
 
 class _ExpandableShareTile extends StatelessWidget {
-  const _ExpandableShareTile({required this.child, required this.isExpanded, required this.onToggle});
+  const _ExpandableShareTile({required this.isExpanded, required this.isSharing, required this.onToggle, required this.child});
 
-  final Widget child;
+  final bool isSharing;
   final bool isExpanded;
   final VoidCallback onToggle;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -90,8 +103,8 @@ class _ExpandableShareTile extends StatelessWidget {
       children: [
         child,
         Positioned(
-          top: 0,
-          right: 0,
+          top: isSharing ? 0 : 10.0,
+          right: isSharing ? 0 : 10.0,
           child: _ShareExpandButton(isExpanded: isExpanded, onPressed: onToggle),
         ),
       ],
@@ -109,7 +122,7 @@ class _ShareExpandButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: isExpanded ? "Collapse" : "Expand",
-      child: ShadButton.outline(onPressed: onPressed, child: Icon(isExpanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16)),
+      child: ShadButton.secondary(onPressed: onPressed, child: Icon(isExpanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16)),
     );
   }
 }
