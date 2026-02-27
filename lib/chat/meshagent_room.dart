@@ -84,9 +84,15 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
     return _initialFromText(trimmed);
   }
 
-  Widget _buildOverlapAvatars(List<String> names, Set<ShadState> states) {
+  Widget _buildOverlapAvatars(List<RemoteParticipant> remoteUsers, Set<ShadState> states) {
     const avatarSize = 38.0;
     const overlapOffset = 24.0;
+    final names = remoteUsers
+        .map((p) => p.getAttribute("name") as String?)
+        .where((name) => name != null && name.isNotEmpty)
+        .cast<String>()
+        .toList();
+
     final width = avatarSize + (names.length - 1) * overlapOffset;
     final hovered = states.contains(ShadState.hovered);
 
@@ -120,17 +126,22 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final nameSet = <String>{};
+    final remoteUsers = <RemoteParticipant>[];
+
+    final user = MeshagentAuth.current.getUser();
+    final myEmail = ((user?['email'] as String?) ?? "").toLowerCase().trim();
 
     for (final participant in widget.participants) {
       final name = participant.getAttribute("name") as String?;
 
       if (participant.role != 'agent' && name != null && name.isNotEmpty) {
         nameSet.add(name);
+
+        if (name.toLowerCase().trim() != myEmail) {
+          remoteUsers.add(participant);
+        }
       }
     }
-
-    final user = MeshagentAuth.current.getUser();
-    final myEmail = ((user?['email'] as String?) ?? "").toLowerCase().trim();
 
     if (widget.localParticipant != null) {
       final name = widget.localParticipant!.getAttribute("name") as String?;
@@ -140,12 +151,12 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
       }
     }
 
-    if (nameSet.isEmpty) {
+    if (nameSet.isEmpty || remoteUsers.isEmpty) {
       return SizedBox.shrink();
     }
 
     final sortedNames = nameSet.sorted((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    final trigger = sortedNames.length <= 3
+    final trigger = remoteUsers.length <= 3
         ? ValueListenableBuilder(
             valueListenable: statesController,
             builder: (BuildContext context, Set<ShadState> states, Widget? child) {
@@ -155,7 +166,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
                 padding: .zero,
                 onPressed: popoverController.toggle,
                 decoration: .none,
-                child: _buildOverlapAvatars(sortedNames, states),
+                child: _buildOverlapAvatars(remoteUsers, states),
               );
             },
           )
