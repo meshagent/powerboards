@@ -23,22 +23,12 @@ This guide covers:
 3. Go to **OAuth Clients**.
 4. Create web and mobile OAuth clients:
    - **Web redirect URL:** `https://<your-domain>/mauth/callback`
+     If you want to run powerboards locally, using the `flutter run` command, then you can use localhost:8002 as your-domain.
    - **Mobile redirect URL:** `powerboards:/mauth/callback`
 
 Save both client IDs. You will pass them to `flutter build` through `--dart-define`.
 
 ## 2) Build the web app locally
-
-`powerboards/pubspec.yaml` is currently configured for a pub workspace (`resolution: workspace`).
-
-Choose one of the following:
-- Put `powerboards` inside your pub workspace.
-- Remove `resolution: workspace` from `pubspec.yaml`.
-- Create `pubspec_overrides.yaml` with:
-
-```yaml
-resolution:
-```
 
 Then build:
 
@@ -60,6 +50,24 @@ flutter build web \
   --dart-define=MESHAGENT_MAIL_DOMAIN=mail.meshagent.com \
   --dart-define=IMAGE_TAG_PREFIX=us-central1-docker.pkg.dev/meshagent-public/images/
 ```
+
+or run:
+
+```bash
+flutter run \ 
+  --web-port 8002
+  --dart-define=SERVER_URL=https://api.meshagent.com \
+  --dart-define=APP_URL=http://localhost:8002 \
+  --dart-define=BILLING_URL=https://accounts.meshagent.com \
+  --dart-define=OAUTH_CALLBACK_URL=http://localhost:8002/mauth/callback \
+  --dart-define=OAUTH_CLIENT_ID=$WEB_OAUTH_CLIENT_ID_FROM_MESHAGENT \
+  --dart-define=OAUTH_MOBILE_CALLBACK_URL=powerboards:/mauth/callback \
+  --dart-define=OAUTH_MOBILE_CLIENT_ID=$MOBILE_OAUTH_CLIENT_ID_FROM_MESHAGENT \
+  --dart-define=SENTRY_ENABLED=false \
+  --dart-define=MESHAGENT_DOMAIN=meshagent.com \
+  --dart-define=DOMAINS=meshagent.app \
+  --dart-define=MESHAGENT_MAIL_DOMAIN=mail.meshagent.com \
+  --dart-define=IMAGE_TAG_PREFIX=us-central1-docker.pkg.dev/meshagent-public/images/
 
 ## 3) Deploy static files to GCS + HTTPS Load Balancer
 
@@ -200,7 +208,7 @@ Before building, replace the `--dart-define` values for:
 - `OAUTH_MOBILE_CLIENT_ID`
 
 ```dockerfile
-FROM ghcr.io/cirruslabs/flutter:3.38.4 AS flutter
+FROM ghcr.io/cirruslabs/flutter:3.38.10 AS flutter
 RUN apt update && apt install -y git
 
 COPY . /powerboards
