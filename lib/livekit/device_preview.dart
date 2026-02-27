@@ -67,7 +67,10 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     _audioDeviceId = _preferences.getString("audioInput");
     _videoDeviceId = _preferences.getString("videoInput");
 
+    if (!mounted) return;
     await _enableVideo();
+
+    if (!mounted) return;
     await _enableAudio();
 
     if (mounted) {

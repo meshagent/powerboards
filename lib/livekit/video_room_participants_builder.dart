@@ -17,6 +17,7 @@ class _VideoRoomParticipantsBuilderState extends State<VideoRoomParticipantsBuil
   @override
   void initState() {
     super.initState();
+
     participants = [if (widget.room.localParticipant != null) widget.room.localParticipant!, ...widget.room.remoteParticipants.values];
     widget.room.addListener(_onRoomChanged);
   }

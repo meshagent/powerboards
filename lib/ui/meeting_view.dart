@@ -51,36 +51,21 @@ class MeetingView extends StatelessWidget {
   final VoidCallback onCancel;
   final void Function() joinMeeting;
 
-  Widget _cameraStripBuilder(BuildContext context, bool horizontal) {
-    final room = VideoRoomModel.maybeOf(context)?.room;
-    if (room == null) return const SizedBox.shrink();
-
-    return VideoRoomParticipantsBuilder(
-      room: room,
-      builder: (context, participants) {
-        final hasShare = participants.any(
-          (p) => p.videoTrackPublications.any((t) => t.source == lk.TrackSource.screenShareVideo && !t.muted && t.track != null),
-        );
-
-        if (!hasShare) return const SizedBox.shrink();
-
-        return SizedBox(
-          width: horizontal ? null : 250,
-          height: horizontal ? 100 : null,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(5, 0, horizontal ? 0 : 5, horizontal ? 5 : 0),
-            child: CameraStrip(room: room, horizontal: horizontal),
-          ),
-        );
-      },
+  Widget _cameraStripBuilder(lk.Room room, bool horizontal, List<lk.Participant> participants) {
+    final hasShare = participants.any(
+      (p) => p.videoTrackPublications.any((t) => t.source == lk.TrackSource.screenShareVideo && !t.muted && t.track != null),
     );
-  }
 
-  Widget _mainBuilder(BuildContext context) {
-    final room = VideoRoomModel.maybeOf(context)?.room;
-    if (room == null) return const SizedBox();
+    if (!hasShare) return const SizedBox.shrink();
 
-    return VideoRoomParticipantsBuilder(room: room, builder: (context, participants) => cameraGridBuilder(context, participants));
+    return SizedBox(
+      width: horizontal ? null : 250,
+      height: horizontal ? 100 : null,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(5, 0, horizontal ? 0 : 5, horizontal ? 5 : 0),
+        child: CameraStrip(room: room, horizontal: horizontal),
+      ),
+    );
   }
 
   @override
@@ -114,22 +99,31 @@ class MeetingView extends StatelessWidget {
             ),
           );
         } else if (meetingViewController.state == MeetingViewState.joined) {
-          final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-          return isMobile
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _cameraStripBuilder(context, true),
-                    Expanded(child: _mainBuilder(context)),
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(child: _mainBuilder(context)),
-                    _cameraStripBuilder(context, false),
-                  ],
-                );
+          final room = VideoRoomModel.maybeOf(context)?.room;
+          if (room == null) return const SizedBox.shrink();
+
+          return VideoRoomParticipantsBuilder(
+            room: room,
+            builder: (context, participants) {
+              final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
+              return isMobile
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _cameraStripBuilder(room, true, participants),
+                        Expanded(child: ExpandableCameraGrid(participants: participants)),
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: ExpandableCameraGrid(participants: participants)),
+                        _cameraStripBuilder(room, false, participants),
+                      ],
+                    );
+            },
+          );
         } else if (meetingViewController.state == MeetingViewState.ended) {
           return Center(
             child: Column(

@@ -15,15 +15,20 @@ class ResizableSplitView extends StatefulWidget {
   final bool allowCollapse;
 
   @override
-  State<ResizableSplitView> createState() => _ResizableSplitViewState();
+  State createState() => _ResizableSplitViewState();
 }
 
 class _ResizableSplitViewState extends State<ResizableSplitView> {
   final ShadResizableController _resizeController = ShadResizableController();
+  final keyArea1 = GlobalKey();
+  final keyArea2 = GlobalKey();
 
   bool _collapsed = false;
   double? _area1Ratio;
   String? _panelKeyToken;
+
+  Widget get _area1 => KeyedSubtree(key: keyArea1, child: widget.area1);
+  Widget get _area2 => KeyedSubtree(key: keyArea2, child: widget.area2);
 
   @override
   void initState() {
@@ -64,6 +69,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
   void _toggleCollapsed() {
     if (!widget.allowCollapse) return;
+
     setState(() {
       _collapsed = !_collapsed;
       if (_collapsed) _clearController();
@@ -80,53 +86,35 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     _panelKeyToken = null;
   }
 
-  Widget _buildArea1Panel({required bool collapsed}) {
-    final colorScheme = ShadTheme.of(context).colorScheme;
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final cs = theme.colorScheme;
 
-    return Stack(
-      children: [
-        ClipRect(
-          child: Align(alignment: Alignment.centerLeft, child: widget.area1),
-        ),
-        if (collapsed)
-          Positioned.fill(
-            child: AbsorbPointer(child: ColoredBox(color: colorScheme.background)),
-          ),
-        if (widget.split && widget.allowCollapse)
-          Positioned(
-            top: 10,
-            right: 10,
-            child: Tooltip(
-              message: collapsed ? 'Expand' : 'Collapse',
-              child: ShadIconButton.ghost(
-                icon: Icon(collapsed ? LucideIcons.chevronsRight : LucideIcons.chevronsLeft),
-                onPressed: _toggleCollapsed,
+    if (!widget.split) {
+      return _area1;
+    }
+
+    if (widget.allowCollapse && _collapsed) {
+      return Row(
+        crossAxisAlignment: .start,
+        children: [
+          SizedBox(
+            width: _collapsedWidth,
+            child: Padding(
+              padding: const .all(10.0),
+              child: Tooltip(
+                message: 'Expand',
+                child: ShadIconButton.ghost(icon: const Icon(LucideIcons.chevronsRight), onPressed: _toggleCollapsed),
               ),
             ),
           ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = ShadTheme.of(context).colorScheme;
-    final collapsed = widget.split && widget.allowCollapse && _collapsed;
-
-    if (!widget.split) {
-      return _buildArea1Panel(collapsed: false);
-    }
-
-    if (collapsed) {
-      return Row(
-        children: [
-          SizedBox(width: _collapsedWidth, child: _buildArea1Panel(collapsed: true)),
           Expanded(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                border: Border(left: BorderSide(color: colorScheme.border)),
+                border: Border(left: BorderSide(color: cs.border)),
               ),
-              child: widget.area2,
+              child: _area2,
             ),
           ),
         ],
@@ -156,9 +144,23 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
               defaultSize: defaultArea1Ratio,
               minSize: minRatio,
               maxSize: maxRatio,
-              child: _buildArea1Panel(collapsed: false),
+              child: widget.allowCollapse
+                  ? Stack(
+                      children: [
+                        _area1,
+                        Positioned(
+                          top: 10,
+                          right: 10,
+                          child: Tooltip(
+                            message: 'Collapse',
+                            child: ShadIconButton.ghost(icon: Icon(LucideIcons.chevronsLeft), onPressed: _toggleCollapsed),
+                          ),
+                        ),
+                      ],
+                    )
+                  : _area1,
             ),
-            ShadResizablePanel(id: _area2Id, defaultSize: 1 - defaultArea1Ratio, minSize: minRatio, maxSize: maxRatio, child: widget.area2),
+            ShadResizablePanel(id: _area2Id, defaultSize: 1 - defaultArea1Ratio, minSize: minRatio, maxSize: maxRatio, child: _area2),
           ],
         );
       },

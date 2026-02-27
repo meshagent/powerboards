@@ -888,7 +888,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                             ? _buildFilesArea(context, actions)
                                             : _buildAgentArea(context, actions),
                                       ),
-                                      ActionsRow(actions: [...meetingActions(context)]),
+                                      ActionsRow(actions: meetingActions(context)),
                                     ],
                                   ),
                                 ),
@@ -1002,6 +1002,9 @@ class _ResourceFetcher<T> extends StatefulWidget {
 }
 
 class _ResourceFetcherState<T> extends State<_ResourceFetcher<T>> {
+  T? data;
+  Object? error;
+
   @override
   void initState() {
     super.initState();
@@ -1012,9 +1015,6 @@ class _ResourceFetcherState<T> extends State<_ResourceFetcher<T>> {
       });
     });
   }
-
-  T? data;
-  Object? error;
 
   @override
   Widget build(BuildContext context) {
