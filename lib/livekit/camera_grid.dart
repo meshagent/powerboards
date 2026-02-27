@@ -2,10 +2,117 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'audio_stats.dart';
 import 'participant_track.dart';
 import 'room.dart';
+
+class ExpandableCameraGrid extends StatefulWidget {
+  const ExpandableCameraGrid({super.key, required this.participants});
+
+  final List<Participant> participants;
+
+  @override
+  State<ExpandableCameraGrid> createState() => _ExpandableCameraGridState();
+}
+
+class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
+  String? _expandedIdentity;
+
+  bool _participantHasShare(Participant participant) {
+    return participant.videoTrackPublications.any((t) => t.source == TrackSource.screenShareVideo && !t.muted && t.track != null);
+  }
+
+  bool _expandedStillAvailable(List<Participant> participants) {
+    final identity = _expandedIdentity;
+    if (identity == null) return false;
+    return participants.any((p) => p.identity == identity && _participantHasShare(p));
+  }
+
+  void _toggleExpanded(String identity) {
+    setState(() {
+      _expandedIdentity = _expandedIdentity == identity ? null : identity;
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant ExpandableCameraGrid oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_expandedIdentity != null && !_expandedStillAvailable(widget.participants)) {
+      setState(() {
+        _expandedIdentity = null;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final expandedIdentity = _expandedIdentity;
+    final participants = expandedIdentity == null
+        ? widget.participants
+        : widget.participants.where((p) => p.identity == expandedIdentity).toList(growable: false);
+
+    final numberOfShares = widget.participants.where((p) => _participantHasShare(p)).length;
+    final numberOfVideos = widget.participants
+        .where((p) => p.videoTrackPublications.any((t) => t.kind == TrackType.VIDEO && !t.muted && t.track != null))
+        .length;
+
+    return cameraGridBuilder(
+      context,
+      participants,
+      frameBuilder: (context, participant, track, child) {
+        final isShare = track?.source == TrackSource.screenShareVideo;
+
+        if (!isShare || numberOfShares == 1 || (numberOfVideos == 1 && numberOfShares == 0)) {
+          return child;
+        }
+
+        final isExpanded = expandedIdentity != null && participant.identity == expandedIdentity;
+
+        return _ExpandableShareTile(isExpanded: isExpanded, onToggle: () => _toggleExpanded(participant.identity), child: child);
+      },
+    );
+  }
+}
+
+class _ExpandableShareTile extends StatelessWidget {
+  const _ExpandableShareTile({required this.child, required this.isExpanded, required this.onToggle});
+
+  final Widget child;
+  final bool isExpanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        Positioned(
+          top: 0,
+          right: 0,
+          child: _ShareExpandButton(isExpanded: isExpanded, onPressed: onToggle),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShareExpandButton extends StatelessWidget {
+  const _ShareExpandButton({required this.isExpanded, required this.onPressed});
+
+  final bool isExpanded;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: isExpanded ? "Collapse" : "Expand",
+      child: ShadButton.outline(onPressed: onPressed, child: Icon(isExpanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16)),
+    );
+  }
+}
 
 List<int> _layoutCameras(List<TrackPublication?> cameras, double width, double height) {
   int N = cameras.length;
@@ -60,7 +167,7 @@ Widget cameraGridBuilder(
   int rowsDesired = 0,
   int columnsDesired = 0,
   bool tryFill = true,
-  background = Colors.black,
+  Color background = Colors.black,
   Widget Function(BuildContext context, Participant participant, VideoTrack? track, Widget child)? frameBuilder,
 }) {
   final wrap = frameBuilder ?? (ctx, p, track, c) => c;
@@ -109,11 +216,6 @@ Widget cameraGridBuilder(
           color: Colors.grey,
           alignment: Alignment.center,
           child: p.identity.contains(".agent") ? AudioStats(room: room, participant: p) : const SizedBox(),
-
-          // TimuObjectBuilder(
-          //     url: '/api/graph/core:user/${p.identity}',
-          //     builder: (context, user) => ProfileAvatar(profile: user as User, size: 100),
-          // ),
         ),
       );
     }
