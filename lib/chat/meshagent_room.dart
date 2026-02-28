@@ -281,7 +281,7 @@ class NewThreadButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: "Start a new thread",
-      child: ShadIconButton.ghost(icon: const Icon(LucideIcons.messageSquarePlus), onPressed: onPressed),
+      child: ShadIconButton.ghost(icon: const Icon(LucideIcons.messageSquarePlus, size: 18), onPressed: onPressed),
     );
   }
 }
