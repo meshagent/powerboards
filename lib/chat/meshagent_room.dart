@@ -618,7 +618,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildChatArea(BuildContext context, String? agentName, List<Widget> actions) {
+  Widget _buildChatArea(BuildContext context, String? agentName, List<Widget> actions, {String? threadingMode}) {
     final user = MeshagentAuth.current.getUser();
     final userId = user!['id'] as String;
 
@@ -630,6 +630,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           child: MeshagentThreadView(
             services: services,
             agentName: agentName,
+            threadingMode: threadingMode,
             key: ValueKey(getDocumentPath(userId, agentName)),
             client: widget.room,
             documentPath: getDocumentPath(userId, agentName),
@@ -753,7 +754,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
         final type = _serviceType(service);
         if (type == "ChatBot") {
-          return _buildChatArea(context, service.agents[0].name, actions);
+          return _buildChatArea(
+            context,
+            service.agents[0].name,
+            actions,
+            threadingMode: service.agents[0].annotations["meshagent.chatbot.threading"],
+          );
         } else if (type == "VoiceBot") {
           return _buildVoiceArea(context, service.agents[0].name, actions);
         } else if (type == "MeetingTranscriber") {

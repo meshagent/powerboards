@@ -144,6 +144,7 @@ class MeshagentThreadView extends StatefulWidget {
     required this.client,
     required this.joinMeeting,
     this.documentPath = ".threads/main.thread",
+    this.threadingMode,
 
     this.participantNames,
 
@@ -157,6 +158,7 @@ class MeshagentThreadView extends StatefulWidget {
   });
 
   final String? agentName;
+  final String? threadingMode;
   final RoomClient client;
   final String documentPath;
   final void Function() joinMeeting;
@@ -186,6 +188,15 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
     super.didUpdateWidget(oldWidget);
     _agentName.value = widget.agentName;
+
+    if (oldWidget.agentName != widget.agentName ||
+        oldWidget.threadingMode != widget.threadingMode ||
+        oldWidget.documentPath != widget.documentPath) {
+      _documentPath = widget.documentPath;
+      _initialMessageText = widget.initialMessageText;
+    } else if (oldWidget.initialMessageText != widget.initialMessageText && widget.threadingMode != "default-new") {
+      _initialMessageText = widget.initialMessageText;
+    }
   }
 
   @override
@@ -257,26 +268,25 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     return paths.toSet().toList();
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
     return IconTheme(
       data: const IconThemeData(size: 14),
       child: ChatThreadLoader(
-        key: ValueKey(_documentPath),
+        key: ValueKey(path),
         room: widget.client,
-        loadingBuilder: (context) => const SizedBox.shrink(),
-        path: _documentPath,
+        loadingBuilder: loadingBuilder ?? (context) => const SizedBox.shrink(),
+        path: path,
         builder: (context, document) => ChatThreadSender(
           controller: _chatController,
           document: document,
-          documentPath: _documentPath,
-          initialMessageID: widget.initialMessageID,
-          initialMessageText: _initialMessageText,
+          documentPath: path,
+          initialMessageID: initialMessageText == null ? null : widget.initialMessageID,
+          initialMessageText: initialMessageText,
           initialMessageAttachments: widget.initialMessageAttachments,
           onMessageSent: _onMessageSent,
           child: ChatThreadBuilder(
             agentName: widget.agentName,
-            path: _documentPath,
+            path: path,
             document: document,
             room: widget.client,
             controller: _chatController,
@@ -292,7 +302,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       ChatThreadMessages(
-                        path: widget.documentPath,
+                        path: path,
                         room: widget.client,
                         messages: snapshot.messages,
                         online: snapshot.online,
@@ -301,7 +311,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                         threadStatus: snapshot.threadStatus,
                         threadStatusMode: snapshot.threadStatusMode,
                         onCancel: () {
-                          _chatController.cancel(_documentPath, document);
+                          _chatController.cancel(path, document);
                         },
                         fileInThreadBuilder: (context, path) => _fileInThreadBuilder(context, path, snapshot.messages),
                         currentStatusEntry: _currentStatusEntry,
@@ -322,11 +332,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                           (x) => x.getAttribute("name") == widget.agentName,
                                         );
                                         if (participant != null) {
-                                          widget.client.messaging.sendMessage(
-                                            to: participant,
-                                            type: "clear",
-                                            message: {"path": _documentPath},
-                                          );
+                                          widget.client.messaging.sendMessage(to: participant, type: "clear", message: {"path": path});
                                         }
                                       },
                                       placeholder: widget.agentName == null
@@ -362,7 +368,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
                                         _chatController.send(
                                           thread: document,
-                                          path: _documentPath,
+                                          path: path,
                                           message: message,
                                           messageType: messageType,
                                           onMessageSent: _onMessageSent,
@@ -371,7 +377,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                       onChanged: (value, attachments) {
                                         for (final part in snapshot.online) {
                                           if (part.id != widget.client.localParticipant?.id) {
-                                            widget.client.messaging.sendMessage(to: part, type: "typing", message: {"path": _documentPath});
+                                            widget.client.messaging.sendMessage(to: part, type: "typing", message: {"path": path});
                                           }
                                         }
                                       },
@@ -423,6 +429,29 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         participantNames: widget.participantNames,
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.threadingMode == "default-new") {
+      final agentName = widget.agentName;
+      if (agentName == null) {
+        return Center(
+          child: ShadAlert.destructive(title: Text("Unable to start a new thread"), description: Text("No chat agent is selected.")),
+        );
+      }
+
+      return ma.NewChatThread(
+        key: ValueKey("new-thread-$agentName"),
+        room: widget.client,
+        agentName: agentName,
+        toolsBuilder: (context, controller, snapshot) =>
+            buildTools(context, widget.client, agentName, controller, snapshot, widget.services),
+        builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
+      );
+    }
+
+    return _buildThread(path: _documentPath, initialMessageText: _initialMessageText);
   }
 }
 
