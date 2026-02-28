@@ -16,10 +16,12 @@ import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:meshagent_flutter_dev/developer_console.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
+import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
 import 'package:powerboards/chat/hangup_button.dart';
 import 'package:powerboards/livekit/room.dart' as room;
+import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
@@ -120,22 +122,12 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final nameSet = <String>{};
+    final myName = (widget.localParticipant?.getAttribute("name") as String?)?.trim().toLowerCase();
 
     for (final participant in widget.participants) {
       final name = participant.getAttribute("name") as String?;
 
-      if (participant.role != 'agent' && name != null && name.isNotEmpty) {
-        nameSet.add(name);
-      }
-    }
-
-    final user = MeshagentAuth.current.getUser();
-    final myEmail = ((user?['email'] as String?) ?? "").toLowerCase().trim();
-
-    if (widget.localParticipant != null) {
-      final name = widget.localParticipant!.getAttribute("name") as String?;
-
-      if (name != null && name.isNotEmpty) {
+      if (participant.role != 'agent' && name != null && name.isNotEmpty && (myName == null || name.trim().toLowerCase() != myName)) {
         nameSet.add(name);
       }
     }
@@ -182,15 +174,13 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
               mainAxisAlignment: .start,
               crossAxisAlignment: .start,
               children: sortedNames.map((name) {
-                final isMe = name.toLowerCase().trim() == myEmail;
-
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Row(
                     children: [
                       Icon(LucideIcons.user, size: 16),
                       SizedBox(width: 8),
-                      Flexible(child: Text(isMe ? "$name (You)" : name, overflow: .ellipsis)),
+                      Flexible(child: Text(name, overflow: .ellipsis)),
                     ],
                   ),
                 );
@@ -432,6 +422,14 @@ class MeshagentRoom extends StatefulWidget {
   State createState() => MeshagentRoomState();
 }
 
+class _ResolvedAgentSelection {
+  const _ResolvedAgentSelection({required this.routeId, required this.service, required this.developmentParticipant});
+
+  final String? routeId;
+  final ServiceSpec? service;
+  final RemoteParticipant? developmentParticipant;
+}
+
 class MeshagentRoomState extends State<MeshagentRoom> {
   final videoChatKey = GlobalKey();
 
@@ -492,13 +490,129 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   String _serviceId(ServiceSpec s) => s.metadata.annotations["meshagent.service.id"] ?? "";
   String _serviceType(ServiceSpec s) => s.agents.firstOrNull?.annotations["meshagent.agent.type"] ?? "[Unspecified]";
   bool _isChatBot(ServiceSpec s) => _serviceType(s).toLowerCase() == "chatbot";
-
-  ServiceSpec? _selectedService(List<ServiceSpec> supported) {
-    if (widget.service != null) {
-      return supported.firstWhereOrNull((s) => _serviceId(s) == widget.service);
+  String? _serviceAgentName(ServiceSpec service) {
+    final name = service.agents.firstOrNull?.name;
+    if (name == null) {
+      return null;
     }
 
-    return supported.firstWhereOrNull(_isChatBot) ?? supported.firstOrNull;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  List<RemoteParticipant> _developmentParticipants(List<ServiceSpec> supported) {
+    final serviceAgentNames = <String>{};
+    for (final service in supported) {
+      final name = _serviceAgentName(service);
+      if (name != null) {
+        serviceAgentNames.add(name);
+      }
+    }
+
+    final seenNames = <String>{};
+    final participants = <RemoteParticipant>[];
+    for (final participant in widget.room.messaging.remoteParticipants) {
+      if (!isChatOrVoiceBotParticipant(participant)) {
+        continue;
+      }
+
+      final name = participantDisplayName(participant);
+      if (name == null || serviceAgentNames.contains(name) || !seenNames.add(name)) {
+        continue;
+      }
+
+      participants.add(participant);
+    }
+
+    participants.sort((a, b) {
+      final left = participantDisplayName(a) ?? "";
+      final right = participantDisplayName(b) ?? "";
+      return left.toLowerCase().compareTo(right.toLowerCase());
+    });
+
+    return participants;
+  }
+
+  _ResolvedAgentSelection _resolveSelectedAgent(List<ServiceSpec> supported) {
+    final requestedRouteId = widget.service;
+    if (requestedRouteId != null) {
+      final service = supported.firstWhereOrNull((candidate) => _serviceId(candidate) == requestedRouteId);
+      if (service != null) {
+        return _ResolvedAgentSelection(routeId: requestedRouteId, service: service, developmentParticipant: null);
+      }
+
+      final participantName = developmentAgentNameFromRoute(requestedRouteId);
+      if (participantName != null) {
+        final participant = _developmentParticipants(
+          supported,
+        ).firstWhereOrNull((candidate) => participantDisplayName(candidate) == participantName);
+        return _ResolvedAgentSelection(
+          routeId: developmentAgentRouteId(participantName),
+          service: null,
+          developmentParticipant: participant,
+        );
+      }
+
+      final legacyParticipantId = legacyDevelopmentAgentParticipantIdFromRoute(requestedRouteId);
+      if (legacyParticipantId != null) {
+        final participant = widget.room.messaging.remoteParticipants.firstWhereOrNull(
+          (candidate) => candidate.id == legacyParticipantId && isChatOrVoiceBotParticipant(candidate),
+        );
+        final participantName = participant == null ? null : participantDisplayName(participant);
+        return _ResolvedAgentSelection(
+          routeId: participantName == null ? requestedRouteId : developmentAgentRouteId(participantName),
+          service: null,
+          developmentParticipant: participant,
+        );
+      }
+
+      return _ResolvedAgentSelection(routeId: requestedRouteId, service: null, developmentParticipant: null);
+    }
+
+    final defaultService = supported.firstWhereOrNull(_isChatBot) ?? supported.firstOrNull;
+    if (defaultService != null) {
+      return _ResolvedAgentSelection(routeId: _serviceId(defaultService), service: defaultService, developmentParticipant: null);
+    }
+
+    final participant = _developmentParticipants(supported).firstOrNull;
+    if (participant != null) {
+      final participantName = participantDisplayName(participant);
+      if (participantName != null) {
+        return _ResolvedAgentSelection(
+          routeId: developmentAgentRouteId(participantName),
+          service: null,
+          developmentParticipant: participant,
+        );
+      }
+    }
+
+    return const _ResolvedAgentSelection(routeId: null, service: null, developmentParticipant: null);
+  }
+
+  bool _hasVisibleAgents(List<ServiceSpec> supported) {
+    if (supported.isNotEmpty) {
+      return true;
+    }
+
+    return _developmentParticipants(supported).isNotEmpty;
+  }
+
+  String? _threadingModeFromParticipant(RemoteParticipant participant) {
+    final mode = participant.getAttribute("meshagent.chatbot.threading");
+    if (mode is! String) {
+      return null;
+    }
+
+    final trimmed = mode.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    return trimmed;
   }
 
   void updatePath(BuildContext context, String? path) {
@@ -567,7 +681,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (!services.state.isReady) return const SizedBox.shrink();
 
     final supported = _supportedServices(services.state.value!);
-    final selected = _selectedService(supported);
+    final selected = _resolveSelectedAgent(supported);
 
     return Align(
       alignment: AlignmentGeometry.centerLeft,
@@ -576,7 +690,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         child: AgentsDropdown(
           projectId: widget.projectId,
           room: widget.room,
-          selectedService: selected,
+          selectedService: selected.service,
+          selectedAgentRouteId: selected.routeId,
           services: supported,
           onOpen: services.refresh,
           onManageAgents: isOwner.state.value != true ? null : showManageAgents,
@@ -734,44 +849,75 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildAgentArea(BuildContext context, List<Widget> actions) {
-    return SignalBuilder(
-      builder: (context, _) {
-        if (!services.state.isReady) {
-          return Center(child: CircularProgressIndicator(key: loadingKey));
-        }
+    return ChangeNotifierBuilder(
+      source: widget.room.messaging,
+      builder: (context) => SignalBuilder(
+        builder: (context, _) {
+          if (!services.state.isReady) {
+            return Center(child: CircularProgressIndicator(key: loadingKey));
+          }
 
-        final all = services.state.value!;
-        final supported = _supportedServices(all);
-        final service = _selectedService(supported);
+          final all = services.state.value!;
+          final supported = _supportedServices(all);
+          final selected = _resolveSelectedAgent(supported);
+          final service = selected.service;
+          final developmentParticipant = selected.developmentParticipant;
 
-        if (supported.isEmpty) {
-          return _buildErrorArea(context, "No supported agents installed", actions);
-        }
+          if (service == null && developmentParticipant == null) {
+            final requestedRouteId = widget.service;
+            final requestedDevelopmentParticipantName = requestedRouteId == null ? null : developmentAgentNameFromRoute(requestedRouteId);
+            final requestedLegacyDevelopmentParticipantId = requestedRouteId == null
+                ? null
+                : legacyDevelopmentAgentParticipantIdFromRoute(requestedRouteId);
+            if (requestedDevelopmentParticipantName != null || requestedLegacyDevelopmentParticipantId != null) {
+              return _buildErrorArea(context, "Development mode agent is not currently online", actions);
+            }
 
-        if (service == null) {
-          return _buildErrorArea(context, "Agent is not installed ${widget.service}", actions);
-        }
+            if (supported.isEmpty) {
+              return _buildErrorArea(context, "No supported agents installed", actions);
+            }
 
-        final type = _serviceType(service);
-        if (type == "ChatBot") {
-          return _buildChatArea(
-            context,
-            service.agents[0].name,
-            actions,
-            threadingMode: service.agents[0].annotations["meshagent.chatbot.threading"],
-          );
-        } else if (type == "VoiceBot") {
-          return _buildVoiceArea(context, service.agents[0].name, actions);
-        } else if (type == "MeetingTranscriber") {
-          return _buildMeetingTranscriberArea(context, service.agents[0].name, actions);
-        } else if (type == "Shell") {
-          return _buildShellArea(context, service, actions);
-        } else if (service.metadata.annotations["meshagent.service.readme"] != null) {
-          return MarkdownViewer(markdown: service.metadata.annotations["meshagent.service.readme"] ?? "");
-        } else {
-          return _buildErrorArea(context, "Agent type '$type' is not currently supported by Powerboards", actions);
-        }
-      },
+            return _buildErrorArea(context, "Agent is not installed ${widget.service}", actions);
+          }
+
+          if (developmentParticipant != null) {
+            final name = participantDisplayName(developmentParticipant);
+            if (name == null) {
+              return _buildErrorArea(context, "Development mode agent is missing a name", actions);
+            }
+
+            if (participantSupportsVoice(developmentParticipant)) {
+              return _buildVoiceArea(context, name, actions);
+            }
+
+            if (participantSupportsChat(developmentParticipant)) {
+              return _buildChatArea(context, name, actions, threadingMode: _threadingModeFromParticipant(developmentParticipant));
+            }
+
+            return _buildErrorArea(context, "Selected development mode agent does not support chat or voice", actions);
+          }
+
+          final type = _serviceType(service!);
+          if (type == "ChatBot") {
+            return _buildChatArea(
+              context,
+              service.agents[0].name,
+              actions,
+              threadingMode: service.agents[0].annotations["meshagent.chatbot.threading"],
+            );
+          } else if (type == "VoiceBot") {
+            return _buildVoiceArea(context, service.agents[0].name, actions);
+          } else if (type == "MeetingTranscriber") {
+            return _buildMeetingTranscriberArea(context, service.agents[0].name, actions);
+          } else if (type == "Shell") {
+            return _buildShellArea(context, service, actions);
+          } else if (service.metadata.annotations["meshagent.service.readme"] != null) {
+            return MarkdownViewer(markdown: service.metadata.annotations["meshagent.service.readme"] ?? "");
+          } else {
+            return _buildErrorArea(context, "Agent type '$type' is not currently supported by Powerboards", actions);
+          }
+        },
+      ),
     );
   }
 
@@ -794,194 +940,199 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     child: ControllerBuilder(
                       controller: controller,
                       builder: (context) {
-                        final filesVisible = canViewStorage.state.value == true && controller.isFilesShown;
-                        final split = filesVisible || controller.inMeeting;
+                        return ChangeNotifierBuilder(
+                          source: widget.room.messaging,
+                          builder: (context) {
+                            final filesVisible = canViewStorage.state.value == true && controller.isFilesShown;
+                            final split = filesVisible || controller.inMeeting;
+                            final supported = _supportedServices(services.state.value!);
+                            final selected = _resolveSelectedAgent(supported);
 
-                        if (services.state.value!.isEmpty) {
-                          return SafeArea(
-                            child: Column(
-                              children: [
-                                ActionsRow(
-                                  actions: [
-                                    if (isSmallDisplay) BackButton(projectId: widget.projectId),
-                                    Spacer(),
-                                    InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-                                    if (!isMobile) ...[
-                                      RoomOptionsMenu(
-                                        projectId: widget.projectId,
-                                        room: widget.room,
-                                        roomController: controller,
-                                        isOwner: isOwner,
-                                        canViewDeveloperLogs: canViewDeveloperLogs,
-                                      ),
-                                      UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
-                                    ],
-                                  ],
-                                ),
-                                Expanded(
-                                  child: Center(
-                                    child: SignalBuilder(
-                                      builder: (context, _) => Column(
-                                        spacing: 16,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            "Welcome to your room",
-                                            style: ShadTheme.of(context).textTheme.h1,
-                                            textAlign: TextAlign.center,
+                            if (!_hasVisibleAgents(supported)) {
+                              return SafeArea(
+                                child: Column(
+                                  children: [
+                                    ActionsRow(
+                                      actions: [
+                                        if (isSmallDisplay) BackButton(projectId: widget.projectId),
+                                        Spacer(),
+                                        InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+                                        if (!isMobile) ...[
+                                          RoomOptionsMenu(
+                                            projectId: widget.projectId,
+                                            room: widget.room,
+                                            roomController: controller,
+                                            isOwner: isOwner,
+                                            canViewDeveloperLogs: canViewDeveloperLogs,
                                           ),
-                                          if (isOwner.hasValue && isOwner.state.value == true) ...[
-                                            Text(
-                                              "Install an agent in this room to get started",
-                                              style: ShadTheme.of(context).textTheme.p,
-                                              textAlign: TextAlign.center,
-                                            ),
-                                            ShadButton(
-                                              onPressed: () async {
-                                                await showShadDialog(
-                                                  context: context,
-                                                  builder: (context) => ManageAgentsDialog(
-                                                    room: widget.room,
-                                                    projectId: widget.projectId,
-                                                    onServiceChanged: () {
-                                                      services.refresh();
-                                                    },
-                                                  ),
-                                                );
-                                              },
-                                              child: Text("Install an Agent"),
-                                            ),
-                                          ],
+                                          UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
                                         ],
+                                      ],
+                                    ),
+                                    Expanded(
+                                      child: Center(
+                                        child: SignalBuilder(
+                                          builder: (context, _) => Column(
+                                            spacing: 16,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                "Welcome to your room",
+                                                style: ShadTheme.of(context).textTheme.h1,
+                                                textAlign: TextAlign.center,
+                                              ),
+                                              if (isOwner.hasValue && isOwner.state.value == true) ...[
+                                                Text(
+                                                  "Install an agent in this room to get started",
+                                                  style: ShadTheme.of(context).textTheme.p,
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                                ShadButton(
+                                                  onPressed: () async {
+                                                    await showShadDialog(
+                                                      context: context,
+                                                      builder: (context) => ManageAgentsDialog(
+                                                        room: widget.room,
+                                                        projectId: widget.projectId,
+                                                        onServiceChanged: () {
+                                                          services.refresh();
+                                                        },
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: Text("Install an Agent"),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        return ToolConnectionScope(
-                          tools: [UIToolkit(context, room: widget.room)],
-                          builder: (context, error) {
-                            if (isMobile) {
-                              final actions = [
-                                BackButton(projectId: widget.projectId),
-                                Spacer(),
-                                (split ? ShadButton.outline : ShadButton.new)(
-                                  onPressed: () {
-                                    setState(() {
-                                      controller.exitMeeting();
-                                      controller.hideFiles();
-                                    });
-                                  },
-                                  leading: Icon(LucideIcons.messageCircle),
-                                ),
-                                if (canViewStorage.state.value == true) FilesButton(controller: controller),
-                                MeetButton(controller: controller),
-                                InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-                              ];
-
-                              return KeyboardSafe(
-                                child: SafeArea(
-                                  child: Column(
-                                    children: [
-                                      Expanded(
-                                        child: controller.inMeeting
-                                            ? _buildMeeting(context, null, actions)
-                                            : filesVisible
-                                            ? _buildFilesArea(context, actions)
-                                            : _buildAgentArea(context, actions),
-                                      ),
-                                      ActionsRow(actions: meetingActions(context)),
-                                    ],
-                                  ),
+                                  ],
                                 ),
                               );
                             }
 
-                            final supported = _supportedServices(services.state.value!);
-                            final selected = _selectedService(supported);
-                            final actions = [
-                              ...meetingActions(context),
-
-                              if (canViewStorage.state.value == true) FilesButton(controller: controller),
-                              MeetButton(controller: controller),
-                              InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-                              RoomOptionsMenu(
-                                projectId: widget.projectId,
-                                room: widget.room,
-                                roomController: controller,
-                                isOwner: isOwner,
-                                canViewDeveloperLogs: canViewDeveloperLogs,
-                              ),
-                              UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
-                            ];
-
-                            return RoomDeveloperLogsListener(
-                              events: events,
-                              client: widget.room,
-                              child: ShadResizablePanelGroup(
-                                axis: Axis.vertical,
-                                showHandle: true,
-                                children: [
-                                  ShadResizablePanel(
-                                    id: "top",
-                                    defaultSize: 1 - defaultDebugSize,
-                                    child: ResizableSplitView(
-                                      allowCollapse: room.VideoRoomModel.maybeOf(context)?.room != null,
-                                      split: split,
-                                      area1: _buildAgentArea(context, [
-                                        if (isSmallDisplay) BackButton(projectId: widget.projectId),
-
-                                        AgentsDropdown(
-                                          projectId: widget.projectId,
-                                          room: widget.room,
-                                          selectedService: selected,
-                                          services: supported,
-                                          onOpen: services.refresh,
-                                          onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-                                        ),
-
-                                        ParticipantsButton(participants: participants, localParticipant: widget.room.localParticipant),
-
-                                        if (!split) ...actions,
-                                      ]),
-                                      area2: !split
-                                          ? Container()
-                                          : filesVisible
-                                          ? _buildFilesArea(context, actions)
-                                          : controller.inMeeting
-                                          ? _buildMeeting(context, null, actions)
-                                          : _buildAgentArea(context, actions),
+                            return ToolConnectionScope(
+                              tools: [UIToolkit(context, room: widget.room)],
+                              builder: (context, error) {
+                                if (isMobile) {
+                                  final actions = [
+                                    BackButton(projectId: widget.projectId),
+                                    Spacer(),
+                                    (split ? ShadButton.outline : ShadButton.new)(
+                                      onPressed: () {
+                                        setState(() {
+                                          controller.exitMeeting();
+                                          controller.hideFiles();
+                                        });
+                                      },
+                                      leading: Icon(LucideIcons.messageCircle),
                                     ),
-                                  ),
+                                    if (canViewStorage.state.value == true) FilesButton(controller: controller),
+                                    MeetButton(controller: controller),
+                                    InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+                                  ];
 
-                                  if (controller.isDebugShown)
-                                    ShadResizablePanel(
-                                      id: "bottom",
-                                      defaultSize: defaultDebugSize,
-                                      minSize: 0,
-                                      child: Visibility(
-                                        visible: controller.isDebugShown,
-                                        child: Column(
-                                          children: [
-                                            Row(children: [Expanded(child: SizedBox())]),
-                                            Expanded(
-                                              child: RoomDeveloperConsole(
-                                                pricing: null,
-                                                events: events,
-                                                room: widget.room,
-                                                shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}-esgz",
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                                  return KeyboardSafe(
+                                    child: SafeArea(
+                                      child: Column(
+                                        children: [
+                                          Expanded(
+                                            child: controller.inMeeting
+                                                ? _buildMeeting(context, null, actions)
+                                                : filesVisible
+                                                ? _buildFilesArea(context, actions)
+                                                : _buildAgentArea(context, actions),
+                                          ),
+                                          ActionsRow(actions: meetingActions(context)),
+                                        ],
                                       ),
                                     ),
-                                ],
-                              ),
+                                  );
+                                }
+                                final actions = [
+                                  ...meetingActions(context),
+
+                                  if (canViewStorage.state.value == true) FilesButton(controller: controller),
+                                  MeetButton(controller: controller),
+                                  InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+                                  RoomOptionsMenu(
+                                    projectId: widget.projectId,
+                                    room: widget.room,
+                                    roomController: controller,
+                                    isOwner: isOwner,
+                                    canViewDeveloperLogs: canViewDeveloperLogs,
+                                  ),
+                                  UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
+                                ];
+
+                                return RoomDeveloperLogsListener(
+                                  events: events,
+                                  client: widget.room,
+                                  child: ShadResizablePanelGroup(
+                                    axis: Axis.vertical,
+                                    showHandle: true,
+                                    children: [
+                                      ShadResizablePanel(
+                                        id: "top",
+                                        defaultSize: 1 - defaultDebugSize,
+                                        child: ResizableSplitView(
+                                          allowCollapse: room.VideoRoomModel.maybeOf(context)?.room != null,
+                                          split: split,
+                                          area1: _buildAgentArea(context, [
+                                            if (isSmallDisplay) BackButton(projectId: widget.projectId),
+
+                                            AgentsDropdown(
+                                              projectId: widget.projectId,
+                                              room: widget.room,
+                                              selectedService: selected.service,
+                                              selectedAgentRouteId: selected.routeId,
+                                              services: supported,
+                                              onOpen: services.refresh,
+                                              onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+                                            ),
+
+                                            ParticipantsButton(participants: participants, localParticipant: widget.room.localParticipant),
+
+                                            if (!split) ...actions,
+                                          ]),
+                                          area2: !split
+                                              ? Container()
+                                              : filesVisible
+                                              ? _buildFilesArea(context, actions)
+                                              : controller.inMeeting
+                                              ? _buildMeeting(context, null, actions)
+                                              : _buildAgentArea(context, actions),
+                                        ),
+                                      ),
+
+                                      if (controller.isDebugShown)
+                                        ShadResizablePanel(
+                                          id: "bottom",
+                                          defaultSize: defaultDebugSize,
+                                          minSize: 0,
+                                          child: Visibility(
+                                            visible: controller.isDebugShown,
+                                            child: Column(
+                                              children: [
+                                                Row(children: [Expanded(child: SizedBox())]),
+                                                Expanded(
+                                                  child: RoomDeveloperConsole(
+                                                    pricing: null,
+                                                    events: events,
+                                                    room: widget.room,
+                                                    shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}-esgz",
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              },
                             );
                           },
                         );

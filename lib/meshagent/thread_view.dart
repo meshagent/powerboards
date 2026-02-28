@@ -19,7 +19,6 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 import 'package:powerboards/theme/theme.dart';
-import 'package:powerboards/meshagent/wait_for_agent_participant_builder.dart';
 import 'package:powerboards/web_context_menu_manager/enable_web_context_menu.dart';
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
@@ -67,10 +66,8 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
           if (added) {
             room.messaging.removeListener(waitForAgent);
           }
-          if (notifyOnSend) {
-            for (final participant in getOnlineParticipants(thread)) {
-              sendMessageToParticipant(participant: participant, path: path, message: message, messageType: messageType);
-            }
+          for (final participant in getOnlineParticipants(thread)) {
+            sendMessageToParticipant(participant: participant, path: path, message: message, messageType: messageType);
           }
           outboundStatus.markDelivered(message.id);
         }
@@ -335,11 +332,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                           widget.client.messaging.sendMessage(to: participant, type: "clear", message: {"path": path});
                                         }
                                       },
-                                      placeholder: widget.agentName == null
-                                          ? Text("Message")
-                                          : _chatController.notifyOnSend
-                                          ? Text("Send a message or @$agentName")
-                                          : Text("Send a message to everyone except the $agentName"),
+                                      placeholder: widget.agentName == null ? Text("Message") : Text("Send a message or @$agentName"),
                                       leading: _chatController.toolkits.isEmpty
                                           ? buildTools(context, widget.client, agentName, _chatController, snapshot, widget.services)
                                           : null,
@@ -385,33 +378,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                     ),
                                   ),
                                 ),
-                                if (agentName != null)
-                                  WaitForAgentParticipantBuilder(
-                                    room: widget.client,
-                                    agentName: widget.agentName!,
-                                    builder: (context, agent) => Padding(
-                                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        spacing: 8,
-                                        children: [
-                                          ListenableBuilder(
-                                            listenable: _chatController,
-                                            builder: (context, _) => ShadSwitch(
-                                              height: 20,
-                                              width: 32,
-                                              value: _chatController.notifyOnSend,
-                                              onChanged: (value) => _chatController.notifyOnSend = value,
-                                            ),
-                                          ),
-                                          ListenableBuilder(
-                                            listenable: _chatController,
-                                            builder: (context, _) => Text("include $agentName in replies"),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                const SizedBox(height: 8),
                               ],
                             ),
                           ),
