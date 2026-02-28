@@ -142,6 +142,7 @@ class MeshagentThreadView extends StatefulWidget {
     required this.joinMeeting,
     this.documentPath = ".threads/main.thread",
     this.threadingMode,
+    this.newThreadResetVersion = 0,
 
     this.participantNames,
 
@@ -156,6 +157,7 @@ class MeshagentThreadView extends StatefulWidget {
 
   final String? agentName;
   final String? threadingMode;
+  final int newThreadResetVersion;
   final RoomClient client;
   final String documentPath;
   final void Function() joinMeeting;
@@ -409,7 +411,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       }
 
       return ma.NewChatThread(
-        key: ValueKey("new-thread-$agentName"),
+        key: ValueKey("new-thread-$agentName-${widget.newThreadResetVersion}"),
         room: widget.client,
         agentName: agentName,
         toolsBuilder: (context, controller, snapshot) =>

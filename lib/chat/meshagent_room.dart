@@ -272,6 +272,20 @@ class FilesButton extends StatelessWidget {
   }
 }
 
+class NewThreadButton extends StatelessWidget {
+  const NewThreadButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: "Start a new thread",
+      child: ShadIconButton.ghost(icon: const Icon(LucideIcons.messageSquarePlus), onPressed: onPressed),
+    );
+  }
+}
+
 class BackButton extends StatelessWidget {
   const BackButton({super.key, required this.projectId});
 
@@ -434,6 +448,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final videoChatKey = GlobalKey();
 
   final MeshagentRoomController controller = MeshagentRoomController();
+  int _newThreadResetVersion = 0;
 
   final List<RoomEvent> events = [];
 
@@ -674,7 +689,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     services.refresh();
   }
 
-  Widget _buildAgentsActionRow(BuildContext context) {
+  Widget _buildAgentsActionRow(BuildContext context, {bool showNewThreadButton = false}) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     if (!isMobile) return const SizedBox.shrink();
 
@@ -682,22 +697,40 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     final supported = _supportedServices(services.state.value!);
     final selected = _resolveSelectedAgent(supported);
+    final dropdown = AgentsDropdown(
+      projectId: widget.projectId,
+      room: widget.room,
+      selectedService: selected.service,
+      selectedAgentRouteId: selected.routeId,
+      services: supported,
+      onOpen: services.refresh,
+      onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+    );
 
     return Align(
       alignment: AlignmentGeometry.centerLeft,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-        child: AgentsDropdown(
-          projectId: widget.projectId,
-          room: widget.room,
-          selectedService: selected.service,
-          selectedAgentRouteId: selected.routeId,
-          services: supported,
-          onOpen: services.refresh,
-          onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-        ),
+        child: showNewThreadButton
+            ? Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  dropdown,
+                  NewThreadButton(onPressed: _showNewThreadComposer),
+                ],
+              )
+            : dropdown,
       ),
     );
+  }
+
+  List<Widget> _insertAfterAgentsDropdown(List<Widget> actions, Widget widget) {
+    final index = actions.indexWhere((action) => action is AgentsDropdown);
+    if (index < 0) {
+      return [...actions, widget];
+    }
+    return [...actions.take(index + 1), widget, ...actions.skip(index + 1)];
   }
 
   Widget _buildErrorArea(BuildContext context, String error, List<Widget> actions) {
@@ -736,16 +769,22 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Widget _buildChatArea(BuildContext context, String? agentName, List<Widget> actions, {String? threadingMode}) {
     final user = MeshagentAuth.current.getUser();
     final userId = user!['id'] as String;
+    final isDefaultNewThreading = threadingMode == "default-new";
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final chatActions = isDefaultNewThreading && !isMobile
+        ? _insertAfterAgentsDropdown(actions, NewThreadButton(onPressed: _showNewThreadComposer))
+        : actions;
 
     return Column(
       children: [
-        ActionsRow(actions: actions),
-        _buildAgentsActionRow(context),
+        ActionsRow(actions: chatActions),
+        _buildAgentsActionRow(context, showNewThreadButton: isDefaultNewThreading && isMobile),
         Expanded(
           child: MeshagentThreadView(
             services: services,
             agentName: agentName,
             threadingMode: threadingMode,
+            newThreadResetVersion: _newThreadResetVersion,
             key: ValueKey(getDocumentPath(userId, agentName)),
             client: widget.room,
             documentPath: getDocumentPath(userId, agentName),
@@ -846,6 +885,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     meetingViewController.resetToLobby();
     controller.enterMeeting();
+  }
+
+  void _showNewThreadComposer() {
+    setState(() {
+      _newThreadResetVersion++;
+    });
   }
 
   Widget _buildAgentArea(BuildContext context, List<Widget> actions) {
