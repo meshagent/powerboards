@@ -446,6 +446,7 @@ class _ResolvedAgentSelection {
 
 class MeshagentRoomState extends State<MeshagentRoom> {
   final videoChatKey = GlobalKey();
+  final Map<String, GlobalKey> _threadViewKeysByPath = <String, GlobalKey>{};
 
   final MeshagentRoomController controller = MeshagentRoomController();
   int _newThreadResetVersion = 0;
@@ -659,6 +660,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
+  GlobalKey _threadViewKeyForPath(String path) {
+    return _threadViewKeysByPath.putIfAbsent(path, () => GlobalKey(debugLabel: "thread-view-$path"));
+  }
+
   List<Widget> meetingActions(BuildContext context) {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final model = room.VideoRoomModel.maybeOf(context);
@@ -769,6 +774,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Widget _buildChatArea(BuildContext context, String? agentName, List<Widget> actions, {String? threadingMode}) {
     final user = MeshagentAuth.current.getUser();
     final userId = user!['id'] as String;
+    final documentPath = getDocumentPath(userId, agentName);
     final isDefaultNewThreading = threadingMode == "default-new";
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final chatActions = isDefaultNewThreading && !isMobile
@@ -785,9 +791,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             agentName: agentName,
             threadingMode: threadingMode,
             newThreadResetVersion: _newThreadResetVersion,
-            key: ValueKey(getDocumentPath(userId, agentName)),
+            key: _threadViewKeyForPath(documentPath),
             client: widget.room,
-            documentPath: getDocumentPath(userId, agentName),
+            documentPath: documentPath,
             participantNames: [user["email"], ?agentName],
             joinMeeting: _joinMeeting,
           ),
