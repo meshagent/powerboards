@@ -631,6 +631,39 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return trimmed;
   }
 
+  String? _threadListPathFromParticipant(RemoteParticipant participant) {
+    final threadListPath = participant.getAttribute("meshagent.chatbot.thread-list");
+    if (threadListPath is! String) {
+      return null;
+    }
+
+    final trimmed = threadListPath.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  String? _threadListPathFromService(ServiceSpec service) {
+    final annotationPath = service.agents.firstOrNull?.annotations["meshagent.chatbot.thread-list"];
+    if (annotationPath != null && annotationPath.trim().isNotEmpty) {
+      return annotationPath.trim();
+    }
+
+    final agentName = service.agents.firstOrNull?.name;
+    if (agentName == null || agentName.trim().isEmpty) {
+      return null;
+    }
+
+    final participant = widget.room.messaging.remoteParticipants.firstWhereOrNull((p) => p.getAttribute("name") == agentName);
+    if (participant == null) {
+      return null;
+    }
+
+    return _threadListPathFromParticipant(participant);
+  }
+
   void updatePath(BuildContext context, String? path) {
     controller.showFiles();
 
@@ -730,14 +763,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  List<Widget> _insertAfterAgentsDropdown(List<Widget> actions, Widget widget) {
-    final index = actions.indexWhere((action) => action is AgentsDropdown);
-    if (index < 0) {
-      return [...actions, widget];
-    }
-    return [...actions.take(index + 1), widget, ...actions.skip(index + 1)];
-  }
-
   Widget _buildErrorArea(BuildContext context, String error, List<Widget> actions) {
     return Column(
       children: [
@@ -771,15 +796,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildChatArea(BuildContext context, String? agentName, List<Widget> actions, {String? threadingMode}) {
+  Widget _buildChatArea(BuildContext context, String? agentName, List<Widget> actions, {String? threadingMode, String? threadListPath}) {
     final user = MeshagentAuth.current.getUser();
     final userId = user!['id'] as String;
     final documentPath = getDocumentPath(userId, agentName);
     final isDefaultNewThreading = threadingMode == "default-new";
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final chatActions = isDefaultNewThreading && !isMobile
-        ? _insertAfterAgentsDropdown(actions, NewThreadButton(onPressed: _showNewThreadComposer))
-        : actions;
+    final chatActions = actions;
 
     return Column(
       children: [
@@ -790,6 +813,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             services: services,
             agentName: agentName,
             threadingMode: threadingMode,
+            threadListPath: threadListPath,
             newThreadResetVersion: _newThreadResetVersion,
             key: _threadViewKeyForPath(documentPath),
             client: widget.room,
@@ -942,7 +966,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             }
 
             if (participantSupportsChat(developmentParticipant)) {
-              return _buildChatArea(context, name, actions, threadingMode: _threadingModeFromParticipant(developmentParticipant));
+              return _buildChatArea(
+                context,
+                name,
+                actions,
+                threadingMode: _threadingModeFromParticipant(developmentParticipant),
+                threadListPath: _threadListPathFromParticipant(developmentParticipant),
+              );
             }
 
             return _buildErrorArea(context, "Selected development mode agent does not support chat or voice", actions);
@@ -955,6 +985,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               service.agents[0].name,
               actions,
               threadingMode: service.agents[0].annotations["meshagent.chatbot.threading"],
+              threadListPath: _threadListPathFromService(service),
             );
           } else if (type == "VoiceBot") {
             return _buildVoiceArea(context, service.agents[0].name, actions);
