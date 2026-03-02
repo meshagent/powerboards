@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart';
 import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
@@ -8,7 +9,6 @@ import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'agent_option.dart';
-import 'manage_connectors_dialog.dart';
 
 class RoomOptionsMenu extends StatefulWidget {
   final String projectId;
@@ -70,7 +70,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
             onPressed: () {
               showShadDialog<void>(
                 context: context,
-                builder: (context) => ManageConnectorsDialog(projectId: widget.projectId, room: widget.room),
+                builder: (context) => KeychainDialog(room: widget.room),
               );
             },
           ),

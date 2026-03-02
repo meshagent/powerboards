@@ -466,7 +466,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     super.initState();
 
     customViewers["thread"] = ({Key? key, required RoomClient room, required String filename, required Uri url}) {
-      return MeshagentThreadView(client: room, participantNames: [], documentPath: filename, joinMeeting: _joinMeeting, services: services);
+      return MeshagentThreadView(client: room, participantNames: [], documentPath: filename, joinMeeting: _joinMeeting);
     };
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -485,11 +485,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   late final services = Resource<List<ServiceSpec>>(() async {
-    final projectId = widget.projectId;
-    final services = (await getMeshagentClient().listRoomServices(
-      projectId: projectId,
-      roomName: widget.room.roomName!,
-    )).where((x) => x.agents.isNotEmpty).toList();
+    final services = (await widget.room.services.list()).where((x) => x.agents.isNotEmpty).toList();
     services.sort(_compareServices);
     return services;
   });
@@ -810,7 +806,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         _buildAgentsActionRow(context, showNewThreadButton: isDefaultNewThreading && isMobile),
         Expanded(
           child: MeshagentThreadView(
-            services: services,
             agentName: agentName,
             threadingMode: threadingMode,
             threadListPath: threadListPath,

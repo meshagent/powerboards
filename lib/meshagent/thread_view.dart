@@ -4,7 +4,6 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 import 'package:path/path.dart' as p;
 import 'package:powerboards/meshagent/document_pane.dart';
@@ -159,7 +158,6 @@ class MeshagentThreadView extends StatefulWidget {
     this.agentName,
 
     this.emptyState,
-    required this.services,
   });
 
   final String? agentName;
@@ -174,8 +172,6 @@ class MeshagentThreadView extends StatefulWidget {
   final String? initialMessageID;
   final String? initialMessageText;
   final List<FileAttachment>? initialMessageAttachments;
-  final Resource<List<ServiceSpec>> services;
-
   final Widget? emptyState;
 
   @override
@@ -694,20 +690,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                       },
                                       placeholder: widget.agentName == null ? Text("Message") : Text("Send a message or @$agentName"),
                                       leading: _chatController.toolkits.isEmpty
-                                          ? buildTools(context, widget.client, agentName, _chatController, snapshot, widget.services)
+                                          ? buildTools(context, widget.client, agentName, _chatController, snapshot)
                                           : null,
                                       footer: _chatController.toolkits.isEmpty
                                           ? null
                                           : Padding(
                                               padding: EdgeInsets.only(top: 8),
-                                              child: buildTools(
-                                                context,
-                                                widget.client,
-                                                agentName,
-                                                _chatController,
-                                                snapshot,
-                                                widget.services,
-                                              ),
+                                              child: buildTools(context, widget.client, agentName, _chatController, snapshot),
                                             ),
                                       trailing: null,
                                       room: widget.client,
@@ -837,8 +826,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             room: widget.client,
             agentName: agentName,
             onThreadPathChanged: _onNewThreadPathChanged,
-            toolsBuilder: (context, controller, snapshot) =>
-                buildTools(context, widget.client, agentName, controller, snapshot, widget.services),
+            toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, agentName, controller, snapshot),
             builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
           )
         : _buildThread(path: threadPath, initialMessageText: null);
@@ -1175,14 +1163,7 @@ String? getBaseUrl(ServiceSpec s, PortSpec p, EndpointSpec e) {
   return baseWithPath.replace(port: port).toString();
 }
 
-Widget buildTools(
-  BuildContext context,
-  RoomClient room,
-  String? agentName,
-  ChatThreadController controller,
-  ChatThreadSnapshot state,
-  Resource<List<ServiceSpec>> services,
-) {
+Widget buildTools(BuildContext context, RoomClient room, String? agentName, ChatThreadController controller, ChatThreadSnapshot state) {
   return ChatThreadAttachButton(
     agentName: agentName,
     alwaysShowAttachFiles: true, // agentName == null ? true : null,
@@ -1197,23 +1178,26 @@ Widget buildTools(
         Uri.parse("${MeshagentConfig.current?.appUrl}/oauth2/callback"),
       );
     },
-    availableConnectors: [
-      if (services.state.isReady)
-        for (final s in services.state.value!)
-          for (final p in s.ports)
-            for (final e in p.endpoints)
-              if (e.mcp != null)
-                Connector(
-                  name: e.mcp!.label,
-                  server: MCPServer(
-                    serverLabel: e.mcp!.label,
-                    serverUrl: getBaseUrl(s, p, e),
-                    headers: e.mcp!.headers,
-                    openaiConnectorId: e.mcp!.openaiConnectorId,
+    availableConnectors: () async {
+      final services = await room.services.list();
+      return [
+        for (final s in services)
+          if (s.metadata.annotations["meshagent.agent.filter"] == null || s.metadata.annotations["meshagent.agent.filter"] == agentName)
+            for (final p in s.ports)
+              for (final e in p.endpoints)
+                if (e.mcp != null)
+                  Connector(
+                    name: e.mcp!.label,
+                    server: MCPServer(
+                      serverLabel: e.mcp!.label,
+                      serverUrl: getBaseUrl(s, p, e),
+                      headers: e.mcp!.headers,
+                      openaiConnectorId: e.mcp!.openaiConnectorId,
+                    ),
+                    oauth: e.mcp!.oauth,
                   ),
-                  oauth: e.mcp!.oauth,
-                ),
-    ],
+      ];
+    },
     toolkits: [
       for (final tool in state.availableTools) ...[
         if (tool.name == "storage") storage,
