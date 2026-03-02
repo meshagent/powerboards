@@ -1205,7 +1205,12 @@ Widget buildTools(
               if (e.mcp != null)
                 Connector(
                   name: e.mcp!.label,
-                  server: MCPServer(serverLabel: e.mcp!.label, serverUrl: getBaseUrl(s, p, e), openaiConnectorId: e.mcp!.openaiConnectorId),
+                  server: MCPServer(
+                    serverLabel: e.mcp!.label,
+                    serverUrl: getBaseUrl(s, p, e),
+                    headers: e.mcp!.headers,
+                    openaiConnectorId: e.mcp!.openaiConnectorId,
+                  ),
                   oauth: e.mcp!.oauth,
                 ),
     ],
