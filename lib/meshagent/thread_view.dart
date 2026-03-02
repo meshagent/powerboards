@@ -941,9 +941,12 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                   child: const Text("Delete"),
                 ),
               ],
-              child: ShadGestureDetector(
-                onTap: _menuController.show,
-                behavior: HitTestBehavior.opaque,
+              child: ShadButton.ghost(
+                onPressed: _menuController.show,
+                hoverBackgroundColor: Colors.transparent,
+                backgroundColor: Colors.transparent,
+                padding: EdgeInsets.zero,
+                decoration: ShadDecoration.none,
                 child: SizedBox(
                   width: 40,
                   height: 40,
