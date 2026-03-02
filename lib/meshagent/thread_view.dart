@@ -1182,7 +1182,8 @@ Widget buildTools(BuildContext context, RoomClient room, String? agentName, Chat
       final services = await room.services.list();
       return [
         for (final s in services)
-          if (s.metadata.annotations["meshagent.agent.filter"] == null || s.metadata.annotations["meshagent.agent.filter"] == agentName)
+          if (s.metadata.annotations["meshagent.service.filter.agent"] == null ||
+              s.metadata.annotations["meshagent.service.filter.agent"] == agentName)
             for (final p in s.ports)
               for (final e in p.endpoints)
                 if (e.mcp != null)
