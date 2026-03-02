@@ -168,7 +168,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
                       await oauth2Authenticate(
                         request,
                         Uri.parse("${MeshagentConfig.current?.appUrl}/oauth2/callback"),
-                        jsonEncode({"room_name": widget.roomName, "request_id": request.requestId}),
+                        jsonEncode({"project_id": widget.projectId, "room_name": widget.roomName, "request_id": request.requestId}),
                       ),
                     );
 
