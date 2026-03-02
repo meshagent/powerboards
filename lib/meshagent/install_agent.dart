@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:http/http.dart';
@@ -68,11 +69,19 @@ class _AgentInstaller extends State<AgentInstaller> {
     _spec = widget.template == null
         ? Resource<ServiceTemplateSpec?>(() async {
             if (!_hasValidUrl) return null;
-            final res = await get(_url!);
-            _template = res.body;
             final client = getMeshagentClient();
-
-            return await client.renderTemplate(template: res.body, values: {});
+            try {
+              final res = await get(_url!);
+              if (res.statusCode < 200 || res.statusCode >= 300) {
+                throw Exception("Failed to download template URL: ${res.statusCode}");
+              }
+              _template = res.body;
+              return await client.renderTemplate(template: res.body, values: {});
+            } catch (_) {
+              final discovered = await client.discoverMcpServiceTemplate(url: _url.toString());
+              _template = jsonEncode(discovered.toJson());
+              return discovered;
+            }
           })
         : Resource<ServiceTemplateSpec?>(() async {
             final client = getMeshagentClient();
@@ -173,8 +182,8 @@ class _AgentInstaller extends State<AgentInstaller> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 16,
         children: [
-          Text("Enter the URL of your agent.yaml", style: _labelStyle, textAlign: TextAlign.center),
-          ShadInput(controller: _urlController, placeholder: const Text("https://.../agent.yaml")),
+          Text("Enter the URL of an agent or MCP server", style: _labelStyle, textAlign: TextAlign.center),
+          ShadInput(controller: _urlController, placeholder: const Text("https://.../agent.yaml or https://.../mcp")),
           if (_urlError != null) ShadAlert.destructive(description: Text(_urlError!)),
           const Spacer(),
           Row(
