@@ -183,7 +183,12 @@ class _AgentInstaller extends State<AgentInstaller> {
         spacing: 16,
         children: [
           Text("Enter the URL of an agent or MCP server", style: _labelStyle, textAlign: TextAlign.center),
-          ShadInput(controller: _urlController, placeholder: const Text("https://.../agent.yaml or https://.../mcp")),
+          ShadInput(controller: _urlController, placeholder: const Text("https://mcp.notion.com/mcp")),
+          Text(
+            "The link must point to a valid service template YAML or an MCP server URL.",
+            textAlign: TextAlign.left,
+            style: ShadTheme.of(context).textTheme.small.copyWith(color: ShadTheme.of(context).colorScheme.mutedForeground),
+          ),
           if (_urlError != null) ShadAlert.destructive(description: Text(_urlError!)),
           const Spacer(),
           Row(
@@ -220,7 +225,7 @@ class _AgentInstaller extends State<AgentInstaller> {
           child: ListView(
             padding: EdgeInsets.all(15),
             children: [
-              Text("Review the agent details", style: _labelStyle, textAlign: TextAlign.center),
+              Text("Review details", style: _labelStyle, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               ServiceNameCard(manifest: _spec.state.value!),
               const SizedBox(height: 20),
