@@ -16,6 +16,8 @@ import 'package:powerboards/meshagent/room_ended_card.dart';
 import 'package:powerboards/meshagent/room_not_found.dart';
 import 'package:powerboards/oauth/oauth.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/sweep_status_text.dart';
 import 'package:powerboards/ui/main_wrapper.dart';
 
 const String meshagentDomain = String.fromEnvironment('MESHAGENT_DOMAIN');
@@ -52,8 +54,11 @@ class MeshagentConnectionBuilder extends StatefulWidget {
 }
 
 class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder> {
+  static const String _defaultConnectionStatusText = "Connecting to room";
+
   Exception? error;
   int conectionNumber = 0;
+  String _lastConnectionStatusText = _defaultConnectionStatusText;
 
   Widget _backHeader() {
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
@@ -77,12 +82,63 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
     );
   }
 
+  Widget _connectionProgress([RoomClient? room]) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            spacing: 10,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SweepStatusText(
+                text: "Preparing your room",
+                style: ShadTheme.of(context).textTheme.p.copyWith(fontWeight: FontWeight.w700),
+              ),
+              if (room == null)
+                SweepStatusText(text: _lastConnectionStatusText, style: ShadTheme.of(context).textTheme.muted)
+              else
+                StreamBuilder<RoomStatusEvent>(
+                  stream: room.events.where((event) => event is RoomStatusEvent).cast<RoomStatusEvent>(),
+                  builder: (context, snapshot) {
+                    final description = snapshot.data?.description.trim();
+                    if (description != null && description.isNotEmpty) {
+                      _lastConnectionStatusText = description;
+                    }
+                    return SweepStatusText(
+                      text: (description == null || description.isEmpty) ? _lastConnectionStatusText : description,
+                      style: ShadTheme.of(context).textTheme.muted,
+                    );
+                  },
+                ),
+              SizedBox(height: 2),
+              SizedBox(width: 24, height: 24, child: CircularProgressIndicator(key: loadingKey)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _withReservedRoomHeader(Widget child) {
+    return SafeArea(
+      child: Column(
+        children: [
+          SizedBox(height: headerHeight),
+          Expanded(child: child),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ShadToaster(
       child: RoomConnectionScope(
         key: ValueKey("room-connection-${widget.roomName}-$conectionNumber"),
         authorization: () {
+          _lastConnectionStatusText = _defaultConnectionStatusText;
           final client = getMeshagentClient();
 
           return client.connectRoom(projectId: widget.projectId, roomName: widget.roomName);
@@ -112,7 +168,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
                       await oauth2Authenticate(
                         request,
                         Uri.parse("${MeshagentConfig.current?.appUrl}/oauth2/callback"),
-                        jsonEncode({"room_name": widget.roomName, "request_id": request.requestId}),
+                        jsonEncode({"project_id": widget.projectId, "room_name": widget.roomName, "request_id": request.requestId}),
                       ),
                     );
 
@@ -192,9 +248,28 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
             }
           }
         },
-        authorizingBuilder: (context) => Center(child: CircularProgressIndicator(key: loadingKey)),
-        connectingBuilder: (context, client) => Center(child: CircularProgressIndicator(key: loadingKey)),
+        authorizingBuilder: (context) => _withReservedRoomHeader(_connectionProgress()),
+        connectingBuilder: (context, client) => _withReservedRoomHeader(_connectionProgress(client)),
         doneBuilder: (context, error) {
+          if (error != null) {
+            return SafeArea(
+              child: _loadingBody(
+                ShadCard(
+                  title: Text("Room connection failed"),
+                  description: Text("$error"),
+                  footer: ShadButton(
+                    onPressed: () {
+                      setState(() {
+                        conectionNumber += 1;
+                      });
+                    },
+                    child: Text("Reconnect"),
+                  ),
+                ),
+              ),
+            );
+          }
+
           return SafeArea(
             child: _loadingBody(
               RoomEndedCard(
@@ -210,8 +285,19 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
         builder: (context, client) {
           return FutureBuilder(
             future: client.ready,
-            builder: (context, snapshot) =>
-                snapshot.hasData ? widget.builder(context, client) : Center(child: CircularProgressIndicator(key: loadingKey)),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return SafeArea(
+                  child: _loadingBody(ShadAlert.destructive(description: Text("Failed to connect to room: ${snapshot.error}"))),
+                );
+              }
+
+              if (snapshot.connectionState != ConnectionState.done) {
+                return _withReservedRoomHeader(_connectionProgress(client));
+              }
+
+              return widget.builder(context, client);
+            },
           );
         },
       ),

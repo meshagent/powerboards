@@ -16,23 +16,22 @@ Future<String?> showRenameRoomDialog(
   return showShadDialog<String?>(
     context: context,
     builder: (ctx) {
+      void submit() {
+        if (formKey.currentState!.saveAndValidate()) {
+          final values = formKey.currentState!.value;
+          final name = (values['name'] as String).trim();
+
+          Navigator.of(ctx).pop(name);
+        }
+      }
+
       return ShadDialog(
         useSafeArea: false,
         title: Text(title),
         description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(description)),
         actions: [
           ShadButton.outline(onPressed: () => Navigator.of(ctx).pop(null), child: const Text('Cancel')),
-          ShadButton(
-            onPressed: () {
-              if (formKey.currentState!.saveAndValidate()) {
-                final values = formKey.currentState!.value;
-                final name = (values['name'] as String).trim();
-
-                Navigator.of(ctx).pop(name);
-              }
-            },
-            child: const Text('Continue'),
-          ),
+          ShadButton(onPressed: submit, child: const Text('Save')),
         ],
         child: ShadForm(
           key: formKey,
@@ -48,6 +47,7 @@ Future<String?> showRenameRoomDialog(
                   initialValue: initialValue,
                   autofocus: true,
                   textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => submit(),
                   validator: (v) {
                     final value = v.trim();
 

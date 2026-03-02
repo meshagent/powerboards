@@ -139,29 +139,64 @@ final permissionHelp = {
   "queues": "Interact with job queues",
 };
 
+class _ServiceInstallSummary {
+  const _ServiceInstallSummary({required this.permissionKeys, required this.installsMcp, required this.tokenIdentities});
+
+  final List<String> permissionKeys;
+  final bool installsMcp;
+  final List<String> tokenIdentities;
+}
+
 class ServiceInfoCard extends StatelessWidget {
   const ServiceInfoCard({super.key, required this.manifest});
   final ServiceTemplateSpec manifest;
 
-  List<String> _summarize(List<PortSpec> ports) {
-    Set<String> keys = {};
+  _ServiceInstallSummary _summarize(List<PortSpec> ports) {
+    final keys = <String>{};
+    final tokenIdentities = <String>{};
+    var installsMcp = false;
 
     for (final p in ports) {
       for (final e in p.endpoints) {
-        final scope = e.meshagent?.api ?? ApiScope.agentDefault();
-        // Detect templates
-        final asJson = scope.toJson();
+        if (e.meshagent != null) {
+          final scope = e.meshagent!.api ?? ApiScope.agentDefault();
+          final asJson = scope.toJson();
+          keys.addAll(asJson.keys);
+        }
 
-        keys.addAll(asJson.keys);
+        if (e.mcp != null) {
+          installsMcp = true;
+        }
       }
     }
 
-    return keys.toList();
+    for (final env in manifest.container?.environment ?? <TemplateEnvironmentVariable>[]) {
+      final token = env.token;
+      if (token == null) {
+        continue;
+      }
+
+      tokenIdentities.add(token.identity);
+      final tokenApi = token.api;
+      if (tokenApi != null) {
+        keys.addAll(tokenApi.toJson().keys);
+      }
+    }
+
+    return _ServiceInstallSummary(permissionKeys: keys.toList(), installsMcp: installsMcp, tokenIdentities: tokenIdentities.toList());
   }
 
   @override
   Widget build(BuildContext context) {
     final labelStyle = Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600);
+    final summary = _summarize(manifest.ports);
+    final showsInstallSummary = manifest.agents.isNotEmpty || summary.installsMcp;
+    final filteredAgentName = manifest.metadata.annotations["meshagent.service.filter.agent"]?.trim();
+    final hasFilteredAgentName = filteredAgentName != null && filteredAgentName.isNotEmpty;
+    final permissionLines = <String>[
+      ...summary.permissionKeys.map((t) => permissionHelp[t] ?? t),
+      ...summary.tokenIdentities.map((identity) => "Create environment token for identity '$identity'"),
+    ];
 
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: 12),
@@ -169,7 +204,7 @@ class ServiceInfoCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (manifest.agents.isNotEmpty) ...[
+          if (showsInstallSummary) ...[
             Text('This package will install:', style: labelStyle),
 
             Padding(
@@ -187,17 +222,20 @@ class ServiceInfoCard extends StatelessWidget {
                     if (a.annotations["meshagent.agent.database.schema"] != null) Text("• A custom database"),
                     if (a.annotations["meshagent.agent.schedule"] != null) Text("• Scheduled tasks"),
                   ],
+                  if (summary.installsMcp) Text("• An MCP connector"),
+                  if (summary.installsMcp && hasFilteredAgentName)
+                    Text("• This MCP connector will only be installed for agent '$filteredAgentName'"),
                 ],
               ),
             ),
           ],
 
-          if (manifest.ports.isNotEmpty) ...[
+          if (permissionLines.isNotEmpty) ...[
             Text('Installing this agent will grant it permission to:', style: labelStyle),
 
             Padding(
               padding: EdgeInsets.only(left: 8, top: 8),
-              child: Text(_summarize(manifest.ports).map((t) => "• ${permissionHelp[t] ?? t}").join("\n"), style: TextStyle(height: 1.75)),
+              child: Text(permissionLines.map((line) => "• $line").join("\n"), style: TextStyle(height: 1.75)),
             ),
           ],
         ],
@@ -630,6 +668,14 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
     setState(() => _error = '$prefix: $e');
   }
 
+  String _variableTitle(ServiceTemplateVariable variable) {
+    final title = variable.title?.trim();
+    if (title == null || title.isEmpty) {
+      return variable.name;
+    }
+    return title;
+  }
+
   final info = ShadTooltipController();
   Widget _buildError(BuildContext context) {
     return _error == null
@@ -715,7 +761,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
                             id: v.name,
                             constraints: BoxConstraints(maxWidth: 400),
                             padding: EdgeInsets.only(left: 8, top: 0, bottom: 0, right: 0),
-                            label: Text('${v.name} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
+                            label: Text('${_variableTitle(v)} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
                             obscureText: v.obscure,
                             initialValue: (_vars[v.name] ?? '').replaceAll(suffix, ''),
                             onChanged: (txt) => setState(() => _vars[v.name] = txt.trim().isEmpty ? "" : ("${txt.trim()}$suffix").trim()),
@@ -735,10 +781,10 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
                           if (routeDomains.isEmpty)
                             ShadInputFormField(
                               id: "${v.name}_domain",
-                              label: Text('${v.name} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
+                              label: Text('${_variableTitle(v)} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
                               initialValue: _vars[v.name] ?? "",
                               description: v.description == null ? null : Text(v.description ?? ''),
-                              validator: v.optional ? null : (txt) => (txt.trim().isEmpty) ? '${v.name} is required' : null,
+                              validator: v.optional ? null : (txt) => (txt.trim().isEmpty) ? '${_variableTitle(v)} is required' : null,
                               onChanged: (txt) => setState(() => _vars[v.name] = txt.trim()),
                             )
                           else ...[
@@ -751,9 +797,9 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
                                   gap: 0,
                                   id: "${v.name}_subdomain",
                                   crossAxisAlignment: .center,
-                                  label: Text('${v.name} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
+                                  label: Text('${_variableTitle(v)} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
                                   initialValue: _routeSubdomains[v.name] ?? "",
-                                  validator: v.optional ? null : (txt) => (txt.trim().isEmpty) ? '${v.name} is required' : null,
+                                  validator: v.optional ? null : (txt) => (txt.trim().isEmpty) ? '${_variableTitle(v)} is required' : null,
                                   onChanged: (txt) {
                                     setState(() {
                                       _routeSubdomains[v.name] = txt.trim();
@@ -779,21 +825,21 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
                         v.enumValues == null
                             ? ShadInputFormField(
                                 id: v.name,
-                                label: Text('${v.name} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
+                                label: Text('${_variableTitle(v)} (${v.optional ? 'optional' : 'required'})', style: labelStyle),
                                 obscureText: v.obscure,
                                 initialValue: _vars[v.name] ?? '',
                                 description: v.description == null ? null : Text(v.description ?? ''),
                                 validator: (txt) {
                                   final val = (txt).trim();
                                   if (v.optional) return null;
-                                  final msg = val.isEmpty ? '${v.name} is required' : null;
+                                  final msg = val.isEmpty ? '${_variableTitle(v)} is required' : null;
 
                                   return msg;
                                 },
                                 onChanged: (txt) => setState(() => _vars[v.name] = txt.trim()),
                               )
                             : ShadSelectFormField<String>(
-                                label: Text(v.name, style: labelStyle),
+                                label: Text(_variableTitle(v), style: labelStyle),
                                 id: v.name,
                                 initialValue: _vars[v.name] ?? v.enumValues!.first,
                                 selectedOptionBuilder: (context, value) => Text(value),
@@ -802,7 +848,9 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
                                 validator: v.optional
                                     ? null
                                     : (txt) {
-                                        final msg = (txt?.trim().isEmpty == true || txt == null) ? '${v.name} is required' : null;
+                                        final msg = (txt?.trim().isEmpty == true || txt == null)
+                                            ? '${_variableTitle(v)} is required'
+                                            : null;
                                         if (msg != null) {}
                                         return msg;
                                       },
