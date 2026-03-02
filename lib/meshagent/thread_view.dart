@@ -1122,7 +1122,8 @@ final storage = StaticToolkitBuilderOption(
 );
 
 String? getBaseUrl(ServiceSpec s, PortSpec p, EndpointSpec e) {
-  final endpointPath = e.path.startsWith('/') ? e.path : '/${e.path}';
+  final rawPath = e.path.trim();
+  final endpointPath = rawPath.isEmpty ? "" : (rawPath.startsWith('/') ? rawPath : '/$rawPath');
   final port = p.num.value;
 
   if (s.external == null) {
