@@ -837,14 +837,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         final showThreadList =
             hasThreadEntries && maxWidth.isFinite && (maxWidth - _threadListPanelWidth) >= _minChatAreaWidthWithThreadList;
 
-        if (!showThreadList) {
-          return threadContent;
-        }
-
         return Row(
           children: [
             Expanded(child: threadContent),
-            _buildThreadListPanel(context),
+            if (showThreadList) _buildThreadListPanel(context),
           ],
         );
       },
