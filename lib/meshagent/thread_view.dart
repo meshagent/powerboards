@@ -837,14 +837,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         final showThreadList =
             hasThreadEntries && maxWidth.isFinite && (maxWidth - _threadListPanelWidth) >= _minChatAreaWidthWithThreadList;
 
-        if (!showThreadList) {
-          return threadContent;
-        }
-
         return Row(
           children: [
             Expanded(child: threadContent),
-            _buildThreadListPanel(context),
+            if (showThreadList) _buildThreadListPanel(context),
           ],
         );
       },
@@ -945,9 +941,12 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                   child: const Text("Delete"),
                 ),
               ],
-              child: ShadGestureDetector(
-                onTap: _menuController.show,
-                behavior: HitTestBehavior.opaque,
+              child: ShadButton.ghost(
+                onPressed: _menuController.show,
+                hoverBackgroundColor: Colors.transparent,
+                backgroundColor: Colors.transparent,
+                padding: EdgeInsets.zero,
+                decoration: ShadDecoration.none,
                 child: SizedBox(
                   width: 40,
                   height: 40,
