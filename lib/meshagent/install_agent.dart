@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:http/http.dart';
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart' as dev;
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
@@ -227,9 +228,9 @@ class _AgentInstaller extends State<AgentInstaller> {
             children: [
               Text("Review details", style: _labelStyle, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              ServiceNameCard(manifest: _spec.state.value!),
+              dev.ServiceNameCard(manifest: _spec.state.value!),
               const SizedBox(height: 20),
-              ServiceInfoCard(manifest: _spec.state.value!),
+              dev.ServiceInfoCard(manifest: _spec.state.value!),
             ],
           ),
         ),
@@ -425,7 +426,7 @@ class _AgentInstaller extends State<AgentInstaller> {
             template: _template!,
             header: [
               Text("Confirm and Install into ${_roomName ?? _roomDisplayName}", style: _labelStyle, textAlign: TextAlign.center),
-              ServiceNameCard(manifest: _spec.state.value!),
+              dev.ServiceNameCard(manifest: _spec.state.value!),
               SizedBox(height: 8),
             ],
             serviceId: existingServiceId,
