@@ -22,7 +22,7 @@ version: 0.29.2
 environment:
   sdk: ">=3.10.0"
 
-resolution: workspace
+resolution:
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
