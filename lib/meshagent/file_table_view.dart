@@ -1178,7 +1178,7 @@ class _FileTableViewState extends State<FileTableView> {
                     key,
                     alwaysShowCheckbox,
                     Center(
-                      child: Checkbox(value: isSelected, onChanged: (v) => widget.onToggleSelected(key, v ?? false)),
+                      child: ShadCheckbox(value: isSelected, onChanged: (v) => widget.onToggleSelected(key, v)),
                     ),
                   ),
                 ),
@@ -1224,7 +1224,7 @@ class _FileTableViewState extends State<FileTableView> {
           DataColumn2(
             fixedWidth: 50,
             label: Center(
-              child: Checkbox(tristate: true, value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+              child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
             ),
           ),
         DataColumn2(
@@ -1318,5 +1318,31 @@ class UploadProgressNotifications {
   void hide() {
     _autoHideTimer?.cancel();
     popoverController.hide();
+  }
+}
+
+class ShadTriCheckbox extends StatelessWidget {
+  const ShadTriCheckbox({super.key, required this.value, required this.onChanged});
+
+  final bool? value;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool internalBool = value != false;
+
+    final theme = ShadTheme.of(context);
+    final effectiveSize = theme.checkboxTheme.size;
+    final iconColor = theme.colorScheme.primaryForeground;
+
+    final Widget? effectiveIcon = value == null ? Icon(LucideIcons.minus, size: effectiveSize, color: iconColor) : null;
+
+    return Semantics(
+      checked: value == true,
+      mixed: value == null,
+      child: ExcludeSemantics(
+        child: ShadCheckbox(value: internalBool, icon: effectiveIcon, onChanged: (_) => onChanged(value == false)),
+      ),
+    );
   }
 }
