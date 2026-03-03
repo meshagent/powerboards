@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 const double _collapsedWidth = 58;
-const double _minAreaWidth = 200;
+const double _minAreaWidth = 300;
 const double _defaultWidth = 450;
 const String _area1Id = 'area1';
 const String _area2Id = 'area2';

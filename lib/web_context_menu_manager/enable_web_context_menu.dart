@@ -52,6 +52,7 @@ class _EnableWebContextMenuState extends State<EnableWebContextMenu> with Widget
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.addObserver(this);
     scheduleUpdate();
   }
 
@@ -73,7 +74,7 @@ class _EnableWebContextMenuState extends State<EnableWebContextMenu> with Widget
   Widget build(context) {
     return NotificationListener<SizeChangedLayoutNotification>(
       onNotification: (notification) {
-        getPosition(context);
+        scheduleUpdate();
 
         return false;
       },
