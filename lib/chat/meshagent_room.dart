@@ -491,13 +491,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     customViewers["thread"] = ({Key? key, required RoomClient room, required String filename, required Uri url}) {
       return MeshagentThreadView(client: room, participantNames: [], documentPath: filename, joinMeeting: _joinMeeting);
     };
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeFromUrl();
-    });
   }
 
-  void _initializeFromUrl() {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncViewWithRoute();
+  }
+
+  void _syncViewWithRoute() {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
     final path = currentUri.queryParameters['p'];
