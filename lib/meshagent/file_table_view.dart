@@ -1804,7 +1804,11 @@ class _FileTableViewState extends State<FileTableView> {
       height: iconSize,
       child: iconData != null
           ? Center(
-              child: Icon(iconData, size: paddedIconSize, color: (entry.isFolder ? .fromARGB(0xff, 0xe0, 0xa0, 0x30) : null)),
+              child: Icon(
+                iconData,
+                size: paddedIconSize,
+                color: entry.isFolder ? ShadTheme.of(context).colorScheme.secondaryForeground : null,
+              ),
             )
           : FileIcon(entry.name, size: iconSize),
     );

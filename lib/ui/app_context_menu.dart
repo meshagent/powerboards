@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class AppMenuEntry {
@@ -150,20 +151,20 @@ Widget _menuItem(AppMenuEntry e, {required int index, required int count, requir
           ? [
               Text(
                 e.title,
-                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600),
+                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600, color: shadForeground),
                 overflow: TextOverflow.ellipsis,
               ),
             ]
           : [
               Text(
                 e.title,
-                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600),
+                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600, color: shadForeground),
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 6),
               Text(
                 e.description!,
-                style: GoogleFonts.inter(fontSize: 14, height: 1.2, fontWeight: FontWeight.w500, color: const Color(0xFF666666)),
+                style: GoogleFonts.inter(fontSize: 14, height: 1.2, fontWeight: FontWeight.w500, color: shadSecondaryForeground),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 2,
               ),
