@@ -20,10 +20,11 @@ const Set<String> meshagentExtensions = {"thread", "transcript", "widget", "docu
 enum _ViewerOverride { none, text, meshagent }
 
 class DocumentPane extends StatefulWidget {
-  const DocumentPane({super.key, required this.path, required this.room});
+  const DocumentPane({super.key, required this.path, required this.room, this.forceTextViewer = false});
 
   final String path;
   final RoomClient room;
+  final bool forceTextViewer;
 
   @override
   State createState() => _DocumentPane();
@@ -68,7 +69,7 @@ class _DocumentPane extends State<DocumentPane> {
         }
         if (!snap.hasData) return _loading();
 
-        return CodePreview(room: widget.room, filename: widget.path, url: Uri.parse(snap.data!), readOnly: false);
+        return CodePreview(room: widget.room, filename: widget.path, url: Uri.parse(snap.data!));
       },
     );
   }
@@ -217,6 +218,10 @@ class _DocumentPane extends State<DocumentPane> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.forceTextViewer) {
+      return _codePreview();
+    }
+
     switch (_override) {
       case _ViewerOverride.text:
         return _codePreview();

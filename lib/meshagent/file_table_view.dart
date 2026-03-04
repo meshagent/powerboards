@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path/path.dart' as p;
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:data_table_2/data_table_2.dart';
@@ -24,6 +25,8 @@ import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/text_validators.dart';
 
 import 'file_upload.dart';
+
+const Set<String> editExtensions = {"md"};
 
 enum FileSortField { name, modified }
 
@@ -131,6 +134,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   String? get _openedFile => _location.openedFile;
 
   bool _forceShowSelect = false;
+  String _tab = 'preview';
 
   final popoverController = ShadPopoverController();
   late final uploadNotifications = UploadProgressNotifications(popoverController: popoverController);
@@ -271,6 +275,12 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     _setEntries(next);
+  }
+
+  String _ext(String path) {
+    final base = p.basename(path);
+    if (base.isEmpty) return "";
+    return base.split(".").last.toLowerCase();
   }
 
   void _removePath(String path, {isFolder = false}) {
@@ -922,6 +932,48 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  Widget _buildOpenedFile(BuildContext context) {
+    if (_openedFile == null) return const SizedBox.shrink();
+
+    final view = fileViewer(widget.client, _openedFile!) ?? DocumentPane(path: _openedFile!, room: widget.client);
+
+    final ext = _ext(_openedFile!);
+    final showEdit = editExtensions.contains(ext);
+    if (!showEdit) {
+      return view;
+    }
+
+    final edit = DocumentPane(path: _openedFile!, room: widget.client, forceTextViewer: true);
+
+    return Column(
+      key: ValueKey(_openedFile),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: ShadTabs<String>(
+            value: _tab,
+            onChanged: (v) => setState(() => _tab = v),
+            tabBarConstraints: const BoxConstraints(maxWidth: 400),
+            tabs: const [
+              ShadTab(value: 'preview', child: Text('Preview')),
+              ShadTab(value: 'edit', child: Text('Edit')),
+            ],
+          ),
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: _tab == 'preview' ? 0 : 1,
+            children: [
+              Container(key: ValueKey("preview$_tab"), child: view),
+              edit,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
@@ -990,8 +1042,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                             ),
                           ),
                         ),
-                        if (_openedFile != null)
-                          fileViewer(widget.client, _openedFile!) ?? DocumentPane(path: _openedFile!, room: widget.client),
+                        _buildOpenedFile(context),
                       ],
                     ),
                   ),
@@ -1170,15 +1221,17 @@ class _FileTableViewState extends State<FileTableView> {
         cells: [
           if (showSelectColumn)
             DataCell(
-              Container(
-                decoration: BoxDecoration(color: Colors.white),
-                child: _hoverRegion(
-                  key,
-                  _hoverShow(
+              _hoverRegion(
+                key,
+                Container(
+                  decoration: BoxDecoration(color: Colors.white),
+                  child: _hoverShow(
                     key,
                     alwaysShowCheckbox,
-                    Center(
-                      child: ShadCheckbox(value: isSelected, onChanged: (v) => widget.onToggleSelected(key, v)),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => widget.onToggleSelected(key, !isSelected),
+                      child: Center(child: ShadCheckbox(value: isSelected)),
                     ),
                   ),
                 ),
