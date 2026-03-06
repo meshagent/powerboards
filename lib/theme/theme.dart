@@ -25,7 +25,7 @@ const shadBorder = Color(0xFFE3E3E3);
 const shadInput = Color(0xFFFFFFFF);
 const shadRing = Color(0xFF222222);
 const shadSelection = Color(0xFFE3E3E3);
-const statusError = shadDestructive;
+const statusError = Color(0xFFE5484D);
 
 const shadDarkBackground = Color(0xFF101012);
 const shadDarkForeground = Color(0xFFF5F5F5);

@@ -403,7 +403,7 @@ class _NavState extends State<Nav> {
 
     return Container(
       constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 48),
-      color: cs.destructive,
+      color: statusError,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
         child: Text.rich(
@@ -411,7 +411,7 @@ class _NavState extends State<Nav> {
             children: [
               TextSpan(
                 text: "Out of Credit - ",
-                style: tt.small.copyWith(fontWeight: FontWeight.bold),
+                style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
               ),
 
               if (userRole == ProjectRole.admin)
@@ -420,7 +420,7 @@ class _NavState extends State<Nav> {
                 TextSpan(text: "Contact your project admin to add more credits."),
             ],
           ),
-          style: tt.small.copyWith(color: cs.background, height: 1.5),
+          style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
           textAlign: TextAlign.center,
         ),
       ),
@@ -434,7 +434,7 @@ class _NavState extends State<Nav> {
 
     return Container(
       constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 48),
-      color: cs.destructive,
+      color: statusError,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
         child: Row(
@@ -446,13 +446,13 @@ class _NavState extends State<Nav> {
                 children: [
                   TextSpan(
                     text: "Low Balance - ",
-                    style: tt.small.copyWith(fontWeight: FontWeight.bold),
+                    style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
                   ),
 
                   TextSpan(text: "Add more credits to avoid service interruption."),
                 ],
               ),
-              style: tt.small.copyWith(color: cs.background, height: 1.5),
+              style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
               textAlign: TextAlign.center,
             ),
             ShadButton(key: const Key('add-credits-button'), onPressed: onAddCredits, child: const Text("Add Credits")),
