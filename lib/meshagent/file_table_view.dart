@@ -584,19 +584,41 @@ class _FileManagerViewState extends State<FileManagerView> {
       builder: (context) {
         return ControlledForm(
           builder: (context, controller, formKey) {
-            void submit(_) {
+            Future<void> submit(_) async {
               if (!formKey.currentState!.saveAndValidate()) {
                 return;
               }
 
               final formData = formKey.currentState!.value;
-              String name = formData["name"] ?? "";
+              final String name = formData["name"] ?? "";
+              final String trimmedName = name.trim();
+              String? resolvedName = trimmedName;
 
-              if (!name.contains('.')) {
-                name = "$name.md";
+              if (!trimmedName.contains('.')) {
+                resolvedName = await showShadDialog<String>(
+                  context: context,
+                  builder: (context) {
+                    return ShadDialog(
+                      title: const Text("Add .txt extension?"),
+                      description: Text("`$trimmedName` has no extension."),
+                      actions: [
+                        ShadButton.outline(onPressed: () => Navigator.of(context).pop(trimmedName), child: const Text("No extension")),
+                        ShadButton(onPressed: () => Navigator.of(context).pop("$trimmedName.txt"), child: const Text("Add .txt")),
+                      ],
+                    );
+                  },
+                );
               }
 
-              Navigator.of(context).pop(name);
+              if (resolvedName == null) {
+                return;
+              }
+
+              if (!context.mounted) {
+                return;
+              }
+
+              Navigator.of(context).pop(resolvedName);
             }
 
             return ShadDialog(
@@ -613,7 +635,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     ShadInputFormField(
                       id: "name",
                       initialValue: "",
-                      validator: (value) => value.isEmpty ? "File name cannot be empty" : null,
+                      validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,
                       label: Text("Name"),
                       autofocus: true,
                       onSubmitted: submit,
