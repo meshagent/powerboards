@@ -30,7 +30,7 @@ const Set<String> editExtensions = {"md"};
 
 enum FileSortField { name, modified }
 
-enum _FileAction { open, download, upload, delete }
+enum _FileAction { open, download, upload, compressFolder, delete }
 
 class _FileLocation {
   final String folder;
@@ -405,6 +405,98 @@ class _FileManagerViewState extends State<FileManagerView> {
     _removePath(folderPath, isFolder: true);
   }
 
+  String _shellQuote(String value) {
+    if (value.isEmpty) {
+      return "''";
+    }
+    return "'${value.replaceAll("'", r"'\''")}'";
+  }
+
+  Future<void> _refreshCurrentFolder() async {
+    final entries = await _getChildren(_folderSig.value);
+    if (!mounted) {
+      return;
+    }
+    _setEntries(entries);
+  }
+
+  Future<void> _waitForContainerExit(String containerId) async {
+    final deadline = DateTime.now().add(const Duration(minutes: 5));
+
+    while (true) {
+      RoomContainer? container;
+      for (final candidate in await widget.client.containers.list(all: true)) {
+        if (candidate.id == containerId) {
+          container = candidate;
+          break;
+        }
+      }
+
+      if (container == null || container.state == "EXITED" || container.state == "UNKNOWN") {
+        return;
+      }
+
+      if (DateTime.now().isAfter(deadline)) {
+        throw TimeoutException("Timed out waiting for container $containerId to exit.");
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+  }
+
+  Future<void> _compressFolder(String folderPath) async {
+    final toaster = ShadToaster.of(context);
+    final folderName = p.basename(folderPath);
+    final parentFolder = parentPath(folderPath);
+
+    final zipFileName = "$folderName.zip";
+
+    toaster.show(
+      ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 3)),
+    );
+
+    final containerID = await widget.client.containers.run(
+      image: "us-central1-docker.pkg.dev/meshagent-life/meshagent-public/shell-terminal:0.29.3-esgz",
+      command: "/usr/bin/zip -r ${_shellQuote(zipFileName)} ${_shellQuote(folderName)}",
+      mountPath: "/data",
+      workingDir: "/data/$parentFolder",
+      private: true,
+    );
+
+    final logStream = widget.client.containers.logs(containerId: containerID, follow: true);
+    final logResult = logStream.result.catchError((Object error) {
+      debugPrint("compressFolder log stream ended with error: $error");
+      if (mounted) {
+        toaster.show(
+          ShadToast.destructive(
+            title: const Text("Failed to compress folder"),
+            description: Text(error.toString()),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
+    });
+
+    try {
+      await _waitForContainerExit(containerID);
+    } finally {
+      try {
+        await logStream.cancel();
+      } catch (_) {}
+      await logResult;
+    }
+
+    await _refreshCurrentFolder();
+
+    if (!mounted) {
+      return;
+    }
+
+    toaster.show(
+      ShadToast(title: const Text("Compression complete"), description: Text("Created $zipFileName"), duration: const Duration(seconds: 5)),
+    );
+  }
+
   Future<void> _onFileDrop(String name, Stream<Uint8List> stream, int? fileSize) async {
     final fileName = joinPaths(_folderSig.value, name);
     await _uploadFile(stream, fileName, fileSize ?? 0);
@@ -734,6 +826,9 @@ class _FileManagerViewState extends State<FileManagerView> {
           case _FileAction.upload:
             await _addFiles(fullPath);
             break;
+          case _FileAction.compressFolder:
+            await _compressFolder(fullPath);
+            break;
           case _FileAction.download:
             await _downloadFile(fullPath);
             break;
@@ -744,6 +839,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         if (!isFolder) _menuItem(_FileAction.download, LucideIcons.download, 'Download'),
         if (isFolder) _menuItem(_FileAction.open, LucideIcons.folderOpen, 'Open folder'),
         if (isFolder) _menuItem(_FileAction.upload, LucideIcons.upload, 'Upload here'),
+        if (isFolder) _menuItem(_FileAction.compressFolder, LucideIcons.archive, 'Compress folder'),
         const PopupMenuDivider(),
         _menuItem(_FileAction.delete, LucideIcons.trash, 'Delete'),
       ],

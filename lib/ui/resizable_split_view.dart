@@ -26,14 +26,8 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   BoxConstraints? lastConstraints;
   Timer? resizeDebounceTimer;
 
-  final keyArea1 = GlobalKey();
-  final keyArea2 = GlobalKey();
-
   bool _collapsed = false;
   double? _area1Ratio;
-
-  Widget get _area1 => KeyedSubtree(key: keyArea1, child: widget.area1);
-  Widget get _area2 => KeyedSubtree(key: keyArea2, child: widget.area2);
 
   void debounceResize(BoxConstraints constraints) {
     if (lastConstraints == null || lastConstraints!.maxWidth != constraints.maxWidth) {
@@ -70,6 +64,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
   @override
   void dispose() {
+    resizeDebounceTimer?.cancel();
     resizeController.dispose();
 
     super.dispose();
@@ -111,7 +106,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
     if (!widget.split) {
       lastConstraints = null;
-      return _area1;
+      return widget.area1;
     }
 
     if (widget.allowCollapse && _collapsed) {
@@ -134,7 +129,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
               decoration: BoxDecoration(
                 border: Border(left: BorderSide(color: cs.border)),
               ),
-              child: _area2,
+              child: widget.area2,
             ),
           ),
         ],
@@ -167,7 +162,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
               child: widget.allowCollapse
                   ? Stack(
                       children: [
-                        _area1,
+                        widget.area1,
                         Positioned(
                           top: 10,
                           right: 10,
@@ -178,9 +173,9 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
                         ),
                       ],
                     )
-                  : _area1,
+                  : widget.area1,
             ),
-            ShadResizablePanel(id: _area2Id, defaultSize: 1 - defaultSize, minSize: minSize, maxSize: maxSize, child: _area2),
+            ShadResizablePanel(id: _area2Id, defaultSize: 1 - defaultSize, minSize: minSize, maxSize: maxSize, child: widget.area2),
           ],
         );
       },
