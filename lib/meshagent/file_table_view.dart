@@ -756,7 +756,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final showRouteActions = !isMobile || !showSelectionActions;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         spacing: 8,
@@ -928,7 +928,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: Row(children: crumbs),
+      child: Row(children: [SizedBox(width: 40), ...crumbs]),
     );
   }
 
@@ -1204,6 +1204,7 @@ class _FileTableViewState extends State<FileTableView> {
       final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
       final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
       final isSelected = widget.selected.contains(key);
+      final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border));
 
       return DataRow(
         onSelectChanged: (_) {
@@ -1231,7 +1232,9 @@ class _FileTableViewState extends State<FileTableView> {
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () => widget.onToggleSelected(key, !isSelected),
-                      child: Center(child: ShadCheckbox(value: isSelected)),
+                      child: Center(
+                        child: ShadCheckbox(decoration: checkboxDecoration, value: isSelected),
+                      ),
                     ),
                   ),
                 ),
@@ -1262,6 +1265,12 @@ class _FileTableViewState extends State<FileTableView> {
             ),
           ),
           DataCell(_hoverRegion(key, _hoverShow(key, alwaysShowMenu, Center(child: widget.buildActionsMenu(fullPath, entry.isFolder))))),
+          DataCell(
+            SizedBox(
+              width: 50,
+              child: Container(decoration: BoxDecoration(color: Colors.white)),
+            ),
+          ),
         ],
       );
     }).toList();
@@ -1296,6 +1305,7 @@ class _FileTableViewState extends State<FileTableView> {
               : SizedBox.shrink(),
           fixedWidth: 50,
         ),
+        DataColumn2(label: SizedBox.shrink(), fixedWidth: 50),
       ],
       rows: rows,
     );
@@ -1389,12 +1399,17 @@ class ShadTriCheckbox extends StatelessWidget {
     final iconColor = theme.colorScheme.primaryForeground;
 
     final Widget? effectiveIcon = value == null ? Icon(LucideIcons.minus, size: effectiveSize, color: iconColor) : null;
-
+    final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border));
     return Semantics(
       checked: value == true,
       mixed: value == null,
       child: ExcludeSemantics(
-        child: ShadCheckbox(value: internalBool, icon: effectiveIcon, onChanged: (_) => onChanged(value == false)),
+        child: ShadCheckbox(
+          decoration: checkboxDecoration,
+          value: internalBool,
+          icon: effectiveIcon,
+          onChanged: (_) => onChanged(value == false),
+        ),
       ),
     );
   }
