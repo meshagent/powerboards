@@ -420,30 +420,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     _setEntries(entries);
   }
 
-  Future<void> _waitForContainerExit(String containerId) async {
-    final deadline = DateTime.now().add(const Duration(minutes: 5));
-
-    while (true) {
-      RoomContainer? container;
-      for (final candidate in await widget.client.containers.list(all: true)) {
-        if (candidate.id == containerId) {
-          container = candidate;
-          break;
-        }
-      }
-
-      if (container == null || container.state == "EXITED" || container.state == "UNKNOWN") {
-        return;
-      }
-
-      if (DateTime.now().isAfter(deadline)) {
-        throw TimeoutException("Timed out waiting for container $containerId to exit.");
-      }
-
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-    }
-  }
-
   Future<void> _compressFolder(String folderPath) async {
     final toaster = ShadToaster.of(context);
     final folderName = p.basename(folderPath);
@@ -452,49 +428,41 @@ class _FileManagerViewState extends State<FileManagerView> {
     final zipFileName = "$folderName.zip";
 
     toaster.show(
-      ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 3)),
+      ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 5)),
     );
 
-    final containerID = await widget.client.containers.run(
-      image: "us-central1-docker.pkg.dev/meshagent-life/meshagent-public/shell-terminal:0.29.3-esgz",
+    final containerId = await widget.client.containers.run(
+      image: "docker.io/joshkeegan/zip:latest",
       command: "/usr/bin/zip -r ${_shellQuote(zipFileName)} ${_shellQuote(folderName)}",
       mountPath: "/data",
       workingDir: "/data/$parentFolder",
       private: true,
     );
 
-    final logStream = widget.client.containers.logs(containerId: containerID, follow: true);
-    final logResult = logStream.result.catchError((Object error) {
-      debugPrint("compressFolder log stream ended with error: $error");
-      if (mounted) {
-        toaster.show(
-          ShadToast.destructive(
-            title: const Text("Failed to compress folder"),
-            description: Text(error.toString()),
-            duration: const Duration(seconds: 8),
-          ),
-        );
-      }
-    });
-
-    try {
-      await _waitForContainerExit(containerID);
-    } finally {
-      try {
-        await logStream.cancel();
-      } catch (_) {}
-      await logResult;
-    }
-
-    await _refreshCurrentFolder();
+    final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
 
     if (!mounted) {
       return;
     }
 
-    toaster.show(
-      ShadToast(title: const Text("Compression complete"), description: Text("Created $zipFileName"), duration: const Duration(seconds: 5)),
-    );
+    if (returnCode == 0) {
+      toaster.show(
+        ShadToast(
+          title: const Text("Compression complete"),
+          description: Text("Created $zipFileName"),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      _refreshCurrentFolder();
+    } else {
+      toaster.show(
+        ShadToast.destructive(
+          title: const Text("Compression failed"),
+          description: Text("Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)"),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    }
   }
 
   Future<void> _onFileDrop(String name, Stream<Uint8List> stream, int? fileSize) async {
