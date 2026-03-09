@@ -254,7 +254,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         final parentName = p.split('/').where((s) => s.isNotEmpty).last;
         final idx = next.indexWhere((e) => e.name == parentName);
         if (idx == -1) {
-          next.add(StorageEntry(name: parentName, isFolder: true, createdAt: now, updatedAt: null));
+          next.add(StorageEntry(name: parentName, isFolder: true, size: null, createdAt: now, updatedAt: null));
           _setEntries(next);
         }
       }
@@ -264,10 +264,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (event is FileUpdatedEvent) {
       final idx = next.indexWhere((e) => e.name == name);
       if (idx == -1) {
-        next.add(StorageEntry(name: name, isFolder: false, createdAt: now, updatedAt: now));
+        next.add(StorageEntry(name: name, isFolder: false, size: null, createdAt: now, updatedAt: now));
       } else {
         final old = next[idx];
-        next[idx] = StorageEntry(name: name, isFolder: false, createdAt: old.createdAt, updatedAt: now);
+        next[idx] = StorageEntry(name: name, isFolder: false, size: old.size, createdAt: old.createdAt, updatedAt: now);
       }
     } else if (event is FileDeletedEvent) {
       next.removeWhere((e) => e.name == name);
