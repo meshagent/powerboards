@@ -30,7 +30,7 @@ const Set<String> editExtensions = {"md"};
 
 enum FileSortField { name, modified }
 
-enum _FileAction { open, download, upload, delete }
+enum _FileAction { open, download, upload, compressFolder, delete }
 
 class _FileLocation {
   final String folder;
@@ -405,6 +405,66 @@ class _FileManagerViewState extends State<FileManagerView> {
     _removePath(folderPath, isFolder: true);
   }
 
+  String _shellQuote(String value) {
+    if (value.isEmpty) {
+      return "''";
+    }
+    return "'${value.replaceAll("'", r"'\''")}'";
+  }
+
+  Future<void> _refreshCurrentFolder() async {
+    final entries = await _getChildren(_folderSig.value);
+    if (!mounted) {
+      return;
+    }
+    _setEntries(entries);
+  }
+
+  Future<void> _compressFolder(String folderPath) async {
+    final toaster = ShadToaster.of(context);
+    final folderName = p.basename(folderPath);
+    final parentFolder = parentPath(folderPath);
+
+    final zipFileName = "$folderName.zip";
+
+    toaster.show(
+      ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 5)),
+    );
+
+    final containerId = await widget.client.containers.run(
+      image: "docker.io/joshkeegan/zip:latest",
+      command: "/usr/bin/zip -r ${_shellQuote(zipFileName)} ${_shellQuote(folderName)}",
+      mountPath: "/data",
+      workingDir: "/data/$parentFolder",
+      private: true,
+    );
+
+    final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
+
+    if (!mounted) {
+      return;
+    }
+
+    if (returnCode == 0) {
+      toaster.show(
+        ShadToast(
+          title: const Text("Compression complete"),
+          description: Text("Created $zipFileName"),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      _refreshCurrentFolder();
+    } else {
+      toaster.show(
+        ShadToast.destructive(
+          title: const Text("Compression failed"),
+          description: Text("Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)"),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    }
+  }
+
   Future<void> _onFileDrop(String name, Stream<Uint8List> stream, int? fileSize) async {
     final fileName = joinPaths(_folderSig.value, name);
     await _uploadFile(stream, fileName, fileSize ?? 0);
@@ -756,6 +816,9 @@ class _FileManagerViewState extends State<FileManagerView> {
           case _FileAction.upload:
             await _addFiles(fullPath);
             break;
+          case _FileAction.compressFolder:
+            await _compressFolder(fullPath);
+            break;
           case _FileAction.download:
             await _downloadFile(fullPath);
             break;
@@ -766,6 +829,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         if (!isFolder) _menuItem(_FileAction.download, LucideIcons.download, 'Download'),
         if (isFolder) _menuItem(_FileAction.open, LucideIcons.folderOpen, 'Open folder'),
         if (isFolder) _menuItem(_FileAction.upload, LucideIcons.upload, 'Upload here'),
+        if (isFolder) _menuItem(_FileAction.compressFolder, LucideIcons.archive, 'Compress folder'),
         const PopupMenuDivider(),
         _menuItem(_FileAction.delete, LucideIcons.trash, 'Delete'),
       ],
