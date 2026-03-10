@@ -431,37 +431,49 @@ class _FileManagerViewState extends State<FileManagerView> {
       ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 5)),
     );
 
-    final containerId = await widget.client.containers.run(
-      image: "docker.io/joshkeegan/zip:latest",
-      command: "/usr/bin/zip -r ${_shellQuote(zipFileName)} ${_shellQuote(folderName)}",
-      mountPath: "/data",
-      workingDir: "/data/$parentFolder",
-      private: true,
-    );
+    String? containerId;
 
-    final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
-
-    if (!mounted) {
-      return;
-    }
-
-    if (returnCode == 0) {
-      toaster.show(
-        ShadToast(
-          title: const Text("Compression complete"),
-          description: Text("Created $zipFileName"),
-          duration: const Duration(seconds: 5),
-        ),
+    try {
+      containerId = await widget.client.containers.run(
+        image: "docker.io/joshkeegan/zip:latest",
+        command: "/usr/bin/zip -r ${_shellQuote(zipFileName)} ${_shellQuote(folderName)}",
+        mountPath: "/data",
+        workingDir: "/data/$parentFolder",
+        private: true,
       );
-      _refreshCurrentFolder();
-    } else {
-      toaster.show(
-        ShadToast.destructive(
-          title: const Text("Compression failed"),
-          description: Text("Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)"),
-          duration: const Duration(seconds: 8),
-        ),
-      );
+
+      final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
+
+      if (!mounted) {
+        return;
+      }
+
+      if (returnCode == 0) {
+        toaster.show(
+          ShadToast(
+            title: const Text("Compression complete"),
+            description: Text("Created $zipFileName"),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        _refreshCurrentFolder();
+      } else {
+        toaster.show(
+          ShadToast.destructive(
+            title: const Text("Compression failed"),
+            description: Text("Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)"),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
+    } finally {
+      try {
+        if (containerId != null) {
+          await widget.client.containers.deleteContainer(containerId: containerId);
+        }
+      } catch (e) {
+        debugPrint("Failed to clean up compression container: $e");
+      }
     }
   }
 
