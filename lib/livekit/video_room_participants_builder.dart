@@ -30,7 +30,7 @@ class _VideoRoomParticipantsBuilderState extends State<VideoRoomParticipantsBuil
       oldWidget.room.removeListener(_onRoomChanged);
       widget.room.addListener(_onRoomChanged);
 
-      _onRoomChanged();
+      participants = _getParticipants();
     }
   }
 
@@ -44,7 +44,7 @@ class _VideoRoomParticipantsBuilderState extends State<VideoRoomParticipantsBuil
   List<lk.Participant> _getParticipants() {
     List<lk.Participant> participants = [];
 
-    for (var p in widget.room.remoteParticipants.values) {
+    for (final p in widget.room.remoteParticipants.values) {
       final isRecorder = p.identity.endsWith(".agent-recorder");
       final isTranscriber = p.identity.endsWith(".agent-transcriber");
 

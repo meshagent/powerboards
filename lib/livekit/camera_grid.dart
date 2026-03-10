@@ -24,10 +24,30 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
     return participant.videoTrackPublications.any((t) => t.source == TrackSource.screenShareVideo && !t.muted && t.track != null);
   }
 
-  bool _expandedStillAvailable(List<Participant> participants) {
+  bool _participantHasCamera(Participant participant) {
+    return participant.videoTrackPublications.any((t) => t.kind == TrackType.VIDEO && !t.muted && t.track != null);
+  }
+
+  int _getNumberOfShares(List<Participant> participants) {
+    return participants.where((p) => _participantHasShare(p)).length;
+  }
+
+  int _getNumberOfVideos(List<Participant> participants) {
+    return participants.where((p) => _participantHasCamera(p)).length;
+  }
+
+  bool _expandedShareStillAvailable(List<Participant> participants) {
     final identity = _expandedIdentity;
     if (identity == null) return false;
+
     return participants.any((p) => p.identity == identity && _participantHasShare(p));
+  }
+
+  bool _expandedCameraStillAvailable(List<Participant> participants) {
+    final identity = _expandedIdentity;
+    if (identity == null) return false;
+
+    return participants.any((p) => p.identity == identity && _participantHasCamera(p));
   }
 
   void _toggleExpanded(String identity) {
@@ -39,10 +59,19 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   @override
   void didUpdateWidget(covariant ExpandableCameraGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_expandedIdentity != null && !_expandedStillAvailable(widget.participants)) {
-      setState(() {
-        _expandedIdentity = null;
-      });
+
+    if (_expandedIdentity != null) {
+      final numberOfShares = _getNumberOfShares(widget.participants);
+      if (numberOfShares > 0) {
+        if (!_expandedShareStillAvailable(widget.participants)) {
+          _expandedIdentity = null;
+        }
+      } else {
+        final numberOfVideos = _getNumberOfVideos(widget.participants);
+        if (numberOfVideos > 0 && !_expandedCameraStillAvailable(widget.participants)) {
+          _expandedIdentity = null;
+        }
+      }
     }
   }
 
@@ -53,10 +82,8 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
         ? widget.participants
         : widget.participants.where((p) => p.identity == expandedIdentity).toList(growable: false);
 
-    final numberOfShares = widget.participants.where((p) => _participantHasShare(p)).length;
-    final numberOfVideos = widget.participants
-        .where((p) => p.videoTrackPublications.any((t) => t.kind == TrackType.VIDEO && !t.muted && t.track != null))
-        .length;
+    final numberOfShares = _getNumberOfShares(widget.participants);
+    final numberOfVideos = _getNumberOfVideos(widget.participants);
 
     return cameraGridBuilder(
       context,
