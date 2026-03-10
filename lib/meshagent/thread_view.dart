@@ -641,6 +641,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                         showTyping: (snapshot.threadStatusMode != null) && snapshot.listening.isEmpty,
                         showListening: snapshot.listening.isNotEmpty,
                         threadStatus: snapshot.threadStatus,
+                        threadStatusStartedAt: snapshot.threadStatusStartedAt,
                         threadStatusMode: snapshot.threadStatusMode,
                         onCancel: () {
                           _chatController.cancel(path, document);
