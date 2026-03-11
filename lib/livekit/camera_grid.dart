@@ -5,8 +5,20 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'audio_stats.dart';
+import 'hover_builder.dart';
 import 'participant_track.dart';
 import 'room.dart';
+
+class ContextMenuCoordinator {
+  ShadContextMenuController? _currentController;
+
+  void setActive(ShadContextMenuController controller) {
+    if (!identical(_currentController, controller)) {
+      _currentController?.hide();
+    }
+    _currentController = controller;
+  }
+}
 
 class ExpandableCameraGrid extends StatefulWidget {
   const ExpandableCameraGrid({super.key, required this.participants});
@@ -19,6 +31,7 @@ class ExpandableCameraGrid extends StatefulWidget {
 
 class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   String? _expandedIdentity;
+  final _contextMenuCoordinator = ContextMenuCoordinator();
 
   bool _participantHasShare(Participant participant) {
     return participant.videoTrackPublications.any((t) => t.source == TrackSource.screenShareVideo && !t.muted && t.track != null);
@@ -93,6 +106,7 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
 
         if (numberOfShares >= 2) {
           return _ExpandableShareTile(
+            contextMenuCoordinator: _contextMenuCoordinator,
             isSharing: true,
             isExpanded: isExpanded,
             onToggle: () => _toggleExpanded(participant.identity),
@@ -102,6 +116,7 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
 
         if (numberOfShares == 0 && numberOfVideos >= 2) {
           return _ExpandableShareTile(
+            contextMenuCoordinator: _contextMenuCoordinator,
             isSharing: false,
             isExpanded: isExpanded,
             onToggle: () => _toggleExpanded(participant.identity),
@@ -115,41 +130,101 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 }
 
-class _ExpandableShareTile extends StatelessWidget {
-  const _ExpandableShareTile({required this.isExpanded, required this.isSharing, required this.onToggle, required this.child});
+class _ExpandableShareTile extends StatefulWidget {
+  const _ExpandableShareTile({
+    required this.contextMenuCoordinator,
+    required this.isExpanded,
+    required this.isSharing,
+    required this.onToggle,
+    required this.child,
+  });
 
+  final ContextMenuCoordinator contextMenuCoordinator;
   final bool isSharing;
   final bool isExpanded;
   final VoidCallback onToggle;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        child,
-        Positioned(
-          top: isSharing ? 0 : 10.0,
-          right: isSharing ? 0 : 10.0,
-          child: _ShareExpandButton(isExpanded: isExpanded, onPressed: onToggle),
-        ),
-      ],
-    );
-  }
+  State<_ExpandableShareTile> createState() => _ExpandableShareTileState();
 }
 
-class _ShareExpandButton extends StatelessWidget {
-  const _ShareExpandButton({required this.isExpanded, required this.onPressed});
+class _ExpandableShareTileState extends State<_ExpandableShareTile> {
+  late final ShadContextMenuController _topMenuController = ShadContextMenuController();
+  late final ShadContextMenuController _buttonMenuController = ShadContextMenuController();
 
-  final bool isExpanded;
-  final VoidCallback onPressed;
+  List<ShadContextMenuItem> get _menuItems => [
+    ShadContextMenuItem(
+      height: 40.0,
+      leading: Icon(widget.isExpanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
+      onPressed: widget.onToggle,
+      child: Text(widget.isExpanded ? "Collapse" : "Expand"),
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    _topMenuController.addListener(() {
+      widget.contextMenuCoordinator.setActive(_topMenuController);
+    });
+    _buttonMenuController.addListener(() {
+      widget.contextMenuCoordinator.setActive(_buttonMenuController);
+    });
+  }
+
+  @override
+  void dispose() {
+    _topMenuController.dispose();
+    _buttonMenuController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: isExpanded ? "Collapse" : "Expand",
-      child: ShadButton.secondary(onPressed: onPressed, child: Icon(isExpanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16)),
+    return HoverBuilder(
+      cursor: SystemMouseCursors.basic,
+      builder: (hovered) {
+        final showMenuButton = hovered;
+
+        return ShadContextMenuRegion(
+          controller: _topMenuController,
+          items: _menuItems,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ShadGestureDetector(
+                onTap: () {
+                  if (_buttonMenuController.isOpen) {
+                    _buttonMenuController.hide();
+                  }
+                },
+                child: widget.child,
+              ),
+              Positioned(
+                top: widget.isSharing ? 0 : 10.0,
+                right: widget.isSharing ? 0 : 10.0,
+                child: IgnorePointer(
+                  ignoring: !showMenuButton,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 120),
+                    opacity: showMenuButton ? 1 : 0,
+                    child: ShadContextMenu(
+                      controller: _buttonMenuController,
+                      items: _menuItems,
+                      child: ShadButton.secondary(
+                        onPressed: _buttonMenuController.toggle,
+                        child: const Icon(LucideIcons.ellipsis, size: 16),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
