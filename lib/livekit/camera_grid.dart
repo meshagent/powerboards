@@ -18,6 +18,11 @@ class ContextMenuCoordinator {
     }
     _currentController = controller;
   }
+
+  void hideCurrent() {
+    _currentController?.hide();
+    _currentController = null;
+  }
 }
 
 class ExpandableCameraGrid extends StatefulWidget {
@@ -157,7 +162,11 @@ class _ExpandableShareTileState extends State<_ExpandableShareTile> {
     ShadContextMenuItem(
       height: 40.0,
       leading: Icon(widget.isExpanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
-      onPressed: widget.onToggle,
+      onPressed: () {
+        widget.contextMenuCoordinator.hideCurrent();
+
+        widget.onToggle();
+      },
       child: Text(widget.isExpanded ? "Collapse" : "Expand"),
     ),
   ];
@@ -183,6 +192,9 @@ class _ExpandableShareTileState extends State<_ExpandableShareTile> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
     return HoverBuilder(
       cursor: SystemMouseCursors.basic,
       builder: (hovered) {
@@ -213,9 +225,10 @@ class _ExpandableShareTileState extends State<_ExpandableShareTile> {
                     child: ShadContextMenu(
                       controller: _buttonMenuController,
                       items: _menuItems,
-                      child: ShadButton.secondary(
+                      child: ShadIconButton.outline(
+                        icon: const Icon(LucideIcons.ellipsis),
+                        backgroundColor: cs.surface,
                         onPressed: _buttonMenuController.toggle,
-                        child: const Icon(LucideIcons.ellipsis, size: 16),
                       ),
                     ),
                   ),
