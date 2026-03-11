@@ -155,38 +155,62 @@ class _ExpandableShareTile extends StatefulWidget {
 }
 
 class _ExpandableShareTileState extends State<_ExpandableShareTile> {
+  static const _contextMenuAnimDuration = Duration(milliseconds: 150);
+
   late final ShadContextMenuController _topMenuController = ShadContextMenuController();
   late final ShadContextMenuController _buttonMenuController = ShadContextMenuController();
+
+  // Fixing switch button labes right after click
+  bool? _latchedExpandedState;
+  bool get _effectiveExpandedState => _latchedExpandedState ?? widget.isExpanded;
 
   List<ShadContextMenuItem> get _menuItems => [
     ShadContextMenuItem(
       height: 40.0,
-      leading: Icon(widget.isExpanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
+      leading: Icon(_effectiveExpandedState ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
       onPressed: () {
         widget.contextMenuCoordinator.hideCurrent();
 
         widget.onToggle();
       },
-      child: Text(widget.isExpanded ? "Collapse" : "Expand"),
+      child: Text(_effectiveExpandedState ? "Collapse" : "Expand"),
     ),
   ];
+
+  void _handleMenuControllerChange() {
+    final activeController = _buttonMenuController.isOpen ? _buttonMenuController : _topMenuController;
+
+    widget.contextMenuCoordinator.setActive(activeController);
+
+    if (!_topMenuController.isOpen && !_buttonMenuController.isOpen) {
+      return;
+    }
+
+    if (_latchedExpandedState == widget.isExpanded) {
+      return;
+    }
+
+    setState(() {
+      _latchedExpandedState = widget.isExpanded;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
 
-    _topMenuController.addListener(() {
-      widget.contextMenuCoordinator.setActive(_topMenuController);
-    });
-    _buttonMenuController.addListener(() {
-      widget.contextMenuCoordinator.setActive(_buttonMenuController);
-    });
+    _topMenuController.addListener(_handleMenuControllerChange);
+    _buttonMenuController.addListener(_handleMenuControllerChange);
   }
 
   @override
   void dispose() {
+    _topMenuController.removeListener(_handleMenuControllerChange);
+    _buttonMenuController.removeListener(_handleMenuControllerChange);
+
     _topMenuController.dispose();
     _buttonMenuController.dispose();
+
     super.dispose();
   }
 
@@ -203,28 +227,23 @@ class _ExpandableShareTileState extends State<_ExpandableShareTile> {
         return ShadContextMenuRegion(
           controller: _topMenuController,
           items: _menuItems,
+          popoverReverseDuration: _contextMenuAnimDuration,
           child: Stack(
             fit: StackFit.expand,
             children: [
-              ShadGestureDetector(
-                onTap: () {
-                  if (_buttonMenuController.isOpen) {
-                    _buttonMenuController.hide();
-                  }
-                },
-                child: widget.child,
-              ),
+              ShadGestureDetector(onTap: widget.contextMenuCoordinator.hideCurrent, child: widget.child),
               Positioned(
                 top: widget.isSharing ? 0 : 10.0,
                 right: widget.isSharing ? 0 : 10.0,
                 child: IgnorePointer(
                   ignoring: !showMenuButton,
                   child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 120),
+                    duration: _contextMenuAnimDuration,
                     opacity: showMenuButton ? 1 : 0,
                     child: ShadContextMenu(
                       controller: _buttonMenuController,
                       items: _menuItems,
+                      popoverReverseDuration: _contextMenuAnimDuration,
                       child: ShadIconButton.outline(
                         icon: const Icon(LucideIcons.ellipsis),
                         backgroundColor: cs.surface,
