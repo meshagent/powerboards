@@ -5,8 +5,25 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'audio_stats.dart';
+import 'hover_builder.dart';
 import 'participant_track.dart';
 import 'room.dart';
+
+class ContextMenuCoordinator {
+  ShadContextMenuController? _currentController;
+
+  void setActive(ShadContextMenuController controller) {
+    if (!identical(_currentController, controller)) {
+      _currentController?.hide();
+    }
+    _currentController = controller;
+  }
+
+  void hideCurrent() {
+    _currentController?.hide();
+    _currentController = null;
+  }
+}
 
 class ExpandableCameraGrid extends StatefulWidget {
   const ExpandableCameraGrid({super.key, required this.participants});
@@ -19,15 +36,36 @@ class ExpandableCameraGrid extends StatefulWidget {
 
 class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   String? _expandedIdentity;
+  final _contextMenuCoordinator = ContextMenuCoordinator();
 
   bool _participantHasShare(Participant participant) {
     return participant.videoTrackPublications.any((t) => t.source == TrackSource.screenShareVideo && !t.muted && t.track != null);
   }
 
-  bool _expandedStillAvailable(List<Participant> participants) {
+  bool _participantHasCamera(Participant participant) {
+    return participant.videoTrackPublications.any((t) => t.kind == TrackType.VIDEO && !t.muted && t.track != null);
+  }
+
+  int _getNumberOfShares(List<Participant> participants) {
+    return participants.where((p) => _participantHasShare(p)).length;
+  }
+
+  int _getNumberOfVideos(List<Participant> participants) {
+    return participants.where((p) => _participantHasCamera(p)).length;
+  }
+
+  bool _expandedShareStillAvailable(List<Participant> participants) {
     final identity = _expandedIdentity;
     if (identity == null) return false;
+
     return participants.any((p) => p.identity == identity && _participantHasShare(p));
+  }
+
+  bool _expandedCameraStillAvailable(List<Participant> participants) {
+    final identity = _expandedIdentity;
+    if (identity == null) return false;
+
+    return participants.any((p) => p.identity == identity && _participantHasCamera(p));
   }
 
   void _toggleExpanded(String identity) {
@@ -39,10 +77,19 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   @override
   void didUpdateWidget(covariant ExpandableCameraGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_expandedIdentity != null && !_expandedStillAvailable(widget.participants)) {
-      setState(() {
-        _expandedIdentity = null;
-      });
+
+    if (_expandedIdentity != null) {
+      final numberOfShares = _getNumberOfShares(widget.participants);
+      if (numberOfShares > 0) {
+        if (!_expandedShareStillAvailable(widget.participants)) {
+          _expandedIdentity = null;
+        }
+      } else {
+        final numberOfVideos = _getNumberOfVideos(widget.participants);
+        if (numberOfVideos > 0 && !_expandedCameraStillAvailable(widget.participants)) {
+          _expandedIdentity = null;
+        }
+      }
     }
   }
 
@@ -53,10 +100,8 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
         ? widget.participants
         : widget.participants.where((p) => p.identity == expandedIdentity).toList(growable: false);
 
-    final numberOfShares = widget.participants.where((p) => _participantHasShare(p)).length;
-    final numberOfVideos = widget.participants
-        .where((p) => p.videoTrackPublications.any((t) => t.kind == TrackType.VIDEO && !t.muted && t.track != null))
-        .length;
+    final numberOfShares = _getNumberOfShares(widget.participants);
+    final numberOfVideos = _getNumberOfVideos(widget.participants);
 
     return cameraGridBuilder(
       context,
@@ -66,6 +111,7 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
 
         if (numberOfShares >= 2) {
           return _ExpandableShareTile(
+            contextMenuCoordinator: _contextMenuCoordinator,
             isSharing: true,
             isExpanded: isExpanded,
             onToggle: () => _toggleExpanded(participant.identity),
@@ -75,6 +121,7 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
 
         if (numberOfShares == 0 && numberOfVideos >= 2) {
           return _ExpandableShareTile(
+            contextMenuCoordinator: _contextMenuCoordinator,
             isSharing: false,
             isExpanded: isExpanded,
             onToggle: () => _toggleExpanded(participant.identity),
@@ -88,41 +135,128 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 }
 
-class _ExpandableShareTile extends StatelessWidget {
-  const _ExpandableShareTile({required this.isExpanded, required this.isSharing, required this.onToggle, required this.child});
+class _ExpandableShareTile extends StatefulWidget {
+  const _ExpandableShareTile({
+    required this.contextMenuCoordinator,
+    required this.isExpanded,
+    required this.isSharing,
+    required this.onToggle,
+    required this.child,
+  });
 
+  final ContextMenuCoordinator contextMenuCoordinator;
   final bool isSharing;
   final bool isExpanded;
   final VoidCallback onToggle;
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        child,
-        Positioned(
-          top: isSharing ? 0 : 10.0,
-          right: isSharing ? 0 : 10.0,
-          child: _ShareExpandButton(isExpanded: isExpanded, onPressed: onToggle),
-        ),
-      ],
-    );
-  }
+  State<_ExpandableShareTile> createState() => _ExpandableShareTileState();
 }
 
-class _ShareExpandButton extends StatelessWidget {
-  const _ShareExpandButton({required this.isExpanded, required this.onPressed});
+class _ExpandableShareTileState extends State<_ExpandableShareTile> {
+  static const _contextMenuAnimDuration = Duration(milliseconds: 150);
 
-  final bool isExpanded;
-  final VoidCallback onPressed;
+  late final ShadContextMenuController _topMenuController = ShadContextMenuController();
+  late final ShadContextMenuController _buttonMenuController = ShadContextMenuController();
+
+  // Fixing switch button labes right after click
+  bool? _latchedExpandedState;
+  bool get _effectiveExpandedState => _latchedExpandedState ?? widget.isExpanded;
+
+  List<ShadContextMenuItem> get _menuItems => [
+    ShadContextMenuItem(
+      height: 40.0,
+      leading: Icon(_effectiveExpandedState ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
+      onPressed: () {
+        widget.contextMenuCoordinator.hideCurrent();
+
+        widget.onToggle();
+      },
+      child: Text(_effectiveExpandedState ? "Collapse" : "Expand"),
+    ),
+  ];
+
+  void _handleMenuControllerChange() {
+    final activeController = _buttonMenuController.isOpen ? _buttonMenuController : _topMenuController;
+
+    widget.contextMenuCoordinator.setActive(activeController);
+
+    if (!_topMenuController.isOpen && !_buttonMenuController.isOpen) {
+      return;
+    }
+
+    if (_latchedExpandedState == widget.isExpanded) {
+      return;
+    }
+
+    setState(() {
+      _latchedExpandedState = widget.isExpanded;
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    _topMenuController.addListener(_handleMenuControllerChange);
+    _buttonMenuController.addListener(_handleMenuControllerChange);
+  }
+
+  @override
+  void dispose() {
+    _topMenuController.removeListener(_handleMenuControllerChange);
+    _buttonMenuController.removeListener(_handleMenuControllerChange);
+
+    _topMenuController.dispose();
+    _buttonMenuController.dispose();
+
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: isExpanded ? "Collapse" : "Expand",
-      child: ShadButton.secondary(onPressed: onPressed, child: Icon(isExpanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16)),
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return HoverBuilder(
+      cursor: SystemMouseCursors.basic,
+      builder: (hovered) {
+        final showMenuButton = hovered;
+
+        return ShadContextMenuRegion(
+          controller: _topMenuController,
+          items: _menuItems,
+          popoverReverseDuration: _contextMenuAnimDuration,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ShadGestureDetector(onTap: widget.contextMenuCoordinator.hideCurrent, child: widget.child),
+              Positioned(
+                top: widget.isSharing ? 0 : 10.0,
+                right: widget.isSharing ? 0 : 10.0,
+                child: IgnorePointer(
+                  ignoring: !showMenuButton,
+                  child: AnimatedOpacity(
+                    duration: _contextMenuAnimDuration,
+                    opacity: showMenuButton ? 1 : 0,
+                    child: ShadContextMenu(
+                      controller: _buttonMenuController,
+                      items: _menuItems,
+                      popoverReverseDuration: _contextMenuAnimDuration,
+                      child: ShadIconButton.outline(
+                        icon: const Icon(LucideIcons.ellipsis),
+                        backgroundColor: cs.surface,
+                        onPressed: _buttonMenuController.toggle,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

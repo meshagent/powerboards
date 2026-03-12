@@ -30,7 +30,7 @@ const Set<String> editExtensions = {"md"};
 
 enum FileSortField { name, modified }
 
-enum _FileAction { open, download, upload, delete }
+enum _FileAction { open, download, upload, compressFolder, delete }
 
 class _FileLocation {
   final String folder;
@@ -254,7 +254,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         final parentName = p.split('/').where((s) => s.isNotEmpty).last;
         final idx = next.indexWhere((e) => e.name == parentName);
         if (idx == -1) {
-          next.add(StorageEntry(name: parentName, isFolder: true, createdAt: now, updatedAt: null));
+          next.add(StorageEntry(name: parentName, isFolder: true, size: null, createdAt: now, updatedAt: null));
           _setEntries(next);
         }
       }
@@ -264,10 +264,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (event is FileUpdatedEvent) {
       final idx = next.indexWhere((e) => e.name == name);
       if (idx == -1) {
-        next.add(StorageEntry(name: name, isFolder: false, createdAt: now, updatedAt: now));
+        next.add(StorageEntry(name: name, isFolder: false, size: null, createdAt: now, updatedAt: now));
       } else {
         final old = next[idx];
-        next[idx] = StorageEntry(name: name, isFolder: false, createdAt: old.createdAt, updatedAt: now);
+        next[idx] = StorageEntry(name: name, isFolder: false, size: old.size, createdAt: old.createdAt, updatedAt: now);
       }
     } else if (event is FileDeletedEvent) {
       next.removeWhere((e) => e.name == name);
@@ -403,6 +403,78 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     _removePath(folderPath, isFolder: true);
+  }
+
+  String _shellQuote(String value) {
+    if (value.isEmpty) {
+      return "''";
+    }
+    return "'${value.replaceAll("'", r"'\''")}'";
+  }
+
+  Future<void> _refreshCurrentFolder() async {
+    final entries = await _getChildren(_folderSig.value);
+    if (!mounted) {
+      return;
+    }
+    _setEntries(entries);
+  }
+
+  Future<void> _compressFolder(String folderPath) async {
+    final toaster = ShadToaster.of(context);
+    final folderName = p.basename(folderPath);
+    final parentFolder = parentPath(folderPath);
+
+    final zipFileName = "$folderName.zip";
+
+    toaster.show(
+      ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 5)),
+    );
+
+    String? containerId;
+
+    try {
+      containerId = await widget.client.containers.run(
+        image: "docker.io/joshkeegan/zip:latest",
+        command: "/usr/bin/zip -r ${_shellQuote(zipFileName)} ${_shellQuote(folderName)}",
+        mountPath: "/data",
+        workingDir: "/data/$parentFolder",
+        private: true,
+      );
+
+      final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
+
+      if (!mounted) {
+        return;
+      }
+
+      if (returnCode == 0) {
+        toaster.show(
+          ShadToast(
+            title: const Text("Compression complete"),
+            description: Text("Created $zipFileName"),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        _refreshCurrentFolder();
+      } else {
+        toaster.show(
+          ShadToast.destructive(
+            title: const Text("Compression failed"),
+            description: Text("Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)"),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
+    } finally {
+      try {
+        if (containerId != null) {
+          await widget.client.containers.deleteContainer(containerId: containerId);
+        }
+      } catch (e) {
+        debugPrint("Failed to clean up compression container: $e");
+      }
+    }
   }
 
   Future<void> _onFileDrop(String name, Stream<Uint8List> stream, int? fileSize) async {
@@ -584,19 +656,41 @@ class _FileManagerViewState extends State<FileManagerView> {
       builder: (context) {
         return ControlledForm(
           builder: (context, controller, formKey) {
-            void submit(_) {
+            Future<void> submit(_) async {
               if (!formKey.currentState!.saveAndValidate()) {
                 return;
               }
 
               final formData = formKey.currentState!.value;
-              String name = formData["name"] ?? "";
+              final String name = formData["name"] ?? "";
+              final String trimmedName = name.trim();
+              String? resolvedName = trimmedName;
 
-              if (!name.contains('.')) {
-                name = "$name.md";
+              if (!trimmedName.contains('.')) {
+                resolvedName = await showShadDialog<String>(
+                  context: context,
+                  builder: (context) {
+                    return ShadDialog(
+                      title: const Text("Add .txt extension?"),
+                      description: Text("`$trimmedName` has no extension."),
+                      actions: [
+                        ShadButton.outline(onPressed: () => Navigator.of(context).pop(trimmedName), child: const Text("No extension")),
+                        ShadButton(onPressed: () => Navigator.of(context).pop("$trimmedName.txt"), child: const Text("Add .txt")),
+                      ],
+                    );
+                  },
+                );
               }
 
-              Navigator.of(context).pop(name);
+              if (resolvedName == null) {
+                return;
+              }
+
+              if (!context.mounted) {
+                return;
+              }
+
+              Navigator.of(context).pop(resolvedName);
             }
 
             return ShadDialog(
@@ -613,7 +707,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     ShadInputFormField(
                       id: "name",
                       initialValue: "",
-                      validator: (value) => value.isEmpty ? "File name cannot be empty" : null,
+                      validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,
                       label: Text("Name"),
                       autofocus: true,
                       onSubmitted: submit,
@@ -734,6 +828,9 @@ class _FileManagerViewState extends State<FileManagerView> {
           case _FileAction.upload:
             await _addFiles(fullPath);
             break;
+          case _FileAction.compressFolder:
+            await _compressFolder(fullPath);
+            break;
           case _FileAction.download:
             await _downloadFile(fullPath);
             break;
@@ -744,6 +841,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         if (!isFolder) _menuItem(_FileAction.download, LucideIcons.download, 'Download'),
         if (isFolder) _menuItem(_FileAction.open, LucideIcons.folderOpen, 'Open folder'),
         if (isFolder) _menuItem(_FileAction.upload, LucideIcons.upload, 'Upload here'),
+        if (isFolder) _menuItem(_FileAction.compressFolder, LucideIcons.archive, 'Compress folder'),
         const PopupMenuDivider(),
         _menuItem(_FileAction.delete, LucideIcons.trash, 'Delete'),
       ],
