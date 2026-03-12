@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path/path.dart' as p;
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:data_table_2/data_table_2.dart';
@@ -25,9 +27,12 @@ import 'package:powerboards/ui/text_validators.dart';
 
 import 'file_upload.dart';
 
+const Set<String> editExtensions = {"md"};
+const String placeholderFileName = ".placeholder";
+
 enum FileSortField { name, modified }
 
-enum _FileAction { open, download, upload, delete }
+enum _FileAction { open, download, upload, compressFolder, delete }
 
 class _FileLocation {
   final String folder;
@@ -43,11 +48,19 @@ class _FileLocation {
 
   factory _FileLocation.fromUri(Uri uri) {
     final raw = uri.queryParameters['p'] ?? '';
-    final path = joinPaths(raw, ''); // normalize: remove trailing slash
-    final last = path.split('/').where((s) => s.isNotEmpty).lastOrNull;
-    final isFile = last != null && last.contains('.'); //todo: fix file detection by looking at storage entries instead of name
 
-    return isFile ? _FileLocation(folder: parentPath(path), openedFile: path) : _FileLocation(folder: path, openedFile: null);
+    if (raw.isEmpty) {
+      return const _FileLocation(folder: "", openedFile: null);
+    }
+
+    final isFolder = raw.endsWith('/');
+    final normalizedPath = joinPaths(raw, '');
+
+    if (isFolder) {
+      return _FileLocation(folder: normalizedPath, openedFile: null);
+    }
+
+    return _FileLocation(folder: parentPath(normalizedPath), openedFile: normalizedPath);
   }
 }
 
@@ -131,6 +144,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   String? get _openedFile => _location.openedFile;
 
   bool _forceShowSelect = false;
+  String _tab = 'preview';
 
   final popoverController = ShadPopoverController();
   late final uploadNotifications = UploadProgressNotifications(popoverController: popoverController);
@@ -250,7 +264,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         final parentName = p.split('/').where((s) => s.isNotEmpty).last;
         final idx = next.indexWhere((e) => e.name == parentName);
         if (idx == -1) {
-          next.add(StorageEntry(name: parentName, isFolder: true, createdAt: now, updatedAt: null));
+          next.add(StorageEntry(name: parentName, isFolder: true, size: null, createdAt: now, updatedAt: null));
           _setEntries(next);
         }
       }
@@ -260,10 +274,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (event is FileUpdatedEvent) {
       final idx = next.indexWhere((e) => e.name == name);
       if (idx == -1) {
-        next.add(StorageEntry(name: name, isFolder: false, createdAt: now, updatedAt: now));
+        next.add(StorageEntry(name: name, isFolder: false, size: null, createdAt: now, updatedAt: now));
       } else {
         final old = next[idx];
-        next[idx] = StorageEntry(name: name, isFolder: false, createdAt: old.createdAt, updatedAt: now);
+        next[idx] = StorageEntry(name: name, isFolder: false, size: old.size, createdAt: old.createdAt, updatedAt: now);
       }
     } else if (event is FileDeletedEvent) {
       next.removeWhere((e) => e.name == name);
@@ -271,6 +285,12 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     _setEntries(next);
+  }
+
+  String _ext(String path) {
+    final base = p.basename(path);
+    if (base.isEmpty) return "";
+    return base.split(".").last.toLowerCase();
   }
 
   void _removePath(String path, {isFolder = false}) {
@@ -332,15 +352,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  void _open(String path) {
+  void _openEntry(String path, bool isFolder) {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
-    updatedQueryParameters['p'] = path;
+    updatedQueryParameters['p'] = path.isEmpty ? '' : (isFolder ? '$path/' : path);
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
-
     context.go(newUri.toString());
   }
 
@@ -354,10 +373,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (currentIndex < 0) return;
 
     final nextIndex = (currentIndex + offset + files.length) % files.length;
-    _open(files[nextIndex]);
+    _openEntry(files[nextIndex], false);
   }
 
-  void _closeFile() => _open(_folderSig.value);
+  void _closeFile() => _openEntry(_folderSig.value, true);
   void _previousFile() => _cycleFile(-1);
   void _nextFile() => _cycleFile(1);
 
@@ -393,6 +412,78 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     _removePath(folderPath, isFolder: true);
+  }
+
+  String _shellQuote(String value) {
+    if (value.isEmpty) {
+      return "''";
+    }
+    return "'${value.replaceAll("'", r"'\''")}'";
+  }
+
+  Future<void> _refreshCurrentFolder() async {
+    final entries = await _getChildren(_folderSig.value);
+    if (!mounted) {
+      return;
+    }
+    _setEntries(entries);
+  }
+
+  Future<void> _compressFolder(String folderPath) async {
+    final toaster = ShadToaster.of(context);
+    final folderName = p.basename(folderPath);
+    final parentFolder = parentPath(folderPath);
+
+    final zipFileName = "$folderName.zip";
+
+    toaster.show(
+      ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 5)),
+    );
+
+    String? containerId;
+
+    try {
+      containerId = await widget.client.containers.run(
+        image: "docker.io/joshkeegan/zip:latest",
+        command: "/usr/bin/zip -r ${_shellQuote(zipFileName)} ${_shellQuote(folderName)}",
+        mountPath: "/data",
+        workingDir: "/data/$parentFolder",
+        private: true,
+      );
+
+      final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
+
+      if (!mounted) {
+        return;
+      }
+
+      if (returnCode == 0) {
+        toaster.show(
+          ShadToast(
+            title: const Text("Compression complete"),
+            description: Text("Created $zipFileName"),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        _refreshCurrentFolder();
+      } else {
+        toaster.show(
+          ShadToast.destructive(
+            title: const Text("Compression failed"),
+            description: Text("Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)"),
+            duration: const Duration(seconds: 8),
+          ),
+        );
+      }
+    } finally {
+      try {
+        if (containerId != null) {
+          await widget.client.containers.deleteContainer(containerId: containerId);
+        }
+      } catch (e) {
+        debugPrint("Failed to clean up compression container: $e");
+      }
+    }
   }
 
   Future<void> _onFileDrop(String name, Stream<Uint8List> stream, int? fileSize) async {
@@ -470,7 +561,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return;
     }
 
-    final fileName = joinPaths(path, "$result/.placeholder");
+    final fileName = joinPaths(path, "$result/$placeholderFileName");
     await _uploadFile(Stream.empty(), fileName, 0);
   }
 
@@ -574,19 +665,41 @@ class _FileManagerViewState extends State<FileManagerView> {
       builder: (context) {
         return ControlledForm(
           builder: (context, controller, formKey) {
-            void submit(_) {
+            Future<void> submit(_) async {
               if (!formKey.currentState!.saveAndValidate()) {
                 return;
               }
 
               final formData = formKey.currentState!.value;
-              String name = formData["name"] ?? "";
+              final String name = formData["name"] ?? "";
+              final String trimmedName = name.trim();
+              String? resolvedName = trimmedName;
 
-              if (!name.contains('.')) {
-                name = "$name.md";
+              if (!trimmedName.contains('.')) {
+                resolvedName = await showShadDialog<String>(
+                  context: context,
+                  builder: (context) {
+                    return ShadDialog(
+                      title: const Text("Add .txt extension?"),
+                      description: Text("`$trimmedName` has no extension."),
+                      actions: [
+                        ShadButton.outline(onPressed: () => Navigator.of(context).pop(trimmedName), child: const Text("No extension")),
+                        ShadButton(onPressed: () => Navigator.of(context).pop("$trimmedName.txt"), child: const Text("Add .txt")),
+                      ],
+                    );
+                  },
+                );
               }
 
-              Navigator.of(context).pop(name);
+              if (resolvedName == null) {
+                return;
+              }
+
+              if (!context.mounted) {
+                return;
+              }
+
+              Navigator.of(context).pop(resolvedName);
             }
 
             return ShadDialog(
@@ -603,7 +716,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     ShadInputFormField(
                       id: "name",
                       initialValue: "",
-                      validator: (value) => value.isEmpty ? "File name cannot be empty" : null,
+                      validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,
                       label: Text("Name"),
                       autofocus: true,
                       onSubmitted: submit,
@@ -621,6 +734,21 @@ class _FileManagerViewState extends State<FileManagerView> {
         _uploadFile(Stream.value(Uint8List(0)), path, 0);
       }
     });
+  }
+
+  String _uploadTitle(List<UploadProgressItem> uploads, bool isCompleted) {
+    if (uploads.isEmpty) {
+      return "";
+    }
+
+    final isFolder = uploads.length == 1 && uploads.first.upload.filename == placeholderFileName;
+    if (isFolder) {
+      return isCompleted ? "Folder created" : "Creating folder";
+    }
+
+    final count = uploads.length;
+    final verb = isCompleted ? "Uploaded" : "Uploading";
+    return "$verb $count file${count > 1 ? 's' : ''}";
   }
 
   Widget _popover(BuildContext context) {
@@ -646,10 +774,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 children: [
                   Padding(
                     padding: const .only(top: 20, left: 16, right: 16, bottom: 12),
-                    child: Text(
-                      "Upload${isCompleted ? 'ed' : 'ing'} ${uploads.length} file${uploads.length > 1 ? 's' : ''}",
-                      style: tt.small.copyWith(fontWeight: .w700),
-                    ),
+                    child: Text(_uploadTitle(uploads, isCompleted), style: tt.small.copyWith(fontWeight: .w700)),
                   ),
                   ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: 200),
@@ -668,13 +793,14 @@ class _FileManagerViewState extends State<FileManagerView> {
                               animation: upload,
                               builder: (context, _) {
                                 final double percent = totalBytes > 0 ? (upload.bytesUploaded / totalBytes).clamp(0.0, 1.0) : 1.0;
+                                final name = upload.filename == placeholderFileName ? parentPath(upload.path) : upload.path.split('/').last;
 
                                 return Padding(
                                   padding: const .only(bottom: 8),
                                   child: Column(
                                     crossAxisAlignment: .start,
                                     children: [
-                                      Text(upload.path.split('/').last, style: TextStyle(fontSize: 12)),
+                                      Text(name, style: TextStyle(fontSize: 12)),
                                       const SizedBox(height: 4),
                                       LinearProgressIndicator(value: percent),
                                     ],
@@ -716,13 +842,16 @@ class _FileManagerViewState extends State<FileManagerView> {
       onSelected: (action) async {
         switch (action) {
           case _FileAction.open:
-            _open(fullPath);
+            _openEntry(fullPath, isFolder);
             break;
           case _FileAction.delete:
             await _confirmAndDelete(fullPath, isFolder);
             break;
           case _FileAction.upload:
             await _addFiles(fullPath);
+            break;
+          case _FileAction.compressFolder:
+            await _compressFolder(fullPath);
             break;
           case _FileAction.download:
             await _downloadFile(fullPath);
@@ -734,6 +863,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         if (!isFolder) _menuItem(_FileAction.download, LucideIcons.download, 'Download'),
         if (isFolder) _menuItem(_FileAction.open, LucideIcons.folderOpen, 'Open folder'),
         if (isFolder) _menuItem(_FileAction.upload, LucideIcons.upload, 'Upload here'),
+        if (isFolder) _menuItem(_FileAction.compressFolder, LucideIcons.archive, 'Compress folder'),
         const PopupMenuDivider(),
         _menuItem(_FileAction.delete, LucideIcons.trash, 'Delete'),
       ],
@@ -746,7 +876,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final showRouteActions = !isMobile || !showSelectionActions;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      padding: EdgeInsets.fromLTRB(8, 0, 8, _openedFile == null ? 0 : 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         spacing: 8,
@@ -794,7 +924,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             onPressed: () async {
               final confirmDelete = await _confirmAndDelete(_openedFile!, false);
               if (confirmDelete == true) {
-                _open(_folderSig.value);
+                _openEntry(_folderSig.value, true);
               }
             },
           ),
@@ -891,7 +1021,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     crumbs.add(
       ShadButton.ghost(
-        onPressed: () => _open(""),
+        onPressed: () => _openEntry("", true),
         child: Text("Files", style: breadcrumbLinkStyle),
       ),
     );
@@ -904,7 +1034,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       crumbs.add(const Icon(LucideIcons.chevronRight, color: Color(0xffa5a5a5)));
       crumbs.add(
         ShadButton.ghost(
-          onPressed: () => _open(currentPath),
+          onPressed: () => _openEntry(currentPath, true),
           child: Text(segment, style: breadcrumbLinkStyle),
         ),
       );
@@ -916,9 +1046,54 @@ class _FileManagerViewState extends State<FileManagerView> {
       crumbs.add(ShadButton.ghost(enabled: false, child: Text(fileName, style: breadcrumbLinkStyle)));
     }
 
+    bool isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    bool showGap = !isMobile && _openedFile == null;
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: Row(children: crumbs),
+      child: Row(children: [if (showGap) SizedBox(width: 40), ...crumbs]),
+    );
+  }
+
+  Widget _buildOpenedFile(BuildContext context) {
+    if (_openedFile == null) return const SizedBox.shrink();
+
+    final view = fileViewer(widget.client, _openedFile!) ?? DocumentPane(path: _openedFile!, room: widget.client);
+
+    final ext = _ext(_openedFile!);
+    final showEdit = editExtensions.contains(ext);
+    if (!showEdit) {
+      return view;
+    }
+
+    final edit = DocumentPane(path: _openedFile!, room: widget.client, forceTextViewer: true);
+
+    return Column(
+      key: ValueKey(_openedFile),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: ShadTabs<String>(
+            value: _tab,
+            onChanged: (v) => setState(() => _tab = v),
+            tabBarConstraints: const BoxConstraints(maxWidth: 400),
+            tabs: const [
+              ShadTab(value: 'preview', child: Text('Preview')),
+              ShadTab(value: 'edit', child: Text('Edit')),
+            ],
+          ),
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: _tab == 'preview' ? 0 : 1,
+            children: [
+              Container(key: ValueKey("preview$_tab"), child: view),
+              edit,
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -977,7 +1152,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                                         sort: sort,
                                         isRefreshing: storageEntries.state.isRefreshing,
                                         forceShowSelect: _forceShowSelect,
-                                        onOpen: _open,
+                                        onOpen: _openEntry,
                                         onToggleSelected: _toggleSelected,
                                         onToggleAllSelected: _toggleAllSelected,
                                         onSortChanged: _setSort,
@@ -990,8 +1165,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                             ),
                           ),
                         ),
-                        if (_openedFile != null)
-                          fileViewer(widget.client, _openedFile!) ?? DocumentPane(path: _openedFile!, room: widget.client),
+                        _buildOpenedFile(context),
                       ],
                     ),
                   ),
@@ -1012,7 +1186,7 @@ class FileTableView extends StatefulWidget {
   final FileSort sort;
   final bool isRefreshing;
   final bool forceShowSelect;
-  final void Function(String fullPath) onOpen;
+  final void Function(String fullPath, bool isFolder) onOpen;
   final void Function(String key, bool selected) onToggleSelected;
   final void Function(bool selected) onToggleAllSelected;
   final void Function(FileSort) onSortChanged;
@@ -1148,15 +1322,17 @@ class _FileTableViewState extends State<FileTableView> {
     final bool? selectAllValue = widget.selected.isEmpty ? false : (widget.selected.length == widget.entries.length ? true : null);
     final sortColumnIndex = (widget.sort.field == FileSortField.name ? 0 : 1) + (showSelectColumn ? 1 : 0);
     final sortAscending = widget.sort.ascending;
+    final showGap = !isMobile;
 
     final rows = widget.entries.map((entry) {
       final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
       final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
       final isSelected = widget.selected.contains(key);
+      final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border));
 
       return DataRow(
         onSelectChanged: (_) {
-          widget.onOpen(fullPath);
+          widget.onOpen(fullPath, entry.isFolder);
         },
         color: WidgetStateProperty.resolveWith((states) {
           if (isSelected) {
@@ -1170,15 +1346,19 @@ class _FileTableViewState extends State<FileTableView> {
         cells: [
           if (showSelectColumn)
             DataCell(
-              Container(
-                decoration: BoxDecoration(color: Colors.white),
-                child: _hoverRegion(
-                  key,
-                  _hoverShow(
+              _hoverRegion(
+                key,
+                Container(
+                  decoration: BoxDecoration(color: Colors.white),
+                  child: _hoverShow(
                     key,
                     alwaysShowCheckbox,
-                    Center(
-                      child: ShadCheckbox(value: isSelected, onChanged: (v) => widget.onToggleSelected(key, v)),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => widget.onToggleSelected(key, !isSelected),
+                      child: Center(
+                        child: ShadCheckbox(decoration: checkboxDecoration, value: isSelected),
+                      ),
                     ),
                   ),
                 ),
@@ -1202,13 +1382,25 @@ class _FileTableViewState extends State<FileTableView> {
           DataCell(
             _hoverRegion(
               key,
-              Padding(
+              Container(
+                width: double.infinity,
+                alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.only(left: 8),
                 child: Text(entry.updatedAt?.modified() ?? "", style: dataStyle, maxLines: 2, overflow: TextOverflow.ellipsis),
               ),
             ),
           ),
           DataCell(_hoverRegion(key, _hoverShow(key, alwaysShowMenu, Center(child: widget.buildActionsMenu(fullPath, entry.isFolder))))),
+          if (showGap)
+            DataCell(
+              _hoverRegion(
+                key,
+                SizedBox(
+                  width: 50,
+                  child: Container(decoration: BoxDecoration(color: Colors.white)),
+                ),
+              ),
+            ),
         ],
       );
     }).toList();
@@ -1243,6 +1435,7 @@ class _FileTableViewState extends State<FileTableView> {
               : SizedBox.shrink(),
           fixedWidth: 50,
         ),
+        if (showGap) DataColumn2(label: SizedBox.shrink(), fixedWidth: 50),
       ],
       rows: rows,
     );
@@ -1336,12 +1529,17 @@ class ShadTriCheckbox extends StatelessWidget {
     final iconColor = theme.colorScheme.primaryForeground;
 
     final Widget? effectiveIcon = value == null ? Icon(LucideIcons.minus, size: effectiveSize, color: iconColor) : null;
-
+    final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border));
     return Semantics(
       checked: value == true,
       mixed: value == null,
       child: ExcludeSemantics(
-        child: ShadCheckbox(value: internalBool, icon: effectiveIcon, onChanged: (_) => onChanged(value == false)),
+        child: ShadCheckbox(
+          decoration: checkboxDecoration,
+          value: internalBool,
+          icon: effectiveIcon,
+          onChanged: (_) => onChanged(value == false),
+        ),
       ),
     );
   }

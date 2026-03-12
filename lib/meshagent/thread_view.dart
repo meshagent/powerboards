@@ -4,15 +4,13 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 import 'package:path/path.dart' as p;
-import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
+import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:super_sliver_list/super_sliver_list.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
@@ -23,7 +21,6 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
-import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/web_context_menu_manager/enable_web_context_menu.dart';
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
@@ -579,46 +576,28 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   void _onMessageSent(ma.ChatMessage message) {}
 
-  Widget _fileInThreadBuilder(BuildContext context, String path, List<MeshElement> messages) {
+  Widget _fileInThreadBuilder(BuildContext context, String path) {
     if (path.endsWith('.meeting')) {
       return MeetingCard(onJoin: () => widget.joinMeeting());
     }
 
     return ShadGestureDetector(
       cursor: SystemMouseCursors.click,
-      onTap: () => _openFileDialog(context, path, messages),
+      onTap: () => _open(path),
       child: ChatThreadPreview(room: widget.client, path: path),
     );
   }
 
-  void _openFileDialog(BuildContext context, String startPath, List<MeshElement> messages) {
-    final files = _collectFilePaths(messages);
-    final start = files.indexOf(startPath);
-    if (start == -1) return;
+  void _open(String path) {
+    final state = PathRouteMatch.of(context);
+    final currentUri = state.uri;
 
-    showShadDialog(
-      context: context,
-      barrierColor: Colors.white,
-      builder: (context) {
-        return SafeArea(
-          bottom: false,
-          child: _FileViewer(room: widget.client, files: files, initialIndex: start, onClose: () => Navigator.of(context).maybePop()),
-        );
-      },
-    );
-  }
+    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    updatedQueryParameters['p'] = path;
 
-  List<String> _collectFilePaths(List<MeshElement> messages) {
-    final paths = <String>[];
-    for (final m in messages) {
-      for (final attachment in m.getChildren()) {
-        final path = (attachment as MeshElement).getAttribute("path");
-        if (path != null && !path.endsWith('.meeting')) {
-          paths.add(path);
-        }
-      }
-    }
-    return paths.toSet().toList();
+    final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
+
+    context.go(newUri.toString());
   }
 
   Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
@@ -662,11 +641,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                         showTyping: (snapshot.threadStatusMode != null) && snapshot.listening.isEmpty,
                         showListening: snapshot.listening.isNotEmpty,
                         threadStatus: snapshot.threadStatus,
+                        threadStatusStartedAt: snapshot.threadStatusStartedAt,
                         threadStatusMode: snapshot.threadStatusMode,
                         onCancel: () {
                           _chatController.cancel(path, document);
                         },
-                        fileInThreadBuilder: (context, path) => _fileInThreadBuilder(context, path, snapshot.messages),
+                        fileInThreadBuilder: _fileInThreadBuilder,
                         currentStatusEntry: _currentStatusEntry,
                       ),
                       Padding(
@@ -982,120 +962,6 @@ class MeetingCard extends StatelessWidget {
     return GestureDetector(
       onTap: onJoin,
       child: ShadAlert(icon: Icon(LucideIcons.video), title: Text('Meeting'), description: Text('Join meeting to start')),
-    );
-  }
-}
-
-class _FileViewer extends StatefulWidget {
-  const _FileViewer({required this.room, required this.files, required this.initialIndex, required this.onClose});
-
-  final RoomClient room;
-  final List<String> files;
-  final int initialIndex;
-  final VoidCallback onClose;
-
-  @override
-  State<_FileViewer> createState() => _FileViewerState();
-}
-
-class _FileViewerState extends State<_FileViewer> {
-  late int _index;
-
-  String get _currentPath => widget.files[_index];
-  String get _fileTitle => _currentPath.split('/').last;
-
-  @override
-  void initState() {
-    super.initState();
-    _index = widget.initialIndex;
-  }
-
-  void _cycle(int d) => setState(() => _index = (_index + d + widget.files.length) % widget.files.length);
-  void _prev() => _cycle(-1);
-  void _next() => _cycle(1);
-
-  Future<void> _download() async {
-    final url = await widget.room.storage.downloadUrl(_currentPath);
-    launchUrl(Uri.parse(url));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): widget.onClose,
-        const SingleActivator(LogicalKeyboardKey.arrowLeft): _prev,
-        const SingleActivator(LogicalKeyboardKey.arrowRight): _next,
-      },
-      child: Focus(
-        autofocus: true,
-        child: SizedBox.expand(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                height: headerHeight,
-                padding: const EdgeInsets.symmetric(horizontal: 15),
-                child: Row(
-                  children: [
-                    Row(
-                      children: [
-                        Tooltip(
-                          message: "Close file",
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: ShadIconButton.ghost(icon: const Icon(LucideIcons.x), onPressed: widget.onClose),
-                          ),
-                        ),
-                        Tooltip(
-                          message: "Previous file",
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronLeft), onPressed: _prev),
-                          ),
-                        ),
-                        Tooltip(
-                          message: "Next file",
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronRight), onPressed: _next),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          _fileTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ),
-                    Tooltip(
-                      message: "Download",
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: ShadIconButton.outline(icon: const Icon(LucideIcons.download), onPressed: _download),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1600),
-                    child: fileViewer(widget.room, _currentPath) ?? DocumentPane(path: _currentPath, room: widget.room),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
