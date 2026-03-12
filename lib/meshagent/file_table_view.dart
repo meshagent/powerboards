@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +28,7 @@ import 'package:powerboards/ui/text_validators.dart';
 import 'file_upload.dart';
 
 const Set<String> editExtensions = {"md"};
+const String placeholderFileName = ".placeholder";
 
 enum FileSortField { name, modified }
 
@@ -552,7 +554,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return;
     }
 
-    final fileName = joinPaths(path, "$result/.placeholder");
+    final fileName = joinPaths(path, "$result/$placeholderFileName");
     await _uploadFile(Stream.empty(), fileName, 0);
   }
 
@@ -727,6 +729,21 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
+  String _uploadTitle(List<UploadProgressItem> uploads, bool isCompleted) {
+    if (uploads.isEmpty) {
+      return "";
+    }
+
+    final isFolder = uploads.length == 1 && uploads.first.upload.filename == placeholderFileName;
+    if (isFolder) {
+      return isCompleted ? "Folder created" : "Creating folder";
+    }
+
+    final count = uploads.length;
+    final verb = isCompleted ? "Uploaded" : "Uploading";
+    return "$verb $count file${count > 1 ? 's' : ''}";
+  }
+
   Widget _popover(BuildContext context) {
     final theme = ShadTheme.of(context);
     final tt = theme.textTheme;
@@ -750,10 +767,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 children: [
                   Padding(
                     padding: const .only(top: 20, left: 16, right: 16, bottom: 12),
-                    child: Text(
-                      "Upload${isCompleted ? 'ed' : 'ing'} ${uploads.length} file${uploads.length > 1 ? 's' : ''}",
-                      style: tt.small.copyWith(fontWeight: .w700),
-                    ),
+                    child: Text(_uploadTitle(uploads, isCompleted), style: tt.small.copyWith(fontWeight: .w700)),
                   ),
                   ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: 200),
@@ -772,13 +786,14 @@ class _FileManagerViewState extends State<FileManagerView> {
                               animation: upload,
                               builder: (context, _) {
                                 final double percent = totalBytes > 0 ? (upload.bytesUploaded / totalBytes).clamp(0.0, 1.0) : 1.0;
+                                final name = upload.filename == placeholderFileName ? parentPath(upload.path) : upload.path.split('/').last;
 
                                 return Padding(
                                   padding: const .only(bottom: 8),
                                   child: Column(
                                     crossAxisAlignment: .start,
                                     children: [
-                                      Text(upload.path.split('/').last, style: TextStyle(fontSize: 12)),
+                                      Text(name, style: TextStyle(fontSize: 12)),
                                       const SizedBox(height: 4),
                                       LinearProgressIndicator(value: percent),
                                     ],
@@ -854,7 +869,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final showRouteActions = !isMobile || !showSelectionActions;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+      padding: EdgeInsets.fromLTRB(8, 0, 8, _openedFile == null ? 0 : 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         spacing: 8,
@@ -1024,9 +1039,12 @@ class _FileManagerViewState extends State<FileManagerView> {
       crumbs.add(ShadButton.ghost(enabled: false, child: Text(fileName, style: breadcrumbLinkStyle)));
     }
 
+    bool isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    bool showGap = !isMobile && _openedFile == null;
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: Row(children: [SizedBox(width: 40), ...crumbs]),
+      child: Row(children: [if (showGap) SizedBox(width: 40), ...crumbs]),
     );
   }
 
@@ -1297,6 +1315,7 @@ class _FileTableViewState extends State<FileTableView> {
     final bool? selectAllValue = widget.selected.isEmpty ? false : (widget.selected.length == widget.entries.length ? true : null);
     final sortColumnIndex = (widget.sort.field == FileSortField.name ? 0 : 1) + (showSelectColumn ? 1 : 0);
     final sortAscending = widget.sort.ascending;
+    final showGap = !isMobile;
 
     final rows = widget.entries.map((entry) {
       final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
@@ -1356,19 +1375,25 @@ class _FileTableViewState extends State<FileTableView> {
           DataCell(
             _hoverRegion(
               key,
-              Padding(
+              Container(
+                width: double.infinity,
+                alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.only(left: 8),
                 child: Text(entry.updatedAt?.modified() ?? "", style: dataStyle, maxLines: 2, overflow: TextOverflow.ellipsis),
               ),
             ),
           ),
           DataCell(_hoverRegion(key, _hoverShow(key, alwaysShowMenu, Center(child: widget.buildActionsMenu(fullPath, entry.isFolder))))),
-          DataCell(
-            SizedBox(
-              width: 50,
-              child: Container(decoration: BoxDecoration(color: Colors.white)),
+          if (showGap)
+            DataCell(
+              _hoverRegion(
+                key,
+                SizedBox(
+                  width: 50,
+                  child: Container(decoration: BoxDecoration(color: Colors.white)),
+                ),
+              ),
             ),
-          ),
         ],
       );
     }).toList();
@@ -1403,7 +1428,7 @@ class _FileTableViewState extends State<FileTableView> {
               : SizedBox.shrink(),
           fixedWidth: 50,
         ),
-        DataColumn2(label: SizedBox.shrink(), fixedWidth: 50),
+        if (showGap) DataColumn2(label: SizedBox.shrink(), fixedWidth: 50),
       ],
       rows: rows,
     );
