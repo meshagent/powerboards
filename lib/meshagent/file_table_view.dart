@@ -48,11 +48,19 @@ class _FileLocation {
 
   factory _FileLocation.fromUri(Uri uri) {
     final raw = uri.queryParameters['p'] ?? '';
-    final path = joinPaths(raw, ''); // normalize: remove trailing slash
-    final last = path.split('/').where((s) => s.isNotEmpty).lastOrNull;
-    final isFile = last != null && last.contains('.'); //todo: fix file detection by looking at storage entries instead of name
 
-    return isFile ? _FileLocation(folder: parentPath(path), openedFile: path) : _FileLocation(folder: path, openedFile: null);
+    if (raw.isEmpty) {
+      return const _FileLocation(folder: "", openedFile: null);
+    }
+
+    final isFolder = raw.endsWith('/');
+    final normalizedPath = joinPaths(raw, '');
+
+    if (isFolder) {
+      return _FileLocation(folder: normalizedPath, openedFile: null);
+    }
+
+    return _FileLocation(folder: parentPath(normalizedPath), openedFile: normalizedPath);
   }
 }
 
@@ -344,15 +352,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  void _open(String path) {
+  void _openEntry(String path, bool isFolder) {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
-    updatedQueryParameters['p'] = path;
+    updatedQueryParameters['p'] = path.isEmpty ? '' : (isFolder ? '$path/' : path);
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
-
     context.go(newUri.toString());
   }
 
@@ -366,10 +373,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (currentIndex < 0) return;
 
     final nextIndex = (currentIndex + offset + files.length) % files.length;
-    _open(files[nextIndex]);
+    _openEntry(files[nextIndex], false);
   }
 
-  void _closeFile() => _open(_folderSig.value);
+  void _closeFile() => _openEntry(_folderSig.value, true);
   void _previousFile() => _cycleFile(-1);
   void _nextFile() => _cycleFile(1);
 
@@ -835,7 +842,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       onSelected: (action) async {
         switch (action) {
           case _FileAction.open:
-            _open(fullPath);
+            _openEntry(fullPath, isFolder);
             break;
           case _FileAction.delete:
             await _confirmAndDelete(fullPath, isFolder);
@@ -917,7 +924,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             onPressed: () async {
               final confirmDelete = await _confirmAndDelete(_openedFile!, false);
               if (confirmDelete == true) {
-                _open(_folderSig.value);
+                _openEntry(_folderSig.value, true);
               }
             },
           ),
@@ -1014,7 +1021,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     crumbs.add(
       ShadButton.ghost(
-        onPressed: () => _open(""),
+        onPressed: () => _openEntry("", true),
         child: Text("Files", style: breadcrumbLinkStyle),
       ),
     );
@@ -1027,7 +1034,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       crumbs.add(const Icon(LucideIcons.chevronRight, color: Color(0xffa5a5a5)));
       crumbs.add(
         ShadButton.ghost(
-          onPressed: () => _open(currentPath),
+          onPressed: () => _openEntry(currentPath, true),
           child: Text(segment, style: breadcrumbLinkStyle),
         ),
       );
@@ -1145,7 +1152,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                                         sort: sort,
                                         isRefreshing: storageEntries.state.isRefreshing,
                                         forceShowSelect: _forceShowSelect,
-                                        onOpen: _open,
+                                        onOpen: _openEntry,
                                         onToggleSelected: _toggleSelected,
                                         onToggleAllSelected: _toggleAllSelected,
                                         onSortChanged: _setSort,
@@ -1179,7 +1186,7 @@ class FileTableView extends StatefulWidget {
   final FileSort sort;
   final bool isRefreshing;
   final bool forceShowSelect;
-  final void Function(String fullPath) onOpen;
+  final void Function(String fullPath, bool isFolder) onOpen;
   final void Function(String key, bool selected) onToggleSelected;
   final void Function(bool selected) onToggleAllSelected;
   final void Function(FileSort) onSortChanged;
@@ -1325,7 +1332,7 @@ class _FileTableViewState extends State<FileTableView> {
 
       return DataRow(
         onSelectChanged: (_) {
-          widget.onOpen(fullPath);
+          widget.onOpen(fullPath, entry.isFolder);
         },
         color: WidgetStateProperty.resolveWith((states) {
           if (isSelected) {
