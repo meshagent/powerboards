@@ -16,17 +16,13 @@ import 'package:responsive_framework/responsive_framework.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
-import 'package:meshagent_flutter_shadcn/chat/outbound_delivery_status.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
-import 'package:powerboards/web_context_menu_manager/enable_web_context_menu.dart';
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
-  MeshagentRoomChatThreadController({required super.room, required this.agentName});
-
-  final String? agentName;
+  MeshagentRoomChatThreadController({required super.room});
 
   final folderNameService = MeshagentUploadFoldernameService();
 
@@ -43,102 +39,6 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
 
     return uploader;
   }
-
-  @override
-  Future<void> send({
-    required MeshDocument thread,
-    required String path,
-    required ma.ChatMessage message,
-    String messageType = "chat",
-    String? remoteStoreParticipantName,
-    bool storeLocally = true,
-    bool useAgentMessages = false,
-    String? turnId,
-    void Function(ma.ChatMessage)? onMessageSent,
-  }) async {
-    if (message.text.trim().isNotEmpty || message.attachments.isNotEmpty) {
-      insertMessage(thread: thread, message: message);
-
-      outboundStatus.markSending(message.id);
-
-      bool added = false;
-      void waitForAgent() async {
-        if (agentName != null && room.messaging.remoteParticipants.where((x) => x.getAttribute("name") == agentName).isEmpty) {
-          if (!added) {
-            room.messaging.addListener(waitForAgent);
-            added = true;
-          }
-        } else {
-          if (added) {
-            room.messaging.removeListener(waitForAgent);
-          }
-          for (final participant in getOnlineParticipants(thread)) {
-            sendMessageToParticipant(participant: participant, path: path, message: message, messageType: messageType);
-          }
-          outboundStatus.markDelivered(message.id);
-        }
-      }
-
-      waitForAgent();
-
-      clear();
-    }
-  }
-}
-
-class ChatThreadSender extends StatefulWidget {
-  const ChatThreadSender({
-    super.key,
-    required this.child,
-    this.initialMessageID,
-    this.initialMessageText,
-    this.initialMessageAttachments,
-    this.onMessageSent,
-    required this.controller,
-    required this.document,
-    required this.documentPath,
-  });
-
-  final Widget child;
-  final String? initialMessageID;
-  final String? initialMessageText;
-  final List<FileAttachment>? initialMessageAttachments;
-  final void Function(ma.ChatMessage)? onMessageSent;
-  final ChatThreadController controller;
-  final MeshDocument document;
-  final String documentPath;
-
-  @override
-  State createState() => _ChatThreadSender();
-}
-
-class _ChatThreadSender extends State<ChatThreadSender> {
-  late final ChatThreadController controller;
-
-  @override
-  void initState() {
-    super.initState();
-
-    final initialMessage = (widget.initialMessageText != null)
-        ? ma.ChatMessage(
-            id: widget.initialMessageID!,
-            text: widget.initialMessageText!,
-            attachments: (widget.initialMessageAttachments?.map((a) => a.path).toList() ?? []),
-          )
-        : null;
-
-    if (initialMessage != null) {
-      widget.controller.send(
-        thread: widget.document,
-        path: widget.documentPath,
-        message: initialMessage,
-        onMessageSent: widget.onMessageSent,
-      );
-    }
-  }
-
-  @override
-  Widget build(context) => widget.child;
 }
 
 class MeshagentThreadView extends StatefulWidget {
@@ -183,13 +83,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const double _threadListPanelWidth = 300;
   static const double _minChatAreaWidthWithThreadList = 600;
 
-  late final _agentName = ValueNotifier(widget.agentName);
-
   late final ChatThreadController _chatController;
   late String _documentPath;
   late String? _initialMessageText;
-
-  OutboundEntry? _currentStatusEntry;
   MeshDocument? _threadListDocument;
   RoomClient? _threadListClient;
   String? _threadListPath;
@@ -524,7 +420,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _agentName.value = widget.agentName;
 
     if (oldWidget.agentName != widget.agentName ||
         oldWidget.threadingMode != widget.threadingMode ||
@@ -555,24 +450,16 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   void initState() {
     super.initState();
 
-    _chatController = MeshagentRoomChatThreadController(room: widget.client, agentName: widget.agentName);
+    _chatController = MeshagentRoomChatThreadController(room: widget.client);
     _documentPath = widget.documentPath;
     _initialMessageText = widget.initialMessageText;
 
-    _chatController.outboundStatus.addListener(_onStatusChange);
     unawaited(_rebindThreadListDocument());
-  }
-
-  void _onStatusChange() {
-    setState(() {
-      _currentStatusEntry = _chatController.outboundStatus.currentEntry();
-    });
   }
 
   @override
   void dispose() {
     unawaited(_closeThreadListDocument());
-    _chatController.outboundStatus.removeListener(_onStatusChange);
     _chatController.dispose();
 
     super.dispose();
@@ -612,120 +499,23 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         room: widget.client,
         loadingBuilder: loadingBuilder ?? (context) => const SizedBox.shrink(),
         path: path,
-        builder: (context, document) => ChatThreadSender(
-          controller: _chatController,
+        builder: (context, document) => ChatThread(
+          path: path,
           document: document,
-          documentPath: path,
-          initialMessageID: initialMessageText == null ? null : widget.initialMessageID,
-          initialMessageText: initialMessageText,
-          initialMessageAttachments: widget.initialMessageAttachments,
-          onMessageSent: _onMessageSent,
-          child: ChatThreadBuilder(
-            agentName: widget.agentName,
-            path: path,
-            document: document,
-            room: widget.client,
-            controller: _chatController,
-            builder: (context, snapshot) {
-              return FileDropArea(
-                onFileDrop: (name, dataStream, size) async {
-                  _chatController.uploadFile(name, dataStream, size ?? 0);
-                },
-
-                child: ValueListenableBuilder(
-                  valueListenable: _agentName,
-                  builder: (context, agentName, _) => Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      ChatThreadMessages(
-                        path: path,
-                        room: widget.client,
-                        messages: snapshot.messages,
-                        online: snapshot.online,
-                        showTyping: (snapshot.threadStatusMode != null) && snapshot.listening.isEmpty,
-                        showListening: snapshot.listening.isNotEmpty,
-                        threadStatus: snapshot.threadStatus,
-                        threadStatusStartedAt: snapshot.threadStatusStartedAt,
-                        threadStatusMode: snapshot.threadStatusMode,
-                        onCancel: () {
-                          _chatController.cancel(path, document);
-                        },
-                        fileInThreadBuilder: _fileInThreadBuilder,
-                        openFile: _open,
-                        currentStatusEntry: _currentStatusEntry,
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 15, left: 8, right: 8),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 912),
-                            child: Column(
-                              children: [
-                                ListenableBuilder(
-                                  listenable: _chatController,
-                                  builder: (context, _) => EnableWebContextMenu(
-                                    child: ChatThreadInput(
-                                      onClear: () {
-                                        final participant = widget.client.messaging.remoteParticipants.firstWhereOrNull(
-                                          (x) => x.getAttribute("name") == widget.agentName,
-                                        );
-                                        if (participant != null) {
-                                          widget.client.messaging.sendMessage(to: participant, type: "clear", message: {"path": path});
-                                        }
-                                      },
-                                      placeholder: widget.agentName == null ? Text("Message") : Text("Send a message or @$agentName"),
-                                      leading: _chatController.toolkits.isEmpty
-                                          ? buildTools(context, widget.client, agentName, _chatController, snapshot)
-                                          : null,
-                                      footer: _chatController.toolkits.isEmpty
-                                          ? null
-                                          : Padding(
-                                              padding: EdgeInsets.only(top: 8),
-                                              child: buildTools(context, widget.client, agentName, _chatController, snapshot),
-                                            ),
-                                      trailing: null,
-                                      room: widget.client,
-                                      onSend: (value, attachments) async {
-                                        final messageType = snapshot.threadStatusMode == "steerable" ? "steer" : "chat";
-                                        final message = ma.ChatMessage(
-                                          id: const Uuid().v4(),
-                                          text: value,
-                                          attachments: attachments.map((x) => x.path).toList(),
-                                        );
-
-                                        await _chatController.send(
-                                          thread: document,
-                                          path: path,
-                                          message: message,
-                                          messageType: messageType,
-                                          onMessageSent: _onMessageSent,
-                                        );
-                                      },
-                                      onChanged: (value, attachments) {
-                                        for (final part in snapshot.online) {
-                                          if (part.id != widget.client.localParticipant?.id) {
-                                            widget.client.messaging.sendMessage(to: part, type: "typing", message: {"path": path});
-                                          }
-                                        }
-                                      },
-                                      controller: _chatController,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      if (agentName == null) SizedBox(height: 10),
-                    ],
-                  ),
+          room: widget.client,
+          controller: _chatController,
+          initialMessage: initialMessageText == null
+              ? null
+              : ma.ChatMessage(
+                  id: widget.initialMessageID ?? const Uuid().v4(),
+                  text: initialMessageText,
+                  attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
                 ),
-              );
-            },
-          ),
+          onMessageSent: _onMessageSent,
+          fileInThreadBuilder: _fileInThreadBuilder,
+          openFile: _open,
+          toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, widget.agentName, controller, snapshot),
+          agentName: widget.agentName,
         ),
         participantNames: widget.participantNames,
       ),
