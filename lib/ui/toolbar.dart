@@ -347,7 +347,7 @@ class EmphasizedToolbarButton extends ToolbarButton {
     return FilledButton(
       onPressed: onPressed,
       style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.all(const Color(0xFFED6464)),
+        backgroundColor: WidgetStateProperty.all(shadDestructive),
         textStyle: WidgetStateProperty.all(const TextStyle(color: Color(0xffffffff))),
         shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(5.0))),
         padding: WidgetStateProperty.all(const EdgeInsets.all(5)),

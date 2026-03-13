@@ -15,6 +15,7 @@ import 'package:meshagent/meshagent.dart' as ma;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'agent_config.dart';
+import '../theme/theme.dart';
 
 class AgentOption {
   final String id;
@@ -87,7 +88,7 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
       case AgentRuntimeStatus.invalid:
       case AgentRuntimeStatus.unknown:
       case null:
-        return const Color(0xFFE11D48);
+        return statusError;
     }
   }
 
