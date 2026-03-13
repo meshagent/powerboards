@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
@@ -876,9 +877,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     final showRouteActions = !isMobile || !showSelectionActions;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(8, 0, 8, _openedFile == null ? 0 : 8),
+      padding: EdgeInsets.fromLTRB(0, 0, 0, _openedFile == null ? 0 : 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
         spacing: 8,
         children: [
           if (_openedFile != null) ..._buildFileNavActions(),
@@ -1051,7 +1052,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: Row(children: [if (showGap) SizedBox(width: 40), ...crumbs]),
+      child: Row(children: [if (showGap) const SizedBox(width: 20), ...crumbs]),
     );
   }
 
@@ -1118,6 +1119,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 crossAxisAlignment: .start,
                 children: [
                   _buildToolbar(selected),
+                  const SizedBox(height: 12),
                   Expanded(
                     child: IndexedStack(
                       index: _openedFile == null ? 0 : 1,
@@ -1133,35 +1135,32 @@ class _FileManagerViewState extends State<FileManagerView> {
                               offset: const Offset(-20.0, -20.0),
                             ),
                             popover: _popover,
-                            child: Container(
-                              margin: const .fromLTRB(8, 0, 8, 0),
-                              child: SignalBuilder(
-                                builder: (context, _) {
-                                  return storageEntries.state.when(
-                                    loading: () => const Center(child: CircularProgressIndicator()),
-                                    error: (e, st) => Center(child: Text("Error loading files: $e")),
-                                    ready: (_) {
-                                      final entries = _visibleSortedEntries.value;
-                                      final sort = _sortSig.value;
-                                      final folder = _folderSig.value;
+                            child: SignalBuilder(
+                              builder: (context, _) {
+                                return storageEntries.state.when(
+                                  loading: () => const Center(child: CircularProgressIndicator()),
+                                  error: (e, st) => Center(child: Text("Error loading files: $e")),
+                                  ready: (_) {
+                                    final entries = _visibleSortedEntries.value;
+                                    final sort = _sortSig.value;
+                                    final folder = _folderSig.value;
 
-                                      return FileTableView(
-                                        currentPath: folder,
-                                        entries: entries,
-                                        selected: selected,
-                                        sort: sort,
-                                        isRefreshing: storageEntries.state.isRefreshing,
-                                        forceShowSelect: _forceShowSelect,
-                                        onOpen: _openEntry,
-                                        onToggleSelected: _toggleSelected,
-                                        onToggleAllSelected: _toggleAllSelected,
-                                        onSortChanged: _setSort,
-                                        buildActionsMenu: _buildActionsMenu,
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
+                                    return FileTableView(
+                                      currentPath: folder,
+                                      entries: entries,
+                                      selected: selected,
+                                      sort: sort,
+                                      isRefreshing: storageEntries.state.isRefreshing,
+                                      forceShowSelect: _forceShowSelect,
+                                      onOpen: _openEntry,
+                                      onToggleSelected: _toggleSelected,
+                                      onToggleAllSelected: _toggleAllSelected,
+                                      onSortChanged: _setSort,
+                                      buildActionsMenu: _buildActionsMenu,
+                                    );
+                                  },
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -1239,24 +1238,52 @@ class _FileTableViewState extends State<FileTableView> {
     if (_hoveredRowKey.value == key) _hoveredRowKey.value = null;
   }
 
+  Widget _buildTableCard(Widget child) {
+    final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
+    const borderWidth = 1.0;
+    final innerRadius = BorderRadius.only(
+      topLeft: Radius.circular(math.max(0, radius.topLeft.x - borderWidth)),
+      topRight: Radius.circular(math.max(0, radius.topRight.x - borderWidth)),
+      bottomLeft: Radius.circular(math.max(0, radius.bottomLeft.x - borderWidth)),
+      bottomRight: Radius.circular(math.max(0, radius.bottomRight.x - borderWidth)),
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: shadCard,
+        border: Border.all(color: shadBorder, width: borderWidth),
+        borderRadius: radius,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(borderWidth),
+        child: ClipRRect(borderRadius: innerRadius, child: child),
+      ),
+    );
+  }
+
   Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(LucideIcons.folder, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            "This folder is empty",
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, color: Colors.grey[700]),
+    return _buildTableCard(
+      Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(LucideIcons.folder, size: 80, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              Text(
+                "This folder is empty",
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, color: shadSecondaryForeground),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "It looks like there are no files here",
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: shadMutedForeground),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          const Text(
-            "It looks like there are no files here",
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1307,6 +1334,132 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
+  Icon _sortIcon(bool ascending) {
+    return Icon(ascending ? LucideIcons.arrowUpAZ : LucideIcons.arrowDownAZ, size: 16, color: shadMutedForeground);
+  }
+
+  Widget _buildSortButton({required String label, required bool active, required bool ascending, required VoidCallback onPressed}) {
+    return ShadButton.ghost(
+      onPressed: onPressed,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: headerStyle.copyWith(color: active ? shadForeground : shadMutedForeground)),
+          if (active) ...[const SizedBox(width: 6), _sortIcon(ascending)],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileHeader(bool showSelectColumn, bool? selectAllValue) {
+    final isNameSort = widget.sort.field == FileSortField.name;
+    final isModifiedSort = widget.sort.field == FileSortField.modified;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          if (showSelectColumn) ...[
+            SizedBox(
+              width: 36,
+              child: Center(
+                child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+          _buildSortButton(
+            label: 'Name',
+            active: isNameSort,
+            ascending: widget.sort.ascending,
+            onPressed: () => widget.onSortChanged(FileSort(FileSortField.name, isNameSort ? !widget.sort.ascending : true)),
+          ),
+          const Spacer(),
+          _buildSortButton(
+            label: 'Modified',
+            active: isModifiedSort,
+            ascending: widget.sort.ascending,
+            onPressed: () => widget.onSortChanged(FileSort(FileSortField.modified, isModifiedSort ? !widget.sort.ascending : false)),
+          ),
+          SizedBox(
+            width: 36,
+            child: widget.isRefreshing
+                ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileList(BuildContext context, bool showSelectColumn, bool alwaysShowMenu, bool? selectAllValue) {
+    final colorScheme = ShadTheme.of(context).colorScheme;
+
+    return _buildTableCard(
+      Column(
+        children: [
+          _buildMobileHeader(showSelectColumn, selectAllValue),
+          const Divider(height: 1, color: shadBorder),
+          Expanded(
+            child: ListView.separated(
+              itemCount: widget.entries.length,
+              separatorBuilder: (_, _) => const Divider(height: 1, color: shadBorder),
+              itemBuilder: (context, index) {
+                final entry = widget.entries[index];
+                final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
+                final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
+                final isSelected = widget.selected.contains(key);
+                final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+
+                return Material(
+                  color: isSelected ? const Color(0xFFF2F1FF) : shadCard,
+                  child: InkWell(
+                    onTap: () => widget.onOpen(fullPath, entry.isFolder),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          if (showSelectColumn) ...[
+                            SizedBox(
+                              width: 36,
+                              child: Center(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => widget.onToggleSelected(key, !isSelected),
+                                  child: ShadCheckbox(decoration: checkboxDecoration, value: isSelected),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          _getIcon(entry),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(entry.name, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                const SizedBox(height: 4),
+                                Text(entry.updatedAt?.modified() ?? '', style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _hoverShow(key, alwaysShowMenu || isSelected, widget.buildActionsMenu(fullPath, entry.isFolder)),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.entries.isEmpty) {
@@ -1316,19 +1469,22 @@ class _FileTableViewState extends State<FileTableView> {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final colorScheme = ShadTheme.of(context).colorScheme;
     final showSelectColumn = !isMobile || widget.forceShowSelect;
-    final alwaysShowCheckbox = isMobile || widget.selected.isNotEmpty;
     final alwaysShowMenu = isMobile;
 
     final bool? selectAllValue = widget.selected.isEmpty ? false : (widget.selected.length == widget.entries.length ? true : null);
+
+    if (isMobile) {
+      return _buildMobileList(context, showSelectColumn, alwaysShowMenu, selectAllValue);
+    }
+
     final sortColumnIndex = (widget.sort.field == FileSortField.name ? 0 : 1) + (showSelectColumn ? 1 : 0);
     final sortAscending = widget.sort.ascending;
-    final showGap = !isMobile;
 
     final rows = widget.entries.map((entry) {
       final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
       final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
       final isSelected = widget.selected.contains(key);
-      final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border));
+      final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
 
       return DataRow(
         onSelectChanged: (_) {
@@ -1336,31 +1492,21 @@ class _FileTableViewState extends State<FileTableView> {
         },
         color: WidgetStateProperty.resolveWith((states) {
           if (isSelected) {
-            return Colors.blue.shade50;
+            return const Color(0xFFF2F1FF);
           }
           if (states.contains(WidgetState.hovered)) {
-            return Colors.grey.shade100;
+            return const Color(0xFFF8F8FA);
           }
-          return null;
+          return shadCard;
         }),
         cells: [
           if (showSelectColumn)
             DataCell(
-              _hoverRegion(
-                key,
-                Container(
-                  decoration: BoxDecoration(color: Colors.white),
-                  child: _hoverShow(
-                    key,
-                    alwaysShowCheckbox,
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => widget.onToggleSelected(key, !isSelected),
-                      child: Center(
-                        child: ShadCheckbox(decoration: checkboxDecoration, value: isSelected),
-                      ),
-                    ),
-                  ),
+              Center(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => widget.onToggleSelected(key, !isSelected),
+                  child: ShadCheckbox(decoration: checkboxDecoration, value: isSelected),
                 ),
               ),
             ),
@@ -1369,7 +1515,6 @@ class _FileTableViewState extends State<FileTableView> {
               key,
               Row(
                 children: [
-                  Container(width: 3, color: isSelected ? colorScheme.primary : Colors.transparent),
                   _getIcon(entry),
                   const SizedBox(width: 10),
                   Flexible(
@@ -1390,54 +1535,55 @@ class _FileTableViewState extends State<FileTableView> {
               ),
             ),
           ),
-          DataCell(_hoverRegion(key, _hoverShow(key, alwaysShowMenu, Center(child: widget.buildActionsMenu(fullPath, entry.isFolder))))),
-          if (showGap)
-            DataCell(
-              _hoverRegion(
-                key,
-                SizedBox(
-                  width: 50,
-                  child: Container(decoration: BoxDecoration(color: Colors.white)),
-                ),
-              ),
+          DataCell(
+            _hoverRegion(
+              key,
+              _hoverShow(key, alwaysShowMenu || isSelected, Center(child: widget.buildActionsMenu(fullPath, entry.isFolder))),
             ),
+          ),
         ],
       );
     }).toList();
 
-    return DataTable2(
-      showCheckboxColumn: false,
-      columnSpacing: 0,
-      horizontalMargin: 0,
-      sortColumnIndex: sortColumnIndex,
-      sortAscending: sortAscending,
-      columns: [
-        if (showSelectColumn)
-          DataColumn2(
-            fixedWidth: 50,
-            label: Center(
-              child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+    return _buildTableCard(
+      Theme(
+        data: Theme.of(context).copyWith(dividerColor: shadBorder),
+        child: DataTable2(
+          showCheckboxColumn: false,
+          columnSpacing: 0,
+          horizontalMargin: 0,
+          headingRowColor: const WidgetStatePropertyAll(shadCard),
+          dataRowColor: const WidgetStatePropertyAll(shadCard),
+          sortColumnIndex: sortColumnIndex,
+          sortAscending: sortAscending,
+          columns: [
+            if (showSelectColumn)
+              DataColumn2(
+                fixedWidth: 56,
+                label: Center(
+                  child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+                ),
+              ),
+            DataColumn2(
+              label: _getLabel("Name"),
+              size: ColumnSize.L,
+              onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.name, ascending)),
             ),
-          ),
-        DataColumn2(
-          label: _getLabel("Name"),
-          size: ColumnSize.L,
-          onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.name, ascending)),
+            DataColumn2(
+              label: _getLabel("Modified"),
+              fixedWidth: isMobile ? 125 : 170,
+              onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.modified, ascending)),
+            ),
+            DataColumn2(
+              label: widget.isRefreshing
+                  ? const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))
+                  : const SizedBox.shrink(),
+              fixedWidth: 56,
+            ),
+          ],
+          rows: rows,
         ),
-        DataColumn2(
-          label: _getLabel("Modified"),
-          fixedWidth: isMobile ? 125 : 170,
-          onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.modified, ascending)),
-        ),
-        DataColumn2(
-          label: widget.isRefreshing
-              ? Center(child: const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))
-              : SizedBox.shrink(),
-          fixedWidth: 50,
-        ),
-        if (showGap) DataColumn2(label: SizedBox.shrink(), fixedWidth: 50),
-      ],
-      rows: rows,
+      ),
     );
   }
 }

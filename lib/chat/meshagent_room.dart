@@ -982,20 +982,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Widget _buildFilesArea(BuildContext context, List<Widget> actions) {
     final cs = ShadTheme.of(context).colorScheme;
-
-    return ColoredBox(
-      color: cs.background,
-      child: Column(
-        children: [
-          ActionsRow(actions: actions),
-          Expanded(child: FileManagerView(client: widget.room, hideSystem: true)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMeeting(BuildContext context, String? agentName, List<Widget> actions) {
-    final cs = ShadTheme.of(context).colorScheme;
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final horizontalInset = isMobile ? 12.0 : 20.0;
+    const bottomInset = 8.0;
 
     return ColoredBox(
       color: cs.background,
@@ -1003,7 +992,32 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         children: [
           ActionsRow(actions: actions),
           Expanded(
-            child: MeetingView(room: widget.room, onCancel: _leaveMeeting, joinMeeting: _joinMeeting, agentName: agentName),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
+              child: FileManagerView(client: widget.room, hideSystem: true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMeeting(BuildContext context, String? agentName, List<Widget> actions) {
+    final cs = ShadTheme.of(context).colorScheme;
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final horizontalInset = isMobile ? 12.0 : 20.0;
+    const bottomInset = 8.0;
+
+    return ColoredBox(
+      color: cs.background,
+      child: Column(
+        children: [
+          ActionsRow(actions: actions),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
+              child: MeetingView(room: widget.room, onCancel: _leaveMeeting, joinMeeting: _joinMeeting, agentName: agentName),
+            ),
           ),
         ],
       ),
