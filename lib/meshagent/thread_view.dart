@@ -50,6 +50,10 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
     required String path,
     required ma.ChatMessage message,
     String messageType = "chat",
+    String? remoteStoreParticipantName,
+    bool storeLocally = true,
+    bool useAgentMessages = false,
+    String? turnId,
     void Function(ma.ChatMessage)? onMessageSent,
   }) async {
     if (message.text.trim().isNotEmpty || message.attachments.isNotEmpty) {
@@ -647,6 +651,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                           _chatController.cancel(path, document);
                         },
                         fileInThreadBuilder: _fileInThreadBuilder,
+                        openFile: _open,
                         currentStatusEntry: _currentStatusEntry,
                       ),
                       Padding(
@@ -680,7 +685,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                             ),
                                       trailing: null,
                                       room: widget.client,
-                                      onSend: (value, attachments) {
+                                      onSend: (value, attachments) async {
                                         final messageType = snapshot.threadStatusMode == "steerable" ? "steer" : "chat";
                                         final message = ma.ChatMessage(
                                           id: const Uuid().v4(),
@@ -688,7 +693,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                                           attachments: attachments.map((x) => x.path).toList(),
                                         );
 
-                                        _chatController.send(
+                                        await _chatController.send(
                                           thread: document,
                                           path: path,
                                           message: message,
