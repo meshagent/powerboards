@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +28,7 @@ import 'package:powerboards/ui/text_validators.dart';
 import 'file_upload.dart';
 
 const Set<String> editExtensions = {"md"};
+const String placeholderFileName = ".placeholder";
 
 enum FileSortField { name, modified }
 
@@ -46,11 +48,19 @@ class _FileLocation {
 
   factory _FileLocation.fromUri(Uri uri) {
     final raw = uri.queryParameters['p'] ?? '';
-    final path = joinPaths(raw, ''); // normalize: remove trailing slash
-    final last = path.split('/').where((s) => s.isNotEmpty).lastOrNull;
-    final isFile = last != null && last.contains('.'); //todo: fix file detection by looking at storage entries instead of name
 
-    return isFile ? _FileLocation(folder: parentPath(path), openedFile: path) : _FileLocation(folder: path, openedFile: null);
+    if (raw.isEmpty) {
+      return const _FileLocation(folder: "", openedFile: null);
+    }
+
+    final isFolder = raw.endsWith('/');
+    final normalizedPath = joinPaths(raw, '');
+
+    if (isFolder) {
+      return _FileLocation(folder: normalizedPath, openedFile: null);
+    }
+
+    return _FileLocation(folder: parentPath(normalizedPath), openedFile: normalizedPath);
   }
 }
 
@@ -342,15 +352,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  void _open(String path) {
+  void _openEntry(String path, bool isFolder) {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
-    updatedQueryParameters['p'] = path;
+    updatedQueryParameters['p'] = path.isEmpty ? '' : (isFolder ? '$path/' : path);
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
-
     context.go(newUri.toString());
   }
 
@@ -364,10 +373,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (currentIndex < 0) return;
 
     final nextIndex = (currentIndex + offset + files.length) % files.length;
-    _open(files[nextIndex]);
+    _openEntry(files[nextIndex], false);
   }
 
-  void _closeFile() => _open(_folderSig.value);
+  void _closeFile() => _openEntry(_folderSig.value, true);
   void _previousFile() => _cycleFile(-1);
   void _nextFile() => _cycleFile(1);
 
@@ -552,7 +561,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return;
     }
 
-    final fileName = joinPaths(path, "$result/.placeholder");
+    final fileName = joinPaths(path, "$result/$placeholderFileName");
     await _uploadFile(Stream.empty(), fileName, 0);
   }
 
@@ -727,6 +736,21 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
+  String _uploadTitle(List<UploadProgressItem> uploads, bool isCompleted) {
+    if (uploads.isEmpty) {
+      return "";
+    }
+
+    final isFolder = uploads.length == 1 && uploads.first.upload.filename == placeholderFileName;
+    if (isFolder) {
+      return isCompleted ? "Folder created" : "Creating folder";
+    }
+
+    final count = uploads.length;
+    final verb = isCompleted ? "Uploaded" : "Uploading";
+    return "$verb $count file${count > 1 ? 's' : ''}";
+  }
+
   Widget _popover(BuildContext context) {
     final theme = ShadTheme.of(context);
     final tt = theme.textTheme;
@@ -750,10 +774,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 children: [
                   Padding(
                     padding: const .only(top: 20, left: 16, right: 16, bottom: 12),
-                    child: Text(
-                      "Upload${isCompleted ? 'ed' : 'ing'} ${uploads.length} file${uploads.length > 1 ? 's' : ''}",
-                      style: tt.small.copyWith(fontWeight: .w700),
-                    ),
+                    child: Text(_uploadTitle(uploads, isCompleted), style: tt.small.copyWith(fontWeight: .w700)),
                   ),
                   ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: 200),
@@ -772,13 +793,14 @@ class _FileManagerViewState extends State<FileManagerView> {
                               animation: upload,
                               builder: (context, _) {
                                 final double percent = totalBytes > 0 ? (upload.bytesUploaded / totalBytes).clamp(0.0, 1.0) : 1.0;
+                                final name = upload.filename == placeholderFileName ? parentPath(upload.path) : upload.path.split('/').last;
 
                                 return Padding(
                                   padding: const .only(bottom: 8),
                                   child: Column(
                                     crossAxisAlignment: .start,
                                     children: [
-                                      Text(upload.path.split('/').last, style: TextStyle(fontSize: 12)),
+                                      Text(name, style: TextStyle(fontSize: 12)),
                                       const SizedBox(height: 4),
                                       LinearProgressIndicator(value: percent),
                                     ],
@@ -820,7 +842,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       onSelected: (action) async {
         switch (action) {
           case _FileAction.open:
-            _open(fullPath);
+            _openEntry(fullPath, isFolder);
             break;
           case _FileAction.delete:
             await _confirmAndDelete(fullPath, isFolder);
@@ -854,7 +876,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final showRouteActions = !isMobile || !showSelectionActions;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+      padding: EdgeInsets.fromLTRB(8, 0, 8, _openedFile == null ? 0 : 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         spacing: 8,
@@ -902,7 +924,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             onPressed: () async {
               final confirmDelete = await _confirmAndDelete(_openedFile!, false);
               if (confirmDelete == true) {
-                _open(_folderSig.value);
+                _openEntry(_folderSig.value, true);
               }
             },
           ),
@@ -999,7 +1021,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     crumbs.add(
       ShadButton.ghost(
-        onPressed: () => _open(""),
+        onPressed: () => _openEntry("", true),
         child: Text("Files", style: breadcrumbLinkStyle),
       ),
     );
@@ -1012,7 +1034,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       crumbs.add(const Icon(LucideIcons.chevronRight, color: Color(0xffa5a5a5)));
       crumbs.add(
         ShadButton.ghost(
-          onPressed: () => _open(currentPath),
+          onPressed: () => _openEntry(currentPath, true),
           child: Text(segment, style: breadcrumbLinkStyle),
         ),
       );
@@ -1024,9 +1046,12 @@ class _FileManagerViewState extends State<FileManagerView> {
       crumbs.add(ShadButton.ghost(enabled: false, child: Text(fileName, style: breadcrumbLinkStyle)));
     }
 
+    bool isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    bool showGap = !isMobile && _openedFile == null;
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      child: Row(children: [SizedBox(width: 40), ...crumbs]),
+      child: Row(children: [if (showGap) SizedBox(width: 40), ...crumbs]),
     );
   }
 
@@ -1127,7 +1152,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                                         sort: sort,
                                         isRefreshing: storageEntries.state.isRefreshing,
                                         forceShowSelect: _forceShowSelect,
-                                        onOpen: _open,
+                                        onOpen: _openEntry,
                                         onToggleSelected: _toggleSelected,
                                         onToggleAllSelected: _toggleAllSelected,
                                         onSortChanged: _setSort,
@@ -1161,7 +1186,7 @@ class FileTableView extends StatefulWidget {
   final FileSort sort;
   final bool isRefreshing;
   final bool forceShowSelect;
-  final void Function(String fullPath) onOpen;
+  final void Function(String fullPath, bool isFolder) onOpen;
   final void Function(String key, bool selected) onToggleSelected;
   final void Function(bool selected) onToggleAllSelected;
   final void Function(FileSort) onSortChanged;
@@ -1297,6 +1322,7 @@ class _FileTableViewState extends State<FileTableView> {
     final bool? selectAllValue = widget.selected.isEmpty ? false : (widget.selected.length == widget.entries.length ? true : null);
     final sortColumnIndex = (widget.sort.field == FileSortField.name ? 0 : 1) + (showSelectColumn ? 1 : 0);
     final sortAscending = widget.sort.ascending;
+    final showGap = !isMobile;
 
     final rows = widget.entries.map((entry) {
       final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
@@ -1306,7 +1332,7 @@ class _FileTableViewState extends State<FileTableView> {
 
       return DataRow(
         onSelectChanged: (_) {
-          widget.onOpen(fullPath);
+          widget.onOpen(fullPath, entry.isFolder);
         },
         color: WidgetStateProperty.resolveWith((states) {
           if (isSelected) {
@@ -1356,19 +1382,25 @@ class _FileTableViewState extends State<FileTableView> {
           DataCell(
             _hoverRegion(
               key,
-              Padding(
+              Container(
+                width: double.infinity,
+                alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.only(left: 8),
                 child: Text(entry.updatedAt?.modified() ?? "", style: dataStyle, maxLines: 2, overflow: TextOverflow.ellipsis),
               ),
             ),
           ),
           DataCell(_hoverRegion(key, _hoverShow(key, alwaysShowMenu, Center(child: widget.buildActionsMenu(fullPath, entry.isFolder))))),
-          DataCell(
-            SizedBox(
-              width: 50,
-              child: Container(decoration: BoxDecoration(color: Colors.white)),
+          if (showGap)
+            DataCell(
+              _hoverRegion(
+                key,
+                SizedBox(
+                  width: 50,
+                  child: Container(decoration: BoxDecoration(color: Colors.white)),
+                ),
+              ),
             ),
-          ),
         ],
       );
     }).toList();
@@ -1403,7 +1435,7 @@ class _FileTableViewState extends State<FileTableView> {
               : SizedBox.shrink(),
           fixedWidth: 50,
         ),
-        DataColumn2(label: SizedBox.shrink(), fixedWidth: 50),
+        if (showGap) DataColumn2(label: SizedBox.shrink(), fixedWidth: 50),
       ],
       rows: rows,
     );
