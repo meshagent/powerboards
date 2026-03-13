@@ -122,11 +122,18 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   }
 
   Widget _withReservedRoomHeader(Widget child) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
     return SafeArea(
       child: Column(
         children: [
-          SizedBox(height: headerHeight),
-          Expanded(child: child),
+          ColoredBox(
+            color: isMobile ? Colors.transparent : shadCard,
+            child: const SizedBox(height: headerHeight, width: double.infinity),
+          ),
+          Expanded(
+            child: ColoredBox(color: isMobile ? Colors.transparent : shadCard, child: child),
+          ),
         ],
       ),
     );

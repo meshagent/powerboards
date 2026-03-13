@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:powerboards/meshagent/project.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:powerboards/theme/theme.dart';
 
 import 'avatar_menu_button.dart';
@@ -15,6 +16,8 @@ class MainWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
     return Semantics(
       container: true,
       explicitChildNodes: true,
@@ -35,7 +38,9 @@ class MainWrapper extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(child: child),
+          Expanded(
+            child: ColoredBox(color: isMobile ? Colors.transparent : shadCard, child: child),
+          ),
         ],
       ),
     );

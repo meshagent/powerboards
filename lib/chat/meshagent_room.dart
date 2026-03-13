@@ -981,22 +981,32 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildFilesArea(BuildContext context, List<Widget> actions) {
-    return Column(
-      children: [
-        ActionsRow(actions: actions),
-        Expanded(child: FileManagerView(client: widget.room, hideSystem: true)),
-      ],
+    final cs = ShadTheme.of(context).colorScheme;
+
+    return ColoredBox(
+      color: cs.background,
+      child: Column(
+        children: [
+          ActionsRow(actions: actions),
+          Expanded(child: FileManagerView(client: widget.room, hideSystem: true)),
+        ],
+      ),
     );
   }
 
   Widget _buildMeeting(BuildContext context, String? agentName, List<Widget> actions) {
-    return Column(
-      children: [
-        ActionsRow(actions: actions),
-        Expanded(
-          child: MeetingView(room: widget.room, onCancel: _leaveMeeting, joinMeeting: _joinMeeting, agentName: agentName),
-        ),
-      ],
+    final cs = ShadTheme.of(context).colorScheme;
+
+    return ColoredBox(
+      color: cs.background,
+      child: Column(
+        children: [
+          ActionsRow(actions: actions),
+          Expanded(
+            child: MeetingView(room: widget.room, onCancel: _leaveMeeting, joinMeeting: _joinMeeting, agentName: agentName),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1267,6 +1277,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
                                 ];
 
+                                final cs = ShadTheme.of(context).colorScheme;
+
                                 return RoomDeveloperLogsListener(
                                   events: events,
                                   client: widget.room,
@@ -1280,23 +1292,29 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                         child: ResizableSplitView(
                                           allowCollapse: room.VideoRoomModel.maybeOf(context)?.room != null,
                                           split: split,
-                                          area1: _buildAgentArea(context, [
-                                            if (isSmallDisplay) BackButton(projectId: widget.projectId),
+                                          area1: ColoredBox(
+                                            color: cs.card,
+                                            child: _buildAgentArea(context, [
+                                              if (isSmallDisplay) BackButton(projectId: widget.projectId),
 
-                                            AgentsDropdown(
-                                              projectId: widget.projectId,
-                                              room: widget.room,
-                                              selectedService: selected.service,
-                                              selectedAgentRouteId: selected.routeId,
-                                              services: supported,
-                                              onOpen: services.refresh,
-                                              onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-                                            ),
+                                              AgentsDropdown(
+                                                projectId: widget.projectId,
+                                                room: widget.room,
+                                                selectedService: selected.service,
+                                                selectedAgentRouteId: selected.routeId,
+                                                services: supported,
+                                                onOpen: services.refresh,
+                                                onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+                                              ),
 
-                                            ParticipantsButton(participants: participants, localParticipant: widget.room.localParticipant),
+                                              ParticipantsButton(
+                                                participants: participants,
+                                                localParticipant: widget.room.localParticipant,
+                                              ),
 
-                                            if (!split) ...actions,
-                                          ]),
+                                              if (!split) ...actions,
+                                            ]),
+                                          ),
                                           area2: !split
                                               ? Container()
                                               : filesVisible

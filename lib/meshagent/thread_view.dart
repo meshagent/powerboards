@@ -733,66 +733,69 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     final cs = ShadTheme.of(context).colorScheme;
     final tt = ShadTheme.of(context).textTheme;
 
-    return SizedBox(
-      width: _threadListPanelWidth,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-            child: ShadButton.ghost(
-              onPressed: () {
-                if (_selectedThreadPath == null && _activeThreadPath == null) {
-                  return;
-                }
-                setState(() {
-                  _selectedThreadPath = null;
-                  _activeThreadPath = null;
-                  _inlineNewThreadResetVersion++;
-                });
-              },
-              mainAxisAlignment: MainAxisAlignment.start,
-              expands: true,
-              leading: const Icon(LucideIcons.plus, size: 16),
-              child: const Align(
-                alignment: Alignment.centerLeft,
-                child: Text("New Thread", textAlign: TextAlign.start),
+    return ColoredBox(
+      color: cs.background,
+      child: SizedBox(
+        width: _threadListPanelWidth,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+              child: ShadButton.ghost(
+                onPressed: () {
+                  if (_selectedThreadPath == null && _activeThreadPath == null) {
+                    return;
+                  }
+                  setState(() {
+                    _selectedThreadPath = null;
+                    _activeThreadPath = null;
+                    _inlineNewThreadResetVersion++;
+                  });
+                },
+                mainAxisAlignment: MainAxisAlignment.start,
+                expands: true,
+                leading: const Icon(LucideIcons.plus, size: 16),
+                child: const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text("New Thread", textAlign: TextAlign.start),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text("Threads", style: tt.small.copyWith(color: cs.foreground.withValues(alpha: .5))),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text("Threads", style: tt.small.copyWith(color: cs.foreground.withValues(alpha: .5))),
+              ),
             ),
-          ),
-          Expanded(
-            child: _threadListLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _threadListError != null
-                ? const Center(child: Text("Unable to load thread list"))
-                : entries.isEmpty
-                ? const Center(child: Text("No threads yet"))
-                : SuperListView(
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                    children: [
-                      for (final entry in entries)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: _ThreadListItem(
-                            entry: entry,
-                            selected: entry.path == activePath,
-                            onOpen: () => _openThreadFromList(entry.path),
-                            onRename: () => _renameThread(entry),
-                            onDelete: () => _deleteThread(entry),
+            Expanded(
+              child: _threadListLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _threadListError != null
+                  ? const Center(child: Text("Unable to load thread list"))
+                  : entries.isEmpty
+                  ? const Center(child: Text("No threads yet"))
+                  : SuperListView(
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                      children: [
+                        for (final entry in entries)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: _ThreadListItem(
+                              entry: entry,
+                              selected: entry.path == activePath,
+                              onOpen: () => _openThreadFromList(entry.path),
+                              onRename: () => _renameThread(entry),
+                              onDelete: () => _deleteThread(entry),
+                            ),
                           ),
-                        ),
-                    ],
-                  ),
-          ),
-        ],
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
