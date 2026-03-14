@@ -993,16 +993,22 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (_openedFile != null) {
-      final children = <Widget>[
-        ..._buildFileCycleActions(),
-        if (_openedFileSupportsEditTabs) _buildOpenFileTabs(),
-        if (_openedFileSupportsExternalSave) _buildExternalSaveButton(),
-        ..._buildRouteActions(),
-      ];
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final compactToolbar = constraints.maxWidth < 540;
+          final gap = compactToolbar ? 6.0 : desktopPaneHeaderButtonGap;
+          final children = <Widget>[
+            ..._buildFileCycleActions(),
+            if (_openedFileSupportsEditTabs) _buildOpenFileTabs(),
+            if (_openedFileSupportsExternalSave) _buildExternalSaveButton(compact: compactToolbar),
+            ..._buildRouteActions(),
+          ];
 
-      return SizedBox(
-        height: 52,
-        child: Row(crossAxisAlignment: CrossAxisAlignment.center, spacing: desktopPaneHeaderButtonGap, children: children),
+          return SizedBox(
+            height: 52,
+            child: Row(crossAxisAlignment: CrossAxisAlignment.center, spacing: gap, children: children),
+          );
+        },
       );
     }
 
@@ -1088,7 +1094,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Widget _buildExternalSaveButton() {
+  Widget _buildExternalSaveButton({required bool compact}) {
     return AnimatedBuilder(
       animation: _codePreviewController,
       builder: (context, _) {
@@ -1100,7 +1106,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             await _codePreviewController.save();
           },
           leading: saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator()) : const Icon(LucideIcons.save),
-          child: const Text("Save"),
+          child: compact ? null : const Text("Save"),
         );
       },
     );
@@ -1551,6 +1557,12 @@ class _FileTableViewState extends State<FileTableView> {
   static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x66, 0x66, 0x66));
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
+
+  @override
+  void initState() {
+    super.initState();
+    dataTableShowLogs = false;
+  }
 
   @override
   void dispose() {

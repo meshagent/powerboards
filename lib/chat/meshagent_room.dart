@@ -1037,10 +1037,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       child: Row(
                         spacing: desktopPaneHeaderButtonGap,
                         children: [
-                          IgnorePointer(
-                            child: ShadButton.ghost(
-                              onPressed: () {},
-                              child: Text("Get ready to meet", style: meetingHeaderTitleStyle),
+                          Flexible(
+                            child: IgnorePointer(
+                              child: ShadButton.ghost(
+                                onPressed: () {},
+                                child: Text(
+                                  "Get ready to meet",
+                                  style: meetingHeaderTitleStyle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ),
                           ),
                           const Spacer(),
