@@ -24,6 +24,7 @@ import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
+import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/text_validators.dart';
 
 import 'file_upload.dart';
@@ -128,11 +129,19 @@ class _FilePathKey {
   }
 }
 
+class _BreadcrumbSegment {
+  const _BreadcrumbSegment({required this.label, required this.path});
+
+  final String label;
+  final String path;
+}
+
 class FileManagerView extends StatefulWidget {
   final RoomClient client;
   final bool hideSystem;
+  final List<Widget> desktopHeaderActions;
 
-  const FileManagerView({super.key, required this.client, this.hideSystem = false});
+  const FileManagerView({super.key, required this.client, this.hideSystem = false, this.desktopHeaderActions = const []});
 
   @override
   State<FileManagerView> createState() => _FileManagerViewState();
@@ -148,6 +157,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   String _tab = 'preview';
 
   final popoverController = ShadPopoverController();
+  final ShadContextMenuController _collapsedBreadcrumbMenuController = ShadContextMenuController();
   late final uploadNotifications = UploadProgressNotifications(popoverController: popoverController);
 
   late StreamSubscription<RoomEvent> roomSub;
@@ -208,6 +218,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     roomSub.cancel();
 
     uploadNotifications.dispose();
+    _collapsedBreadcrumbMenuController.dispose();
     popoverController.dispose();
 
     _visibleSortedFiles.dispose();
@@ -368,7 +379,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     await storageEntries.untilReady();
 
     final files = _visibleSortedFiles.value;
-    if (files.isEmpty || _openedFile == null) return;
+    if (files.length < 2 || _openedFile == null) return;
 
     final currentIndex = files.indexOf(_openedFile!);
     if (currentIndex < 0) return;
@@ -873,45 +884,113 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget _buildToolbar(Set<String> selected) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    if (!isMobile) {
+      return _buildDesktopToolbar(selected);
+    }
+
+    return _buildMobileToolbar(selected);
+  }
+
+  Widget _buildDesktopToolbar(Set<String> selected) {
+    final desktopActions = widget.desktopHeaderActions;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: headerHeight,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compactActions = shouldCompactPaneHeaderActions(constraints.maxWidth);
+              return PaneHeaderActionScope(
+                compact: compactActions,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  spacing: desktopPaneHeaderButtonGap,
+                  children: [
+                    Expanded(
+                      child: Align(alignment: Alignment.centerLeft, child: _buildBreadcrumb()),
+                    ),
+                    if (desktopActions.isNotEmpty) ...desktopActions,
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 20),
+        _buildDesktopContextToolbar(selected),
+      ],
+    );
+  }
+
+  Widget _buildDesktopContextToolbar(Set<String> selected) {
     final showSelectionActions = selected.isNotEmpty && _openedFile == null;
-    final showRouteActions = !isMobile || !showSelectionActions;
+
+    if (showSelectionActions) {
+      return _buildSelection(selected);
+    }
+
+    if (_openedFile != null) {
+      final fileName = _openedFile!.split('/').last;
+      return Row(
+        spacing: desktopPaneHeaderButtonGap,
+        children: [
+          ..._buildFileNavActions(),
+          Expanded(
+            child: Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          ..._buildRouteActions(),
+        ],
+      );
+    }
+
+    return Row(spacing: desktopPaneHeaderButtonGap, children: _buildRouteActions());
+  }
+
+  Widget _buildMobileToolbar(Set<String> selected) {
+    final showSelectionActions = selected.isNotEmpty && _openedFile == null;
+    final showRouteActions = !showSelectionActions;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(0, 0, 0, _openedFile == null ? 0 : 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
-        spacing: 8,
+        spacing: 6,
         children: [
           if (_openedFile != null) ..._buildFileNavActions(),
           Expanded(child: showSelectionActions ? _buildSelection(selected) : _buildBreadcrumb()),
           if (showRouteActions) ..._buildRouteActions(),
-          if (isMobile)
-            Tooltip(
-              message: "Select items",
-              child: (_forceShowSelect ? ShadIconButton.new : ShadIconButton.outline)(
-                icon: const Icon(LucideIcons.squareCheckBig),
-                onPressed: _toggleForceShowSelect,
-              ),
+          Tooltip(
+            message: "Select items",
+            child: (_forceShowSelect ? ShadIconButton.new : ShadIconButton.outline)(
+              icon: const Icon(LucideIcons.squareCheckBig),
+              onPressed: _toggleForceShowSelect,
             ),
+          ),
         ],
       ),
     );
   }
 
   List<Widget> _buildFileNavActions() {
+    final canCycleFiles = _visibleSortedFiles.value.length > 1;
+
     return [
       Tooltip(
         message: "Close file",
         child: ShadIconButton.ghost(icon: const Icon(LucideIcons.x), onPressed: _closeFile),
       ),
-      Tooltip(
-        message: "Previous file",
-        child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronLeft), onPressed: _previousFile),
-      ),
-      Tooltip(
-        message: "Next file",
-        child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronRight), onPressed: _nextFile),
-      ),
+      if (canCycleFiles)
+        Tooltip(
+          message: "Previous file",
+          child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronLeft), onPressed: _previousFile),
+        ),
+      if (canCycleFiles)
+        Tooltip(
+          message: "Next file",
+          child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronRight), onPressed: _nextFile),
+        ),
     ];
   }
 
@@ -1017,42 +1096,136 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Widget _buildBreadcrumb() {
-    List<Widget> crumbs = [];
+  double _measureBreadcrumbLabelWidth(BuildContext context, String label) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: breadcrumbLinkStyle),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+    )..layout();
 
-    crumbs.add(
-      ShadButton.ghost(
-        onPressed: () => _openEntry("", true),
-        child: Text("Files", style: breadcrumbLinkStyle),
+    return painter.width;
+  }
+
+  List<_BreadcrumbSegment> _folderBreadcrumbSegments() {
+    final segments = <_BreadcrumbSegment>[const _BreadcrumbSegment(label: "Files", path: "")];
+    final folderSegments = _folderSig.value.split('/').where((s) => s.isNotEmpty).toList();
+
+    var accumulated = "";
+    for (final segment in folderSegments) {
+      accumulated = accumulated.isEmpty ? segment : "$accumulated/$segment";
+      segments.add(_BreadcrumbSegment(label: segment, path: accumulated));
+    }
+
+    return segments;
+  }
+
+  Widget _breadcrumbSeparator() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 2),
+      child: Icon(LucideIcons.chevronRight, color: Color(0xffa5a5a5)),
+    );
+  }
+
+  Widget _buildBreadcrumbCrumb(_BreadcrumbSegment segment) {
+    return ShadButton.ghost(
+      onPressed: () => _openEntry(segment.path, true),
+      child: Text(segment.label, style: breadcrumbLinkStyle),
+    );
+  }
+
+  Widget _buildCollapsedBreadcrumbMenu(List<_BreadcrumbSegment> hiddenSegments) {
+    return ShadContextMenu(
+      controller: _collapsedBreadcrumbMenuController,
+      constraints: const BoxConstraints(minWidth: 200),
+      anchor: const ShadAnchor(childAlignment: Alignment.topLeft, overlayAlignment: Alignment.bottomLeft, offset: Offset(0, 4)),
+      items: hiddenSegments.reversed
+          .map(
+            (segment) => ShadContextMenuItem(
+              height: 40.0,
+              leading: const Icon(LucideIcons.folder, size: 16),
+              onPressed: () => _openEntry(segment.path, true),
+              child: Text(segment.label),
+            ),
+          )
+          .toList(growable: false),
+      child: Tooltip(
+        message: "Browse collapsed path",
+        child: ShadIconButton.outline(
+          icon: const Icon(LucideIcons.folderTree),
+          onPressed: () {
+            if (_collapsedBreadcrumbMenuController.isOpen) {
+              _collapsedBreadcrumbMenuController.hide();
+            } else {
+              _collapsedBreadcrumbMenuController.show();
+            }
+          },
+        ),
       ),
     );
+  }
 
-    final segments = _folderSig.value.split('/').where((s) => s.isNotEmpty).toList();
-    String accumulated = "";
-    for (final segment in segments) {
-      accumulated = accumulated.isEmpty ? segment : "$accumulated/$segment";
-      final currentPath = accumulated;
-      crumbs.add(const Icon(LucideIcons.chevronRight, color: Color(0xffa5a5a5)));
-      crumbs.add(
-        ShadButton.ghost(
-          onPressed: () => _openEntry(currentPath, true),
-          child: Text(segment, style: breadcrumbLinkStyle),
-        ),
-      );
-    }
+  Widget _buildFileNameOnly() {
+    final fileName = _openedFile!.split('/').last;
 
+    return Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+  }
+
+  Widget _buildBreadcrumb() {
     if (_openedFile != null) {
-      final fileName = _openedFile!.split('/').last;
-      crumbs.add(const Icon(LucideIcons.chevronRight, color: Color(0xffa5a5a5)));
-      crumbs.add(ShadButton.ghost(enabled: false, child: Text(fileName, style: breadcrumbLinkStyle)));
+      return _buildFileNameOnly();
     }
 
-    bool isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    bool showGap = !isMobile && _openedFile == null;
+    final segments = _folderBreadcrumbSegments();
+    if (segments.length <= 1) {
+      return _buildBreadcrumbCrumb(segments.first);
+    }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(children: [if (showGap) const SizedBox(width: 20), ...crumbs]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const separatorWidth = 20.0;
+        const crumbChromeWidth = 28.0;
+        const collapseButtonWidth = 40.0;
+
+        final segmentWidths = segments
+            .map((segment) => _measureBreadcrumbLabelWidth(context, segment.label) + crumbChromeWidth)
+            .toList(growable: false);
+
+        var startIndex = segments.length - 1;
+        var usedWidth = segmentWidths.last;
+
+        while (startIndex > 0) {
+          final nextWidth = usedWidth + separatorWidth + segmentWidths[startIndex - 1];
+          if (nextWidth > constraints.maxWidth) {
+            break;
+          }
+          startIndex--;
+          usedWidth = nextWidth;
+        }
+
+        var hiddenCount = startIndex;
+        while (hiddenCount > 0 &&
+            usedWidth + separatorWidth + collapseButtonWidth > constraints.maxWidth &&
+            startIndex < segments.length - 1) {
+          usedWidth -= separatorWidth + segmentWidths[startIndex];
+          startIndex++;
+          hiddenCount = startIndex;
+        }
+
+        final children = <Widget>[];
+        if (hiddenCount > 0) {
+          children.add(_buildCollapsedBreadcrumbMenu(segments.take(hiddenCount).toList(growable: false)));
+          children.add(_breadcrumbSeparator());
+        }
+
+        for (var i = startIndex; i < segments.length; i++) {
+          if (i > startIndex) {
+            children.add(_breadcrumbSeparator());
+          }
+          children.add(_buildBreadcrumbCrumb(segments[i]));
+        }
+
+        return Row(mainAxisSize: MainAxisSize.min, children: children);
+      },
     );
   }
 
@@ -1545,45 +1718,58 @@ class _FileTableViewState extends State<FileTableView> {
       );
     }).toList();
 
-    return _buildTableCard(
-      Theme(
-        data: Theme.of(context).copyWith(dividerColor: shadBorder),
-        child: DataTable2(
-          showCheckboxColumn: false,
-          columnSpacing: 0,
-          horizontalMargin: 0,
-          headingRowColor: const WidgetStatePropertyAll(shadCard),
-          dataRowColor: const WidgetStatePropertyAll(shadCard),
-          sortColumnIndex: sortColumnIndex,
-          sortAscending: sortAscending,
-          columns: [
-            if (showSelectColumn)
-              DataColumn2(
-                fixedWidth: 56,
-                label: Center(
-                  child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final modifiedWidth = constraints.maxWidth < 640 ? 140.0 : 170.0;
+        final actionWidth = constraints.maxWidth < 640 ? 48.0 : 56.0;
+        final selectWidth = showSelectColumn ? (constraints.maxWidth < 640 ? 48.0 : 56.0) : 0.0;
+        final fixedWidthTotal = selectWidth + modifiedWidth + actionWidth;
+
+        if (constraints.maxWidth < fixedWidthTotal + 140) {
+          return _buildMobileList(context, widget.forceShowSelect, true, selectAllValue);
+        }
+
+        return _buildTableCard(
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: shadBorder),
+            child: DataTable2(
+              showCheckboxColumn: false,
+              columnSpacing: 0,
+              horizontalMargin: 0,
+              headingRowColor: const WidgetStatePropertyAll(shadCard),
+              dataRowColor: const WidgetStatePropertyAll(shadCard),
+              sortColumnIndex: sortColumnIndex,
+              sortAscending: sortAscending,
+              columns: [
+                if (showSelectColumn)
+                  DataColumn2(
+                    fixedWidth: selectWidth,
+                    label: Center(
+                      child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+                    ),
+                  ),
+                DataColumn2(
+                  label: _getLabel("Name"),
+                  size: ColumnSize.L,
+                  onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.name, ascending)),
                 ),
-              ),
-            DataColumn2(
-              label: _getLabel("Name"),
-              size: ColumnSize.L,
-              onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.name, ascending)),
+                DataColumn2(
+                  label: _getLabel("Modified"),
+                  fixedWidth: modifiedWidth,
+                  onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.modified, ascending)),
+                ),
+                DataColumn2(
+                  label: widget.isRefreshing
+                      ? const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))
+                      : const SizedBox.shrink(),
+                  fixedWidth: actionWidth,
+                ),
+              ],
+              rows: rows,
             ),
-            DataColumn2(
-              label: _getLabel("Modified"),
-              fixedWidth: isMobile ? 125 : 170,
-              onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.modified, ascending)),
-            ),
-            DataColumn2(
-              label: widget.isRefreshing
-                  ? const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))
-                  : const SizedBox.shrink(),
-              fixedWidth: 56,
-            ),
-          ],
-          rows: rows,
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

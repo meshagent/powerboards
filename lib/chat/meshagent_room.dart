@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/markdown.dart';
 import 'package:powerboards/meshagent/project.dart';
@@ -44,10 +45,12 @@ import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/meeting_view.dart';
+import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/resizable_split_view.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
 
 const defaultDebugSize = 0.4;
+final meetingHeaderTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600);
 
 class ParticipantsButton extends StatefulWidget {
   const ParticipantsButton({super.key, required this.participants, required this.localParticipant});
@@ -205,6 +208,7 @@ class InviteUserButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final compact = PaneHeaderActionScope.compactOf(context);
 
     return Tooltip(
       message: "Invite user",
@@ -217,7 +221,7 @@ class InviteUserButton extends StatelessWidget {
             await showUpdateRoomPermsDialog(context, projectId: projectId, room: room);
           }
         },
-        child: isMobile ? null : Text("Invite"),
+        child: isMobile || compact ? null : Text("Invite"),
       ),
     );
   }
@@ -231,6 +235,7 @@ class MeetButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final compact = PaneHeaderActionScope.compactOf(context);
 
     return Tooltip(
       message: "Meet",
@@ -243,7 +248,7 @@ class MeetButton extends StatelessWidget {
             controller.enterMeeting();
           }
         },
-        child: isMobile ? null : Text("Meet"),
+        child: isMobile || compact ? null : Text("Meet"),
       ),
     );
   }
@@ -257,18 +262,23 @@ class FilesButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final compact = PaneHeaderActionScope.compactOf(context);
 
     return controller.isFilesShown
         ? Tooltip(
             message: "Hide files",
-            child: ShadButton(leading: Icon(LucideIcons.files), onPressed: controller.hideFiles, child: isMobile ? null : Text("Files")),
+            child: ShadButton(
+              leading: Icon(LucideIcons.files),
+              onPressed: controller.hideFiles,
+              child: isMobile || compact ? null : Text("Files"),
+            ),
           )
         : Tooltip(
             message: "Show files",
             child: ShadButton.outline(
               leading: Icon(LucideIcons.files),
               onPressed: controller.showFiles,
-              child: isMobile ? null : Text("Files"),
+              child: isMobile || compact ? null : Text("Files"),
             ),
           );
   }
@@ -990,11 +1000,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       color: cs.background,
       child: Column(
         children: [
-          ActionsRow(actions: actions),
+          if (isMobile) ActionsRow(actions: actions),
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
-              child: FileManagerView(client: widget.room, hideSystem: true),
+              child: FileManagerView(client: widget.room, hideSystem: true, desktopHeaderActions: isMobile ? const [] : actions),
             ),
           ),
         ],
@@ -1012,7 +1022,36 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       color: cs.background,
       child: Column(
         children: [
-          ActionsRow(actions: actions),
+          if (isMobile)
+            ActionsRow(actions: actions)
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compactActions = shouldCompactPaneHeaderActions(constraints.maxWidth);
+                return PaneHeaderActionScope(
+                  compact: compactActions,
+                  child: SizedBox(
+                    height: headerHeight,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        spacing: desktopPaneHeaderButtonGap,
+                        children: [
+                          IgnorePointer(
+                            child: ShadButton.ghost(
+                              onPressed: () {},
+                              child: Text("Get ready to meet", style: meetingHeaderTitleStyle),
+                            ),
+                          ),
+                          const Spacer(),
+                          ...actions,
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
