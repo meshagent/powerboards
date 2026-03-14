@@ -16,6 +16,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
@@ -158,6 +159,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   final popoverController = ShadPopoverController();
   final ShadContextMenuController _collapsedBreadcrumbMenuController = ShadContextMenuController();
+  final CodePreviewController _codePreviewController = CodePreviewController();
   late final uploadNotifications = UploadProgressNotifications(popoverController: popoverController);
 
   late StreamSubscription<RoomEvent> roomSub;
@@ -220,6 +222,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     uploadNotifications.dispose();
     _collapsedBreadcrumbMenuController.dispose();
     popoverController.dispose();
+    _codePreviewController.dispose();
 
     _visibleSortedFiles.dispose();
     _visibleSelected.dispose();
@@ -974,7 +977,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     return Row(
       spacing: desktopPaneHeaderButtonGap,
       children: [
-        ..._buildFileNavActions(),
+        ..._buildFileCloseAction(),
         Expanded(
           child: Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
@@ -990,10 +993,117 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (_openedFile != null) {
-      return Row(spacing: desktopPaneHeaderButtonGap, children: _buildRouteActions());
+      final children = <Widget>[
+        ..._buildFileCycleActions(),
+        if (_openedFileSupportsEditTabs) _buildOpenFileTabs(),
+        if (_openedFileSupportsExternalSave) _buildExternalSaveButton(),
+        ..._buildRouteActions(),
+      ];
+
+      return SizedBox(
+        height: 52,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.center, spacing: desktopPaneHeaderButtonGap, children: children),
+      );
     }
 
     return Row(spacing: desktopPaneHeaderButtonGap, children: _buildRouteActions());
+  }
+
+  bool get _openedFileSupportsEditTabs {
+    final openedFile = _openedFile;
+    if (openedFile == null) {
+      return false;
+    }
+
+    return editExtensions.contains(_ext(openedFile));
+  }
+
+  bool get _openedFileSupportsExternalSave {
+    final openedFile = _openedFile;
+    if (openedFile == null) {
+      return false;
+    }
+
+    return isCodeFile(openedFile);
+  }
+
+  Widget _buildOpenFileTabs() {
+    final theme = ShadTheme.of(context);
+    final borderColor = theme.colorScheme.foreground.withValues(alpha: 0.16);
+    final radius = theme.radius;
+
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.background,
+        border: Border.all(color: borderColor),
+        borderRadius: radius,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildOpenFileToggleButton(
+            value: 'preview',
+            tooltip: 'Preview',
+            icon: LucideIcons.eye,
+            borderRadius: BorderRadius.only(topLeft: radius.topLeft, bottomLeft: radius.bottomLeft),
+          ),
+          Container(width: 1, height: double.infinity, color: borderColor),
+          _buildOpenFileToggleButton(
+            value: 'edit',
+            tooltip: 'Edit',
+            icon: LucideIcons.pencil,
+            borderRadius: BorderRadius.only(topRight: radius.topRight, bottomRight: radius.bottomRight),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOpenFileToggleButton({
+    required String value,
+    required String tooltip,
+    required IconData icon,
+    required BorderRadius borderRadius,
+  }) {
+    final selected = _tab == value;
+    final theme = ShadTheme.of(context);
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: selected ? theme.colorScheme.foreground : Colors.transparent,
+        borderRadius: borderRadius,
+        child: InkWell(
+          borderRadius: borderRadius,
+          onTap: () => setState(() => _tab = value),
+          child: SizedBox(
+            width: 48,
+            height: 38,
+            child: Icon(icon, size: 18, color: selected ? theme.colorScheme.background : theme.colorScheme.foreground),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExternalSaveButton() {
+    return AnimatedBuilder(
+      animation: _codePreviewController,
+      builder: (context, _) {
+        final saving = _codePreviewController.saving;
+
+        return ShadButton.outline(
+          enabled: _codePreviewController.canSave,
+          onPressed: () async {
+            await _codePreviewController.save();
+          },
+          leading: saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator()) : const Icon(LucideIcons.save),
+          child: const Text("Save"),
+        );
+      },
+    );
   }
 
   Widget _buildMobileToolbar(Set<String> selected) {
@@ -1006,7 +1116,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         crossAxisAlignment: CrossAxisAlignment.end,
         spacing: 6,
         children: [
-          if (_openedFile != null) ..._buildFileNavActions(),
+          if (_openedFile != null) ..._buildFileCloseAction(),
           Expanded(child: showSelectionActions ? _buildSelection(selected) : _buildBreadcrumb()),
           if (showRouteActions) ..._buildRouteActions(),
           Tooltip(
@@ -1021,14 +1131,19 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  List<Widget> _buildFileNavActions() {
-    final canCycleFiles = _visibleSortedFiles.value.length > 1;
-
+  List<Widget> _buildFileCloseAction() {
     return [
       Tooltip(
         message: "Close file",
         child: ShadIconButton.ghost(icon: const Icon(LucideIcons.x), onPressed: _closeFile),
       ),
+    ];
+  }
+
+  List<Widget> _buildFileCycleActions() {
+    final canCycleFiles = _visibleSortedFiles.value.length > 1;
+
+    return [
       if (canCycleFiles)
         Tooltip(
           message: "Previous file",
@@ -1046,6 +1161,15 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (_openedFile != null) {
       return [
         Tooltip(
+          message: "Download",
+          child: ShadIconButton.outline(
+            icon: const Icon(LucideIcons.download),
+            onPressed: () {
+              _downloadFile(_openedFile!);
+            },
+          ),
+        ),
+        Tooltip(
           message: "Delete file",
           child: ShadIconButton.outline(
             icon: const Icon(LucideIcons.trash),
@@ -1054,15 +1178,6 @@ class _FileManagerViewState extends State<FileManagerView> {
               if (confirmDelete == true) {
                 _openEntry(_folderSig.value, true);
               }
-            },
-          ),
-        ),
-        Tooltip(
-          message: "Download",
-          child: ShadIconButton.outline(
-            icon: const Icon(LucideIcons.download),
-            onPressed: () {
-              _downloadFile(_openedFile!);
             },
           ),
         ),
@@ -1280,32 +1395,32 @@ class _FileManagerViewState extends State<FileManagerView> {
   Widget _buildOpenedFile(BuildContext context) {
     if (_openedFile == null) return const SizedBox.shrink();
 
-    final view = fileViewer(widget.client, _openedFile!) ?? DocumentPane(path: _openedFile!, room: widget.client);
-
     final ext = _ext(_openedFile!);
-    final showEdit = editExtensions.contains(ext);
-    if (!showEdit) {
-      return view;
+    final showEditTabs = editExtensions.contains(ext);
+    final showExternalSave = isCodeFile(_openedFile!);
+
+    if (!showExternalSave) {
+      return fileViewer(widget.client, _openedFile!) ?? DocumentPane(path: _openedFile!, room: widget.client);
     }
 
-    final edit = DocumentPane(path: _openedFile!, room: widget.client, forceTextViewer: true);
+    final edit = DocumentPane(
+      path: _openedFile!,
+      room: widget.client,
+      forceTextViewer: true,
+      codePreviewController: _codePreviewController,
+      showCodeToolbar: false,
+    );
+
+    if (!showEditTabs) {
+      return edit;
+    }
+
+    final view = fileViewer(widget.client, _openedFile!) ?? DocumentPane(path: _openedFile!, room: widget.client);
 
     return Column(
       key: ValueKey(_openedFile),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: ShadTabs<String>(
-            value: _tab,
-            onChanged: (v) => setState(() => _tab = v),
-            tabBarConstraints: const BoxConstraints(maxWidth: 400),
-            tabs: const [
-              ShadTab(value: 'preview', child: Text('Preview')),
-              ShadTab(value: 'edit', child: Text('Edit')),
-            ],
-          ),
-        ),
         Expanded(
           child: IndexedStack(
             index: _tab == 'preview' ? 0 : 1,
