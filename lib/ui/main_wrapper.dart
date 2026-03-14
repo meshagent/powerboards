@@ -23,18 +23,21 @@ class MainWrapper extends StatelessWidget {
       explicitChildNodes: true,
       child: Column(
         children: [
-          SizedBox(
-            height: headerHeight,
-            child: Padding(
-              padding: const .symmetric(horizontal: 10),
-              child: Row(
-                children: [
-                  ?leftSideBar,
+          ColoredBox(
+            color: isMobile ? Colors.transparent : shadCard,
+            child: SizedBox(
+              height: headerHeight,
+              child: Padding(
+                padding: const .symmetric(horizontal: 10),
+                child: Row(
+                  children: [
+                    ?leftSideBar,
 
-                  Spacer(),
+                    Spacer(),
 
-                  UserAvatarMenuButton(projectId: projectId, projects: projects),
-                ],
+                    UserAvatarMenuButton(projectId: projectId, projects: projects),
+                  ],
+                ),
               ),
             ),
           ),
