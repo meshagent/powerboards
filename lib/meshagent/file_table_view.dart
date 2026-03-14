@@ -841,44 +841,84 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  PopupMenuItem<_FileAction> _menuItem(_FileAction value, IconData icon, String text) {
-    return PopupMenuItem<_FileAction>(
-      value: value,
-      child: Row(children: [Icon(icon, size: 18), const SizedBox(width: 10), Text(text)]),
-    );
-  }
-
   Widget _buildActionsMenu(String fullPath, bool isFolder) {
-    return PopupMenuButton<_FileAction>(
-      icon: const Icon(LucideIcons.ellipsis),
-      onSelected: (action) async {
-        switch (action) {
-          case _FileAction.open:
-            _openEntry(fullPath, isFolder);
-            break;
-          case _FileAction.delete:
-            await _confirmAndDelete(fullPath, isFolder);
-            break;
-          case _FileAction.upload:
-            await _addFiles(fullPath);
-            break;
-          case _FileAction.compressFolder:
-            await _compressFolder(fullPath);
-            break;
-          case _FileAction.download:
-            await _downloadFile(fullPath);
-            break;
-        }
-      },
-      itemBuilder: (context) => <PopupMenuEntry<_FileAction>>[
-        if (!isFolder) _menuItem(_FileAction.open, LucideIcons.externalLink, 'Open'),
-        if (!isFolder) _menuItem(_FileAction.download, LucideIcons.download, 'Download'),
-        if (isFolder) _menuItem(_FileAction.open, LucideIcons.folderOpen, 'Open folder'),
-        if (isFolder) _menuItem(_FileAction.upload, LucideIcons.upload, 'Upload here'),
-        if (isFolder) _menuItem(_FileAction.compressFolder, LucideIcons.archive, 'Compress folder'),
-        const PopupMenuDivider(),
-        _menuItem(_FileAction.delete, LucideIcons.trash, 'Delete'),
-      ],
+    final controller = ShadContextMenuController();
+
+    Future<void> onAction(_FileAction action) async {
+      switch (action) {
+        case _FileAction.open:
+          _openEntry(fullPath, isFolder);
+          break;
+        case _FileAction.delete:
+          await _confirmAndDelete(fullPath, isFolder);
+          break;
+        case _FileAction.upload:
+          await _addFiles(fullPath);
+          break;
+        case _FileAction.compressFolder:
+          await _compressFolder(fullPath);
+          break;
+        case _FileAction.download:
+          await _downloadFile(fullPath);
+          break;
+      }
+    }
+
+    List<ShadContextMenuItem> items() {
+      return [
+        if (!isFolder)
+          ShadContextMenuItem(
+            height: 40.0,
+            leading: const Icon(LucideIcons.externalLink, size: 16),
+            onPressed: () => onAction(_FileAction.open),
+            child: const Text('Open'),
+          ),
+        if (!isFolder)
+          ShadContextMenuItem(
+            height: 40.0,
+            leading: const Icon(LucideIcons.download, size: 16),
+            onPressed: () => onAction(_FileAction.download),
+            child: const Text('Download'),
+          ),
+        if (isFolder)
+          ShadContextMenuItem(
+            height: 40.0,
+            leading: const Icon(LucideIcons.folderOpen, size: 16),
+            onPressed: () => onAction(_FileAction.open),
+            child: const Text('Open folder'),
+          ),
+        if (isFolder)
+          ShadContextMenuItem(
+            height: 40.0,
+            leading: const Icon(LucideIcons.upload, size: 16),
+            onPressed: () => onAction(_FileAction.upload),
+            child: const Text('Upload here'),
+          ),
+        if (isFolder)
+          ShadContextMenuItem(
+            height: 40.0,
+            leading: const Icon(LucideIcons.archive, size: 16),
+            onPressed: () => onAction(_FileAction.compressFolder),
+            child: const Text('Compress folder'),
+          ),
+        ShadContextMenuItem(
+          height: 40.0,
+          leading: const Icon(LucideIcons.trash, size: 16),
+          onPressed: () => onAction(_FileAction.delete),
+          child: const Text('Delete'),
+        ),
+      ];
+    }
+
+    return ShadContextMenu(
+      controller: controller,
+      constraints: const BoxConstraints(minWidth: 200),
+      items: items(),
+      child: ShadGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: controller.show,
+        child: const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsis, size: 20))),
+      ),
     );
   }
 
@@ -909,7 +949,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   spacing: desktopPaneHeaderButtonGap,
                   children: [
                     Expanded(
-                      child: Align(alignment: Alignment.centerLeft, child: _buildBreadcrumb()),
+                      child: Align(alignment: Alignment.centerLeft, child: _buildDesktopHeaderLeading()),
                     ),
                     if (desktopActions.isNotEmpty) ...desktopActions,
                   ],
@@ -924,6 +964,24 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  Widget _buildDesktopHeaderLeading() {
+    if (_openedFile == null) {
+      return _buildBreadcrumb();
+    }
+
+    final fileName = _openedFile!.split('/').last;
+
+    return Row(
+      spacing: desktopPaneHeaderButtonGap,
+      children: [
+        ..._buildFileNavActions(),
+        Expanded(
+          child: Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDesktopContextToolbar(Set<String> selected) {
     final showSelectionActions = selected.isNotEmpty && _openedFile == null;
 
@@ -932,17 +990,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (_openedFile != null) {
-      final fileName = _openedFile!.split('/').last;
-      return Row(
-        spacing: desktopPaneHeaderButtonGap,
-        children: [
-          ..._buildFileNavActions(),
-          Expanded(
-            child: Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          ..._buildRouteActions(),
-        ],
-      );
+      return Row(spacing: desktopPaneHeaderButtonGap, children: _buildRouteActions());
     }
 
     return Row(spacing: desktopPaneHeaderButtonGap, children: _buildRouteActions());
@@ -1511,6 +1559,17 @@ class _FileTableViewState extends State<FileTableView> {
     return Icon(ascending ? LucideIcons.arrowUpAZ : LucideIcons.arrowDownAZ, size: 16, color: shadMutedForeground);
   }
 
+  Widget _fileSelectionCheckbox({required bool value, required ShadDecoration decoration, ValueChanged<bool?>? onChanged}) {
+    final checkboxForeground = ShadTheme.of(context).colorScheme.primaryForeground;
+
+    return ShadCheckbox(
+      decoration: decoration,
+      value: value,
+      icon: value ? Icon(LucideIcons.check, size: 14, weight: 3, color: checkboxForeground) : null,
+      onChanged: onChanged,
+    );
+  }
+
   Widget _buildSortButton({required String label, required bool active, required bool ascending, required VoidCallback onPressed}) {
     return ShadButton.ghost(
       onPressed: onPressed,
@@ -1600,7 +1659,7 @@ class _FileTableViewState extends State<FileTableView> {
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTap: () => widget.onToggleSelected(key, !isSelected),
-                                  child: ShadCheckbox(decoration: checkboxDecoration, value: isSelected),
+                                  child: _fileSelectionCheckbox(decoration: checkboxDecoration, value: isSelected),
                                 ),
                               ),
                             ),
@@ -1679,7 +1738,7 @@ class _FileTableViewState extends State<FileTableView> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => widget.onToggleSelected(key, !isSelected),
-                  child: ShadCheckbox(decoration: checkboxDecoration, value: isSelected),
+                  child: _fileSelectionCheckbox(decoration: checkboxDecoration, value: isSelected),
                 ),
               ),
             ),
