@@ -600,6 +600,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             key: ValueKey("new-thread-$agentName-${widget.newThreadResetVersion}-$_inlineNewThreadResetVersion"),
             room: widget.client,
             agentName: agentName,
+            controller: _chatController,
             onThreadPathChanged: _onNewThreadPathChanged,
             toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, agentName, controller, snapshot),
             builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
@@ -853,7 +854,9 @@ Widget buildTools(BuildContext context, RoomClient room, String? agentName, Chat
                     server: MCPServer(
                       serverLabel: e.mcp!.label,
                       serverUrl: getBaseUrl(s, p, e),
-                      headers: e.mcp!.headers,
+                      headers: e.mcp!.headers == null
+                          ? null
+                          : [for (final header in e.mcp!.headers!.entries) MCPHeader(name: header.key, value: header.value)],
                       openaiConnectorId: e.mcp!.openaiConnectorId,
                     ),
                     oauth: e.mcp!.oauth,
