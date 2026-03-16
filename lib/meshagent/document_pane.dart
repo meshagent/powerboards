@@ -11,6 +11,7 @@ import 'package:meshagent_flutter_shadcn/viewers/gallery.dart';
 import 'package:meshagent_flutter_shadcn/viewers/presentation.dart';
 import 'package:meshagent_flutter_shadcn/viewers/transcript.dart';
 import 'package:path/path.dart' as p;
+import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -48,6 +49,18 @@ class _DocumentPane extends State<DocumentPane> {
       _override = value;
       _reload++;
     });
+  }
+
+  void _open(String path) {
+    final state = PathRouteMatch.of(context);
+    final currentUri = state.uri;
+
+    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    updatedQueryParameters['p'] = path;
+
+    final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
+
+    context.go(newUri.toString());
   }
 
   String _ext(String path) {
@@ -101,6 +114,7 @@ class _DocumentPane extends State<DocumentPane> {
                               document: document,
                               room: widget.room,
                               toolsBuilder: (context, controller, _) => ChatThreadAttachButton(controller: controller),
+                              openFile: _open,
                             ),
                             "gallery" => GalleryViewer(client: widget.room, document: document),
                             "presentation" => SingleChildScrollView(
