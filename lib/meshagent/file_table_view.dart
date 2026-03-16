@@ -32,6 +32,8 @@ import 'file_upload.dart';
 
 const Set<String> editExtensions = {"md"};
 const String placeholderFileName = ".placeholder";
+const double filePaneDesktopContextToolbarHeight = 48;
+const double filePaneToolbarContentGap = 6;
 
 enum FileSortField { name, modified }
 
@@ -141,8 +143,17 @@ class FileManagerView extends StatefulWidget {
   final RoomClient client;
   final bool hideSystem;
   final List<Widget> desktopHeaderActions;
+  final ValueChanged<bool>? onDesktopHeaderCompactChanged;
+  final bool preferDesktopHeaderCompact;
 
-  const FileManagerView({super.key, required this.client, this.hideSystem = false, this.desktopHeaderActions = const []});
+  const FileManagerView({
+    super.key,
+    required this.client,
+    this.hideSystem = false,
+    this.desktopHeaderActions = const [],
+    this.onDesktopHeaderCompactChanged,
+    this.preferDesktopHeaderCompact = false,
+  });
 
   @override
   State<FileManagerView> createState() => _FileManagerViewState();
@@ -156,6 +167,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   bool _forceShowSelect = false;
   String _tab = 'preview';
+  bool? _lastReportedDesktopHeaderCompact;
 
   final popoverController = ShadPopoverController();
   final ShadContextMenuController _collapsedBreadcrumbMenuController = ShadContextMenuController();
@@ -944,9 +956,16 @@ class _FileManagerViewState extends State<FileManagerView> {
           height: headerHeight,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final compactActions = shouldCompactPaneHeaderActions(constraints.maxWidth);
+              final compactActions =
+                  widget.preferDesktopHeaderCompact ||
+                  shouldCompactPaneHeaderActions(
+                    constraints.maxWidth,
+                    leadingWidth: _estimateDesktopHeaderLeadingWidth(context, constraints.maxWidth),
+                  );
+              _reportDesktopHeaderCompactChanged(compactActions);
               return PaneHeaderActionScope(
                 compact: compactActions,
+                iconOnly: true,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   spacing: desktopPaneHeaderButtonGap,
@@ -954,7 +973,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                     Expanded(
                       child: Align(alignment: Alignment.centerLeft, child: _buildDesktopHeaderLeading()),
                     ),
-                    if (desktopActions.isNotEmpty) ...desktopActions,
+                    if (desktopActions.isNotEmpty)
+                      Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: desktopActions),
                   ],
                 ),
               );
@@ -1004,15 +1024,22 @@ class _FileManagerViewState extends State<FileManagerView> {
             ..._buildRouteActions(),
           ];
 
-          return SizedBox(
-            height: 52,
-            child: Row(crossAxisAlignment: CrossAxisAlignment.center, spacing: gap, children: children),
-          );
+          return _buildDesktopContextToolbarRow(children: children, gap: gap);
         },
       );
     }
 
-    return Row(spacing: desktopPaneHeaderButtonGap, children: _buildRouteActions());
+    return _buildDesktopContextToolbarRow(children: _buildRouteActions());
+  }
+
+  Widget _buildDesktopContextToolbarRow({required List<Widget> children, double gap = desktopPaneHeaderButtonGap}) {
+    return SizedBox(
+      height: filePaneDesktopContextToolbarHeight,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, spacing: gap, children: children),
+      ),
+    );
   }
 
   bool get _openedFileSupportsEditTabs {
@@ -1099,8 +1126,9 @@ class _FileManagerViewState extends State<FileManagerView> {
       animation: _codePreviewController,
       builder: (context, _) {
         final saving = _codePreviewController.saving;
+        final needsSaveAttention = _codePreviewController.dirty || saving;
 
-        return ShadButton.outline(
+        return (needsSaveAttention ? ShadButton.destructive : ShadButton.outline)(
           enabled: _codePreviewController.canSave,
           onPressed: () async {
             await _codePreviewController.save();
@@ -1250,19 +1278,21 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget _buildSelection(Set<String> selected) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        spacing: 8,
-        children: [
-          Text('${selected.length} selected', style: breadcrumbLinkStyle),
-          const SizedBox.shrink(),
-          ShadButton.destructive(onPressed: () => _confirmAndDeleteSelected(), child: const Text("Delete")),
-          ShadButton.outline(onPressed: _clearSelected, child: Text(isMobile ? "Clear" : "Clear selection")),
-        ],
+    final countPadding = isMobile ? 4.0 : 6.0;
+    final children = <Widget>[
+      ShadButton.outline(onPressed: _clearSelected, child: Text(isMobile ? "Clear" : "Clear selection")),
+      ShadButton.destructive(onPressed: () => _confirmAndDeleteSelected(), child: const Text("Delete")),
+      Padding(
+        padding: EdgeInsets.symmetric(horizontal: countPadding),
+        child: Text('${selected.length} selected', style: breadcrumbLinkStyle),
       ),
-    );
+    ];
+
+    if (!isMobile) {
+      return _buildDesktopContextToolbarRow(children: children, gap: 8);
+    }
+
+    return Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: children);
   }
 
   double _measureBreadcrumbLabelWidth(BuildContext context, String label) {
@@ -1273,6 +1303,41 @@ class _FileManagerViewState extends State<FileManagerView> {
     )..layout();
 
     return painter.width;
+  }
+
+  void _reportDesktopHeaderCompactChanged(bool compactActions) {
+    if (_lastReportedDesktopHeaderCompact == compactActions) {
+      return;
+    }
+
+    _lastReportedDesktopHeaderCompact = compactActions;
+    Future<void>.microtask(() {
+      if (!mounted || _lastReportedDesktopHeaderCompact != compactActions) {
+        return;
+      }
+      widget.onDesktopHeaderCompactChanged?.call(compactActions);
+    });
+  }
+
+  double _estimateDesktopHeaderLeadingWidth(BuildContext context, double maxWidth) {
+    final openedFile = _openedFile;
+    if (openedFile != null) {
+      final fileName = openedFile.split('/').last;
+      final closeActionWidth = 40.0 + desktopPaneHeaderButtonGap;
+      final fileNameWidth = _measureBreadcrumbLabelWidth(context, fileName) + 24.0;
+      return math.min(closeActionWidth + fileNameWidth, maxWidth * 0.5);
+    }
+
+    final segments = _folderBreadcrumbSegments();
+    var width = 0.0;
+    for (var i = 0; i < segments.length; i++) {
+      width += _measureBreadcrumbLabelWidth(context, segments[i].label) + 40.0;
+      if (i > 0) {
+        width += 20.0;
+      }
+    }
+
+    return math.min(width, maxWidth * 0.5);
   }
 
   List<_BreadcrumbSegment> _folderBreadcrumbSegments() {
@@ -1298,7 +1363,21 @@ class _FileManagerViewState extends State<FileManagerView> {
   Widget _buildBreadcrumbCrumb(_BreadcrumbSegment segment) {
     return ShadButton.ghost(
       onPressed: () => _openEntry(segment.path, true),
-      child: Text(segment.label, style: breadcrumbLinkStyle),
+      child: Text(segment.label, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+    );
+  }
+
+  Widget _buildCollapsedBreadcrumbCurrent(_BreadcrumbSegment segment) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _openEntry(segment.path, true),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Text(segment.label, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      ),
     );
   }
 
@@ -1352,8 +1431,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         const separatorWidth = 20.0;
-        const crumbChromeWidth = 28.0;
-        const collapseButtonWidth = 40.0;
+        // Keep a little safety margin so ghost-button chrome collapses
+        // before the row reaches a visible overflow.
+        const crumbChromeWidth = 40.0;
+        const collapseButtonWidth = 44.0;
 
         final segmentWidths = segments
             .map((segment) => _measureBreadcrumbLabelWidth(context, segment.label) + crumbChromeWidth)
@@ -1382,8 +1463,15 @@ class _FileManagerViewState extends State<FileManagerView> {
 
         final children = <Widget>[];
         if (hiddenCount > 0) {
-          children.add(_buildCollapsedBreadcrumbMenu(segments.take(hiddenCount).toList(growable: false)));
-          children.add(_breadcrumbSeparator());
+          return Row(
+            children: [
+              _buildCollapsedBreadcrumbMenu(segments.take(hiddenCount).toList(growable: false)),
+              _breadcrumbSeparator(),
+              Expanded(
+                child: Align(alignment: Alignment.centerLeft, child: _buildCollapsedBreadcrumbCurrent(segments.last)),
+              ),
+            ],
+          );
         }
 
         for (var i = startIndex; i < segments.length; i++) {
@@ -1461,7 +1549,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 crossAxisAlignment: .start,
                 children: [
                   _buildToolbar(selected),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: filePaneToolbarContentGap),
                   Expanded(
                     child: IndexedStack(
                       index: _openedFile == null ? 0 : 1,

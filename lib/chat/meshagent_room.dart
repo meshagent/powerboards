@@ -208,7 +208,7 @@ class InviteUserButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final compact = PaneHeaderActionScope.compactOf(context);
+    final iconOnly = PaneHeaderActionScope.iconOnlyOf(context);
 
     return Tooltip(
       message: "Invite user",
@@ -221,7 +221,7 @@ class InviteUserButton extends StatelessWidget {
             await showUpdateRoomPermsDialog(context, projectId: projectId, room: room);
           }
         },
-        child: isMobile || compact ? null : Text("Invite"),
+        child: isMobile || iconOnly ? null : Text("Invite"),
       ),
     );
   }
@@ -235,7 +235,7 @@ class MeetButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final compact = PaneHeaderActionScope.compactOf(context);
+    final iconOnly = PaneHeaderActionScope.iconOnlyOf(context);
 
     return Tooltip(
       message: "Meet",
@@ -248,7 +248,7 @@ class MeetButton extends StatelessWidget {
             controller.enterMeeting();
           }
         },
-        child: isMobile || compact ? null : Text("Meet"),
+        child: isMobile || iconOnly ? null : Text("Meet"),
       ),
     );
   }
@@ -262,7 +262,7 @@ class FilesButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final compact = PaneHeaderActionScope.compactOf(context);
+    final iconOnly = PaneHeaderActionScope.iconOnlyOf(context);
 
     return controller.isFilesShown
         ? Tooltip(
@@ -270,7 +270,7 @@ class FilesButton extends StatelessWidget {
             child: ShadButton(
               leading: Icon(LucideIcons.files),
               onPressed: controller.hideFiles,
-              child: isMobile || compact ? null : Text("Files"),
+              child: isMobile || iconOnly ? null : Text("Files"),
             ),
           )
         : Tooltip(
@@ -278,7 +278,7 @@ class FilesButton extends StatelessWidget {
             child: ShadButton.outline(
               leading: Icon(LucideIcons.files),
               onPressed: controller.showFiles,
-              child: isMobile || compact ? null : Text("Files"),
+              child: isMobile || iconOnly ? null : Text("Files"),
             ),
           );
   }
@@ -342,10 +342,12 @@ class MeshagentRoomController extends Controller {
   bool _isFilesShown = false;
   bool _isDebugShown = false;
   bool _inMeeting = false;
+  bool _preferCompactPaneActions = false;
 
   bool get isFilesShown => _isFilesShown;
   bool get isDebugShown => _isDebugShown;
   bool get inMeeting => _inMeeting;
+  bool get preferCompactPaneActions => _preferCompactPaneActions;
 
   void showFiles() {
     _isFilesShown = true;
@@ -355,6 +357,15 @@ class MeshagentRoomController extends Controller {
 
   void hideFiles() {
     _isFilesShown = false;
+    notifyListeners();
+  }
+
+  void setPreferCompactPaneActions(bool value) {
+    if (_preferCompactPaneActions == value) {
+      return;
+    }
+
+    _preferCompactPaneActions = value;
     notifyListeners();
   }
 
@@ -429,7 +440,7 @@ class ActionsRow extends StatelessWidget {
     return SizedBox(
       height: headerHeight,
       child: Padding(
-        padding: .symmetric(horizontal: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Row(spacing: 8, crossAxisAlignment: .center, children: act),
       ),
     );
@@ -1004,7 +1015,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
-              child: FileManagerView(client: widget.room, hideSystem: true, desktopHeaderActions: isMobile ? const [] : actions),
+              child: FileManagerView(
+                client: widget.room,
+                hideSystem: true,
+                desktopHeaderActions: isMobile ? const [] : actions,
+                onDesktopHeaderCompactChanged: controller.setPreferCompactPaneActions,
+                preferDesktopHeaderCompact: controller.preferCompactPaneActions,
+              ),
             ),
           ),
         ],
@@ -1027,9 +1044,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           else
             LayoutBuilder(
               builder: (context, constraints) {
-                final compactActions = shouldCompactPaneHeaderActions(constraints.maxWidth);
+                final compactActions =
+                    controller.preferCompactPaneActions ||
+                    shouldCompactPaneHeaderActions(
+                      constraints.maxWidth,
+                      leadingWidth: _measureMeetingHeaderTitleWidth(context, constraints.maxWidth),
+                    );
                 return PaneHeaderActionScope(
                   compact: compactActions,
+                  iconOnly: true,
                   child: SizedBox(
                     height: headerHeight,
                     child: Padding(
@@ -1037,21 +1060,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       child: Row(
                         spacing: desktopPaneHeaderButtonGap,
                         children: [
-                          Flexible(
-                            child: IgnorePointer(
-                              child: ShadButton.ghost(
-                                onPressed: () {},
-                                child: Text(
-                                  "Get ready to meet",
-                                  style: meetingHeaderTitleStyle,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                "Get ready to meet",
+                                style: meetingHeaderTitleStyle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
-                          const Spacer(),
-                          ...actions,
+                          if (actions.isNotEmpty)
+                            Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: actions),
                         ],
                       ),
                     ),
@@ -1170,6 +1191,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         },
       ),
     );
+  }
+
+  double _measureMeetingHeaderTitleWidth(BuildContext context, double maxWidth) {
+    final painter = TextPainter(
+      text: TextSpan(text: "Get ready to meet", style: meetingHeaderTitleStyle),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+    )..layout();
+
+    return painter.width.clamp(0.0, maxWidth * 0.45);
   }
 
   @override
