@@ -196,8 +196,9 @@ class _MeetingActions extends State<MeetingToolkits> {
             ) !=
             null;
 
-        return Row(
+        return Wrap(
           spacing: 8,
+          runSpacing: 8,
           children: [
             if (startRecording != null && !transcribing)
               ShadButton.outline(

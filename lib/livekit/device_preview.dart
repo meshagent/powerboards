@@ -257,10 +257,12 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
               ),
             ),
             const SizedBox(height: 20),
-            SizedBox(
-              height: 40,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+            Center(
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   RoomToolbarButton(
                     key: const Key('device-setttings-camera-button'),
@@ -281,7 +283,6 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                         : null,
                     icon: videoOn ? LucideIcons.video : LucideIcons.videoOff,
                   ),
-                  const SizedBox(width: 8),
                   RoomToolbarButton(
                     key: const Key('device-setttings-mic-button'),
                     text: deviceManager.canTurnOnMicrophone
@@ -301,7 +302,6 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                         : null,
                     icon: audioOn ? LucideIcons.mic : LucideIcons.micOff,
                   ),
-                  const SizedBox(width: 8),
                   ChangeDeviceButton(
                     onChangeVideoInput: _selectVideoInput,
                     onChangeAudioInput: _selectAudioInput,
@@ -323,25 +323,20 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                       );
                     },
                   ),
-
-                  if (widget.onJoin != null) ...[
-                    const SizedBox(width: 10),
+                  if (widget.onJoin != null)
                     ShadButton(
                       onPressed: () {
                         widget.onJoin?.call(videoOn, audioOn);
                       },
                       child: const Text("Meet Now"),
                     ),
-                  ],
-                  if (widget.onCancel != null) ...[
-                    const SizedBox(width: 10),
-                    ShadButton.secondary(
+                  if (widget.onCancel != null)
+                    ShadButton.outline(
                       onPressed: () {
                         widget.onCancel?.call();
                       },
                       child: const Text("Cancel"),
                     ),
-                  ],
                 ],
               ),
             ),
