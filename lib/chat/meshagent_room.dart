@@ -439,9 +439,14 @@ class ActionsRow extends StatelessWidget {
 
     return SizedBox(
       height: headerHeight,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Row(spacing: 8, crossAxisAlignment: .center, children: act),
+      child: Center(
+        child: SizedBox(
+          height: desktopPaneHeaderContentHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(spacing: 8, crossAxisAlignment: .center, children: act),
+          ),
+        ),
       ),
     );
   }
@@ -900,6 +905,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return Column(
       children: [
         ActionsRow(actions: actions),
+        _buildDesktopSecondaryControlSpacer(context),
         _buildAgentsActionRow(context),
         Expanded(
           child: Builder(
@@ -926,6 +932,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return Column(
       children: [
         ActionsRow(actions: chatActions),
+        _buildDesktopChatViewportCutoffSpacer(context),
         _buildAgentsActionRow(context, showNewThreadButton: isDefaultNewThreading && isMobile),
         Expanded(
           child: MeshagentThreadView(
@@ -948,6 +955,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return Column(
       children: [
         ActionsRow(actions: actions),
+        _buildDesktopPaneContentSpacer(context),
         _buildAgentsActionRow(context),
         Expanded(
           child: WaitForAgentParticipantBuilder(
@@ -982,6 +990,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       builder: (context, participant) => Column(
         children: [
           ActionsRow(actions: actions),
+          _buildDesktopPaneContentSpacer(context),
           _buildAgentsActionRow(context),
           Expanded(
             child: participant == null
@@ -1056,25 +1065,30 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   iconOnly: true,
                   child: SizedBox(
                     height: headerHeight,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        spacing: desktopPaneHeaderButtonGap,
-                        children: [
-                          Expanded(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                "Get ready to meet",
-                                style: meetingHeaderTitleStyle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                    child: Center(
+                      child: SizedBox(
+                        height: desktopPaneHeaderContentHeight,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            spacing: desktopPaneHeaderButtonGap,
+                            children: [
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    "Get ready to meet",
+                                    style: meetingHeaderTitleStyle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ),
-                            ),
+                              if (actions.isNotEmpty)
+                                Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: actions),
+                            ],
                           ),
-                          if (actions.isNotEmpty)
-                            Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: actions),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -1083,7 +1097,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             ),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
+              padding: EdgeInsets.fromLTRB(horizontalInset, isMobile ? 0 : desktopPaneHeaderToContentOffset, horizontalInset, bottomInset),
               child: MeetingView(room: widget.room, onCancel: _leaveMeeting, joinMeeting: _joinMeeting, agentName: agentName),
             ),
           ),
@@ -1109,6 +1123,33 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     setState(() {
       _newThreadResetVersion++;
     });
+  }
+
+  Widget _buildDesktopPaneContentSpacer(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    if (isMobile) {
+      return const SizedBox.shrink();
+    }
+
+    return const SizedBox(height: desktopPaneHeaderToContentOffset);
+  }
+
+  Widget _buildDesktopChatViewportCutoffSpacer(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    if (isMobile) {
+      return const SizedBox.shrink();
+    }
+
+    return const SizedBox(height: desktopPaneHeaderToChatViewportOffset);
+  }
+
+  Widget _buildDesktopSecondaryControlSpacer(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    if (isMobile) {
+      return const SizedBox.shrink();
+    }
+
+    return const SizedBox(height: desktopPaneSecondaryControlTopOffset);
   }
 
   Widget _buildAgentArea(BuildContext context, List<Widget> actions) {

@@ -3,6 +3,13 @@ import 'package:flutter/widgets.dart';
 const double desktopPaneHeaderButtonGap = 8;
 const double desktopPaneHeaderActionReserve = 72;
 const double desktopPaneHeaderExpandedActionsWidthEstimate = 380;
+const double desktopPaneHeaderContentHeight = 44;
+const double desktopPaneSecondaryControlTopOffset = 16;
+const double desktopPaneSecondaryControlHeight = 40;
+const double desktopPaneSecondaryRowContentGap = 6;
+const double desktopPaneHeaderToContentOffset =
+    desktopPaneSecondaryControlTopOffset + desktopPaneSecondaryControlHeight + desktopPaneSecondaryRowContentGap;
+const double desktopPaneHeaderToChatViewportOffset = desktopPaneSecondaryControlTopOffset;
 
 bool shouldCompactPaneHeaderActions(
   double maxWidth, {

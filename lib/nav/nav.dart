@@ -21,6 +21,7 @@ import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/empty_states.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
+import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -579,15 +580,20 @@ class _NavBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const SizedBox(height: desktopPaneSecondaryControlTopOffset),
           Padding(
-            padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 0),
-            child: ShadInput(
-              decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.background),
-              key: const Key('room-list-search-field'),
-              onChanged: setFilter,
-              placeholder: Text("Filter rooms..."),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SizedBox(
+              height: desktopPaneSecondaryControlHeight,
+              child: ShadInput(
+                decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.background),
+                key: const Key('room-list-search-field'),
+                onChanged: setFilter,
+                placeholder: Text("Filter rooms..."),
+              ),
             ),
           ),
+          const SizedBox(height: desktopPaneSecondaryRowContentGap),
           Expanded(
             child: projectId == null
                 ? Center(child: CircularProgressIndicator())
@@ -711,86 +717,90 @@ class _NavBarTopState extends State<_NavBarTop> {
                   ],
                 ),
               ),
-            if (!isSmallDisplay) SizedBox(height: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  spacing: 16,
-                  children: [
-                    if (!isSmallDisplay) const NavMainLogo(size: 30),
-                    Expanded(
-                      child: ShadSelect<String?>(
-                        anchor: const ShadAnchor(
-                          childAlignment: Alignment.topRight,
-                          overlayAlignment: Alignment.bottomRight,
-                          offset: Offset(0, 4),
-                        ),
-                        decoration: .none,
-                        padding: .zero,
-                        maxHeight: selectHeight,
-                        controller: projectSelectController,
-                        popoverController: popoverController,
-                        placeholder: const Text('Select project'),
-                        showScrollToTopChevron: false,
-                        showScrollToBottomChevron: false,
-                        onChanged: (value) {
-                          if (value != null && context.mounted) {
-                            localStorage.setItem("lastProjectId", value);
-                            context.go("/p/${fromUUID(value)}");
-                          }
-                        },
-                        options: [
-                          if (projectsReady)
-                            ...projectList.map(
-                              (project) => ShadOption<String?>(
-                                value: project.id,
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(minWidth: 200),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
-                                    child: Text(project.name, overflow: TextOverflow.ellipsis),
+            if (!isSmallDisplay)
+              SizedBox(
+                height: headerHeight,
+                child: Center(
+                  child: SizedBox(
+                    height: desktopPaneHeaderContentHeight,
+                    child: Row(
+                      spacing: 16,
+                      children: [
+                        const NavMainLogo(size: 30),
+                        Expanded(
+                          child: ShadSelect<String?>(
+                            anchor: const ShadAnchor(
+                              childAlignment: Alignment.topRight,
+                              overlayAlignment: Alignment.bottomRight,
+                              offset: Offset(0, 4),
+                            ),
+                            decoration: .none,
+                            padding: .zero,
+                            maxHeight: selectHeight,
+                            controller: projectSelectController,
+                            popoverController: popoverController,
+                            placeholder: const Text('Select project'),
+                            showScrollToTopChevron: false,
+                            showScrollToBottomChevron: false,
+                            onChanged: (value) {
+                              if (value != null && context.mounted) {
+                                localStorage.setItem("lastProjectId", value);
+                                context.go("/p/${fromUUID(value)}");
+                              }
+                            },
+                            options: [
+                              if (projectsReady)
+                                ...projectList.map(
+                                  (project) => ShadOption<String?>(
+                                    value: project.id,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(minWidth: 200),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4),
+                                        child: Text(
+                                          project.name,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(color: ShadTheme.of(context).colorScheme.foreground),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                        ],
-                        trailing: isSmallDisplay
-                            ? null
-                            : const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsisVertical))),
-                        footer: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            ShadSeparator.horizontal(margin: .zero),
-                            _ProjectSelectFooterButton(onPressed: widget.onCreateProject),
-                          ],
-                        ),
-                        selectedOptionBuilder: (context, value) {
-                          final effectiveValue = value == _newProjectValue ? widget.projectId : value;
-                          final displayName = effectiveValue == null
-                              ? selectedProject?.name
-                              : projectList.firstWhereOrNull((p) => p.id == effectiveValue)?.name ?? selectedProject?.name;
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  displayName ?? 'Select project',
-                                  style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: const Color(0xFF222222)),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
                             ],
-                          );
-                        },
-                      ),
+                            trailing: const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsisVertical))),
+                            footer: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                ShadSeparator.horizontal(margin: .zero),
+                                _ProjectSelectFooterButton(onPressed: widget.onCreateProject),
+                              ],
+                            ),
+                            selectedOptionBuilder: (context, value) {
+                              final effectiveValue = value == _newProjectValue ? widget.projectId : value;
+                              final displayName = effectiveValue == null
+                                  ? selectedProject?.name
+                                  : projectList.firstWhereOrNull((p) => p.id == effectiveValue)?.name ?? selectedProject?.name;
+                              return Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      displayName ?? 'Select project',
+                                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: const Color(0xFF222222)),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ],
-            ),
+              ),
           ],
         ),
       ),

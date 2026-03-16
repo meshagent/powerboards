@@ -34,8 +34,6 @@ import 'file_upload.dart';
 
 const Set<String> editExtensions = {"md"};
 const String placeholderFileName = ".placeholder";
-const double filePaneDesktopContextToolbarHeight = 48;
-const double filePaneToolbarContentGap = 6;
 
 enum FileSortField { name, modified }
 
@@ -965,22 +963,27 @@ class _FileManagerViewState extends State<FileManagerView> {
               return PaneHeaderActionScope(
                 compact: compactActions,
                 iconOnly: true,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  spacing: desktopPaneHeaderButtonGap,
-                  children: [
-                    Expanded(
-                      child: Align(alignment: Alignment.centerLeft, child: _buildDesktopHeaderLeading()),
+                child: Center(
+                  child: SizedBox(
+                    height: desktopPaneHeaderContentHeight,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      spacing: desktopPaneHeaderButtonGap,
+                      children: [
+                        Expanded(
+                          child: Align(alignment: Alignment.centerLeft, child: _buildDesktopHeaderLeading()),
+                        ),
+                        if (desktopActions.isNotEmpty)
+                          Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: desktopActions),
+                      ],
                     ),
-                    if (desktopActions.isNotEmpty)
-                      Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: desktopActions),
-                  ],
+                  ),
                 ),
               );
             },
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: desktopPaneSecondaryControlTopOffset),
         _buildDesktopContextToolbar(selected),
       ],
     );
@@ -1033,14 +1036,11 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget _buildDesktopContextToolbarRow({required List<Widget> children, double gap = desktopPaneHeaderButtonGap}) {
     return SizedBox(
-      height: filePaneDesktopContextToolbarHeight,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          clipBehavior: Clip.none,
-          child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, spacing: gap, children: children),
-        ),
+      height: desktopPaneSecondaryControlHeight,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        clipBehavior: Clip.none,
+        child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, spacing: gap, children: children),
       ),
     );
   }
@@ -1557,7 +1557,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 crossAxisAlignment: .start,
                 children: [
                   _buildToolbar(selected),
-                  const SizedBox(height: filePaneToolbarContentGap),
+                  const SizedBox(height: desktopPaneSecondaryRowContentGap),
                   Expanded(
                     child: IndexedStack(
                       index: _openedFile == null ? 0 : 1,
