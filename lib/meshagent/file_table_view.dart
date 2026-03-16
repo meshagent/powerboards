@@ -24,6 +24,8 @@ import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
+import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/text_validators.dart';
@@ -856,9 +858,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Widget _buildActionsMenu(String fullPath, bool isFolder) {
-    final controller = ShadContextMenuController();
-
+  Widget _buildActionsMenu(BuildContext? boundaryContext, String fullPath, bool isFolder, bool showTrigger) {
     Future<void> onAction(_FileAction action) async {
       switch (action) {
         case _FileAction.open:
@@ -925,15 +925,14 @@ class _FileManagerViewState extends State<FileManagerView> {
       ];
     }
 
-    return ShadContextMenu(
-      controller: controller,
-      constraints: const BoxConstraints(minWidth: 200),
-      items: items(),
-      child: ShadGestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: controller.show,
-        child: const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsis, size: 20))),
-      ),
+    final menuItems = items();
+    return _FileActionsMenuButton(
+      key: ValueKey(_FilePathKey.keyForPath(fullPath, isFolder)),
+      boundaryContext: boundaryContext,
+      items: menuItems,
+      estimatedMenuWidth: 200,
+      estimatedMenuHeight: menuItems.length * 40.0 + 8.0,
+      showTrigger: showTrigger,
     );
   }
 
@@ -1037,7 +1036,11 @@ class _FileManagerViewState extends State<FileManagerView> {
       height: filePaneDesktopContextToolbarHeight,
       child: Align(
         alignment: Alignment.centerLeft,
-        child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, spacing: gap, children: children),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          clipBehavior: Clip.none,
+          child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, spacing: gap, children: children),
+        ),
       ),
     );
   }
@@ -1244,6 +1247,8 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget _buildUploadMenu() {
     return AppContextMenuButton(
+      compact: true,
+      boundaryContext: context,
       entries: [
         AppMenuEntry(
           title: "Upload files",
@@ -1260,6 +1265,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           onPressed: _showNewTextFileDialog,
         ),
       ],
+      constraints: const BoxConstraints(minWidth: 200),
       childBuilder: (context, controller) {
         return Tooltip(
           message: "Upload file",
@@ -1382,10 +1388,12 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildCollapsedBreadcrumbMenu(List<_BreadcrumbSegment> hiddenSegments) {
-    return ShadContextMenu(
+    return AdaptiveShadContextMenu(
       controller: _collapsedBreadcrumbMenuController,
+      boundaryContext: context,
       constraints: const BoxConstraints(minWidth: 200),
-      anchor: const ShadAnchor(childAlignment: Alignment.topLeft, overlayAlignment: Alignment.bottomLeft, offset: Offset(0, 4)),
+      estimatedMenuWidth: 200,
+      estimatedMenuHeight: hiddenSegments.length * 40.0 + 8.0,
       items: hiddenSegments.reversed
           .map(
             (segment) => ShadContextMenuItem(
@@ -1433,8 +1441,8 @@ class _FileManagerViewState extends State<FileManagerView> {
         const separatorWidth = 20.0;
         // Keep a little safety margin so ghost-button chrome collapses
         // before the row reaches a visible overflow.
-        const crumbChromeWidth = 40.0;
-        const collapseButtonWidth = 44.0;
+        const crumbChromeWidth = 52.0;
+        const collapseButtonWidth = 48.0;
 
         final segmentWidths = segments
             .map((segment) => _measureBreadcrumbLabelWidth(context, segment.label) + crumbChromeWidth)
@@ -1619,7 +1627,7 @@ class FileTableView extends StatefulWidget {
   final void Function(String key, bool selected) onToggleSelected;
   final void Function(bool selected) onToggleAllSelected;
   final void Function(FileSort) onSortChanged;
-  final Widget Function(String fullPath, bool isFolder) buildActionsMenu;
+  final Widget Function(BuildContext? boundaryContext, String fullPath, bool isFolder, bool showTrigger) buildActionsMenu;
 
   const FileTableView({
     super.key,
@@ -1645,6 +1653,7 @@ class _FileTableViewState extends State<FileTableView> {
   static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x66, 0x66, 0x66));
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
+  final GlobalKey _tableCardKey = GlobalKey();
 
   @override
   void initState() {
@@ -1685,6 +1694,7 @@ class _FileTableViewState extends State<FileTableView> {
     );
 
     return DecoratedBox(
+      key: _tableCardKey,
       decoration: BoxDecoration(
         color: shadCard,
         border: Border.all(color: shadBorder, width: borderWidth),
@@ -1758,16 +1768,6 @@ class _FileTableViewState extends State<FileTableView> {
 
   Widget _hoverRegion(String rowKey, Widget child) {
     return MouseRegion(opaque: true, onEnter: (_) => _setHovered(rowKey), onExit: (_) => _clearHoveredIf(rowKey), child: child);
-  }
-
-  Widget _hoverShow(String rowKey, bool alwaysShow, Widget child) {
-    return ValueListenableBuilder<String?>(
-      valueListenable: _hoveredRowKey,
-      builder: (_, hoveredKey, _) {
-        final show = alwaysShow || hoveredKey == rowKey;
-        return Visibility(visible: show, maintainSize: true, maintainAnimation: true, maintainState: true, child: child);
-      },
-    );
   }
 
   Icon _sortIcon(bool ascending) {
@@ -1893,7 +1893,15 @@ class _FileTableViewState extends State<FileTableView> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          _hoverShow(key, alwaysShowMenu || isSelected, widget.buildActionsMenu(fullPath, entry.isFolder)),
+                          ValueListenableBuilder<String?>(
+                            valueListenable: _hoveredRowKey,
+                            builder: (_, hoveredKey, _) => widget.buildActionsMenu(
+                              _tableCardKey.currentContext,
+                              fullPath,
+                              entry.isFolder,
+                              alwaysShowMenu || isSelected || hoveredKey == key,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1985,7 +1993,17 @@ class _FileTableViewState extends State<FileTableView> {
           DataCell(
             _hoverRegion(
               key,
-              _hoverShow(key, alwaysShowMenu || isSelected, Center(child: widget.buildActionsMenu(fullPath, entry.isFolder))),
+              ValueListenableBuilder<String?>(
+                valueListenable: _hoveredRowKey,
+                builder: (_, hoveredKey, _) => Center(
+                  child: widget.buildActionsMenu(
+                    _tableCardKey.currentContext,
+                    fullPath,
+                    entry.isFolder,
+                    alwaysShowMenu || isSelected || hoveredKey == key,
+                  ),
+                ),
+              ),
             ),
           ),
         ],
@@ -2044,6 +2062,79 @@ class _FileTableViewState extends State<FileTableView> {
           ),
         );
       },
+    );
+  }
+}
+
+class _FileActionsMenuButton extends StatefulWidget {
+  const _FileActionsMenuButton({
+    super.key,
+    required this.items,
+    required this.estimatedMenuWidth,
+    required this.estimatedMenuHeight,
+    required this.showTrigger,
+    this.boundaryContext,
+  });
+
+  final List<Widget> items;
+  final double estimatedMenuWidth;
+  final double estimatedMenuHeight;
+  final bool showTrigger;
+  final BuildContext? boundaryContext;
+
+  @override
+  State<_FileActionsMenuButton> createState() => _FileActionsMenuButtonState();
+}
+
+class _FileActionsMenuButtonState extends State<_FileActionsMenuButton> {
+  late final ShadContextMenuController _controller = ShadContextMenuController();
+  bool _menuOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_syncOpenState);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_syncOpenState);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _syncOpenState() {
+    if (_menuOpen == _controller.isOpen) {
+      return;
+    }
+
+    setState(() {
+      _menuOpen = _controller.isOpen;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showTrigger = widget.showTrigger || _menuOpen;
+    return AdaptiveShadContextMenu(
+      controller: _controller,
+      boundaryContext: widget.boundaryContext,
+      constraints: const BoxConstraints(minWidth: 200),
+      estimatedMenuWidth: widget.estimatedMenuWidth,
+      estimatedMenuHeight: widget.estimatedMenuHeight,
+      items: widget.items,
+      child: IgnorePointer(
+        ignoring: !showTrigger,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 120),
+          opacity: showTrigger ? 1 : 0,
+          child: ShadGestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _controller.show,
+            child: const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsis, size: 20))),
+          ),
+        ),
+      ),
     );
   }
 }

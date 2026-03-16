@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'audio_stats.dart';
@@ -240,8 +241,10 @@ class _ExpandableShareTileState extends State<_ExpandableShareTile> {
                   child: AnimatedOpacity(
                     duration: _contextMenuAnimDuration,
                     opacity: showMenuButton ? 1 : 0,
-                    child: ShadContextMenu(
+                    child: AdaptiveShadContextMenu(
                       controller: _buttonMenuController,
+                      estimatedMenuWidth: 128,
+                      estimatedMenuHeight: _menuItems.length * 40.0 + 8.0,
                       items: _menuItems,
                       popoverReverseDuration: _contextMenuAnimDuration,
                       child: ShadIconButton.outline(

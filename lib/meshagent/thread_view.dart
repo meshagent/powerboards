@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:super_sliver_list/super_sliver_list.dart';
@@ -907,9 +908,11 @@ class _ThreadListItemState extends State<_ThreadListItem> {
             onPressed: widget.onOpen,
             mainAxisAlignment: MainAxisAlignment.start,
             expands: true,
-            trailing: ShadContextMenu(
+            trailing: AdaptiveShadContextMenu(
               controller: _menuController,
               constraints: const BoxConstraints(minWidth: 180),
+              estimatedMenuWidth: 180,
+              estimatedMenuHeight: 2 * 40.0 + 8.0,
               items: [
                 ShadContextMenuItem(
                   height: 40,

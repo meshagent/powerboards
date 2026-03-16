@@ -650,15 +650,15 @@ class ChangeSettings extends StatelessWidget {
       onChangeVideoInput: (device) => _selectVideoInput(context, device),
       onChangeAudioInput: (device) => _selectAudioInput(context, device),
       onChangeAudioOutput: (device) => _selectAudioOutput(context, device),
-      renderButton: (MenuController controller) {
+      renderButton: (ShadContextMenuController controller) {
         return Tooltip(
           message: "Change device",
           child: ShadIconButton.outline(
             onPressed: () {
               if (controller.isOpen) {
-                controller.close();
+                controller.hide();
               } else {
-                controller.open();
+                controller.show();
               }
             },
             icon: const Icon(LucideIcons.settings),

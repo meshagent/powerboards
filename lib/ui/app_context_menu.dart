@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class AppMenuEntry {
@@ -19,15 +20,19 @@ class AppContextMenuButton extends StatefulWidget {
     required this.entries,
     required this.childBuilder,
     this.anchor,
+    this.boundaryContext,
     this.constraints = const BoxConstraints(minWidth: 320, maxWidth: 420),
     this.radius = 12,
+    this.compact = false,
   });
 
   final List<AppMenuEntry> entries;
   final Widget Function(BuildContext, ShadContextMenuController) childBuilder;
   final ShadAnchorBase? anchor;
+  final BuildContext? boundaryContext;
   final BoxConstraints constraints;
   final double radius;
+  final bool compact;
 
   @override
   State<AppContextMenuButton> createState() => _AppContextMenuButtonState();
@@ -44,18 +49,62 @@ class _AppContextMenuButtonState extends State<AppContextMenuButton> {
 
   @override
   Widget build(BuildContext context) {
-    return ShadContextMenu(
+    return AdaptiveShadContextMenu(
       controller: controller,
       anchor: widget.anchor,
+      boundaryContext: widget.boundaryContext,
       constraints: widget.constraints,
-      padding: EdgeInsets.zero,
-      decoration: ShadDecoration(
-        border: ShadBorder.all(color: const Color(0xFFE5E5E5), radius: BorderRadius.circular(widget.radius)),
-      ),
-      items: _buildItems(widget.entries, radius: widget.radius),
+      estimatedMenuWidth: _estimatedMenuWidth(widget.constraints),
+      estimatedMenuHeight: _estimatedMenuHeight(widget.entries.length, compact: widget.compact),
+      padding: widget.compact ? const EdgeInsets.symmetric(vertical: 4) : EdgeInsets.zero,
+      decoration: widget.compact
+          ? null
+          : ShadDecoration(
+              border: ShadBorder.all(color: const Color(0xFFE3E3E3), radius: BorderRadius.circular(widget.radius)),
+            ),
+      items: widget.compact ? _buildCompactItems(widget.entries) : _buildItems(widget.entries, radius: widget.radius),
       child: widget.childBuilder(context, controller),
     );
   }
+}
+
+double _estimatedMenuWidth(BoxConstraints constraints) {
+  if (constraints.minWidth > 0) {
+    return constraints.minWidth;
+  }
+
+  if (constraints.hasBoundedWidth && constraints.maxWidth.isFinite) {
+    return constraints.maxWidth;
+  }
+
+  return 128;
+}
+
+double _estimatedMenuHeight(int entryCount, {required bool compact}) {
+  if (entryCount <= 0) {
+    return 0;
+  }
+
+  if (compact) {
+    return entryCount * 40.0;
+  }
+
+  final separatorCount = entryCount - 1;
+  return entryCount * 80.0 + separatorCount;
+}
+
+List<Widget> _buildCompactItems(List<AppMenuEntry> entries) {
+  return entries
+      .map(
+        (e) => ShadContextMenuItem(
+          height: 40,
+          onPressed: e.onPressed,
+          leading: e.leading ?? (e.icon != null ? Icon(e.icon, size: 16) : null),
+          trailing: e.selected ? const Icon(LucideIcons.check, size: 16) : null,
+          child: Text(e.title, overflow: TextOverflow.ellipsis),
+        ),
+      )
+      .toList(growable: false);
 }
 
 List<Widget> _buildItems(List<AppMenuEntry> entries, {required double radius}) {
