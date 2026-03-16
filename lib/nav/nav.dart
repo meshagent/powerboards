@@ -478,7 +478,7 @@ class _NavState extends State<Nav> {
           child: Row(
             children: [
               Spacer(),
-              UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
+              UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
             ],
           ),
         ),
@@ -706,7 +706,8 @@ class _NavBarTopState extends State<_NavBarTop> {
                   children: [
                     const NavMainLogo(),
                     const Spacer(),
-                    if (isSmallDisplay) UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
+                    if (isSmallDisplay)
+                      UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
                   ],
                 ),
               ),
@@ -721,7 +722,11 @@ class _NavBarTopState extends State<_NavBarTop> {
                     if (!isSmallDisplay) const NavMainLogo(size: 30),
                     Expanded(
                       child: ShadSelect<String?>(
-                        anchor: ShadAnchor(childAlignment: .topLeft),
+                        anchor: const ShadAnchor(
+                          childAlignment: Alignment.topRight,
+                          overlayAlignment: Alignment.bottomRight,
+                          offset: Offset(0, 4),
+                        ),
                         decoration: .none,
                         padding: .zero,
                         maxHeight: selectHeight,
@@ -751,17 +756,15 @@ class _NavBarTopState extends State<_NavBarTop> {
                               ),
                             ),
                         ],
-                        trailing: isSmallDisplay ? null : Icon(LucideIcons.ellipsisVertical),
+                        trailing: isSmallDisplay
+                            ? null
+                            : const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsisVertical))),
                         footer: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             ShadSeparator.horizontal(margin: .zero),
-                            ShadButton.ghost(
-                              onPressed: widget.onCreateProject,
-                              leading: Icon(LucideIcons.plus, size: 16),
-                              child: const Text("New Project"),
-                            ),
+                            _ProjectSelectFooterButton(onPressed: widget.onCreateProject),
                           ],
                         ),
                         selectedOptionBuilder: (context, value) {
@@ -779,7 +782,6 @@ class _NavBarTopState extends State<_NavBarTop> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(width: 8),
                             ],
                           );
                         },
@@ -791,6 +793,40 @@ class _NavBarTopState extends State<_NavBarTop> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ProjectSelectFooterButton extends StatelessWidget {
+  const _ProjectSelectFooterButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final radius = theme.radius;
+
+    return ShadButton.ghost(
+      width: double.infinity,
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      hoverBackgroundColor: theme.colorScheme.accent,
+      pressedBackgroundColor: theme.colorScheme.accent,
+      decoration: ShadDecoration(
+        border: ShadBorder.all(
+          radius: BorderRadius.only(bottomLeft: radius.bottomLeft, bottomRight: radius.bottomRight),
+        ),
+        secondaryBorder: ShadBorder.none,
+        focusedBorder: ShadBorder.none,
+        secondaryFocusedBorder: ShadBorder.none,
+      ),
+      onPressed: onPressed,
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [Icon(LucideIcons.plus, size: 16), SizedBox(width: 12), Text("New Project")],
       ),
     );
   }

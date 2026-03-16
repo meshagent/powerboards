@@ -863,8 +863,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           roomController: controller,
           isOwner: isOwner,
           canViewDeveloperLogs: canViewDeveloperLogs,
+          boundaryContext: context,
         ),
-        UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
+        UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
       ],
     ];
   }
@@ -1364,8 +1365,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                     roomController: controller,
                                     isOwner: isOwner,
                                     canViewDeveloperLogs: canViewDeveloperLogs,
+                                    boundaryContext: context,
                                   ),
-                                  UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
+                                  UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
                                 ];
 
                                 final cs = ShadTheme.of(context).colorScheme;

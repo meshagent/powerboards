@@ -35,7 +35,7 @@ class MainWrapper extends StatelessWidget {
 
                     Spacer(),
 
-                    UserAvatarMenuButton(projectId: projectId, projects: projects),
+                    UserAvatarMenuButton(projectId: projectId, projects: projects, boundaryContext: context),
                   ],
                 ),
               ),

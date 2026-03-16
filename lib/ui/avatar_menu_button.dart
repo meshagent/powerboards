@@ -15,9 +15,10 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class UserAvatarMenuButton extends StatefulWidget {
-  const UserAvatarMenuButton({super.key, required this.projectId, required this.projects});
+  const UserAvatarMenuButton({super.key, required this.projectId, required this.projects, this.boundaryContext});
   final String? projectId;
   final Resource<List<Project>> projects;
+  final BuildContext? boundaryContext;
 
   @override
   State<UserAvatarMenuButton> createState() => _UserAvatarMenuButtonState();
@@ -178,6 +179,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
         ];
 
         return AppContextMenuButton(
+          boundaryContext: widget.boundaryContext ?? context,
           entries: entries,
           childBuilder: (context, controller) {
             return Tooltip(
