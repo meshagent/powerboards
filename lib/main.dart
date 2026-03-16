@@ -52,6 +52,35 @@ const breakpointsLandscape = [
   Breakpoint(start: 2561, end: double.infinity, name: '4K'),
 ];
 
+void _configureDebugPrintFilter() {
+  final originalDebugPrint = debugPrint;
+  debugPrint = (String? message, {int? wrapWidth}) {
+    if (message == null) {
+      return;
+    }
+    if (message.startsWith('get language error:')) {
+      return;
+    }
+    originalDebugPrint(message, wrapWidth: wrapWidth);
+  };
+}
+
+bool _isExpectedLifecycleCancellation(Object error) {
+  final text = '$error'.toLowerCase();
+  return text.contains('room client disposed') || text.contains('protocol disposed');
+}
+
+bool _isExpectedWebHotRestartViewDispose(Object error, [StackTrace? stackTrace]) {
+  if (!(kDebugMode && kIsWeb)) {
+    return false;
+  }
+
+  final errorText = '$error';
+  final stackText = stackTrace?.toString() ?? '';
+  return errorText.contains('Trying to render a disposed EngineFlutterView') ||
+      (errorText.contains('org-dartlang-sdk:///lib/_engine/engine/window.dart:99:12') &&
+          stackText.contains('Trying to render a disposed EngineFlutterView'));
+}
 void main() async {
   SolidartConfig.assertSignalBuilderWithoutDependencies = false;
 
@@ -91,6 +120,14 @@ void main() async {
 
 Future<void> startApp() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _configureDebugPrintFilter();
+  final originalFlutterErrorHandler = FlutterError.onError;
+  FlutterError.onError = (details) {
+    if (_isExpectedWebHotRestartViewDispose(details.exception, details.stack)) {
+      return;
+    }
+    originalFlutterErrorHandler?.call(details);
+  };
   setPathUrlStrategy();
 
   await initializeApp();
