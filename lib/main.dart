@@ -52,6 +52,39 @@ const breakpointsLandscape = [
   Breakpoint(start: 2561, end: double.infinity, name: '4K'),
 ];
 
+void _configureDebugPrintFilter() {
+  final originalDebugPrint = debugPrint;
+  debugPrint = (String? message, {int? wrapWidth}) {
+    if (message == null) {
+      return;
+    }
+    if (message.startsWith('get language error:')) {
+      return;
+    }
+    originalDebugPrint(message, wrapWidth: wrapWidth);
+  };
+}
+
+bool _isExpectedWebHotRestartViewDispose(Object error, [StackTrace? stackTrace]) {
+  if (!(kDebugMode && kIsWeb)) {
+    return false;
+  }
+
+  final errorText = '$error';
+  final stackText = stackTrace?.toString() ?? '';
+  return errorText.contains('Trying to render a disposed EngineFlutterView') ||
+      (errorText.contains('org-dartlang-sdk:///lib/_engine/engine/window.dart:99:12') &&
+          stackText.contains('Trying to render a disposed EngineFlutterView'));
+}
+
+bool _isExpectedRoomClientDisposed(Object error, [StackTrace? stackTrace]) {
+  final errorText = '$error';
+  final stackText = stackTrace?.toString() ?? '';
+  return errorText.contains('room client disposed') ||
+      errorText.contains('room connection closed before request completed') ||
+      stackText.contains('room client disposed');
+}
+
 void main() async {
   SolidartConfig.assertSignalBuilderWithoutDependencies = false;
 
@@ -78,10 +111,16 @@ void main() async {
     runZonedGuarded(
       startApp,
       (object, stackTrace) {
+        if (_isExpectedRoomClientDisposed(object, stackTrace)) {
+          return;
+        }
         debugPrint("Unhandled exception $object $stackTrace");
       },
       zoneSpecification: ZoneSpecification(
         handleUncaughtError: (self, parent, zone, error, stackTrace) {
+          if (_isExpectedRoomClientDisposed(error, stackTrace)) {
+            return;
+          }
           debugPrint("Unhandled exception handled $error $stackTrace");
         },
       ),
@@ -91,6 +130,15 @@ void main() async {
 
 Future<void> startApp() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _configureDebugPrintFilter();
+  final originalFlutterErrorHandler = FlutterError.onError;
+  FlutterError.onError = (details) {
+    if (_isExpectedWebHotRestartViewDispose(details.exception, details.stack) ||
+        _isExpectedRoomClientDisposed(details.exception, details.stack)) {
+      return;
+    }
+    originalFlutterErrorHandler?.call(details);
+  };
   setPathUrlStrategy();
 
   await initializeApp();
@@ -162,9 +210,36 @@ class MyApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       theme: ShadThemeData(
-        colorScheme: ShadColorScheme.fromName("neutral"),
+        colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
-        textTheme: ShadTextTheme.fromGoogleFont(GoogleFonts.inter),
+        textTheme: powerboardsShadTextTheme(),
+        primaryDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        alertDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        popoverTheme: ShadPopoverTheme(
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        contextMenuTheme: ShadContextMenuTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+          selectedBackgroundColor: shadMuted,
+        ),
+        menubarTheme: ShadMenubarTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        outlineButtonTheme: ShadButtonTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
+        ),
       ),
 
       builder: (context, child) {
@@ -217,26 +292,74 @@ class _RootProvidersState extends State<_RootProviders> {
 
   @override
   Widget build(BuildContext context) {
+    final materialTheme = Theme.of(context).copyWith(
+      popupMenuTheme: PopupMenuThemeData(
+        color: shadCard,
+        surfaceTintColor: shadCard,
+        shape: RoundedRectangleBorder(
+          side: const BorderSide(color: shadBorder, width: 1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: const WidgetStatePropertyAll(shadCard),
+          surfaceTintColor: const WidgetStatePropertyAll(shadCard),
+          side: const WidgetStatePropertyAll(BorderSide(color: shadBorder, width: 1)),
+          shape: WidgetStateProperty.all<OutlinedBorder>(const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10)))),
+        ),
+      ),
+    );
     return ShadTheme(
       data: ShadThemeData(
-        colorScheme: ShadColorScheme.fromName("neutral"),
+        colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
-        textTheme: ShadTextTheme.fromGoogleFont(GoogleFonts.inter),
+        textTheme: powerboardsShadTextTheme(),
+        primaryDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        alertDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        popoverTheme: ShadPopoverTheme(
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        contextMenuTheme: ShadContextMenuTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+          selectedBackgroundColor: shadMuted,
+        ),
+        menubarTheme: ShadMenubarTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        outlineButtonTheme: ShadButtonTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
+        ),
       ),
       child: ChromeVisibility(
-        child: Material(
-          type: MaterialType.transparency,
-          child: Directionality(
-            key: uiRoot,
-            textDirection: TextDirection.ltr,
-            child: ResponsiveBreakpoints.builder(
-              breakpoints: breakpoints,
-              breakpointsLandscape: breakpointsLandscape,
-              child: ControllerProvider(
-                controller: navController,
+        child: Theme(
+          data: materialTheme,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Directionality(
+              key: uiRoot,
+              textDirection: TextDirection.ltr,
+              child: ResponsiveBreakpoints.builder(
+                breakpoints: breakpoints,
+                breakpointsLandscape: breakpointsLandscape,
                 child: ControllerProvider(
-                  controller: meetingViewController,
-                  child: Portal(child: widget.child),
+                  controller: navController,
+                  child: ControllerProvider(
+                    controller: meetingViewController,
+                    child: Portal(child: widget.child),
+                  ),
                 ),
               ),
             ),

@@ -81,22 +81,19 @@ class MeetingView extends StatelessWidget {
             (videoRoom == null && meetingViewController.state == MeetingViewState.joined);
 
         if (inPreview) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
-            child: DevicePreview(
-              onJoin: (enableVideo, enableAudio) {
-                final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
-                final navController = Controller.ofType<NavController>(context);
+          return DevicePreview(
+            onJoin: (enableVideo, enableAudio) {
+              final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
+              final navController = Controller.ofType<NavController>(context);
 
-                if (videoChatConnection != null) {
-                  videoChatConnection.setRoomFromDoc("", room, "", video: enableVideo, audio: enableAudio, agentID: null);
-                }
+              if (videoChatConnection != null) {
+                videoChatConnection.setRoomFromDoc("", room, "", video: enableVideo, audio: enableAudio, agentID: null);
+              }
 
-                meetingViewController.enterMeeting();
-                navController.hideNav();
-              },
-              onCancel: onCancel,
-            ),
+              meetingViewController.enterMeeting();
+              navController.hideNav();
+            },
+            onCancel: onCancel,
           );
         } else if (meetingViewController.state == MeetingViewState.joined) {
           final room = VideoRoomModel.maybeOf(context)?.room;
@@ -199,8 +196,9 @@ class _MeetingActions extends State<MeetingToolkits> {
             ) !=
             null;
 
-        return Row(
+        return Wrap(
           spacing: 8,
+          runSpacing: 8,
           children: [
             if (startRecording != null && !transcribing)
               ShadButton.outline(

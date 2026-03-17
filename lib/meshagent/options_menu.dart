@@ -16,6 +16,7 @@ class RoomOptionsMenu extends StatefulWidget {
   final MeshagentRoomController roomController;
   final Resource<bool> isOwner;
   final Resource<bool> canViewDeveloperLogs;
+  final BuildContext? boundaryContext;
 
   const RoomOptionsMenu({
     super.key,
@@ -24,6 +25,7 @@ class RoomOptionsMenu extends StatefulWidget {
     required this.roomController,
     required this.isOwner,
     required this.canViewDeveloperLogs,
+    this.boundaryContext,
   });
 
   @override
@@ -85,7 +87,10 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
         ];
 
         return AppContextMenuButton(
+          compact: true,
+          boundaryContext: widget.boundaryContext ?? context,
           entries: entries,
+          constraints: const BoxConstraints(minWidth: 220),
           childBuilder: (context, controller) {
             return Tooltip(
               message: "Room options",

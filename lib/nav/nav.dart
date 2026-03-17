@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart' as fs;
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,7 +11,6 @@ import 'package:localstorage/localstorage.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:vector_graphics/vector_graphics.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -21,6 +21,7 @@ import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/empty_states.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
+import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -289,6 +290,7 @@ class _NavState extends State<Nav> {
         return ShadResizablePanelGroup(
           axis: .horizontal,
           showHandle: true,
+          dividerColor: Colors.transparent,
           controller: resizeController,
           children: [
             // left nav
@@ -299,7 +301,7 @@ class _NavState extends State<Nav> {
                 minSize: minRatio,
                 maxSize: maxRatio,
                 child: ColoredBox(
-                  color: cs.accent,
+                  color: cs.background,
                   child: Column(
                     mainAxisSize: .min,
                     children: [
@@ -364,22 +366,25 @@ class _NavState extends State<Nav> {
     }
 
     if (widget.selectedRoom == null) {
-      return SafeArea(
-        child: Column(
-          children: [
-            _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
-            Expanded(
-              child: _NavBar(
-                projectId: widget.projectId,
-                rooms: filteredRooms,
-                canCreateRooms: canCreateRooms,
-                onSave: () => rooms.refresh(),
-                onRefresh: () => rooms.refresh(),
-                setFilter: setFilter,
-                balanceLow: balanceLow,
+      return ColoredBox(
+        color: ShadTheme.of(context).colorScheme.card,
+        child: SafeArea(
+          child: Column(
+            children: [
+              _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
+              Expanded(
+                child: _NavBar(
+                  projectId: widget.projectId,
+                  rooms: filteredRooms,
+                  canCreateRooms: canCreateRooms,
+                  onSave: () => rooms.refresh(),
+                  onRefresh: () => rooms.refresh(),
+                  setFilter: setFilter,
+                  balanceLow: balanceLow,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     } else {
@@ -398,7 +403,7 @@ class _NavState extends State<Nav> {
 
     return Container(
       constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 48),
-      color: cs.destructive,
+      color: statusError,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
         child: Text.rich(
@@ -406,7 +411,7 @@ class _NavState extends State<Nav> {
             children: [
               TextSpan(
                 text: "Out of Credit - ",
-                style: tt.small.copyWith(fontWeight: FontWeight.bold),
+                style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
               ),
 
               if (userRole == ProjectRole.admin)
@@ -415,7 +420,7 @@ class _NavState extends State<Nav> {
                 TextSpan(text: "Contact your project admin to add more credits."),
             ],
           ),
-          style: tt.small.copyWith(color: cs.background, height: 1.5),
+          style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
           textAlign: TextAlign.center,
         ),
       ),
@@ -429,7 +434,7 @@ class _NavState extends State<Nav> {
 
     return Container(
       constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 48),
-      color: cs.destructive,
+      color: statusError,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
         child: Row(
@@ -441,13 +446,13 @@ class _NavState extends State<Nav> {
                 children: [
                   TextSpan(
                     text: "Low Balance - ",
-                    style: tt.small.copyWith(fontWeight: FontWeight.bold),
+                    style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
                   ),
 
                   TextSpan(text: "Add more credits to avoid service interruption."),
                 ],
               ),
-              style: tt.small.copyWith(color: cs.background, height: 1.5),
+              style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
               textAlign: TextAlign.center,
             ),
             ShadButton(key: const Key('add-credits-button'), onPressed: onAddCredits, child: const Text("Add Credits")),
@@ -478,7 +483,7 @@ class _NavState extends State<Nav> {
           child: Row(
             children: [
               Spacer(),
-              UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
+              UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
             ],
           ),
         ),
@@ -579,15 +584,20 @@ class _NavBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const SizedBox(height: desktopPaneSecondaryControlTopOffset),
           Padding(
-            padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 0),
-            child: ShadInput(
-              decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.background),
-              key: const Key('room-list-search-field'),
-              onChanged: setFilter,
-              placeholder: Text("Filter rooms..."),
+            padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
+            child: SizedBox(
+              height: desktopPaneSecondaryControlHeight,
+              child: ShadInput(
+                decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.input),
+                key: const Key('room-list-search-field'),
+                onChanged: setFilter,
+                placeholder: Text("Filter rooms..."),
+              ),
             ),
           ),
+          const SizedBox(height: desktopPaneSecondaryRowContentGap),
           Expanded(
             child: projectId == null
                 ? Center(child: CircularProgressIndicator())
@@ -611,13 +621,19 @@ class _NavBar extends StatelessWidget {
           ),
           if (canCreateRooms)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.fromLTRB(
+                desktopPaneSideHorizontalInset,
+                10,
+                desktopPaneSideHorizontalInset,
+                desktopPaneBottomInset,
+              ),
               child: ShadButton.outline(
-                decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.foreground.withAlpha(60))),
+                decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
+                backgroundColor: ShadTheme.of(context).colorScheme.background,
                 hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
                 hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
                 key: const Key('nav-create-room-button'),
-                leading: Icon(LucideIcons.plus),
+                leading: Icon(LucideIcons.packagePlus),
                 onPressed: () => addNewRoomDialog(context),
                 child: const Text("New Room"),
               ),
@@ -692,7 +708,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     return DialogAnchor(
       controller: dialogController,
       child: Container(
-        padding: const EdgeInsets.only(left: 20, right: 6),
+        padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -706,91 +722,156 @@ class _NavBarTopState extends State<_NavBarTop> {
                   children: [
                     const NavMainLogo(),
                     const Spacer(),
-                    if (isSmallDisplay) UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects),
+                    if (isSmallDisplay)
+                      UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
                   ],
                 ),
               ),
-            if (!isSmallDisplay) SizedBox(height: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  spacing: 16,
-                  children: [
-                    if (!isSmallDisplay) const NavMainLogo(size: 30),
-                    Expanded(
-                      child: ShadSelect<String?>(
-                        anchor: ShadAnchor(childAlignment: .topLeft),
-                        decoration: .none,
-                        padding: .zero,
-                        maxHeight: selectHeight,
-                        controller: projectSelectController,
-                        popoverController: popoverController,
-                        placeholder: const Text('Select project'),
-                        showScrollToTopChevron: false,
-                        showScrollToBottomChevron: false,
-                        onChanged: (value) {
-                          if (value != null && context.mounted) {
-                            localStorage.setItem("lastProjectId", value);
-                            context.go("/p/${fromUUID(value)}");
-                          }
-                        },
-                        options: [
-                          if (projectsReady)
-                            ...projectList.map(
-                              (project) => ShadOption<String?>(
-                                value: project.id,
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(minWidth: 200),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
-                                    child: Text(project.name, overflow: TextOverflow.ellipsis),
+            if (!isSmallDisplay)
+              SizedBox(
+                height: headerHeight,
+                child: Center(
+                  child: SizedBox(
+                    height: desktopPaneHeaderContentHeight,
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: ShadSelect<String?>(
+                            anchor: const ShadAnchor(
+                              childAlignment: Alignment.topRight,
+                              overlayAlignment: Alignment.bottomRight,
+                              offset: Offset(0, 4),
+                            ),
+                            decoration: .none,
+                            padding: .zero,
+                            maxHeight: selectHeight,
+                            controller: projectSelectController,
+                            popoverController: popoverController,
+                            placeholder: Padding(
+                              padding: const EdgeInsets.only(left: desktopPaneSideHeaderVisualInset),
+                              child: Center(
+                                child: Text('Select project', overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                              ),
+                            ),
+                            trailing: SizedBox(
+                              width: desktopPaneSideHeaderVisualInset,
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: Icon(LucideIcons.chevronsUpDown, size: 20, color: ShadTheme.of(context).colorScheme.foreground),
+                              ),
+                            ),
+                            showScrollToTopChevron: false,
+                            showScrollToBottomChevron: false,
+                            onChanged: (value) {
+                              if (value != null && context.mounted) {
+                                localStorage.setItem("lastProjectId", value);
+                                context.go("/p/${fromUUID(value)}");
+                              }
+                            },
+                            options: [
+                              if (projectsReady)
+                                ...projectList.map(
+                                  (project) => ShadOption<String?>(
+                                    value: project.id,
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(minWidth: 200),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4),
+                                        child: Text(
+                                          project.name,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(color: ShadTheme.of(context).colorScheme.foreground),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                        ],
-                        trailing: isSmallDisplay ? null : Icon(LucideIcons.ellipsisVertical),
-                        footer: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            ShadSeparator.horizontal(margin: .zero),
-                            ShadButton.ghost(
-                              onPressed: widget.onCreateProject,
-                              leading: Icon(LucideIcons.plus, size: 16),
-                              child: const Text("New Project"),
-                            ),
-                          ],
-                        ),
-                        selectedOptionBuilder: (context, value) {
-                          final effectiveValue = value == _newProjectValue ? widget.projectId : value;
-                          final displayName = effectiveValue == null
-                              ? selectedProject?.name
-                              : projectList.firstWhereOrNull((p) => p.id == effectiveValue)?.name ?? selectedProject?.name;
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  displayName ?? 'Select project',
-                                  style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: const Color(0xFF222222)),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
                             ],
-                          );
-                        },
-                      ),
+                            footer: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                ShadSeparator.horizontal(margin: .zero),
+                                _ProjectSelectFooterButton(onPressed: widget.onCreateProject),
+                              ],
+                            ),
+                            selectedOptionBuilder: (context, value) {
+                              final effectiveValue = value == _newProjectValue ? widget.projectId : value;
+                              final displayName = effectiveValue == null
+                                  ? selectedProject?.name
+                                  : projectList.firstWhereOrNull((p) => p.id == effectiveValue)?.name ?? selectedProject?.name;
+                              return Padding(
+                                padding: const EdgeInsets.only(left: desktopPaneSideHeaderVisualInset),
+                                child: Center(
+                                  child: Text(
+                                    displayName ?? 'Select project',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      color: ShadTheme.of(context).colorScheme.foreground,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        const Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: IgnorePointer(
+                            child: SizedBox(
+                              width: desktopPaneSideHeaderSlotSize,
+                              height: desktopPaneSideHeaderSlotSize,
+                              child: Center(child: NavMainLogo(size: desktopPaneSideHeaderSlotSize)),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ],
-            ),
+              ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ProjectSelectFooterButton extends StatelessWidget {
+  const _ProjectSelectFooterButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final radius = theme.radius;
+
+    return ShadButton.ghost(
+      width: double.infinity,
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      hoverBackgroundColor: theme.colorScheme.accent,
+      pressedBackgroundColor: theme.colorScheme.accent,
+      decoration: ShadDecoration(
+        border: ShadBorder.all(
+          radius: BorderRadius.only(bottomLeft: radius.bottomLeft, bottomRight: radius.bottomRight),
+        ),
+        secondaryBorder: ShadBorder.none,
+        focusedBorder: ShadBorder.none,
+        secondaryFocusedBorder: ShadBorder.none,
+      ),
+      onPressed: onPressed,
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [Icon(LucideIcons.plus, size: 16), SizedBox(width: 12), Text("New Project")],
       ),
     );
   }
@@ -802,18 +883,10 @@ class NavMainLogo extends StatelessWidget {
   final double? size;
   @override
   Widget build(BuildContext context) {
-    final cs = ShadTheme.of(context).colorScheme;
-
-    return Container(
+    return SizedBox(
       width: size ?? (kIsWeb ? 42.0 : 46.0),
       height: size ?? (kIsWeb ? 42.0 : 46.0),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: .all(color: Color.from(alpha: 1, red: .5, green: .5, blue: .5), width: 7),
-        borderRadius: .circular(8),
-        color: Color.from(alpha: 1, red: .5, green: .5, blue: .5),
-      ),
-      child: SvgPicture(const AssetBytesLoader('lib/assets/powerboards-logo.vec'), colorFilter: .mode(cs.background, BlendMode.srcIn)),
+      child: fs.SvgPicture.asset('lib/assets/powerboards-brand-symbol.svg', fit: BoxFit.contain),
     );
   }
 }

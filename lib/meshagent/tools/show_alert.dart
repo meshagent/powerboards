@@ -71,7 +71,7 @@ class ShowErrorAlert extends FunctionTool {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: ShadAlert.destructive(
-              decoration: const ShadDecoration(color: Colors.black),
+              decoration: const ShadDecoration(color: Color(0xFF222222)),
               icon: Icon(Icons.error_outline),
               title: Text(title),
               description: Text(description),

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class ChangeDeviceButton extends StatefulWidget {
@@ -22,7 +23,7 @@ class ChangeDeviceButton extends StatefulWidget {
   final Function(MediaDevice device) onChangeVideoInput;
   final Function(MediaDevice device) onChangeAudioInput;
   final Function(MediaDevice device) onChangeAudioOutput;
-  final Function(MenuController controller) renderButton;
+  final Widget Function(ShadContextMenuController controller) renderButton;
 
   @override
   ChangeDeviceButtonState createState() => ChangeDeviceButtonState();
@@ -33,6 +34,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
   late SharedPreferences _preferences;
   late List<MediaDevice> _devices;
   StreamSubscription? _subscription;
+  final ShadContextMenuController _controller = ShadContextMenuController();
 
   @override
   void initState() {
@@ -50,6 +52,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
   @override
   void dispose() {
     _subscription?.cancel();
+    _controller.dispose();
 
     super.dispose();
   }
@@ -109,121 +112,105 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     final selectedAudioInputDevice = audioInputs.firstWhereOrNull((device) => device.deviceId == audioInput) ?? audioInputs.firstOrNull;
     final selectedAudioOutputDevice = audioOutputs.firstWhereOrNull((device) => device.deviceId == audioOutput) ?? audioOutputs.firstOrNull;
 
-    MenuStyle menuStyle = MenuStyle(
-      padding: WidgetStateProperty.all<EdgeInsetsGeometry>(const EdgeInsets.symmetric(vertical: 15)),
-      shape: WidgetStateProperty.all<OutlinedBorder>(const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10)))),
-      backgroundColor: WidgetStateProperty.all<Color>(ShadTheme.of(context).colorScheme.background),
-    );
-
-    return MenuAnchor(
-      builder: (BuildContext context, MenuController controller, Widget? child) {
-        return widget.renderButton(controller);
+    return AdaptiveShadContextMenu(
+      controller: _controller,
+      boundaryContext: context,
+      constraints: const BoxConstraints(minWidth: 260),
+      estimatedMenuWidth: 260,
+      estimatedMenuHeight: _estimatedTopLevelMenuHeight(
+        includeCamera: widget.kind == null || widget.kind == "camera",
+        includeMicrophone: widget.kind == null || widget.kind == "mic",
+        includeSpeakers: (kIsWeb && widget.kind == null) || widget.kind == "mic",
+      ),
+      onHoverArea: (hovering) {
+        if (hovering) {
+          _loadDevices();
+        }
       },
-      style: menuStyle,
-      onOpen: _loadDevices,
-      menuChildren: [
+      items: [
         if (widget.kind == null || widget.kind == "camera")
-          DevicesMenu(
+          _buildDeviceMenuItem(
+            context,
             label: "Camera",
             devices: videoInputs,
             selectedDevice: selectedVideoDevice,
             onChange: onChangeVideoInput,
             icon: LucideIcons.video,
+            disabledLabel: "Camera disabled",
           ),
         if (widget.kind == null || widget.kind == "mic")
-          DevicesMenu(
+          _buildDeviceMenuItem(
+            context,
             label: "Microphone",
             devices: audioInputs,
             selectedDevice: selectedAudioInputDevice,
             onChange: onChangeAudioInput,
             icon: LucideIcons.mic,
+            disabledLabel: "Microphone disabled",
           ),
-        if (kIsWeb && widget.kind == null || widget.kind == "mic")
-          DevicesMenu(
+        if ((kIsWeb && widget.kind == null) || widget.kind == "mic")
+          _buildDeviceMenuItem(
+            context,
             label: "Speakers",
             devices: audioOutputs,
             selectedDevice: selectedAudioOutputDevice,
             onChange: onChangeAudioOutput,
             icon: Icons.volume_down,
+            disabledLabel: "Speakers disabled",
           ),
       ],
+      child: widget.renderButton(_controller),
     );
   }
-}
 
-class DevicesMenu extends StatelessWidget {
-  const DevicesMenu({
-    super.key,
-    required this.devices,
-    required this.selectedDevice,
-    required this.onChange,
-    required this.icon,
-    required this.label,
-  });
+  double _estimatedTopLevelMenuHeight({required bool includeCamera, required bool includeMicrophone, required bool includeSpeakers}) {
+    final itemCount = [includeCamera, includeMicrophone, includeSpeakers].where((include) => include).length;
+    return itemCount * 56.0 + 8.0;
+  }
 
-  final List<MediaDevice> devices;
-  final MediaDevice? selectedDevice;
-  final Function(MediaDevice device) onChange;
-  final IconData icon;
-  final String label;
+  Widget _buildDeviceMenuItem(
+    BuildContext context, {
+    required String label,
+    required List<MediaDevice> devices,
+    required MediaDevice? selectedDevice,
+    required Function(MediaDevice device) onChange,
+    required IconData icon,
+    required String disabledLabel,
+  }) {
+    final theme = ShadTheme.of(context);
+    final selectedLabel = selectedDevice?.label.trim();
+    final submenuItems = devices
+        .map(
+          (device) => ShadContextMenuItem(
+            height: 40,
+            onPressed: () => onChange(device),
+            trailing: device.deviceId == selectedDevice?.deviceId ? const Icon(LucideIcons.check, size: 16) : null,
+            child: Text(device.label, overflow: TextOverflow.ellipsis),
+          ),
+        )
+        .toList(growable: false);
 
-  @override
-  Widget build(BuildContext context) {
-    MenuStyle menuStyle = MenuStyle(
-      padding: WidgetStateProperty.all<EdgeInsetsGeometry>(const EdgeInsets.symmetric(vertical: 15)),
-      shape: WidgetStateProperty.all<OutlinedBorder>(const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10)))),
-      backgroundColor: WidgetStateProperty.all<Color>(ShadTheme.of(context).colorScheme.background),
-    );
+    if (selectedDevice == null) {
+      return ShadContextMenuItem(enabled: true, closeOnTap: false, height: 40, leading: Icon(icon, size: 18), child: Text(disabledLabel));
+    }
 
-    ButtonStyle submenuButtonStyle = ButtonStyle(
-      iconColor: WidgetStateProperty.all<Color>(ShadTheme.of(context).colorScheme.foreground),
-      padding: WidgetStateProperty.all<EdgeInsetsGeometry>(const EdgeInsets.symmetric(vertical: 15, horizontal: 20)),
-      textStyle: WidgetStateProperty.all<TextStyle>(TextStyle(color: ShadTheme.of(context).colorScheme.foreground)),
-    );
-
-    TextStyle titleTextStyle = ShadTheme.of(context).textTheme.small.copyWith(fontWeight: FontWeight.w500, height: 2.0);
-
-    TextStyle menuTextStyle = ShadTheme.of(context).textTheme.small;
-
-    final selectedColor = ShadTheme.of(context).colorScheme.accentForeground;
-    final disabledColor = ShadTheme.of(context).colorScheme.mutedForeground;
-
-    final disabledTextStyle = ShadTheme.of(context).textTheme.muted;
-
-    return selectedDevice != null
-        ? SubmenuButton(
-            style: submenuButtonStyle,
-            leadingIcon: Icon(icon),
-            menuStyle: menuStyle,
-            menuChildren: devices.map((device) {
-              final isSelected = device.deviceId == selectedDevice!.deviceId;
-              return MenuItemButton(
-                style: submenuButtonStyle,
-                trailingIcon: isSelected ? Icon(Icons.check, color: isSelected ? selectedColor : null, size: 14) : null,
-                onPressed: () => onChange(device),
-                child: Text(
-                  device.label,
-                  style: menuTextStyle.copyWith(color: isSelected ? selectedColor : ShadTheme.of(context).colorScheme.foreground),
-                ),
-              );
-            }).toList(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: titleTextStyle),
-                Text(selectedDevice!.label, style: menuTextStyle),
-              ],
+    return ShadContextMenuItem(
+      height: 40,
+      leading: Icon(icon, size: 18),
+      items: submenuItems,
+      constraints: const BoxConstraints(minWidth: 260),
+      child: Row(
+        children: [
+          Expanded(child: Text(label)),
+          if (selectedLabel != null && selectedLabel.isNotEmpty)
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Text(selectedLabel, style: theme.textTheme.muted, overflow: TextOverflow.ellipsis),
+              ),
             ),
-          )
-        : Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Row(
-              children: [
-                Icon(icon, color: disabledColor),
-                const SizedBox(width: 10),
-                Text("$label disabled", style: disabledTextStyle),
-              ],
-            ),
-          );
+        ],
+      ),
+    );
   }
 }

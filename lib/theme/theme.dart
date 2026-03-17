@@ -1,10 +1,124 @@
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:google_fonts/google_fonts.dart";
+import "package:shadcn_ui/shadcn_ui.dart";
 
 const textScale = kIsWeb ? 1.0 : 1.2;
 const headerHeight = 60.0;
-const filledButtonColor = Color(0xFF7752FF);
+const shadBackground = Color(0xFFF5F5F7);
+const shadForeground = Color(0xFF222222);
+const shadCard = Color(0xFFFFFFFF);
+const shadCardForeground = Color(0xFF222222);
+const shadPopover = Color(0xFFFFFFFF);
+const shadPopoverForeground = Color(0xFF222222);
+const shadPrimary = Color(0xFF222222);
+const shadPrimaryForeground = Color(0xFFFFFFFF);
+const shadSecondary = Color(0xFFF6F6F6);
+const shadSecondaryForeground = Color(0xFF383838);
+const shadMuted = Color(0xFFEFEFEF);
+const shadMutedForeground = Color(0xFF666666);
+const shadAccent = Color(0xFFEFEFEF);
+const shadAccentForeground = Color(0xFF222222);
+const shadDestructive = Color(0xFFE5484D);
+const shadDestructiveForeground = Color(0xFFFFFFFF);
+const shadBorder = Color(0xFFE3E3E3);
+const shadInput = Color(0xFFFFFFFF);
+const shadRing = Color(0xFF222222);
+const shadSelection = Color(0xFFE3E3E3);
+const statusError = Color(0xFFE5484D);
+
+const shadDarkBackground = Color(0xFF101012);
+const shadDarkForeground = Color(0xFFF5F5F5);
+const shadDarkCard = Color(0xFF161619);
+const shadDarkCardForeground = Color(0xFFFAFAFA);
+const shadDarkPopover = Color(0xFF1A1B1D);
+const shadDarkPopoverForeground = Color(0xFFFAFAFA);
+const shadDarkPrimary = Color(0xFF9A86F3);
+const shadDarkPrimaryForeground = Color(0xFFFFFFFF);
+const shadDarkSecondary = Color(0xFF212124);
+const shadDarkSecondaryForeground = Color(0xFFE6E6E6);
+const shadDarkMuted = Color(0xFF2A2A2D);
+const shadDarkMutedForeground = Color(0xFFBCBCBC);
+const shadDarkAccent = Color(0xFF4B3DB8);
+const shadDarkAccentForeground = Color(0xFFC1B6FF);
+const shadDarkDestructive = Color(0xFFC44D50);
+const shadDarkDestructiveForeground = Color(0xFFFFFFFF);
+const shadDarkBorder = Color(0xFF3A3A3C);
+const shadDarkInput = Color(0xFF1D1E20);
+const shadDarkRing = Color(0xFF9A86F3);
+const shadDarkSelection = Color(0xFF473A77);
+
+ShadColorScheme powerboardsShadColorScheme() {
+  return ShadColorScheme.fromName("neutral").copyWith(
+    background: shadBackground,
+    foreground: shadForeground,
+    card: shadCard,
+    cardForeground: shadCardForeground,
+    popover: shadPopover,
+    popoverForeground: shadPopoverForeground,
+    primary: shadPrimary,
+    primaryForeground: shadPrimaryForeground,
+    secondary: shadSecondary,
+    secondaryForeground: shadSecondaryForeground,
+    muted: shadMuted,
+    mutedForeground: shadMutedForeground,
+    accent: shadAccent,
+    accentForeground: shadAccentForeground,
+    destructive: shadDestructive,
+    destructiveForeground: shadDestructiveForeground,
+    border: shadBorder,
+    input: shadInput,
+    ring: shadRing,
+    selection: shadSelection,
+  );
+}
+
+ShadColorScheme powerboardsShadDarkColorScheme() {
+  return ShadColorScheme.fromName("neutral").copyWith(
+    background: shadDarkBackground,
+    foreground: shadDarkForeground,
+    card: shadDarkCard,
+    cardForeground: shadDarkCardForeground,
+    popover: shadDarkPopover,
+    popoverForeground: shadDarkPopoverForeground,
+    primary: shadDarkPrimary,
+    primaryForeground: shadDarkPrimaryForeground,
+    secondary: shadDarkSecondary,
+    secondaryForeground: shadDarkSecondaryForeground,
+    muted: shadDarkMuted,
+    mutedForeground: shadDarkMutedForeground,
+    accent: shadDarkAccent,
+    accentForeground: shadDarkAccentForeground,
+    destructive: shadDarkDestructive,
+    destructiveForeground: shadDarkDestructiveForeground,
+    border: shadDarkBorder,
+    input: shadDarkInput,
+    ring: shadDarkRing,
+    selection: shadDarkSelection,
+  );
+}
+
+ShadTextTheme powerboardsShadTextTheme() {
+  final base = ShadTextTheme.fromGoogleFont(GoogleFonts.inter);
+
+  return base.copyWith(
+    h1Large: base.h1Large.copyWith(color: shadForeground),
+    h1: base.h1.copyWith(color: shadForeground),
+    h2: base.h2.copyWith(color: shadForeground),
+    h3: base.h3.copyWith(color: shadForeground),
+    h4: base.h4.copyWith(color: shadForeground),
+    large: base.large.copyWith(color: shadForeground),
+    lead: base.lead.copyWith(color: shadSecondaryForeground),
+    p: base.p.copyWith(color: shadForeground),
+    list: base.list.copyWith(color: shadSecondaryForeground),
+    table: base.table.copyWith(color: shadSecondaryForeground),
+    blockquote: base.blockquote.copyWith(color: shadSecondaryForeground),
+    small: base.small.copyWith(color: shadSecondaryForeground),
+    muted: base.muted.copyWith(color: shadMutedForeground),
+  );
+}
+
+const filledButtonColor = shadPrimary;
 const agentBackgroundColor = Colors.grey;
 const toolIconColor = Color(0xFF47484A);
 const disabledToolIconColor = Color(0xFFAAAAAA);

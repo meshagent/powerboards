@@ -173,7 +173,7 @@ class _AgentInstaller extends State<AgentInstaller> {
   }
 
   Widget _continueButton({required VoidCallback onPressed, String label = 'Continue'}) {
-    return ShadButton.outline(trailing: const Icon(LucideIcons.arrowRight), onPressed: onPressed, child: Text(label));
+    return ShadButton(trailing: const Icon(LucideIcons.arrowRight), onPressed: onPressed, child: Text(label));
   }
 
   Widget _urlStep() {

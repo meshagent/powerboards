@@ -98,11 +98,22 @@ class _UserGrantRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = ShadTheme.of(context).colorScheme;
+
     return Row(
       children: [
-        Expanded(child: Text(user.email, overflow: TextOverflow.ellipsis)),
+        Expanded(
+          child: Text(
+            user.email,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: cs.foreground),
+          ),
+        ),
         const SizedBox(width: 8),
-        SizedBox(width: 90, child: Text(grantSummary.role.displayName)),
+        SizedBox(
+          width: 90,
+          child: Text(grantSummary.role.displayName, style: TextStyle(color: cs.foreground)),
+        ),
 
         if (canEdit)
           _UserSettingsMenuButton(role: grantSummary.role, onSetOwner: setAsOwner, onSetNonOwner: setAsNonOwner, onRemove: onRemove)

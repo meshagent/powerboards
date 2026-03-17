@@ -61,7 +61,7 @@ class _ThreadPickerMenuState extends State<ThreadPickerMenu> {
               onPressed: () => widget.onSelect(entry.name),
               child: Row(
                 children: [
-                  // if (isSelected) const Icon(Icons.check, color: Colors.black, size: 16) else const SizedBox(width: 16),
+                  // if (isSelected) const Icon(Icons.check, color: const Color(0xFF222222), size: 16) else const SizedBox(width: 16),
                   // const SizedBox(width: 8),
                   Expanded(child: Text(entry.nameWithoutExtension)),
                 ],

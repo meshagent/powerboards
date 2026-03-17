@@ -47,6 +47,11 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   LocalVideoTrack? _video;
   late SharedPreferences _preferences;
 
+  bool _isExpectedMediaAccessError(Object error) {
+    final message = '$error';
+    return message.contains('NotFoundError: Requested device not found') || message.contains('NotAllowedError: Permission denied');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -144,7 +149,15 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           await track.dispose();
         }
       } catch (error) {
-        debugPrint('_enableAudio error $error');
+        if (mounted) {
+          setState(() {
+            _audioOn = false;
+            _audio = null;
+          });
+        }
+        if (!_isExpectedMediaAccessError(error)) {
+          debugPrint('_enableAudio error $error');
+        }
       }
     });
   }
@@ -166,7 +179,15 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           await track.dispose();
         }
       } catch (error) {
-        debugPrint('_enableVideo error $error');
+        if (mounted) {
+          setState(() {
+            _videoOn = false;
+            _video = null;
+          });
+        }
+        if (!_isExpectedMediaAccessError(error)) {
+          debugPrint('_enableVideo error $error');
+        }
       }
     });
   }
@@ -250,17 +271,19 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(5),
                 child: Container(
-                  color: Colors.black,
+                  color: const Color(0xFF222222),
                   foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
                   child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
                 ),
               ),
             ),
             const SizedBox(height: 20),
-            SizedBox(
-              height: 40,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+            Center(
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   RoomToolbarButton(
                     key: const Key('device-setttings-camera-button'),
@@ -281,7 +304,6 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                         : null,
                     icon: videoOn ? LucideIcons.video : LucideIcons.videoOff,
                   ),
-                  const SizedBox(width: 8),
                   RoomToolbarButton(
                     key: const Key('device-setttings-mic-button'),
                     text: deviceManager.canTurnOnMicrophone
@@ -301,21 +323,20 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                         : null,
                     icon: audioOn ? LucideIcons.mic : LucideIcons.micOff,
                   ),
-                  const SizedBox(width: 8),
                   ChangeDeviceButton(
                     onChangeVideoInput: _selectVideoInput,
                     onChangeAudioInput: _selectAudioInput,
                     onChangeAudioOutput: (_) {},
-                    renderButton: (MenuController controller) {
+                    renderButton: (ShadContextMenuController controller) {
                       return Tooltip(
                         message: "Change device",
                         child: ShadIconButton.outline(
                           onPressed: () {
                             if (controller.isOpen) {
-                              controller.close();
+                              controller.hide();
                             } else {
                               deviceManager.refreshDevices();
-                              controller.open();
+                              controller.show();
                             }
                           },
                           icon: const Icon(LucideIcons.settings),
@@ -323,25 +344,20 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                       );
                     },
                   ),
-
-                  if (widget.onJoin != null) ...[
-                    const SizedBox(width: 10),
+                  if (widget.onJoin != null)
                     ShadButton(
                       onPressed: () {
                         widget.onJoin?.call(videoOn, audioOn);
                       },
                       child: const Text("Meet Now"),
                     ),
-                  ],
-                  if (widget.onCancel != null) ...[
-                    const SizedBox(width: 10),
-                    ShadButton.secondary(
+                  if (widget.onCancel != null)
+                    ShadButton.outline(
                       onPressed: () {
                         widget.onCancel?.call();
                       },
                       child: const Text("Cancel"),
                     ),
-                  ],
                 ],
               ),
             ),

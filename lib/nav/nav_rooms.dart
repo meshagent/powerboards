@@ -8,7 +8,9 @@ import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/hover_builder.dart';
+import 'package:powerboards/ui/pane_header_action_scope.dart';
 
 import 'rename_room_dialog.dart';
 import 'delete_room_dialog.dart';
@@ -40,6 +42,7 @@ class NavRooms extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final trayBoundaryContext = context;
     return Column(
       children: [
         if (rooms.isEmpty)
@@ -54,7 +57,7 @@ class NavRooms extends StatelessWidget {
             child: RefreshIndicator(
               onRefresh: onRefresh,
               child: ListView.separated(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.fromLTRB(desktopPaneSideHorizontalInset, 10, desktopPaneSideHorizontalInset, 10),
                 itemCount: rooms.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 6),
                 itemBuilder: (context, i) {
@@ -66,6 +69,7 @@ class NavRooms extends StatelessWidget {
                     projectId: projectId,
                     room: room,
                     selected: selected,
+                    menuBoundaryContext: trayBoundaryContext,
                     onTap: () => onSelect(room),
                     onSave: onSave,
                     balanceLow: balanceLow,
@@ -85,6 +89,7 @@ class _RoomTile extends StatefulWidget {
     required this.projectId,
     required this.room,
     required this.selected,
+    required this.menuBoundaryContext,
     required this.onTap,
     required this.onSave,
     required this.balanceLow,
@@ -93,6 +98,7 @@ class _RoomTile extends StatefulWidget {
   final String projectId;
   final Room room;
   final bool selected;
+  final BuildContext menuBoundaryContext;
   final VoidCallback onTap;
   final VoidCallback onSave;
   final bool balanceLow;
@@ -195,8 +201,8 @@ class _RoomTileState extends State<_RoomTile> {
       builder: (context, hovered, focused) {
         final breakpoints = ResponsiveBreakpoints.of(context);
         final isMobile = breakpoints.isMobile;
-        final isSmallDisplay = breakpoints.smallerOrEqualTo("chromebook");
         final settingsColor = hovered || isMobile ? textStyle.color : Colors.transparent;
+        final menuItems = _buildContextMenuItems(context);
 
         return Container(
           decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: bg),
@@ -206,7 +212,7 @@ class _RoomTileState extends State<_RoomTile> {
             cursor: widget.balanceLow ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
             onTap: widget.balanceLow ? null : widget.onTap,
             child: Padding(
-              padding: EdgeInsets.only(left: 20),
+              padding: const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
               child: Row(
                 children: [
                   Expanded(
@@ -214,13 +220,13 @@ class _RoomTileState extends State<_RoomTile> {
                   ),
 
                   if (!widget.balanceLow)
-                    ShadContextMenu(
-                      anchor: isSmallDisplay
-                          ? ShadAnchorAuto(followerAnchor: Alignment.bottomLeft, targetAnchor: Alignment.bottomRight)
-                          : null,
+                    AdaptiveShadContextMenu(
                       controller: controller,
+                      boundaryContext: widget.menuBoundaryContext,
                       constraints: const BoxConstraints(minWidth: 200),
-                      items: _buildContextMenuItems(context),
+                      estimatedMenuWidth: 200,
+                      estimatedMenuHeight: menuItems.length * 40.0 + 8.0,
+                      items: menuItems,
                       child: ShadGestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: controller.show,

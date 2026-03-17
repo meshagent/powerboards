@@ -167,7 +167,7 @@ class _ToolbarClickableState extends State<ToolbarClickable> {
         borderRadius: primary ? BorderRadius.circular(100) : BorderRadius.circular(2),
         color: widget.active
             ? widget.primary
-                  ? Colors.black
+                  ? const Color(0xFF222222)
                   : (theme?.foregroundColor?.resolve({}) ?? toolIconColor)
             : (hovered ? hoverColor : Colors.transparent),
       ),
@@ -347,7 +347,7 @@ class EmphasizedToolbarButton extends ToolbarButton {
     return FilledButton(
       onPressed: onPressed,
       style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.all(const Color(0xFFED6464)),
+        backgroundColor: WidgetStateProperty.all(shadDestructive),
         textStyle: WidgetStateProperty.all(const TextStyle(color: Color(0xffffffff))),
         shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(5.0))),
         padding: WidgetStateProperty.all(const EdgeInsets.all(5)),
