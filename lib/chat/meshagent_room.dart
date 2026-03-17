@@ -928,6 +928,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final isDefaultNewThreading = threadingMode == "default-new";
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final chatActions = actions;
+    final chatHorizontalInset = isMobile ? 0.0 : desktopPaneChatHorizontalInset;
+    final chatBottomInset = isMobile ? 0.0 : desktopPaneBottomInset - 8;
 
     return Column(
       children: [
@@ -935,16 +937,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         _buildDesktopChatViewportCutoffSpacer(context),
         _buildAgentsActionRow(context, showNewThreadButton: isDefaultNewThreading && isMobile),
         Expanded(
-          child: MeshagentThreadView(
-            agentName: agentName,
-            threadingMode: threadingMode,
-            threadListPath: threadListPath,
-            newThreadResetVersion: _newThreadResetVersion,
-            key: _threadViewKeyForPath(documentPath),
-            client: widget.room,
-            documentPath: documentPath,
-            participantNames: [user["email"], ?agentName],
-            joinMeeting: _joinMeeting,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
+            child: MeshagentThreadView(
+              agentName: agentName,
+              threadingMode: threadingMode,
+              threadListPath: threadListPath,
+              newThreadResetVersion: _newThreadResetVersion,
+              key: _threadViewKeyForPath(documentPath),
+              client: widget.room,
+              documentPath: documentPath,
+              participantNames: [user["email"], ?agentName],
+              joinMeeting: _joinMeeting,
+            ),
           ),
         ),
       ],
@@ -1015,7 +1020,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final horizontalInset = isMobile ? 12.0 : 20.0;
-    const bottomInset = 8.0;
+    final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
 
     return ColoredBox(
       color: cs.background,
@@ -1043,7 +1048,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final horizontalInset = isMobile ? 12.0 : 20.0;
-    const bottomInset = 8.0;
+    final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
 
     return ColoredBox(
       color: cs.background,

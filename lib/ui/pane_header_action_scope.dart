@@ -10,6 +10,13 @@ const double desktopPaneSecondaryRowContentGap = 6;
 const double desktopPaneHeaderToContentOffset =
     desktopPaneSecondaryControlTopOffset + desktopPaneSecondaryControlHeight + desktopPaneSecondaryRowContentGap;
 const double desktopPaneHeaderToChatViewportOffset = desktopPaneSecondaryControlTopOffset;
+const double desktopPaneChatHorizontalInset = 12;
+const double desktopPaneBottomInset = desktopPaneSecondaryControlTopOffset;
+const double desktopPaneSideHorizontalInset = 20;
+const double desktopPaneSideHeaderSlotSize = 30;
+const double desktopPaneSideHeaderGap = 16;
+const double desktopPaneSideHeaderVisualInset = desktopPaneSideHeaderSlotSize + desktopPaneSideHeaderGap;
+const double desktopPaneSideListItemLeadingInset = 12;
 
 bool shouldCompactPaneHeaderActions(
   double maxWidth, {

@@ -17,6 +17,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
+import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
@@ -34,6 +35,7 @@ import 'file_upload.dart';
 
 const Set<String> editExtensions = {"md"};
 const String placeholderFileName = ".placeholder";
+const double filePaneTableHeaderHeight = 48;
 
 enum FileSortField { name, modified }
 
@@ -1497,27 +1499,38 @@ class _FileManagerViewState extends State<FileManagerView> {
   Widget _buildOpenedFile(BuildContext context) {
     if (_openedFile == null) return const SizedBox.shrink();
 
-    final ext = _ext(_openedFile!);
+    final path = _openedFile!;
+    final ext = _ext(path);
+    final fileKind = classifyFile(path);
     final showEditTabs = editExtensions.contains(ext);
-    final showExternalSave = isCodeFile(_openedFile!);
+    final showExternalSave = isCodeFile(path);
 
     if (!showExternalSave) {
-      return fileViewer(widget.client, _openedFile!) ?? DocumentPane(path: _openedFile!, room: widget.client);
+      return _buildOpenedFileSurface(
+        fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client),
+        insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: false),
+      );
     }
 
-    final edit = DocumentPane(
-      path: _openedFile!,
-      room: widget.client,
-      forceTextViewer: true,
-      codePreviewController: _codePreviewController,
-      showCodeToolbar: false,
+    final edit = _buildOpenedFileSurface(
+      DocumentPane(
+        path: path,
+        room: widget.client,
+        forceTextViewer: true,
+        codePreviewController: _codePreviewController,
+        showCodeToolbar: false,
+      ),
+      insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: true),
     );
 
     if (!showEditTabs) {
       return edit;
     }
 
-    final view = fileViewer(widget.client, _openedFile!) ?? DocumentPane(path: _openedFile!, room: widget.client);
+    final view = _buildOpenedFileSurface(
+      fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client),
+      insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: false),
+    );
 
     return Column(
       key: ValueKey(_openedFile),
@@ -1533,6 +1546,44 @@ class _FileManagerViewState extends State<FileManagerView> {
           ),
         ),
       ],
+    );
+  }
+
+  bool _shouldInsetOpenedFileSurface({required FileKind fileKind, required bool editing}) {
+    if (editing) {
+      return false;
+    }
+
+    return switch (fileKind) {
+      FileKind.pdf || FileKind.office || FileKind.code => false,
+      _ => true,
+    };
+  }
+
+  Widget _buildOpenedFileSurface(Widget child, {required bool insetContent}) {
+    final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
+    const borderWidth = 1.0;
+    const previewPadding = 16.0;
+    final innerRadius = BorderRadius.only(
+      topLeft: Radius.circular(math.max(0, radius.topLeft.x - borderWidth)),
+      topRight: Radius.circular(math.max(0, radius.topRight.x - borderWidth)),
+      bottomLeft: Radius.circular(math.max(0, radius.bottomLeft.x - borderWidth)),
+      bottomRight: Radius.circular(math.max(0, radius.bottomRight.x - borderWidth)),
+    );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: shadCard,
+        border: Border.all(color: shadBorder, width: borderWidth),
+        borderRadius: radius,
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(borderWidth + (insetContent ? previewPadding : 0)),
+        child: ClipRRect(
+          borderRadius: innerRadius,
+          child: ColoredBox(color: shadCard, child: child),
+        ),
+      ),
     );
   }
 
@@ -1771,7 +1822,7 @@ class _FileTableViewState extends State<FileTableView> {
   }
 
   Icon _sortIcon(bool ascending) {
-    return Icon(ascending ? LucideIcons.arrowUpAZ : LucideIcons.arrowDownAZ, size: 16, color: shadMutedForeground);
+    return Icon(ascending ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 16, color: shadMutedForeground);
   }
 
   Widget _fileSelectionCheckbox({required bool value, required ShadDecoration decoration, ValueChanged<bool?>? onChanged}) {
@@ -1857,6 +1908,8 @@ class _FileTableViewState extends State<FileTableView> {
                 final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
                 final isSelected = widget.selected.contains(key);
                 final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+                final modifiedLabel = entry.updatedAt?.modified() ?? '';
+                final showModifiedLabel = modifiedLabel.isNotEmpty;
 
                 return Material(
                   color: isSelected ? const Color(0xFFF2F1FF) : shadCard,
@@ -1887,8 +1940,10 @@ class _FileTableViewState extends State<FileTableView> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(entry.name, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                const SizedBox(height: 4),
-                                Text(entry.updatedAt?.modified() ?? '', style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                if (showModifiedLabel) ...[
+                                  const SizedBox(height: 4),
+                                  Text(modifiedLabel, style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                ],
                               ],
                             ),
                           ),
@@ -2028,6 +2083,7 @@ class _FileTableViewState extends State<FileTableView> {
               showCheckboxColumn: false,
               columnSpacing: 0,
               horizontalMargin: 0,
+              headingRowHeight: filePaneTableHeaderHeight,
               headingRowColor: const WidgetStatePropertyAll(shadCard),
               dataRowColor: const WidgetStatePropertyAll(shadCard),
               sortColumnIndex: sortColumnIndex,
