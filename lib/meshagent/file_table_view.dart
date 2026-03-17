@@ -973,7 +973,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                       spacing: desktopPaneHeaderButtonGap,
                       children: [
                         Expanded(
-                          child: Align(alignment: Alignment.centerLeft, child: _buildDesktopHeaderLeading()),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: ClipRect(child: _buildDesktopHeaderLeading()),
+                          ),
                         ),
                         if (desktopActions.isNotEmpty)
                           Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: desktopActions),
@@ -1362,9 +1365,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _breadcrumbSeparator() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 2),
-      child: Icon(LucideIcons.chevronRight, color: Color(0xffa5a5a5)),
+    return const SizedBox(
+      width: 20,
+      child: Center(child: Icon(LucideIcons.chevronRight, size: 16, color: Color(0xffa5a5a5))),
     );
   }
 

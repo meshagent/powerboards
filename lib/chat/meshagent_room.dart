@@ -1023,7 +1023,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
 
     return ColoredBox(
-      color: cs.card,
+      color: cs.background,
       child: Column(
         children: [
           if (isMobile) ActionsRow(actions: actions),
@@ -1051,7 +1051,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
 
     return ColoredBox(
-      color: cs.card,
+      color: cs.background,
       child: Column(
         children: [
           if (isMobile)
@@ -1297,66 +1297,70 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
                             if (!_hasVisibleAgents(supported)) {
                               final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
+                              final cs = ShadTheme.of(context).colorScheme;
                               return SafeArea(
-                                child: Column(
-                                  children: [
-                                    ActionsRow(actions: actions),
-                                    Expanded(
-                                      child: SignalBuilder(
-                                        builder: (context, _) {
-                                          final ownerResolved = isOwner.state.isReady || isOwner.state.hasError;
-                                          final canInstallAgent = isOwner.state.value == true;
+                                child: ColoredBox(
+                                  color: cs.card,
+                                  child: Column(
+                                    children: [
+                                      ActionsRow(actions: actions),
+                                      Expanded(
+                                        child: SignalBuilder(
+                                          builder: (context, _) {
+                                            final ownerResolved = isOwner.state.isReady || isOwner.state.hasError;
+                                            final canInstallAgent = isOwner.state.value == true;
 
-                                          if (!ownerResolved) {
-                                            return _buildRoomLoading(context, title: "Loading room permissions");
-                                          }
+                                            if (!ownerResolved) {
+                                              return _buildRoomLoading(context, title: "Loading room permissions");
+                                            }
 
-                                          return Center(
-                                            child: ConstrainedBox(
-                                              constraints: const BoxConstraints(maxWidth: 520),
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(16),
-                                                child: Column(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Text(
-                                                      "Welcome to your room",
-                                                      style: ShadTheme.of(context).textTheme.h1,
-                                                      textAlign: TextAlign.center,
-                                                    ),
-                                                    if (canInstallAgent) ...[
-                                                      SizedBox(height: 8),
+                                            return Center(
+                                              child: ConstrainedBox(
+                                                constraints: const BoxConstraints(maxWidth: 520),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(16),
+                                                  child: Column(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
                                                       Text(
-                                                        "Install an agent in this room to get started",
-                                                        style: ShadTheme.of(context).textTheme.p,
+                                                        "Welcome to your room",
+                                                        style: ShadTheme.of(context).textTheme.h1,
                                                         textAlign: TextAlign.center,
                                                       ),
-                                                      SizedBox(height: 20),
-                                                      ShadButton(
-                                                        onPressed: () async {
-                                                          await showShadDialog(
-                                                            context: context,
-                                                            builder: (context) => ManageAgentsDialog(
-                                                              room: widget.room,
-                                                              projectId: widget.projectId,
-                                                              onServiceChanged: () {
-                                                                services.refresh();
-                                                              },
-                                                            ),
-                                                          );
-                                                        },
-                                                        child: Text("Install an Agent"),
-                                                      ),
+                                                      if (canInstallAgent) ...[
+                                                        SizedBox(height: 8),
+                                                        Text(
+                                                          "Install an agent in this room to get started",
+                                                          style: ShadTheme.of(context).textTheme.p,
+                                                          textAlign: TextAlign.center,
+                                                        ),
+                                                        SizedBox(height: 20),
+                                                        ShadButton(
+                                                          onPressed: () async {
+                                                            await showShadDialog(
+                                                              context: context,
+                                                              builder: (context) => ManageAgentsDialog(
+                                                                room: widget.room,
+                                                                projectId: widget.projectId,
+                                                                onServiceChanged: () {
+                                                                  services.refresh();
+                                                                },
+                                                              ),
+                                                            );
+                                                          },
+                                                          child: Text("Install an Agent"),
+                                                        ),
+                                                      ],
                                                     ],
-                                                  ],
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                          );
-                                        },
+                                            );
+                                          },
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               );
                             }
@@ -1430,6 +1434,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                         defaultSize: 1 - defaultDebugSize,
                                         child: ResizableSplitView(
                                           allowCollapse: room.VideoRoomModel.maybeOf(context)?.room != null,
+                                          minArea1Width: 360,
+                                          minArea2Width: 440,
                                           split: split,
                                           area1: ColoredBox(
                                             color: cs.card,

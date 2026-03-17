@@ -1,21 +1,33 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 const double _collapsedWidth = 58;
-const double _minAreaWidth = 300;
+const double _defaultMinArea1Width = 300;
+const double _defaultMinArea2Width = 300;
 const double _defaultWidth = 450;
 const String _area1Id = 'area1';
 const String _area2Id = 'area2';
 
 class ResizableSplitView extends StatefulWidget {
-  const ResizableSplitView({super.key, required this.area1, required this.area2, required this.split, required this.allowCollapse});
+  const ResizableSplitView({
+    super.key,
+    required this.area1,
+    required this.area2,
+    required this.split,
+    required this.allowCollapse,
+    this.minArea1Width = _defaultMinArea1Width,
+    this.minArea2Width = _defaultMinArea2Width,
+  });
 
   final Widget area1;
   final Widget area2;
   final bool split;
   final bool allowCollapse;
+  final double minArea1Width;
+  final double minArea2Width;
 
   @override
   State createState() => _ResizableSplitViewState();
@@ -29,6 +41,21 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   bool _collapsed = false;
   double? _area1Ratio;
 
+  ({double area1, double area2}) _resolveMinimumWidths(double totalWidth) {
+    var area1 = widget.minArea1Width;
+    var area2 = widget.minArea2Width;
+
+    final availableWidth = math.max(totalWidth, _collapsedWidth * 2);
+    if (area1 + area2 <= availableWidth) {
+      return (area1: area1, area2: area2);
+    }
+
+    final scale = availableWidth / (area1 + area2);
+    area1 = math.max(_collapsedWidth, area1 * scale);
+    area2 = math.max(_collapsedWidth, area2 * scale);
+    return (area1: area1, area2: area2);
+  }
+
   void debounceResize(BoxConstraints constraints) {
     if (lastConstraints == null || lastConstraints!.maxWidth != constraints.maxWidth) {
       resizeDebounceTimer?.cancel();
@@ -41,13 +68,16 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         }
 
         final size = constraints.maxWidth;
-        final minSize = _minAreaWidth / size;
-        final maxSize = 1 - minSize;
+        final minimums = _resolveMinimumWidths(size);
+        final minArea1Size = minimums.area1 / size;
+        final minArea2Size = minimums.area2 / size;
+        final maxArea1Size = 1 - minArea2Size;
+        final maxArea2Size = 1 - minArea1Size;
 
-        final defaultSize = (_area1Ratio ?? minSize).clamp(minSize, maxSize);
+        final defaultSize = (_area1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
 
-        final newPan1 = ShadPanelInfo(id: _area1Id, minSize: minSize, maxSize: maxSize, defaultSize: defaultSize);
-        final newPan2 = ShadPanelInfo(id: _area2Id, minSize: minSize, maxSize: maxSize, defaultSize: 1 - defaultSize);
+        final newPan1 = ShadPanelInfo(id: _area1Id, minSize: minArea1Size, maxSize: maxArea1Size, defaultSize: defaultSize);
+        final newPan2 = ShadPanelInfo(id: _area2Id, minSize: minArea2Size, maxSize: maxArea2Size, defaultSize: 1 - defaultSize);
 
         lastConstraints = constraints;
         resizeController.update([newPan1, newPan2]);
@@ -139,10 +169,13 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.maxWidth;
-        final minSize = _minAreaWidth / size;
-        final maxSize = 1 - minSize;
+        final minimums = _resolveMinimumWidths(size);
+        final minArea1Size = minimums.area1 / size;
+        final minArea2Size = minimums.area2 / size;
+        final maxArea1Size = 1 - minArea2Size;
+        final maxArea2Size = 1 - minArea1Size;
 
-        final defaultSize = (_defaultWidth / size).clamp(minSize, maxSize);
+        final defaultSize = (_defaultWidth / size).clamp(minArea1Size, maxArea1Size);
 
         _area1Ratio ??= defaultSize;
 
@@ -158,8 +191,8 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
             ShadResizablePanel(
               id: _area1Id,
               defaultSize: defaultSize,
-              minSize: minSize,
-              maxSize: maxSize,
+              minSize: minArea1Size,
+              maxSize: maxArea1Size,
               child: widget.allowCollapse
                   ? Stack(
                       children: [
@@ -176,7 +209,13 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
                     )
                   : widget.area1,
             ),
-            ShadResizablePanel(id: _area2Id, defaultSize: 1 - defaultSize, minSize: minSize, maxSize: maxSize, child: widget.area2),
+            ShadResizablePanel(
+              id: _area2Id,
+              defaultSize: 1 - defaultSize,
+              minSize: minArea2Size,
+              maxSize: maxArea2Size,
+              child: widget.area2,
+            ),
           ],
         );
       },

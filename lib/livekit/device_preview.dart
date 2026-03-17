@@ -47,6 +47,11 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   LocalVideoTrack? _video;
   late SharedPreferences _preferences;
 
+  bool _isExpectedMediaAccessError(Object error) {
+    final message = '$error';
+    return message.contains('NotFoundError: Requested device not found') || message.contains('NotAllowedError: Permission denied');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -144,7 +149,15 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           await track.dispose();
         }
       } catch (error) {
-        debugPrint('_enableAudio error $error');
+        if (mounted) {
+          setState(() {
+            _audioOn = false;
+            _audio = null;
+          });
+        }
+        if (!_isExpectedMediaAccessError(error)) {
+          debugPrint('_enableAudio error $error');
+        }
       }
     });
   }
@@ -166,7 +179,15 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           await track.dispose();
         }
       } catch (error) {
-        debugPrint('_enableVideo error $error');
+        if (mounted) {
+          setState(() {
+            _videoOn = false;
+            _video = null;
+          });
+        }
+        if (!_isExpectedMediaAccessError(error)) {
+          debugPrint('_enableVideo error $error');
+        }
       }
     });
   }

@@ -301,7 +301,7 @@ class _NavState extends State<Nav> {
                 minSize: minRatio,
                 maxSize: maxRatio,
                 child: ColoredBox(
-                  color: cs.card,
+                  color: cs.background,
                   child: Column(
                     mainAxisSize: .min,
                     children: [

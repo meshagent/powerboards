@@ -77,6 +77,14 @@ bool _isExpectedWebHotRestartViewDispose(Object error, [StackTrace? stackTrace])
           stackText.contains('Trying to render a disposed EngineFlutterView'));
 }
 
+bool _isExpectedRoomClientDisposed(Object error, [StackTrace? stackTrace]) {
+  final errorText = '$error';
+  final stackText = stackTrace?.toString() ?? '';
+  return errorText.contains('room client disposed') ||
+      errorText.contains('room connection closed before request completed') ||
+      stackText.contains('room client disposed');
+}
+
 void main() async {
   SolidartConfig.assertSignalBuilderWithoutDependencies = false;
 
@@ -103,10 +111,16 @@ void main() async {
     runZonedGuarded(
       startApp,
       (object, stackTrace) {
+        if (_isExpectedRoomClientDisposed(object, stackTrace)) {
+          return;
+        }
         debugPrint("Unhandled exception $object $stackTrace");
       },
       zoneSpecification: ZoneSpecification(
         handleUncaughtError: (self, parent, zone, error, stackTrace) {
+          if (_isExpectedRoomClientDisposed(error, stackTrace)) {
+            return;
+          }
           debugPrint("Unhandled exception handled $error $stackTrace");
         },
       ),
@@ -119,7 +133,8 @@ Future<void> startApp() async {
   _configureDebugPrintFilter();
   final originalFlutterErrorHandler = FlutterError.onError;
   FlutterError.onError = (details) {
-    if (_isExpectedWebHotRestartViewDispose(details.exception, details.stack)) {
+    if (_isExpectedWebHotRestartViewDispose(details.exception, details.stack) ||
+        _isExpectedRoomClientDisposed(details.exception, details.stack)) {
       return;
     }
     originalFlutterErrorHandler?.call(details);
