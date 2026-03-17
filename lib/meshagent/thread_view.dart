@@ -20,6 +20,7 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
+import 'package:powerboards/web_context_menu_manager/enable_web_context_menu.dart';
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
   MeshagentRoomChatThreadController({required super.room});
@@ -516,6 +517,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           openFile: _open,
           toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, widget.agentName, controller, snapshot),
           agentName: widget.agentName,
+          chatInputBoxBuilder: (context, inputBox) => EnableWebContextMenu(child: inputBox),
         ),
         participantNames: widget.participantNames,
       ),
