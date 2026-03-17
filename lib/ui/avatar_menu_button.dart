@@ -211,12 +211,13 @@ class UserAvatarCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const avatarAccent = Color(0xFFE4E4FF);
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final buttonTheme = theme.outlineButtonTheme;
-    final hoverBackgroundColor = buttonTheme.hoverBackgroundColor ?? cs.muted;
-    final backgroundColor = buttonTheme.backgroundColor ?? cs.background;
+    final hoverBackgroundColor = buttonTheme.hoverBackgroundColor ?? avatarAccent;
+    final backgroundColor = avatarAccent;
 
     return Container(
       width: size,

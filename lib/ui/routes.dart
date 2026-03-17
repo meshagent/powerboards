@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart' as fs;
 
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:vector_graphics/vector_graphics.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
@@ -88,7 +88,6 @@ class _SingInScreenState extends State<_SingInScreen> {
   Widget _inner(BuildContext context) {
     final theme = ShadTheme.of(context);
     final tt = theme.textTheme;
-    final cs = theme.colorScheme;
     final title = widget.isCancelled ? "Login cancelled" : "Sign in to Powerboards";
 
     return Column(
@@ -98,17 +97,10 @@ class _SingInScreenState extends State<_SingInScreen> {
       children: [
         Align(
           alignment: Alignment.centerLeft,
-          child: Container(
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), color: cs.primary),
-            width: 44.0,
-            height: 44.0,
-            clipBehavior: Clip.antiAlias,
-            padding: const EdgeInsets.all(8.0),
-
-            child: SvgPicture(
-              const AssetBytesLoader('lib/assets/powerboards-logo.vec'),
-              colorFilter: ColorFilter.mode(cs.background, BlendMode.srcIn),
-            ),
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: fs.SvgPicture.asset('lib/assets/powerboards-brand-symbol.svg', fit: BoxFit.contain),
           ),
         ),
         const SizedBox(height: 24),
@@ -203,16 +195,10 @@ class _LoginFailedState extends State<_LoginFailed> {
       children: [
         Align(
           alignment: Alignment.centerLeft,
-          child: Container(
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), color: cs.primary),
-            width: 44.0,
-            height: 44.0,
-            clipBehavior: Clip.antiAlias,
-            padding: const EdgeInsets.all(8.0),
-            child: SvgPicture(
-              const AssetBytesLoader('lib/assets/powerboards-logo.vec'),
-              colorFilter: ColorFilter.mode(cs.background, BlendMode.srcIn),
-            ),
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: fs.SvgPicture.asset('lib/assets/powerboards-brand-symbol.svg', fit: BoxFit.contain),
           ),
         ),
         const SizedBox(height: 24),

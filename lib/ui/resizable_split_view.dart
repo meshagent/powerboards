@@ -152,6 +152,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         return ShadResizablePanelGroup(
           axis: .horizontal,
           showHandle: true,
+          dividerColor: Colors.transparent,
           controller: resizeController,
           children: [
             ShadResizablePanel(

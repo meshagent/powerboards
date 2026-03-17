@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart' as fs;
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,7 +11,6 @@ import 'package:localstorage/localstorage.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:vector_graphics/vector_graphics.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -290,6 +290,7 @@ class _NavState extends State<Nav> {
         return ShadResizablePanelGroup(
           axis: .horizontal,
           showHandle: true,
+          dividerColor: Colors.transparent,
           controller: resizeController,
           children: [
             // left nav
@@ -300,7 +301,7 @@ class _NavState extends State<Nav> {
                 minSize: minRatio,
                 maxSize: maxRatio,
                 child: ColoredBox(
-                  color: cs.background,
+                  color: cs.card,
                   child: Column(
                     mainAxisSize: .min,
                     children: [
@@ -365,22 +366,25 @@ class _NavState extends State<Nav> {
     }
 
     if (widget.selectedRoom == null) {
-      return SafeArea(
-        child: Column(
-          children: [
-            _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
-            Expanded(
-              child: _NavBar(
-                projectId: widget.projectId,
-                rooms: filteredRooms,
-                canCreateRooms: canCreateRooms,
-                onSave: () => rooms.refresh(),
-                onRefresh: () => rooms.refresh(),
-                setFilter: setFilter,
-                balanceLow: balanceLow,
+      return ColoredBox(
+        color: ShadTheme.of(context).colorScheme.card,
+        child: SafeArea(
+          child: Column(
+            children: [
+              _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
+              Expanded(
+                child: _NavBar(
+                  projectId: widget.projectId,
+                  rooms: filteredRooms,
+                  canCreateRooms: canCreateRooms,
+                  onSave: () => rooms.refresh(),
+                  onRefresh: () => rooms.refresh(),
+                  setFilter: setFilter,
+                  balanceLow: balanceLow,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     } else {
@@ -879,18 +883,10 @@ class NavMainLogo extends StatelessWidget {
   final double? size;
   @override
   Widget build(BuildContext context) {
-    final cs = ShadTheme.of(context).colorScheme;
-
-    return Container(
+    return SizedBox(
       width: size ?? (kIsWeb ? 42.0 : 46.0),
       height: size ?? (kIsWeb ? 42.0 : 46.0),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: .all(color: Color.from(alpha: 1, red: .5, green: .5, blue: .5), width: 7),
-        borderRadius: .circular(8),
-        color: Color.from(alpha: 1, red: .5, green: .5, blue: .5),
-      ),
-      child: SvgPicture(const AssetBytesLoader('lib/assets/powerboards-logo.vec'), colorFilter: .mode(cs.background, BlendMode.srcIn)),
+      child: fs.SvgPicture.asset('lib/assets/powerboards-brand-symbol.svg', fit: BoxFit.contain),
     );
   }
 }
