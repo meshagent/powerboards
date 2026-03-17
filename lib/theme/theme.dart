@@ -1,6 +1,7 @@
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:google_fonts/google_fonts.dart";
+import "package:shadcn_ui/shadcn_ui.dart";
 
 const textScale = kIsWeb ? 1.0 : 1.2;
 const headerHeight = 60.0;

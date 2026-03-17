@@ -65,11 +65,6 @@ void _configureDebugPrintFilter() {
   };
 }
 
-bool _isExpectedLifecycleCancellation(Object error) {
-  final text = '$error'.toLowerCase();
-  return text.contains('room client disposed') || text.contains('protocol disposed');
-}
-
 bool _isExpectedWebHotRestartViewDispose(Object error, [StackTrace? stackTrace]) {
   if (!(kDebugMode && kIsWeb)) {
     return false;
@@ -81,6 +76,7 @@ bool _isExpectedWebHotRestartViewDispose(Object error, [StackTrace? stackTrace])
       (errorText.contains('org-dartlang-sdk:///lib/_engine/engine/window.dart:99:12') &&
           stackText.contains('Trying to render a disposed EngineFlutterView'));
 }
+
 void main() async {
   SolidartConfig.assertSignalBuilderWithoutDependencies = false;
 
