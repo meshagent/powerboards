@@ -582,11 +582,11 @@ class _NavBar extends StatelessWidget {
         children: [
           const SizedBox(height: desktopPaneSecondaryControlTopOffset),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
             child: SizedBox(
               height: desktopPaneSecondaryControlHeight,
               child: ShadInput(
-                decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.background),
+                decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.input),
                 key: const Key('room-list-search-field'),
                 onChanged: setFilter,
                 placeholder: Text("Filter rooms..."),
@@ -617,13 +617,19 @@ class _NavBar extends StatelessWidget {
           ),
           if (canCreateRooms)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.fromLTRB(
+                desktopPaneSideHorizontalInset,
+                10,
+                desktopPaneSideHorizontalInset,
+                desktopPaneBottomInset,
+              ),
               child: ShadButton.outline(
-                decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.foreground.withAlpha(60))),
+                decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
+                backgroundColor: ShadTheme.of(context).colorScheme.background,
                 hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
                 hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
                 key: const Key('nav-create-room-button'),
-                leading: Icon(LucideIcons.plus),
+                leading: Icon(LucideIcons.packagePlus),
                 onPressed: () => addNewRoomDialog(context),
                 child: const Text("New Room"),
               ),
@@ -698,7 +704,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     return DialogAnchor(
       controller: dialogController,
       child: Container(
-        padding: const EdgeInsets.only(left: 20, right: 6),
+        padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -723,11 +729,9 @@ class _NavBarTopState extends State<_NavBarTop> {
                 child: Center(
                   child: SizedBox(
                     height: desktopPaneHeaderContentHeight,
-                    child: Row(
-                      spacing: 16,
+                    child: Stack(
                       children: [
-                        const NavMainLogo(size: 30),
-                        Expanded(
+                        Positioned.fill(
                           child: ShadSelect<String?>(
                             anchor: const ShadAnchor(
                               childAlignment: Alignment.topRight,
@@ -739,7 +743,19 @@ class _NavBarTopState extends State<_NavBarTop> {
                             maxHeight: selectHeight,
                             controller: projectSelectController,
                             popoverController: popoverController,
-                            placeholder: const Text('Select project'),
+                            placeholder: Padding(
+                              padding: const EdgeInsets.only(left: desktopPaneSideHeaderVisualInset),
+                              child: Center(
+                                child: Text('Select project', overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                              ),
+                            ),
+                            trailing: SizedBox(
+                              width: desktopPaneSideHeaderVisualInset,
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: Icon(LucideIcons.chevronsUpDown, size: 20, color: ShadTheme.of(context).colorScheme.foreground),
+                              ),
+                            ),
                             showScrollToTopChevron: false,
                             showScrollToBottomChevron: false,
                             onChanged: (value) {
@@ -767,7 +783,6 @@ class _NavBarTopState extends State<_NavBarTop> {
                                   ),
                                 ),
                             ],
-                            trailing: const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsisVertical))),
                             footer: Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -781,19 +796,35 @@ class _NavBarTopState extends State<_NavBarTop> {
                               final displayName = effectiveValue == null
                                   ? selectedProject?.name
                                   : projectList.firstWhereOrNull((p) => p.id == effectiveValue)?.name ?? selectedProject?.name;
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      displayName ?? 'Select project',
-                                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: const Color(0xFF222222)),
-                                      overflow: TextOverflow.ellipsis,
+                              return Padding(
+                                padding: const EdgeInsets.only(left: desktopPaneSideHeaderVisualInset),
+                                child: Center(
+                                  child: Text(
+                                    displayName ?? 'Select project',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      color: ShadTheme.of(context).colorScheme.foreground,
                                     ),
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
                                   ),
-                                ],
+                                ),
                               );
                             },
+                          ),
+                        ),
+                        const Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: IgnorePointer(
+                            child: SizedBox(
+                              width: desktopPaneSideHeaderSlotSize,
+                              height: desktopPaneSideHeaderSlotSize,
+                              child: Center(child: NavMainLogo(size: desktopPaneSideHeaderSlotSize)),
+                            ),
                           ),
                         ),
                       ],

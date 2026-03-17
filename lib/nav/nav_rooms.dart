@@ -10,6 +10,7 @@ import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/hover_builder.dart';
+import 'package:powerboards/ui/pane_header_action_scope.dart';
 
 import 'rename_room_dialog.dart';
 import 'delete_room_dialog.dart';
@@ -56,7 +57,7 @@ class NavRooms extends StatelessWidget {
             child: RefreshIndicator(
               onRefresh: onRefresh,
               child: ListView.separated(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.fromLTRB(desktopPaneSideHorizontalInset, 10, desktopPaneSideHorizontalInset, 10),
                 itemCount: rooms.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 6),
                 itemBuilder: (context, i) {
@@ -211,7 +212,7 @@ class _RoomTileState extends State<_RoomTile> {
             cursor: widget.balanceLow ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
             onTap: widget.balanceLow ? null : widget.onTap,
             child: Padding(
-              padding: EdgeInsets.only(left: 20),
+              padding: const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
               child: Row(
                 children: [
                   Expanded(
