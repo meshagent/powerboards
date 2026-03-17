@@ -72,7 +72,7 @@ class CameraStrip extends StatelessWidget {
               ),
             )
           : Container(
-              color: Colors.grey,
+              color: const Color(0xFF222222),
               alignment: Alignment.center,
               child: participant.identity.contains(".agent")
                   ? GestureDetector(

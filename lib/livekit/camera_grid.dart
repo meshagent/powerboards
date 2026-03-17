@@ -317,7 +317,7 @@ Widget cameraGridBuilder(
   int rowsDesired = 0,
   int columnsDesired = 0,
   bool tryFill = true,
-  Color background = Colors.black,
+  Color background = const Color(0xFF222222),
   Widget Function(BuildContext context, Participant participant, VideoTrack? track, Widget child)? frameBuilder,
 }) {
   final wrap = frameBuilder ?? (ctx, p, track, c) => c;
@@ -363,7 +363,7 @@ Widget cameraGridBuilder(
       trackPublications.add(null);
       tracks.add(
         Container(
-          color: Colors.grey,
+          color: const Color(0xFF222222),
           alignment: Alignment.center,
           child: p.identity.contains(".agent") ? AudioStats(room: room, participant: p) : const SizedBox(),
         ),

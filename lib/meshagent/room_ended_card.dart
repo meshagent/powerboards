@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 class RoomEndedCard extends StatelessWidget {
   const RoomEndedCard({super.key, required this.onReconnect});
@@ -7,13 +8,11 @@ class RoomEndedCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = ShadTheme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-      decoration: BoxDecoration(
-        // color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
+      decoration: BoxDecoration(color: cs.card, borderRadius: BorderRadius.circular(12)),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -21,12 +20,12 @@ class RoomEndedCard extends StatelessWidget {
           const SizedBox(height: 24),
           TextButton(
             style: TextButton.styleFrom(
-              backgroundColor: Colors.grey.shade200,
+              backgroundColor: cs.primary,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: onReconnect,
-            child: const Text('Reconnect', style: TextStyle(color: Colors.black)),
+            child: Text('Reconnect', style: TextStyle(color: cs.primaryForeground)),
           ),
         ],
       ),

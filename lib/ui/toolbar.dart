@@ -167,7 +167,7 @@ class _ToolbarClickableState extends State<ToolbarClickable> {
         borderRadius: primary ? BorderRadius.circular(100) : BorderRadius.circular(2),
         color: widget.active
             ? widget.primary
-                  ? Colors.black
+                  ? const Color(0xFF222222)
                   : (theme?.foregroundColor?.resolve({}) ?? toolIconColor)
             : (hovered ? hoverColor : Colors.transparent),
       ),

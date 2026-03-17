@@ -677,7 +677,7 @@ class RoomToolbarButton extends StatelessWidget {
     this.onColor = const Color.fromRGBO(47, 45, 87, 1),
     this.offColor = Colors.transparent,
     this.onForeground = Colors.white,
-    this.offForeground = Colors.black,
+    this.offForeground = const Color(0xFF222222),
     super.key,
     this.on = false,
   });

@@ -250,7 +250,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(5),
                 child: Container(
-                  color: Colors.black,
+                  color: const Color(0xFF222222),
                   foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
                   child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
                 ),

@@ -195,9 +195,36 @@ class MyApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       theme: ShadThemeData(
-        colorScheme: ShadColorScheme.fromName("neutral"),
+        colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
-        textTheme: ShadTextTheme.fromGoogleFont(GoogleFonts.inter),
+        textTheme: powerboardsShadTextTheme(),
+        primaryDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        alertDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        popoverTheme: ShadPopoverTheme(
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        contextMenuTheme: ShadContextMenuTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+          selectedBackgroundColor: shadMuted,
+        ),
+        menubarTheme: ShadMenubarTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        outlineButtonTheme: ShadButtonTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
+        ),
       ),
 
       builder: (context, child) {
@@ -250,26 +277,74 @@ class _RootProvidersState extends State<_RootProviders> {
 
   @override
   Widget build(BuildContext context) {
+    final materialTheme = Theme.of(context).copyWith(
+      popupMenuTheme: PopupMenuThemeData(
+        color: shadCard,
+        surfaceTintColor: shadCard,
+        shape: RoundedRectangleBorder(
+          side: const BorderSide(color: shadBorder, width: 1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: const WidgetStatePropertyAll(shadCard),
+          surfaceTintColor: const WidgetStatePropertyAll(shadCard),
+          side: const WidgetStatePropertyAll(BorderSide(color: shadBorder, width: 1)),
+          shape: WidgetStateProperty.all<OutlinedBorder>(const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10)))),
+        ),
+      ),
+    );
     return ShadTheme(
       data: ShadThemeData(
-        colorScheme: ShadColorScheme.fromName("neutral"),
+        colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
-        textTheme: ShadTextTheme.fromGoogleFont(GoogleFonts.inter),
+        textTheme: powerboardsShadTextTheme(),
+        primaryDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        alertDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        popoverTheme: ShadPopoverTheme(
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        contextMenuTheme: ShadContextMenuTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+          selectedBackgroundColor: shadMuted,
+        ),
+        menubarTheme: ShadMenubarTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        outlineButtonTheme: ShadButtonTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
+        ),
       ),
       child: ChromeVisibility(
-        child: Material(
-          type: MaterialType.transparency,
-          child: Directionality(
-            key: uiRoot,
-            textDirection: TextDirection.ltr,
-            child: ResponsiveBreakpoints.builder(
-              breakpoints: breakpoints,
-              breakpointsLandscape: breakpointsLandscape,
-              child: ControllerProvider(
-                controller: navController,
+        child: Theme(
+          data: materialTheme,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Directionality(
+              key: uiRoot,
+              textDirection: TextDirection.ltr,
+              child: ResponsiveBreakpoints.builder(
+                breakpoints: breakpoints,
+                breakpointsLandscape: breakpointsLandscape,
                 child: ControllerProvider(
-                  controller: meetingViewController,
-                  child: Portal(child: widget.child),
+                  controller: navController,
+                  child: ControllerProvider(
+                    controller: meetingViewController,
+                    child: Portal(child: widget.child),
+                  ),
                 ),
               ),
             ),

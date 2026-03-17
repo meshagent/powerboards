@@ -456,7 +456,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                 title: service.metadata.name,
                 subtitle: service.metadata.description ?? "",
                 icon: LucideIcons.puzzle,
-                color: Colors.black,
+                color: const Color(0xFF222222),
                 canChange: true,
                 template: null,
                 parsed: null,
@@ -470,7 +470,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
               subtitle: available.parsed.metadata.description ?? "",
               template: available.template,
               icon: LucideIcons.bot,
-              color: Colors.black,
+              color: const Color(0xFF222222),
               parsed: available.parsed,
             ),
         ];

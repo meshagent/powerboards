@@ -972,7 +972,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 Expanded(
                   child: Center(
                     child: participant == null
-                        ? ShadButton.outline(child: Text("Start Voice Session"))
+                        ? ShadButton(child: Text("Start Voice Session"))
                         : ConstrainedBox(
                             constraints: BoxConstraints(maxWidth: 500, maxHeight: 500),
                             child: VoiceAgentCaller(meeting: MeetingController.of(context), participant: participant),
@@ -1003,7 +1003,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 : controller.inMeeting
                 ? _buildChatArea(context, null, [])
                 : Center(
-                    child: ShadButton.outline(
+                    child: ShadButton(
                       onPressed: () {
                         _joinMeeting();
                       },
@@ -1023,7 +1023,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
 
     return ColoredBox(
-      color: cs.background,
+      color: cs.card,
       child: Column(
         children: [
           if (isMobile) ActionsRow(actions: actions),
@@ -1051,7 +1051,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
 
     return ColoredBox(
-      color: cs.background,
+      color: cs.card,
       child: Column(
         children: [
           if (isMobile)
