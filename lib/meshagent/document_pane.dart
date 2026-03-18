@@ -129,6 +129,7 @@ class _DocumentPane extends State<DocumentPane> {
                               document: document,
                               room: widget.room,
                               toolsBuilder: (context, controller, _) => ChatThreadAttachButton(controller: controller),
+                              inputPlaceholder: Text("Type a message…"),
                               openFile: _open,
                             ),
                             "gallery" => GalleryViewer(client: widget.room, document: document),

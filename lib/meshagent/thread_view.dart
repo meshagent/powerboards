@@ -506,6 +506,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           document: document,
           room: widget.client,
           controller: _chatController,
+          inputPlaceholder: Text("Send a message or @developer"),
           initialMessage: initialMessageText == null
               ? null
               : ma.ChatMessage(
