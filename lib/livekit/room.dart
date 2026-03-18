@@ -706,31 +706,88 @@ class RoomToolbarButton extends StatelessWidget {
   }
 }
 
-class ShareScreen extends StatelessWidget {
+class ShareScreen extends StatefulWidget {
   const ShareScreen({super.key});
-
-  void onPressed(BuildContext context) async {
-    final local = VideoRoomModel.maybeOf(context)?.room?.localParticipant;
-    final on = local?.isScreenShareEnabled() ?? false;
-    await local?.setScreenShareEnabled(!on);
-  }
 
   bool canShareScreen() {
     return !lk.lkPlatformIsMobile();
   }
 
   @override
+  State<ShareScreen> createState() => _ShareScreenState();
+}
+
+class _ShareScreenState extends State<ShareScreen> {
+  bool _processing = false;
+
+  bool _hasActiveScreenShare(lk.LocalParticipant? local) {
+    if (local == null) return false;
+
+    return local.videoTrackPublications.any(
+      (publication) => publication.source == lk.TrackSource.screenShareVideo && !publication.muted && publication.track != null,
+    );
+  }
+
+  String _describeScreenShareError(Object error) {
+    final message = '$error';
+
+    if (message.contains('NotAllowedError')) {
+      return 'Screen sharing was blocked by the browser or system.';
+    }
+
+    if (message.contains('NotFoundError')) {
+      return 'No screen source was available to share.';
+    }
+
+    if (message.contains('AbortError')) {
+      return 'Screen sharing was canceled before it started.';
+    }
+
+    return 'Unable to start screen sharing: $message';
+  }
+
+  Future<void> _onPressed(BuildContext context) async {
+    final local = VideoRoomModel.maybeOf(context)?.room?.localParticipant;
+    final toaster = ShadToaster.maybeOf(context);
+    if (local == null || _processing) {
+      return;
+    }
+
+    final on = _hasActiveScreenShare(local);
+
+    setState(() {
+      _processing = true;
+    });
+
+    try {
+      await local.setScreenShareEnabled(!on);
+    } catch (error) {
+      if (!mounted) return;
+      toaster?.show(ShadToast.destructive(description: Text(_describeScreenShareError(error))));
+      debugPrint('Unable to toggle screen sharing $error');
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _processing = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final room = VideoRoomModel.maybeOf(context)?.room;
-    if (room == null || !canShareScreen()) {
+    if (room == null || !widget.canShareScreen()) {
       return SizedBox.shrink();
     }
 
     return ListenableBuilder(
       listenable: room,
       builder: (context, _) {
-        final on = room.localParticipant?.isScreenShareEnabled() ?? false;
-        return PresentButton(onPressed: () => onPressed(context), on: on);
+        final on = _hasActiveScreenShare(room.localParticipant);
+        return PresentButton(onPressed: _processing ? null : () => _onPressed(context), on: on);
       },
     );
   }
