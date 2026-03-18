@@ -19,30 +19,31 @@ const double desktopPaneSideHeaderVisualInset = desktopPaneSideHeaderSlotSize + 
 const double desktopPaneSideListItemLeadingInset = 12;
 
 bool shouldCompactPaneHeaderActions(
-  double maxWidth, {
+  BoxConstraints constraints, {
   double leadingWidth = 0,
   double reserve = desktopPaneHeaderActionReserve,
   double expandedActionsWidth = desktopPaneHeaderExpandedActionsWidthEstimate,
 }) {
-  return maxWidth - leadingWidth < expandedActionsWidth + reserve;
+  final availableWidth = constraints.hasBoundedWidth ? constraints.maxWidth : constraints.minWidth;
+  final minimumExpandedWidth = leadingWidth + expandedActionsWidth + reserve;
+  return availableWidth < minimumExpandedWidth;
 }
 
-class PaneHeaderActionScope extends InheritedWidget {
-  const PaneHeaderActionScope({super.key, required this.compact, this.iconOnly = false, required super.child});
+class CompactHeaderActions extends InheritedWidget {
+  const CompactHeaderActions({super.key, required this.compact, required super.child});
 
   final bool compact;
-  final bool iconOnly;
 
   static bool compactOf(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<PaneHeaderActionScope>();
-    return scope?.compact ?? false;
+    final item = context.dependOnInheritedWidgetOfExactType<CompactHeaderActions>();
+    return item?.compact ?? false;
   }
 
   static bool iconOnlyOf(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<PaneHeaderActionScope>();
-    return scope?.iconOnly ?? false;
+    final item = context.dependOnInheritedWidgetOfExactType<CompactHeaderActions>();
+    return item?.compact ?? false;
   }
 
   @override
-  bool updateShouldNotify(PaneHeaderActionScope oldWidget) => compact != oldWidget.compact || iconOnly != oldWidget.iconOnly;
+  bool updateShouldNotify(CompactHeaderActions oldWidget) => compact != oldWidget.compact;
 }

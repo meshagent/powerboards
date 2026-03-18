@@ -208,7 +208,7 @@ class InviteUserButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final iconOnly = PaneHeaderActionScope.iconOnlyOf(context);
+    final compact = CompactHeaderActions.compactOf(context);
 
     return Tooltip(
       message: "Invite user",
@@ -221,7 +221,7 @@ class InviteUserButton extends StatelessWidget {
             await showUpdateRoomPermsDialog(context, projectId: projectId, room: room);
           }
         },
-        child: isMobile || iconOnly ? null : Text("Invite"),
+        child: isMobile || compact ? null : Text("Invite"),
       ),
     );
   }
@@ -235,7 +235,7 @@ class MeetButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final iconOnly = PaneHeaderActionScope.iconOnlyOf(context);
+    final compact = CompactHeaderActions.compactOf(context);
 
     return Tooltip(
       message: "Meet",
@@ -248,7 +248,7 @@ class MeetButton extends StatelessWidget {
             controller.enterMeeting();
           }
         },
-        child: isMobile || iconOnly ? null : Text("Meet"),
+        child: isMobile || compact ? null : Text("Meet"),
       ),
     );
   }
@@ -262,7 +262,7 @@ class FilesButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final iconOnly = PaneHeaderActionScope.iconOnlyOf(context);
+    final compact = CompactHeaderActions.compactOf(context);
 
     return controller.isFilesShown
         ? Tooltip(
@@ -270,7 +270,7 @@ class FilesButton extends StatelessWidget {
             child: ShadButton(
               leading: Icon(LucideIcons.files),
               onPressed: controller.hideFiles,
-              child: isMobile || iconOnly ? null : Text("Files"),
+              child: isMobile || compact ? null : Text("Files"),
             ),
           )
         : Tooltip(
@@ -278,7 +278,7 @@ class FilesButton extends StatelessWidget {
             child: ShadButton.outline(
               leading: Icon(LucideIcons.files),
               onPressed: controller.showFiles,
-              child: isMobile || iconOnly ? null : Text("Files"),
+              child: isMobile || compact ? null : Text("Files"),
             ),
           );
   }
@@ -1110,40 +1110,30 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           else
             LayoutBuilder(
               builder: (context, constraints) {
-                final compactActions =
-                    controller.preferCompactPaneActions ||
-                    shouldCompactPaneHeaderActions(
-                      constraints.maxWidth,
-                      leadingWidth: _measureMeetingHeaderTitleWidth(context, constraints.maxWidth),
-                    );
-                return PaneHeaderActionScope(
-                  compact: compactActions,
-                  iconOnly: true,
-                  child: SizedBox(
-                    height: headerHeight,
-                    child: Center(
-                      child: SizedBox(
-                        height: desktopPaneHeaderContentHeight,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Row(
-                            spacing: desktopPaneHeaderButtonGap,
-                            children: [
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    "Get ready to meet",
-                                    style: meetingHeaderTitleStyle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                return SizedBox(
+                  height: headerHeight,
+                  child: Center(
+                    child: SizedBox(
+                      height: desktopPaneHeaderContentHeight,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          spacing: desktopPaneHeaderButtonGap,
+                          children: [
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  "Get ready to meet",
+                                  style: meetingHeaderTitleStyle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              if (actions.isNotEmpty)
-                                Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: actions),
-                            ],
-                          ),
+                            ),
+                            if (actions.isNotEmpty)
+                              Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: actions),
+                          ],
                         ),
                       ),
                     ),
@@ -1293,16 +1283,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  double _measureMeetingHeaderTitleWidth(BuildContext context, double maxWidth) {
-    final painter = TextPainter(
-      text: TextSpan(text: "Get ready to meet", style: meetingHeaderTitleStyle),
-      maxLines: 1,
-      textDirection: Directionality.of(context),
-    )..layout();
-
-    return painter.width.clamp(0.0, maxWidth * 0.45);
-  }
-
   @override
   Widget build(BuildContext context) {
     final rb = ResponsiveBreakpoints.of(context);
@@ -1421,6 +1401,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             return ToolConnectionScope(
                               tools: [UIToolkit(context, room: widget.room)],
                               builder: (context, error) {
+                                final theme = ShadTheme.of(context);
+                                final cs = theme.colorScheme;
+
                                 if (isMobile) {
                                   final actions = [
                                     BackButton(projectId: widget.projectId),
@@ -1456,6 +1439,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                     ),
                                   );
                                 }
+
                                 final actions = [
                                   ...meetingActions(context),
 
@@ -1472,8 +1456,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   ),
                                   UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
                                 ];
-
-                                final cs = ShadTheme.of(context).colorScheme;
 
                                 return RoomDeveloperLogsListener(
                                   events: events,

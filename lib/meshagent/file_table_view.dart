@@ -955,33 +955,31 @@ class _FileManagerViewState extends State<FileManagerView> {
           height: headerHeight,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final compactActions =
-                  widget.preferDesktopHeaderCompact ||
-                  shouldCompactPaneHeaderActions(
-                    constraints.maxWidth,
-                    leadingWidth: _estimateDesktopHeaderLeadingWidth(context, constraints.maxWidth),
-                  );
+              final compactActions = shouldCompactPaneHeaderActions(
+                constraints,
+                leadingWidth: _estimateDesktopHeaderLeadingWidth(context, constraints.maxWidth),
+              );
               _reportDesktopHeaderCompactChanged(compactActions);
-              return PaneHeaderActionScope(
-                compact: compactActions,
-                iconOnly: true,
-                child: Center(
-                  child: SizedBox(
-                    height: desktopPaneHeaderContentHeight,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      spacing: desktopPaneHeaderButtonGap,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: ClipRect(child: _buildDesktopHeaderLeading()),
-                          ),
+
+              return Center(
+                child: SizedBox(
+                  height: desktopPaneHeaderContentHeight,
+                  child: Row(
+                    crossAxisAlignment: .center,
+                    spacing: desktopPaneHeaderButtonGap,
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: ClipRect(child: _buildDesktopHeaderLeading()),
                         ),
-                        if (desktopActions.isNotEmpty)
-                          Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: desktopActions),
-                      ],
-                    ),
+                      ),
+                      if (desktopActions.isNotEmpty)
+                        CompactHeaderActions(
+                          compact: compactActions,
+                          child: Row(mainAxisSize: .min, spacing: desktopPaneHeaderButtonGap, children: desktopActions),
+                        ),
+                    ],
                   ),
                 ),
               );
@@ -1006,7 +1004,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       children: [
         ..._buildFileCloseAction(),
         Expanded(
-          child: Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          child: Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: .ellipsis),
         ),
       ],
     );
