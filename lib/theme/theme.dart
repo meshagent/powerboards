@@ -49,7 +49,7 @@ const shadDarkRing = Color(0xFF9A86F3);
 const shadDarkSelection = Color(0xFF473A77);
 
 ShadColorScheme powerboardsShadColorScheme() {
-  return ShadColorScheme.fromName("neutral").copyWith(
+  return ShadColorScheme(
     background: shadBackground,
     foreground: shadForeground,
     card: shadCard,
@@ -74,7 +74,7 @@ ShadColorScheme powerboardsShadColorScheme() {
 }
 
 ShadColorScheme powerboardsShadDarkColorScheme() {
-  return ShadColorScheme.fromName("neutral").copyWith(
+  return ShadColorScheme(
     background: shadDarkBackground,
     foreground: shadDarkForeground,
     card: shadDarkCard,
