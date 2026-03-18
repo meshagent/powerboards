@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
+import 'package:powerboards/ui/camera_box.dart';
+
 import 'participant_track.dart';
 import 'hover_builder.dart';
 
 class CameraStrip extends StatelessWidget {
-  const CameraStrip({super.key, required this.room, this.gap = 5, this.horizontal = false});
+  const CameraStrip({super.key, required this.room, this.gap = 5, this.horizontal = false, this.participants});
 
   final lk.Room room;
   final double gap;
   final bool horizontal;
+  final List<lk.Participant>? participants;
 
   Widget displayWrapper(Object key, bool selected, Widget child) {
     return Container(
@@ -103,30 +106,23 @@ class CameraStrip extends StatelessWidget {
     return displayWrapper(
       participant,
       false, //widget.meetingDoc.activeVideoTrack?.matches(participant) == true,
-      participant.identity.contains(".agent")
-          ? GestureDetector(
-              onTap: () {
-                // widget.meetingDoc.setActiveVideoTrack(
-                //   ActiveVideoTrack(participant: ParticipantIdentity.parse(participant.identity).url, source: "agentTasks", device: null),
-                // );
-
-                // widget.controller.previewLayer = null;
-                // widget.controller.selectedLayer = null;
-              },
-              child: const Text("audio stats"), // AudioStats(room: VideoRoomModel.of(context).room, participant: participant),
-            )
-          : HoverBuilder(
-              cursor: SystemMouseCursors.basic,
-              builder: (hovered) {
-                return Container(
-                  color: Colors.transparent,
-                  child: IgnorePointer(
-                    ignoring: true,
-                    child: ParticipantTrack(showName: hovered, participant: participant, track: SizedBox.shrink()),
-                  ),
-                );
-              },
+      HoverBuilder(
+        cursor: SystemMouseCursors.basic,
+        builder: (hovered) {
+          return CameraBox(
+            participantName: participant.name,
+            muted: participant.isMuted,
+            showName: hovered,
+            camera: Container(
+              color: const Color(0xFF2A2A2A),
+              alignment: Alignment.center,
+              child: participant.identity.contains(".agent")
+                  ? const Text("audio stats", style: TextStyle(color: Colors.white70))
+                  : const SizedBox.shrink(),
             ),
+          );
+        },
+      ),
       //  TimuObjectBuilder(
       //    url: '/api/graph/core:user/${participant.name}',
       //    error: (_, _) => const Icon(LucideIcons.user, size: 100, color: Colors.grey),
@@ -142,24 +138,29 @@ class CameraStrip extends StatelessWidget {
     return ListenableBuilder(
       listenable: room,
       builder: (context, _) {
+        final stripParticipants =
+            participants ??
+            <lk.Participant>[...(room.remoteParticipants.values), if (room.localParticipant != null) room.localParticipant!];
+
         return ListView(
           scrollDirection: horizontal ? Axis.horizontal : Axis.vertical,
           children: [
-            for (final participant in <lk.Participant>[
-              ...(room.remoteParticipants.values),
-              if (room.localParticipant != null) room.localParticipant!,
-            ])
-              if (participant.trackPublications.isEmpty)
-                audioDisplay(context, participant)
-              else
-                for (lk.TrackPublication track in participant.trackPublications.values.where(
-                  (t) => t.source != lk.TrackSource.screenShareVideo,
-                ))
-                  switch (track.kind) {
-                    lk.TrackType.AUDIO when !participant.hasVideo => audioDisplay(context, participant),
-                    lk.TrackType.VIDEO => videoDisplay(context, participant, track),
-                    (_) => SizedBox.shrink(),
-                  },
+            for (final participant in stripParticipants)
+              ...() {
+                final nonShareVideoTracks = participant.trackPublications.values.where(
+                  (track) =>
+                      track.kind == lk.TrackType.VIDEO &&
+                      track.source != lk.TrackSource.screenShareVideo &&
+                      !track.muted &&
+                      track.track != null,
+                );
+
+                if (nonShareVideoTracks.isEmpty) {
+                  return [audioDisplay(context, participant)];
+                }
+
+                return nonShareVideoTracks.map((track) => videoDisplay(context, participant, track));
+              }(),
           ],
         );
       },
