@@ -688,24 +688,63 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return trimmed;
   }
 
-  String? _threadListPathFromParticipant(RemoteParticipant participant) {
-    final threadListPath = participant.getAttribute("meshagent.chatbot.thread-list");
-    if (threadListPath is! String) {
+  String? _normalizedThreadDir(String? threadDir) {
+    if (threadDir == null) {
       return null;
     }
 
-    final trimmed = threadListPath.trim();
+    final trimmed = threadDir.trim();
     if (trimmed.isEmpty) {
       return null;
     }
 
-    return trimmed;
+    return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length - 1) : trimmed;
+  }
+
+  String? _threadListPathFromThreadDir(String? threadDir) {
+    final normalized = _normalizedThreadDir(threadDir);
+    if (normalized == null) {
+      return null;
+    }
+
+    return "$normalized/index.threadl";
+  }
+
+  String? _threadDirFromParticipant(RemoteParticipant participant) {
+    final threadDir = participant.getAttribute("meshagent.chatbot.thread-dir");
+    if (threadDir is! String) {
+      return null;
+    }
+
+    return _normalizedThreadDir(threadDir);
+  }
+
+  String? _threadListPathFromParticipant(RemoteParticipant participant) {
+    final threadListPath = participant.getAttribute("meshagent.chatbot.thread-list");
+    if (threadListPath is String) {
+      final trimmed = threadListPath.trim();
+      if (trimmed.isNotEmpty) {
+        return trimmed;
+      }
+    }
+
+    return _threadListPathFromThreadDir(_threadDirFromParticipant(participant));
+  }
+
+  String? _threadDirFromService(ServiceSpec service) {
+    return _normalizedThreadDir(service.agents.firstOrNull?.annotations["meshagent.chatbot.thread-dir"]);
   }
 
   String? _threadListPathFromService(ServiceSpec service) {
     final annotationPath = service.agents.firstOrNull?.annotations["meshagent.chatbot.thread-list"];
     if (annotationPath != null && annotationPath.trim().isNotEmpty) {
       return annotationPath.trim();
+    }
+
+    final threadDir = _threadDirFromService(service);
+    final threadListPath = _threadListPathFromThreadDir(threadDir);
+    if (threadListPath != null) {
+      return threadListPath;
     }
 
     final agentName = service.agents.firstOrNull?.name;
@@ -742,7 +781,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
-  String getDocumentPath(String userId, String? agent) {
+  String getDocumentPath(String? agent, {String? threadDir}) {
+    final normalizedThreadDir = _normalizedThreadDir(threadDir);
+    if (normalizedThreadDir != null) {
+      return "$normalizedThreadDir/main.thread";
+    }
+
     if (agent != null) {
       return '.threads/$agent/main.thread';
     } else {
@@ -921,10 +965,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildChatArea(BuildContext context, String? agentName, List<Widget> actions, {String? threadingMode, String? threadListPath}) {
+  Widget _buildChatArea(
+    BuildContext context,
+    String? agentName,
+    List<Widget> actions, {
+    String? threadingMode,
+    String? threadListPath,
+    String? threadDir,
+  }) {
     final user = MeshagentAuth.current.getUser();
-    final userId = user!['id'] as String;
-    final documentPath = getDocumentPath(userId, agentName);
+    final userEmail = user?["email"];
+    final documentPath = getDocumentPath(agentName, threadDir: threadDir);
     final isDefaultNewThreading = threadingMode == "default-new";
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final chatActions = actions;
@@ -947,7 +998,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               key: _threadViewKeyForPath(documentPath),
               client: widget.room,
               documentPath: documentPath,
-              participantNames: [user["email"], ?agentName],
+              participantNames: [if (userEmail is String && userEmail.isNotEmpty) userEmail, if (agentName != null) agentName],
               joinMeeting: _joinMeeting,
             ),
           ),
@@ -1208,6 +1259,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 name,
                 actions,
                 threadingMode: _threadingModeFromParticipant(developmentParticipant),
+                threadDir: _threadDirFromParticipant(developmentParticipant),
                 threadListPath: _threadListPathFromParticipant(developmentParticipant),
               );
             }
@@ -1222,6 +1274,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               service.agents[0].name,
               actions,
               threadingMode: service.agents[0].annotations["meshagent.chatbot.threading"],
+              threadDir: _threadDirFromService(service),
               threadListPath: _threadListPathFromService(service),
             );
           } else if (type == "VoiceBot") {
