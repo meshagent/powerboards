@@ -45,6 +45,8 @@ class MeetingViewController extends Controller {
 class MeetingView extends StatelessWidget {
   const MeetingView({super.key, required this.room, required this.onCancel, required this.joinMeeting, this.agentName});
 
+  static const Color _meetingSurfaceColor = Color(0xFF222222);
+
   final String? agentName;
 
   final RoomClient room;
@@ -99,27 +101,30 @@ class MeetingView extends StatelessWidget {
           final room = VideoRoomModel.maybeOf(context)?.room;
           if (room == null) return const SizedBox.shrink();
 
-          return VideoRoomParticipantsBuilder(
-            room: room,
-            builder: (context, participants) {
-              final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+          return ColoredBox(
+            color: _meetingSurfaceColor,
+            child: VideoRoomParticipantsBuilder(
+              room: room,
+              builder: (context, participants) {
+                final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
-              return isMobile
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _cameraStripBuilder(room, true, participants),
-                        Expanded(child: ExpandableCameraGrid(participants: participants)),
-                      ],
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: ExpandableCameraGrid(participants: participants)),
-                        _cameraStripBuilder(room, false, participants),
-                      ],
-                    );
-            },
+                return isMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _cameraStripBuilder(room, true, participants),
+                          Expanded(child: ExpandableCameraGrid(participants: participants)),
+                        ],
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: ExpandableCameraGrid(participants: participants)),
+                          _cameraStripBuilder(room, false, participants),
+                        ],
+                      );
+              },
+            ),
           );
         } else if (meetingViewController.state == MeetingViewState.ended) {
           return Center(
