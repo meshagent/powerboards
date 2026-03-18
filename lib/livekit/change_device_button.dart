@@ -30,6 +30,9 @@ class ChangeDeviceButton extends StatefulWidget {
 }
 
 class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
+  static const BoxConstraints _menuConstraints = BoxConstraints(minWidth: 220, maxWidth: 320);
+  static const double _topLevelItemHeight = 52;
+
   bool _loaded = false;
   late SharedPreferences _preferences;
   late List<MediaDevice> _devices;
@@ -115,8 +118,8 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     return AdaptiveShadContextMenu(
       controller: _controller,
       boundaryContext: context,
-      constraints: const BoxConstraints(minWidth: 260),
-      estimatedMenuWidth: 260,
+      constraints: _menuConstraints,
+      estimatedMenuWidth: _menuConstraints.maxWidth,
       estimatedMenuHeight: _estimatedTopLevelMenuHeight(
         includeCamera: widget.kind == null || widget.kind == "camera",
         includeMicrophone: widget.kind == null || widget.kind == "mic",
@@ -165,7 +168,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
 
   double _estimatedTopLevelMenuHeight({required bool includeCamera, required bool includeMicrophone, required bool includeSpeakers}) {
     final itemCount = [includeCamera, includeMicrophone, includeSpeakers].where((include) => include).length;
-    return itemCount * 56.0 + 8.0;
+    return itemCount * _topLevelItemHeight + 8.0;
   }
 
   Widget _buildDeviceMenuItem(
@@ -178,39 +181,55 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     required String disabledLabel,
   }) {
     final theme = ShadTheme.of(context);
-    final selectedLabel = selectedDevice?.label.trim();
+    final selectedLabel = _deviceLabel(selectedDevice, label);
     final submenuItems = devices
         .map(
           (device) => ShadContextMenuItem(
             height: 40,
             onPressed: () => onChange(device),
             trailing: device.deviceId == selectedDevice?.deviceId ? const Icon(LucideIcons.check, size: 16) : null,
-            child: Text(device.label, overflow: TextOverflow.ellipsis),
+            child: Text(_deviceLabel(device, label), overflow: TextOverflow.ellipsis),
           ),
         )
         .toList(growable: false);
 
     if (selectedDevice == null) {
-      return ShadContextMenuItem(enabled: true, closeOnTap: false, height: 40, leading: Icon(icon, size: 18), child: Text(disabledLabel));
+      return ShadContextMenuItem(
+        enabled: true,
+        closeOnTap: false,
+        height: _topLevelItemHeight,
+        leading: Icon(icon, size: 18),
+        child: Text(disabledLabel),
+      );
     }
 
     return ShadContextMenuItem(
-      height: 40,
+      height: _topLevelItemHeight,
       leading: Icon(icon, size: 18),
       items: submenuItems,
-      constraints: const BoxConstraints(minWidth: 260),
-      child: Row(
+      constraints: _menuConstraints,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(child: Text(label)),
-          if (selectedLabel != null && selectedLabel.isNotEmpty)
-            Flexible(
-              child: Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: Text(selectedLabel, style: theme.textTheme.muted, overflow: TextOverflow.ellipsis),
-              ),
+          Text(label, overflow: TextOverflow.ellipsis),
+          if (selectedLabel.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(selectedLabel, style: theme.textTheme.muted.copyWith(fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 1),
             ),
         ],
       ),
     );
+  }
+
+  String _deviceLabel(MediaDevice? device, String fallbackPrefix) {
+    final trimmedLabel = device?.label.trim();
+    if (trimmedLabel != null && trimmedLabel.isNotEmpty) {
+      return trimmedLabel;
+    }
+
+    return 'Default $fallbackPrefix';
   }
 }
