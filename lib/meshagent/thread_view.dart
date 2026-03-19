@@ -770,6 +770,9 @@ final webSearch = StaticToolkitBuilderOption(
   text: "Web search",
   selectedText: "Search",
 );
+
+final shell = StaticToolkitBuilderOption(icon: LucideIcons.terminal, config: ShellConfig(), text: "Shell", selectedText: "Shell");
+
 final imageGen = StaticToolkitBuilderOption(
   icon: LucideIcons.image,
   config: ImageGenerationConfig(),
@@ -869,6 +872,7 @@ Widget buildTools(BuildContext context, RoomClient room, String? agentName, Chat
       for (final tool in state.availableTools) ...[
         if (tool.name == "storage") storage,
         if (tool.name == "web_search") webSearch,
+        if (tool.name == "shell") shell,
         if (tool.name == "image_generation") imageGen,
         if (tool.name == "mcp") mcp,
       ],
