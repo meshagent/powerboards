@@ -1159,7 +1159,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           else
             LayoutBuilder(
               builder: (context, constraints) {
-                final compactActions = controller.preferCompactPaneActions || shouldCompactPaneHeaderActions(
+                final compactActions =
+                    controller.preferCompactPaneActions ||
+                    shouldCompactPaneHeaderActions(
                       constraints,
                       leadingWidth: meetingIsActive
                           ? _measureActiveMeetingHeaderWidth(constraints.maxWidth)
