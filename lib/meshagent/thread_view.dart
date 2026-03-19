@@ -60,6 +60,8 @@ class MeshagentThreadView extends StatefulWidget {
     this.initialMessageText,
     this.initialMessageAttachments,
     this.agentName,
+    this.selectedThreadPath,
+    this.onSelectedThreadPathChanged,
 
     this.emptyState,
   });
@@ -76,6 +78,8 @@ class MeshagentThreadView extends StatefulWidget {
   final String? initialMessageID;
   final String? initialMessageText;
   final List<FileAttachment>? initialMessageAttachments;
+  final String? selectedThreadPath;
+  final ValueChanged<String?>? onSelectedThreadPathChanged;
   final Widget? emptyState;
 
   @override
@@ -83,31 +87,167 @@ class MeshagentThreadView extends StatefulWidget {
 }
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
-  static const double _threadListPanelWidth = 300;
-  static const double _minChatAreaWidthWithThreadList = 600;
-
   late final ChatThreadController _chatController;
   late String _documentPath;
   late String? _initialMessageText;
+  @override
+  void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.agentName != widget.agentName ||
+        oldWidget.threadDisplayMode != widget.threadDisplayMode ||
+        oldWidget.documentPath != widget.documentPath ||
+        oldWidget.threadListPath != widget.threadListPath) {
+      _documentPath = widget.documentPath;
+      _initialMessageText = widget.initialMessageText;
+    } else if (oldWidget.initialMessageText != widget.initialMessageText &&
+        widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer) {
+      _initialMessageText = widget.initialMessageText;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    _chatController = MeshagentRoomChatThreadController(room: widget.client);
+    _documentPath = widget.documentPath;
+    _initialMessageText = widget.initialMessageText;
+  }
+
+  @override
+  void dispose() {
+    _chatController.dispose();
+
+    super.dispose();
+  }
+
+  void _onMessageSent(ma.ChatMessage message) {}
+
+  Widget _fileInThreadBuilder(BuildContext context, String path) {
+    if (path.endsWith('.meeting')) {
+      return MeetingCard(onJoin: () => widget.joinMeeting());
+    }
+
+    return ShadGestureDetector(
+      cursor: SystemMouseCursors.click,
+      onTap: () => _open(path),
+      child: ChatThreadPreview(room: widget.client, path: path),
+    );
+  }
+
+  void _open(String path) {
+    final state = PathRouteMatch.of(context);
+    final currentUri = state.uri;
+
+    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    updatedQueryParameters['p'] = path;
+
+    final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
+
+    context.go(newUri.toString());
+  }
+
+  void _onThreadPathChanged(String? path) {
+    final onSelectedThreadPathChanged = widget.onSelectedThreadPathChanged;
+    if (onSelectedThreadPathChanged != null) {
+      onSelectedThreadPathChanged(path);
+    }
+  }
+
+  Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
+    return IconTheme(
+      data: const IconThemeData(size: 14),
+      child: ChatThreadLoader(
+        key: ValueKey(path),
+        room: widget.client,
+        loadingBuilder: loadingBuilder ?? (context) => const SizedBox.shrink(),
+        path: path,
+        builder: (context, document) => ChatThread(
+          path: path,
+          document: document,
+          room: widget.client,
+          controller: _chatController,
+          inputPlaceholder: Text("Send a message or @developer"),
+          initialMessage: initialMessageText == null
+              ? null
+              : ma.ChatMessage(
+                  id: widget.initialMessageID ?? const Uuid().v4(),
+                  text: initialMessageText,
+                  attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
+                ),
+          onMessageSent: _onMessageSent,
+          fileInThreadBuilder: _fileInThreadBuilder,
+          openFile: _open,
+          toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, widget.agentName, controller, snapshot),
+          agentName: widget.agentName,
+          chatInputBoxBuilder: (context, inputBox) => EnableWebContextMenu(child: inputBox),
+        ),
+        participantNames: widget.participantNames,
+      ),
+    );
+  }
+
+  Widget _buildDefaultNewThreadContent(BuildContext context, {required String agentName}) {
+    final threadPath = widget.selectedThreadPath;
+    final threadContent = threadPath == null
+        ? ma.NewChatThread(
+            key: ValueKey("new-thread-$agentName-${widget.newThreadResetVersion}"),
+            room: widget.client,
+            agentName: agentName,
+            controller: _chatController,
+            onThreadPathChanged: _onThreadPathChanged,
+            toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, agentName, controller, snapshot),
+            builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
+          )
+        : _buildThread(path: threadPath, initialMessageText: null);
+
+    return threadContent;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer) {
+      final agentName = widget.agentName;
+      if (agentName == null) {
+        return Center(
+          child: ShadAlert.destructive(title: Text("Unable to start a new thread"), description: Text("No chat agent is selected.")),
+        );
+      }
+
+      return _buildDefaultNewThreadContent(context, agentName: agentName);
+    }
+
+    return _buildThread(path: _documentPath, initialMessageText: _initialMessageText);
+  }
+}
+
+class MeshagentThreadListPane extends StatefulWidget {
+  const MeshagentThreadListPane({
+    super.key,
+    required this.client,
+    required this.onSelectedThreadPathChanged,
+    this.threadListPath,
+    this.selectedThreadPath,
+    this.newThreadResetVersion = 0,
+  });
+
+  final RoomClient client;
+  final String? threadListPath;
+  final String? selectedThreadPath;
+  final int newThreadResetVersion;
+  final ValueChanged<String?> onSelectedThreadPathChanged;
+
+  @override
+  State<MeshagentThreadListPane> createState() => _MeshagentThreadListPaneState();
+}
+
+class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   MeshDocument? _threadListDocument;
   RoomClient? _threadListClient;
   String? _threadListPath;
   Object? _threadListError;
   bool _threadListLoading = false;
-  String? _selectedThreadPath;
-  String? _activeThreadPath;
-  int _inlineNewThreadResetVersion = 0;
-  String? _threadListIndexPathOverride;
-
-  String? _threadListIndexPathFromDocumentPath(String path) {
-    final normalized = path.trim();
-    if (normalized.isEmpty) {
-      return null;
-    }
-
-    final directory = p.posix.dirname(normalized);
-    return p.posix.join(directory, "index.threadl");
-  }
 
   String? _normalizedThreadListPath(String? path) {
     if (path == null) {
@@ -120,21 +260,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
 
     return trimmed;
-  }
-
-  String? _threadListIndexPathFromThreadPath(String path) {
-    final normalized = path.trim();
-    if (normalized.isEmpty) {
-      return null;
-    }
-
-    return p.posix.join(p.posix.dirname(normalized), "index.threadl");
-  }
-
-  String? _resolvedThreadListPath() {
-    return _threadListIndexPathOverride ??
-        _normalizedThreadListPath(widget.threadListPath) ??
-        _threadListIndexPathFromDocumentPath(widget.documentPath);
   }
 
   DateTime _parseThreadDate(String value) {
@@ -224,13 +349,11 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return;
     }
 
-    final selectedPath = _selectedThreadPath;
+    final selectedPath = widget.selectedThreadPath;
     if (selectedPath != null && !_threadListContainsPath(selectedPath)) {
-      _selectedThreadPath = null;
-      if (_activeThreadPath == selectedPath) {
-        _activeThreadPath = null;
-      }
-      _inlineNewThreadResetVersion++;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onSelectedThreadPathChanged(null);
+      });
     }
 
     setState(() {});
@@ -258,7 +381,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   Future<void> _rebindThreadListDocument() async {
-    final nextPath = widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer ? _resolvedThreadListPath() : null;
+    final nextPath = _normalizedThreadListPath(widget.threadListPath);
     if (nextPath == _threadListPath && _threadListDocument != null) {
       return;
     }
@@ -283,15 +406,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     try {
       final document = await widget.client.sync.open(nextPath);
-      if (!mounted || widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer) {
-        try {
-          await widget.client.sync.close(nextPath);
-        } catch (_) {}
-        return;
-      }
-
-      final expectedPath = _resolvedThreadListPath();
-      if (expectedPath != nextPath) {
+      if (!mounted || _normalizedThreadListPath(widget.threadListPath) != nextPath) {
         try {
           await widget.client.sync.close(nextPath);
         } catch (_) {}
@@ -317,49 +432,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         _threadListLoading = false;
         _threadListError = e;
       });
-    }
-  }
-
-  void _onNewThreadPathChanged(String? path) {
-    if (!mounted) {
-      return;
-    }
-
-    final nextIndexPath = path == null ? _threadListIndexPathOverride : _threadListIndexPathFromThreadPath(path);
-    final needsRebind = path != null && nextIndexPath != null && nextIndexPath != _threadListIndexPathOverride;
-    if (_activeThreadPath == path && !needsRebind) {
-      return;
-    }
-
-    setState(() {
-      _activeThreadPath = path;
-      if (path != null && nextIndexPath != null) {
-        _threadListIndexPathOverride = nextIndexPath;
-      }
-    });
-
-    if (needsRebind) {
-      unawaited(_rebindThreadListDocument());
-    }
-  }
-
-  void _openThreadFromList(String path) {
-    final nextIndexPath = _threadListIndexPathFromThreadPath(path);
-    final needsRebind = nextIndexPath != null && nextIndexPath != _threadListIndexPathOverride;
-    if (_selectedThreadPath == path) {
-      return;
-    }
-
-    setState(() {
-      _selectedThreadPath = path;
-      _activeThreadPath = path;
-      if (nextIndexPath != null) {
-        _threadListIndexPathOverride = nextIndexPath;
-      }
-    });
-
-    if (needsRebind) {
-      unawaited(_rebindThreadListDocument());
     }
   }
 
@@ -398,14 +470,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return;
     }
 
-    final isOpen = _activeThreadPath == entry.path || _selectedThreadPath == entry.path;
-    if (isOpen) {
-      setState(() {
-        _selectedThreadPath = null;
-        _activeThreadPath = null;
-        _inlineNewThreadResetVersion++;
-      });
-
+    if (widget.selectedThreadPath == entry.path) {
+      widget.onSelectedThreadPathChanged(null);
       await WidgetsBinding.instance.endOfFrame;
     }
 
@@ -421,232 +487,91 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   @override
-  void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.agentName != widget.agentName ||
-        oldWidget.threadDisplayMode != widget.threadDisplayMode ||
-        oldWidget.documentPath != widget.documentPath ||
-        oldWidget.threadListPath != widget.threadListPath) {
-      _documentPath = widget.documentPath;
-      _initialMessageText = widget.initialMessageText;
-      _threadListIndexPathOverride = null;
-    } else if (oldWidget.initialMessageText != widget.initialMessageText &&
-        widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer) {
-      _initialMessageText = widget.initialMessageText;
-    }
-
-    if (widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer &&
-        oldWidget.newThreadResetVersion != widget.newThreadResetVersion) {
-      _selectedThreadPath = null;
-      _activeThreadPath = null;
-      _inlineNewThreadResetVersion++;
-    }
-
-    if (oldWidget.client != widget.client ||
-        oldWidget.documentPath != widget.documentPath ||
-        oldWidget.threadListPath != widget.threadListPath ||
-        oldWidget.threadDisplayMode != widget.threadDisplayMode) {
-      unawaited(_rebindThreadListDocument());
-    }
+  void initState() {
+    super.initState();
+    unawaited(_rebindThreadListDocument());
   }
 
   @override
-  void initState() {
-    super.initState();
+  void didUpdateWidget(covariant MeshagentThreadListPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
 
-    _chatController = MeshagentRoomChatThreadController(room: widget.client);
-    _documentPath = widget.documentPath;
-    _initialMessageText = widget.initialMessageText;
+    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath) {
+      unawaited(_rebindThreadListDocument());
+    }
 
-    unawaited(_rebindThreadListDocument());
+    if (oldWidget.newThreadResetVersion != widget.newThreadResetVersion && widget.selectedThreadPath != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onSelectedThreadPathChanged(null);
+      });
+    }
   }
 
   @override
   void dispose() {
     unawaited(_closeThreadListDocument());
-    _chatController.dispose();
-
     super.dispose();
-  }
-
-  void _onMessageSent(ma.ChatMessage message) {}
-
-  Widget _fileInThreadBuilder(BuildContext context, String path) {
-    if (path.endsWith('.meeting')) {
-      return MeetingCard(onJoin: () => widget.joinMeeting());
-    }
-
-    return ShadGestureDetector(
-      cursor: SystemMouseCursors.click,
-      onTap: () => _open(path),
-      child: ChatThreadPreview(room: widget.client, path: path),
-    );
-  }
-
-  void _open(String path) {
-    final state = PathRouteMatch.of(context);
-    final currentUri = state.uri;
-
-    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
-    updatedQueryParameters['p'] = path;
-
-    final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
-
-    context.go(newUri.toString());
-  }
-
-  Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
-    return IconTheme(
-      data: const IconThemeData(size: 14),
-      child: ChatThreadLoader(
-        key: ValueKey(path),
-        room: widget.client,
-        loadingBuilder: loadingBuilder ?? (context) => const SizedBox.shrink(),
-        path: path,
-        builder: (context, document) => ChatThread(
-          path: path,
-          document: document,
-          room: widget.client,
-          controller: _chatController,
-          inputPlaceholder: Text("Send a message or @developer"),
-          initialMessage: initialMessageText == null
-              ? null
-              : ma.ChatMessage(
-                  id: widget.initialMessageID ?? const Uuid().v4(),
-                  text: initialMessageText,
-                  attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
-                ),
-          onMessageSent: _onMessageSent,
-          fileInThreadBuilder: _fileInThreadBuilder,
-          openFile: _open,
-          toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, widget.agentName, controller, snapshot),
-          agentName: widget.agentName,
-          chatInputBoxBuilder: (context, inputBox) => EnableWebContextMenu(child: inputBox),
-        ),
-        participantNames: widget.participantNames,
-      ),
-    );
-  }
-
-  Widget _buildThreadListPanel(BuildContext context) {
-    final entries = _threadListEntries();
-    final activePath = _selectedThreadPath ?? _activeThreadPath;
-    final cs = ShadTheme.of(context).colorScheme;
-    final tt = ShadTheme.of(context).textTheme;
-
-    return ColoredBox(
-      color: Colors.transparent, //cs.background,
-      child: SizedBox(
-        width: _threadListPanelWidth,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-              child: ShadButton.ghost(
-                onPressed: () {
-                  if (_selectedThreadPath == null && _activeThreadPath == null) {
-                    return;
-                  }
-                  setState(() {
-                    _selectedThreadPath = null;
-                    _activeThreadPath = null;
-                    _inlineNewThreadResetVersion++;
-                  });
-                },
-                mainAxisAlignment: MainAxisAlignment.start,
-                expands: true,
-                leading: const Icon(LucideIcons.plus, size: 16),
-                child: const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text("New Thread", textAlign: TextAlign.start),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text("Threads", style: tt.small.copyWith(color: cs.foreground.withValues(alpha: .5))),
-              ),
-            ),
-            Expanded(
-              child: _threadListLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _threadListError != null
-                  ? const Center(child: Text("Unable to load thread list"))
-                  : entries.isEmpty
-                  ? const Center(child: Text("No threads yet"))
-                  : SuperListView(
-                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                      children: [
-                        for (final entry in entries)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: _ThreadListItem(
-                              entry: entry,
-                              selected: entry.path == activePath,
-                              onOpen: () => _openThreadFromList(entry.path),
-                              onRename: () => _renameThread(entry),
-                              onDelete: () => _deleteThread(entry),
-                            ),
-                          ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDefaultNewThreadContent(BuildContext context, {required String agentName}) {
-    final threadPath = _selectedThreadPath;
-    final hasThreadEntries = _threadListEntries().isNotEmpty;
-    final threadContent = threadPath == null
-        ? ma.NewChatThread(
-            key: ValueKey("new-thread-$agentName-${widget.newThreadResetVersion}-$_inlineNewThreadResetVersion"),
-            room: widget.client,
-            agentName: agentName,
-            controller: _chatController,
-            onThreadPathChanged: _onNewThreadPathChanged,
-            toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, agentName, controller, snapshot),
-            builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
-          )
-        : _buildThread(path: threadPath, initialMessageText: null);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth;
-        final showThreadList =
-            hasThreadEntries && maxWidth.isFinite && (maxWidth - _threadListPanelWidth) >= _minChatAreaWidthWithThreadList;
-
-        return Row(
-          children: [
-            Expanded(child: threadContent),
-            if (showThreadList) _buildThreadListPanel(context),
-          ],
-        );
-      },
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer) {
-      final agentName = widget.agentName;
-      if (agentName == null) {
-        return Center(
-          child: ShadAlert.destructive(title: Text("Unable to start a new thread"), description: Text("No chat agent is selected.")),
-        );
-      }
+    final entries = _threadListEntries();
+    final cs = ShadTheme.of(context).colorScheme;
+    final tt = ShadTheme.of(context).textTheme;
 
-      return _buildDefaultNewThreadContent(context, agentName: agentName);
-    }
-
-    return _buildThread(path: _documentPath, initialMessageText: _initialMessageText);
+    return ColoredBox(
+      color: Colors.transparent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: ShadButton.ghost(
+              onPressed: widget.selectedThreadPath == null ? null : () => widget.onSelectedThreadPathChanged(null),
+              mainAxisAlignment: MainAxisAlignment.start,
+              expands: true,
+              leading: const Icon(LucideIcons.plus, size: 16),
+              child: const Align(
+                alignment: Alignment.centerLeft,
+                child: Text("New Thread", textAlign: TextAlign.start),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text("Threads", style: tt.small.copyWith(color: cs.foreground.withValues(alpha: .5))),
+            ),
+          ),
+          Expanded(
+            child: _threadListLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _threadListError != null
+                ? const Center(child: Text("Unable to load thread list"))
+                : entries.isEmpty
+                ? const Center(child: Text("No threads yet"))
+                : SuperListView(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    children: [
+                      for (final entry in entries)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: _ThreadListItem(
+                            entry: entry,
+                            selected: entry.path == widget.selectedThreadPath,
+                            onOpen: () => widget.onSelectedThreadPathChanged(entry.path),
+                            onRename: () => _renameThread(entry),
+                            onDelete: () => _deleteThread(entry),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
