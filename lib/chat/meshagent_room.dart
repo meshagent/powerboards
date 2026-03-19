@@ -687,92 +687,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return _developmentParticipants(supported).isNotEmpty;
   }
 
-  String? _threadingModeFromParticipant(RemoteParticipant participant) {
-    final mode = participant.getAttribute("meshagent.chatbot.threading");
-    if (mode is! String) {
-      return null;
-    }
-
-    final trimmed = mode.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-
-    return trimmed;
-  }
-
-  String? _normalizedThreadDir(String? threadDir) {
-    if (threadDir == null) {
-      return null;
-    }
-
-    final trimmed = threadDir.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-
-    return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length - 1) : trimmed;
-  }
-
-  String? _threadListPathFromThreadDir(String? threadDir) {
-    final normalized = _normalizedThreadDir(threadDir);
-    if (normalized == null) {
-      return null;
-    }
-
-    return "$normalized/index.threadl";
-  }
-
-  String? _threadDirFromParticipant(RemoteParticipant participant) {
-    final threadDir = participant.getAttribute("meshagent.chatbot.thread-dir");
-    if (threadDir is! String) {
-      return null;
-    }
-
-    return _normalizedThreadDir(threadDir);
-  }
-
-  String? _threadListPathFromParticipant(RemoteParticipant participant) {
-    final threadListPath = participant.getAttribute("meshagent.chatbot.thread-list");
-    if (threadListPath is String) {
-      final trimmed = threadListPath.trim();
-      if (trimmed.isNotEmpty) {
-        return trimmed;
-      }
-    }
-
-    return _threadListPathFromThreadDir(_threadDirFromParticipant(participant));
-  }
-
-  String? _threadDirFromService(ServiceSpec service) {
-    return _normalizedThreadDir(service.agents.firstOrNull?.annotations["meshagent.chatbot.thread-dir"]);
-  }
-
-  String? _threadListPathFromService(ServiceSpec service) {
-    final annotationPath = service.agents.firstOrNull?.annotations["meshagent.chatbot.thread-list"];
-    if (annotationPath != null && annotationPath.trim().isNotEmpty) {
-      return annotationPath.trim();
-    }
-
-    final threadDir = _threadDirFromService(service);
-    final threadListPath = _threadListPathFromThreadDir(threadDir);
-    if (threadListPath != null) {
-      return threadListPath;
-    }
-
-    final agentName = service.agents.firstOrNull?.name;
-    if (agentName == null || agentName.trim().isEmpty) {
-      return null;
-    }
-
-    final participant = widget.room.messaging.remoteParticipants.firstWhereOrNull((p) => p.getAttribute("name") == agentName);
-    if (participant == null) {
-      return null;
-    }
-
-    return _threadListPathFromParticipant(participant);
-  }
-
   void updatePath(BuildContext context, String? path) {
     controller.showFiles();
 
@@ -794,8 +708,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
+  String? _normalizedThreadDocumentDir(String? threadDir) {
+    if (threadDir == null) {
+      return null;
+    }
+
+    final trimmed = threadDir.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length - 1) : trimmed;
+  }
+
   String getDocumentPath(String? agent, {String? threadDir}) {
-    final normalizedThreadDir = _normalizedThreadDir(threadDir);
+    final normalizedThreadDir = _normalizedThreadDocumentDir(threadDir);
     if (normalizedThreadDir != null) {
       return "$normalizedThreadDir/main.thread";
     }
@@ -1016,14 +943,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     BuildContext context,
     String? agentName,
     List<Widget> actions, {
-    String? threadingMode,
+    ChatThreadDisplayMode threadDisplayMode = ChatThreadDisplayMode.singleThread,
     String? threadListPath,
     String? threadDir,
   }) {
     final user = MeshagentAuth.current.getUser();
     final userEmail = user?["email"];
     final documentPath = getDocumentPath(agentName, threadDir: threadDir);
-    final isDefaultNewThreading = threadingMode == "default-new";
+    final isMultiThread = threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final chatActions = actions;
     final chatHorizontalInset = isMobile ? 0.0 : desktopPaneChatHorizontalInset;
@@ -1033,13 +960,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       children: [
         ActionsRow(actions: chatActions),
         _buildDesktopChatViewportCutoffSpacer(context),
-        _buildAgentsActionRow(context, showNewThreadButton: isDefaultNewThreading && isMobile),
+        _buildAgentsActionRow(context, showNewThreadButton: isMultiThread && isMobile),
         Expanded(
           child: Padding(
             padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
             child: MeshagentThreadView(
               agentName: agentName,
-              threadingMode: threadingMode,
+              threadDisplayMode: threadDisplayMode,
               threadListPath: threadListPath,
               newThreadResetVersion: _newThreadResetVersion,
               key: _threadViewKeyForPath(documentPath),
@@ -1328,35 +1255,37 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               return _buildErrorArea(context, "Development mode agent is missing a name", actions);
             }
 
-            if (participantSupportsVoice(developmentParticipant)) {
+            final descriptor = participantConversationDescriptor(developmentParticipant);
+            if (descriptor?.isVoiceOnly == true) {
               return _buildVoiceArea(context, name, actions);
             }
 
-            if (participantSupportsChat(developmentParticipant)) {
+            if (descriptor?.isChat == true) {
               return _buildChatArea(
                 context,
                 name,
                 actions,
-                threadingMode: _threadingModeFromParticipant(developmentParticipant),
-                threadDir: _threadDirFromParticipant(developmentParticipant),
-                threadListPath: _threadListPathFromParticipant(developmentParticipant),
+                threadDisplayMode: descriptor!.chatThreadDisplayMode,
+                threadDir: descriptor.threadDir,
+                threadListPath: descriptor.threadListPath,
               );
             }
 
             return _buildErrorArea(context, "Selected development mode agent does not support chat or voice", actions);
           }
 
-          final type = _serviceType(service!);
-          if (type == "ChatBot") {
+          final descriptor = serviceConversationDescriptor(service!, remoteParticipants: widget.room.messaging.remoteParticipants);
+          final type = _serviceType(service);
+          if (descriptor?.isChat == true) {
             return _buildChatArea(
               context,
               service.agents[0].name,
               actions,
-              threadingMode: service.agents[0].annotations["meshagent.chatbot.threading"],
-              threadDir: _threadDirFromService(service),
-              threadListPath: _threadListPathFromService(service),
+              threadDisplayMode: descriptor!.chatThreadDisplayMode,
+              threadDir: descriptor.threadDir,
+              threadListPath: descriptor.threadListPath,
             );
-          } else if (type == "VoiceBot") {
+          } else if (descriptor?.isVoiceOnly == true) {
             return _buildVoiceArea(context, service.agents[0].name, actions);
           } else if (type == "MeetingTranscriber") {
             return _buildMeetingTranscriberArea(context, service.agents[0].name, actions);

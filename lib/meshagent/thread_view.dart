@@ -19,6 +19,7 @@ import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
+import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 import 'package:powerboards/web_context_menu_manager/enable_web_context_menu.dart';
@@ -49,7 +50,7 @@ class MeshagentThreadView extends StatefulWidget {
     required this.client,
     required this.joinMeeting,
     this.documentPath = ".threads/main.thread",
-    this.threadingMode,
+    this.threadDisplayMode = ChatThreadDisplayMode.singleThread,
     this.threadListPath,
     this.newThreadResetVersion = 0,
 
@@ -64,7 +65,7 @@ class MeshagentThreadView extends StatefulWidget {
   });
 
   final String? agentName;
-  final String? threadingMode;
+  final ChatThreadDisplayMode threadDisplayMode;
   final String? threadListPath;
   final int newThreadResetVersion;
   final RoomClient client;
@@ -257,7 +258,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   Future<void> _rebindThreadListDocument() async {
-    final nextPath = widget.threadingMode == "default-new" ? _resolvedThreadListPath() : null;
+    final nextPath = widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer ? _resolvedThreadListPath() : null;
     if (nextPath == _threadListPath && _threadListDocument != null) {
       return;
     }
@@ -282,7 +283,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     try {
       final document = await widget.client.sync.open(nextPath);
-      if (!mounted || widget.threadingMode != "default-new") {
+      if (!mounted || widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer) {
         try {
           await widget.client.sync.close(nextPath);
         } catch (_) {}
@@ -424,17 +425,19 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.agentName != widget.agentName ||
-        oldWidget.threadingMode != widget.threadingMode ||
+        oldWidget.threadDisplayMode != widget.threadDisplayMode ||
         oldWidget.documentPath != widget.documentPath ||
         oldWidget.threadListPath != widget.threadListPath) {
       _documentPath = widget.documentPath;
       _initialMessageText = widget.initialMessageText;
       _threadListIndexPathOverride = null;
-    } else if (oldWidget.initialMessageText != widget.initialMessageText && widget.threadingMode != "default-new") {
+    } else if (oldWidget.initialMessageText != widget.initialMessageText &&
+        widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer) {
       _initialMessageText = widget.initialMessageText;
     }
 
-    if (widget.threadingMode == "default-new" && oldWidget.newThreadResetVersion != widget.newThreadResetVersion) {
+    if (widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer &&
+        oldWidget.newThreadResetVersion != widget.newThreadResetVersion) {
       _selectedThreadPath = null;
       _activeThreadPath = null;
       _inlineNewThreadResetVersion++;
@@ -443,7 +446,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     if (oldWidget.client != widget.client ||
         oldWidget.documentPath != widget.documentPath ||
         oldWidget.threadListPath != widget.threadListPath ||
-        oldWidget.threadingMode != widget.threadingMode) {
+        oldWidget.threadDisplayMode != widget.threadDisplayMode) {
       unawaited(_rebindThreadListDocument());
     }
   }
@@ -632,7 +635,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.threadingMode == "default-new") {
+    if (widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer) {
       final agentName = widget.agentName;
       if (agentName == null) {
         return Center(
