@@ -151,7 +151,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
                 hoverBackgroundColor: cs.background,
                 padding: .zero,
                 onPressed: popoverController.toggle,
-                decoration: .none,
+                decoration: ShadDecoration(shape: .circle),
                 child: _buildOverlapAvatars(sortedNames, states),
               );
             },
@@ -1551,7 +1551,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   events: events,
                                   client: widget.room,
                                   child: ShadResizablePanelGroup(
-                                    axis: Axis.vertical,
+                                    axis: .vertical,
                                     showHandle: true,
                                     children: [
                                       ShadResizablePanel(
@@ -1603,21 +1603,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           id: "bottom",
                                           defaultSize: defaultDebugSize,
                                           minSize: 0,
-                                          child: Visibility(
-                                            visible: controller.isDebugShown,
-                                            child: Column(
-                                              children: [
-                                                Row(children: [Expanded(child: SizedBox())]),
-                                                Expanded(
-                                                  child: RoomDeveloperConsole(
-                                                    pricing: null,
-                                                    events: events,
-                                                    room: widget.room,
-                                                    shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}-esgz",
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
+                                          child: RoomDeveloperConsole(
+                                            pricing: null,
+                                            events: events,
+                                            room: widget.room,
+                                            shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}-esgz",
                                           ),
                                         ),
                                     ],

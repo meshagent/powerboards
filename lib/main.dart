@@ -213,6 +213,16 @@ class MyApp extends StatelessWidget {
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
         textTheme: powerboardsShadTextTheme(),
+        selectTheme: ShadSelectTheme(
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
+        ),
+        tabsTheme: ShadTabsTheme(
+          tabBackgroundColor: shadCard,
+          tabDecoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
         primaryDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
         alertDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
         popoverTheme: ShadPopoverTheme(
@@ -310,56 +320,23 @@ class _RootProvidersState extends State<_RootProviders> {
         ),
       ),
     );
-    return ShadTheme(
-      data: ShadThemeData(
-        colorScheme: powerboardsShadColorScheme(),
-        brightness: Brightness.light,
-        textTheme: powerboardsShadTextTheme(),
-        primaryDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
-        alertDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
-        popoverTheme: ShadPopoverTheme(
-          decoration: ShadDecoration(
-            color: shadCard,
-            border: ShadBorder.all(color: shadBorder, width: 1),
-          ),
-        ),
-        contextMenuTheme: ShadContextMenuTheme(
-          backgroundColor: shadCard,
-          decoration: ShadDecoration(
-            color: shadCard,
-            border: ShadBorder.all(color: shadBorder, width: 1),
-          ),
-          selectedBackgroundColor: shadMuted,
-        ),
-        menubarTheme: ShadMenubarTheme(
-          backgroundColor: shadCard,
-          decoration: ShadDecoration(
-            color: shadCard,
-            border: ShadBorder.all(color: shadBorder, width: 1),
-          ),
-        ),
-        outlineButtonTheme: ShadButtonTheme(
-          backgroundColor: shadCard,
-          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
-        ),
-      ),
-      child: ChromeVisibility(
-        child: Theme(
-          data: materialTheme,
-          child: Material(
-            type: MaterialType.transparency,
-            child: Directionality(
-              key: uiRoot,
-              textDirection: TextDirection.ltr,
-              child: ResponsiveBreakpoints.builder(
-                breakpoints: breakpoints,
-                breakpointsLandscape: breakpointsLandscape,
+
+    return ChromeVisibility(
+      child: Theme(
+        data: materialTheme,
+        child: Material(
+          type: MaterialType.transparency,
+          child: Directionality(
+            key: uiRoot,
+            textDirection: TextDirection.ltr,
+            child: ResponsiveBreakpoints.builder(
+              breakpoints: breakpoints,
+              breakpointsLandscape: breakpointsLandscape,
+              child: ControllerProvider(
+                controller: navController,
                 child: ControllerProvider(
-                  controller: navController,
-                  child: ControllerProvider(
-                    controller: meetingViewController,
-                    child: Portal(child: widget.child),
-                  ),
+                  controller: meetingViewController,
+                  child: Portal(child: widget.child),
                 ),
               ),
             ),
