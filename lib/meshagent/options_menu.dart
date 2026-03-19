@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
+import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'agent_option.dart';
@@ -55,8 +57,17 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
       builder: (context, _) {
         final isOwnerValue = isOwner.state.value == true;
         final canViewDeveloperLogsValue = canViewDeveloperLogs.state.value == true;
+        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+        final overflowCollapsed = CompactHeaderActions.overflowCollapsedOf(context);
 
         final entries = <AppMenuEntry>[
+          if (isMobile || overflowCollapsed)
+            AppMenuEntry(
+              title: "Invite user",
+              description: "Invite someone by email to join this room.",
+              icon: LucideIcons.userPlus,
+              onPressed: _openPermissions,
+            ),
           AppMenuEntry(
             title: "Permissions",
             description: isOwnerValue ? "Add or remove users from this room." : "View users of this room",
