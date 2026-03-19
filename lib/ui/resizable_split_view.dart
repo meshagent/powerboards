@@ -160,10 +160,11 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         final maxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
         final maxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
 
-        final defaultSize = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
+        final defaultSize1 = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
+        final defaultSize2 = (1 - defaultSize1).clamp(minArea2Size, maxArea2Size);
 
-        final newPan1 = ShadPanelInfo(id: _area1Id, minSize: minArea1Size, maxSize: maxArea1Size, defaultSize: defaultSize);
-        final newPan2 = ShadPanelInfo(id: _area2Id, minSize: minArea2Size, maxSize: maxArea2Size, defaultSize: 1 - defaultSize);
+        final newPan1 = ShadPanelInfo(id: _area1Id, minSize: minArea1Size, maxSize: maxArea1Size, defaultSize: defaultSize1);
+        final newPan2 = ShadPanelInfo(id: _area2Id, minSize: minArea2Size, maxSize: maxArea2Size, defaultSize: defaultSize2);
 
         lastConstraints = constraints;
         resizeController.update([newPan1, newPan2]);
@@ -282,9 +283,10 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         final maxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
         final maxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
 
-        final defaultSize = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
+        final defaultSize1 = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
+        final defaultSize2 = (1 - defaultSize1).clamp(minArea2Size, maxArea2Size);
 
-        _area1Ratio ??= defaultSize;
+        _area1Ratio ??= defaultSize1;
 
         // Debounce resize to avoid excessive rebuilds when resizing the window
         debounceResize(constraints);
@@ -297,7 +299,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
           children: [
             ShadResizablePanel(
               id: _area1Id,
-              defaultSize: defaultSize,
+              defaultSize: defaultSize1,
               minSize: minArea1Size,
               maxSize: maxArea1Size,
               child: widget.allowCollapse
@@ -316,13 +318,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
                     )
                   : widget.area1,
             ),
-            ShadResizablePanel(
-              id: _area2Id,
-              defaultSize: 1 - defaultSize,
-              minSize: minArea2Size,
-              maxSize: maxArea2Size,
-              child: widget.area2,
-            ),
+            ShadResizablePanel(id: _area2Id, defaultSize: defaultSize2, minSize: minArea2Size, maxSize: maxArea2Size, child: widget.area2),
           ],
         );
       },
