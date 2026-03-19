@@ -533,7 +533,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     final tt = ShadTheme.of(context).textTheme;
 
     return ColoredBox(
-      color: cs.background,
+      color: Colors.transparent, //cs.background,
       child: SizedBox(
         width: _threadListPanelWidth,
         child: Column(
