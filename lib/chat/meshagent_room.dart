@@ -228,18 +228,25 @@ class InviteUserButton extends StatelessWidget {
 }
 
 class MeetButton extends StatelessWidget {
-  const MeetButton({super.key, required this.controller});
+  const MeetButton({super.key, required this.controller, required this.meetingSessionActive});
 
   final MeshagentRoomController controller;
+  final bool meetingSessionActive;
 
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final compact = CompactHeaderActions.compactOf(context);
 
+    final buttonBuilder = controller.inMeeting
+        ? ShadButton.new
+        : meetingSessionActive
+        ? ShadButton.destructive
+        : ShadButton.outline;
+
     return Tooltip(
       message: "Meet",
-      child: (controller.inMeeting ? ShadButton.new : ShadButton.outline)(
+      child: buttonBuilder(
         leading: Icon(LucideIcons.video),
         onPressed: () {
           if (controller.inMeeting) {
@@ -480,6 +487,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final MeshagentRoomController controller = MeshagentRoomController();
   int _newThreadResetVersion = 0;
   String _lastRoomStatusText = "Connecting to room";
+  String? _lastSyncedRoutePath;
   StreamSubscription<RoomStatusEvent>? _roomStatusSubscription;
 
   final List<RoomEvent> events = [];
@@ -529,6 +537,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
     final path = currentUri.queryParameters['p'];
+
+    if (path == _lastSyncedRoutePath) {
+      return;
+    }
+    _lastSyncedRoutePath = path;
 
     if (path != null && path.isNotEmpty) {
       controller.showFiles();
@@ -798,25 +811,59 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return _threadViewKeysByPath.putIfAbsent(path, () => GlobalKey(debugLabel: "thread-view-$path"));
   }
 
-  List<Widget> meetingActions(BuildContext context) {
+  List<Widget> _meetingToolbarControls(BuildContext context) {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final model = room.VideoRoomModel.maybeOf(context);
-    return model?.room == null
-        ? []
-        : [
-            HangupButton(
-              onPressed: () {
-                meetingViewController.endMeeting();
-                //onCancel();
-              },
-            ),
-            room.MicToggle(),
-            room.CameraToggle(),
-            room.ChangeSettings(),
-            room.ShareScreen(),
-            MeetingToolkits(room: widget.room),
-            Spacer(),
-          ];
+    if (model?.room == null) {
+      return [];
+    }
+
+    return [
+      HangupButton(
+        onPressed: () {
+          meetingViewController.endMeeting();
+          //onCancel();
+        },
+      ),
+      room.MicToggle(),
+      room.CameraToggle(),
+      room.ChangeSettings(),
+      room.ShareScreen(),
+      MeetingToolkits(room: widget.room),
+    ];
+  }
+
+  List<Widget> meetingActions(BuildContext context) {
+    final controls = _meetingToolbarControls(context);
+    if (controls.isEmpty) {
+      return controls;
+    }
+
+    return [...controls, Spacer()];
+  }
+
+  bool _isMeetingSessionActive(BuildContext context) {
+    final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    final videoRoom = room.VideoRoomModel.maybeOf(context)?.room;
+    return meetingViewController.state == MeetingViewState.joined && videoRoom != null;
+  }
+
+  List<Widget> _meetingPaneActions(BuildContext context) {
+    final meetingSessionActive = _isMeetingSessionActive(context);
+    return [
+      FilesButton(controller: controller),
+      MeetButton(controller: controller, meetingSessionActive: meetingSessionActive),
+      InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+      RoomOptionsMenu(
+        projectId: widget.projectId,
+        room: widget.room,
+        roomController: controller,
+        isOwner: isOwner,
+        canViewDeveloperLogs: canViewDeveloperLogs,
+        boundaryContext: context,
+      ),
+      UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+    ];
   }
 
   Future<void> showManageAgents() async {
@@ -1097,9 +1144,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Widget _buildMeeting(BuildContext context, String? agentName, List<Widget> actions) {
     final cs = ShadTheme.of(context).colorScheme;
+    final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final horizontalInset = isMobile ? 12.0 : 20.0;
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
+    final meetingIsActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
       color: cs.background,
@@ -1110,33 +1159,68 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           else
             LayoutBuilder(
               builder: (context, constraints) {
-                return SizedBox(
-                  height: headerHeight,
-                  child: Center(
-                    child: SizedBox(
-                      height: desktopPaneHeaderContentHeight,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          spacing: desktopPaneHeaderButtonGap,
-                          children: [
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  "Get ready to meet",
-                                  style: meetingHeaderTitleStyle,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                final compactActions = controller.preferCompactPaneActions || shouldCompactPaneHeaderActions(
+                      constraints,
+                      leadingWidth: meetingIsActive
+                          ? _measureActiveMeetingHeaderWidth(constraints.maxWidth)
+                          : _measureMeetingHeaderTitleWidth(context, constraints.maxWidth),
+                    );
+                return CompactHeaderActions(
+                  compact: compactActions,
+                  child: SizedBox(
+                    height: headerHeight,
+                    child: meetingIsActive
+                        ? Center(
+                            child: SizedBox(
+                              height: desktopPaneHeaderContentHeight,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                child: Row(
+                                  spacing: desktopPaneHeaderButtonGap,
+                                  children: [
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          spacing: desktopPaneHeaderButtonGap,
+                                          children: _meetingToolbarControls(context),
+                                        ),
+                                      ),
+                                    ),
+                                    if (actions.isNotEmpty)
+                                      Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: actions),
+                                  ],
                                 ),
                               ),
                             ),
-                            if (actions.isNotEmpty)
-                              Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: actions),
-                          ],
-                        ),
-                      ),
-                    ),
+                          )
+                        : Center(
+                            child: SizedBox(
+                              height: desktopPaneHeaderContentHeight,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                child: Row(
+                                  spacing: desktopPaneHeaderButtonGap,
+                                  children: [
+                                    Expanded(
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          "Get ready to meet",
+                                          style: meetingHeaderTitleStyle,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    if (actions.isNotEmpty)
+                                      Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: actions),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                   ),
                 );
               },
@@ -1144,7 +1228,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(horizontalInset, isMobile ? 0 : desktopPaneHeaderToContentOffset, horizontalInset, bottomInset),
-              child: MeetingView(room: widget.room, onCancel: _leaveMeeting, joinMeeting: _joinMeeting, agentName: agentName),
+              child: ClipRRect(
+                borderRadius: radius,
+                child: MeetingView(room: widget.room, onCancel: _leaveMeeting, joinMeeting: _joinMeeting, agentName: agentName),
+              ),
             ),
           ),
         ],
@@ -1283,6 +1370,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  double _measureMeetingHeaderTitleWidth(BuildContext context, double maxWidth) {
+    final painter = TextPainter(
+      text: TextSpan(text: "Get ready to meet", style: meetingHeaderTitleStyle),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+    )..layout();
+
+    return painter.width.clamp(0.0, maxWidth * 0.45);
+  }
+
+  double _measureActiveMeetingHeaderWidth(double maxWidth) {
+    return (maxWidth * 0.42).clamp(260.0, 420.0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final rb = ResponsiveBreakpoints.of(context);
@@ -1418,7 +1519,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                       leading: Icon(LucideIcons.messageCircle),
                                     ),
                                     if (canViewStorageAllowed) FilesButton(controller: controller),
-                                    MeetButton(controller: controller),
+                                    MeetButton(controller: controller, meetingSessionActive: _isMeetingSessionActive(context)),
                                     InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
                                   ];
 
@@ -1441,20 +1542,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                 }
 
                                 final actions = [
-                                  ...meetingActions(context),
-
-                                  if (canViewStorageAllowed) FilesButton(controller: controller),
-                                  MeetButton(controller: controller),
-                                  InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-                                  RoomOptionsMenu(
-                                    projectId: widget.projectId,
-                                    room: widget.room,
-                                    roomController: controller,
-                                    isOwner: isOwner,
-                                    canViewDeveloperLogs: canViewDeveloperLogs,
-                                    boundaryContext: context,
-                                  ),
-                                  UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+                                  if (canViewStorageAllowed) ..._meetingPaneActions(context) else ..._meetingPaneActions(context).skip(1),
                                 ];
 
                                 return RoomDeveloperLogsListener(
@@ -1471,6 +1559,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           allowCollapse: room.VideoRoomModel.maybeOf(context)?.room != null,
                                           minArea1Width: 360,
                                           minArea2Width: 440,
+                                          preferredArea2Fraction: _isMeetingSessionActive(context) ? 0.5 : null,
+                                          minArea2Fraction: _isMeetingSessionActive(context) ? 0.5 : null,
+                                          maxArea2Fraction: _isMeetingSessionActive(context) ? (2 / 3) : null,
                                           split: split,
                                           area1: ColoredBox(
                                             color: cs.card,

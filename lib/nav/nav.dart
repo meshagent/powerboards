@@ -152,9 +152,11 @@ class _NavState extends State<Nav> {
           return;
         }
 
-        final minSize = _navBarMinWidth / constraints.maxWidth;
-        final maxSize = _navBarMaxWidth / constraints.maxWidth;
-        final defaultSize = navBarWidth / constraints.maxWidth;
+        final rawMinSize = _navBarMinWidth / constraints.maxWidth;
+        final rawMaxSize = _navBarMaxWidth / constraints.maxWidth;
+        final minSize = rawMinSize.clamp(0.0, 1.0);
+        final maxSize = rawMaxSize.clamp(minSize, 1.0);
+        final defaultSize = (navBarWidth / constraints.maxWidth).clamp(minSize, maxSize);
 
         final newPanel = ShadPanelInfo(id: "nav", minSize: minSize, maxSize: maxSize, defaultSize: defaultSize);
 
@@ -280,9 +282,11 @@ class _NavState extends State<Nav> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final minRatio = _navBarMinWidth / constraints.maxWidth;
-        final maxRatio = _navBarMaxWidth / constraints.maxWidth;
-        final defaultSize = navBarWidth / constraints.maxWidth;
+        final rawMinRatio = _navBarMinWidth / constraints.maxWidth;
+        final rawMaxRatio = _navBarMaxWidth / constraints.maxWidth;
+        final minRatio = rawMinRatio.clamp(0.0, 1.0);
+        final maxRatio = rawMaxRatio.clamp(minRatio, 1.0);
+        final defaultSize = (navBarWidth / constraints.maxWidth).clamp(minRatio, maxRatio);
 
         // Debounce resize to avoid excessive rebuilds when resizing the window
         debounceResize(constraints);

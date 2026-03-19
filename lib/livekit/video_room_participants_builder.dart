@@ -14,11 +14,25 @@ class VideoRoomParticipantsBuilder extends StatefulWidget {
 class _VideoRoomParticipantsBuilderState extends State<VideoRoomParticipantsBuilder> {
   List<lk.Participant> participants = [];
 
+  String _participantDedupKey(lk.Participant participant) {
+    final identity = participant.identity;
+    if (identity.endsWith(".agent") || identity.endsWith(".agent-recorder") || identity.endsWith(".agent-transcriber")) {
+      return identity;
+    }
+
+    final name = participant.name.trim().toLowerCase();
+    if (name.isNotEmpty) {
+      return "user:$name";
+    }
+
+    return identity;
+  }
+
   @override
   void initState() {
     super.initState();
 
-    participants = [if (widget.room.localParticipant != null) widget.room.localParticipant!, ...widget.room.remoteParticipants.values];
+    participants = _getParticipants();
     widget.room.addListener(_onRoomChanged);
   }
 
@@ -42,20 +56,24 @@ class _VideoRoomParticipantsBuilderState extends State<VideoRoomParticipantsBuil
   }
 
   List<lk.Participant> _getParticipants() {
-    List<lk.Participant> participants = [];
+    final participants = <lk.Participant>[];
+    final seenParticipants = <String>{};
 
     for (final p in widget.room.remoteParticipants.values) {
       final isRecorder = p.identity.endsWith(".agent-recorder");
       final isTranscriber = p.identity.endsWith(".agent-transcriber");
 
-      if (!isRecorder && !isTranscriber) {
+      if (!isRecorder && !isTranscriber && seenParticipants.add(_participantDedupKey(p))) {
         participants.add(p);
       }
     }
 
-    // add our selves
+    // Add our own participant once, after filtering any stale duplicate name/identity.
     if (widget.room.localParticipant != null) {
-      participants.add(widget.room.localParticipant!);
+      final local = widget.room.localParticipant!;
+      if (seenParticipants.add(_participantDedupKey(local))) {
+        participants.add(local);
+      }
     }
 
     return participants;

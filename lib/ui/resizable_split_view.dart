@@ -20,6 +20,12 @@ class ResizableSplitView extends StatefulWidget {
     required this.allowCollapse,
     this.minArea1Width = _defaultMinArea1Width,
     this.minArea2Width = _defaultMinArea2Width,
+    this.minArea1Fraction,
+    this.minArea2Fraction,
+    this.maxArea1Fraction,
+    this.maxArea2Fraction,
+    this.preferredArea1Fraction,
+    this.preferredArea2Fraction,
   });
 
   final Widget area1;
@@ -28,6 +34,12 @@ class ResizableSplitView extends StatefulWidget {
   final bool allowCollapse;
   final double minArea1Width;
   final double minArea2Width;
+  final double? minArea1Fraction;
+  final double? minArea2Fraction;
+  final double? maxArea1Fraction;
+  final double? maxArea2Fraction;
+  final double? preferredArea1Fraction;
+  final double? preferredArea2Fraction;
 
   @override
   State createState() => _ResizableSplitViewState();
@@ -41,12 +53,83 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   bool _collapsed = false;
   double? _area1Ratio;
 
+  double? get _lockedArea1Fraction {
+    final minFraction = widget.minArea1Fraction;
+    final maxFraction = widget.maxArea1Fraction;
+    if (minFraction != null && maxFraction != null && (minFraction - maxFraction).abs() < 0.0001) {
+      return minFraction;
+    }
+    return null;
+  }
+
+  double? get _lockedArea2Fraction {
+    final minFraction = widget.minArea2Fraction;
+    final maxFraction = widget.maxArea2Fraction;
+    if (minFraction != null && maxFraction != null && (minFraction - maxFraction).abs() < 0.0001) {
+      return minFraction;
+    }
+    return null;
+  }
+
+  double? get _preferredArea1Ratio {
+    if (widget.preferredArea1Fraction != null) {
+      return widget.preferredArea1Fraction;
+    }
+
+    if (widget.preferredArea2Fraction != null) {
+      return 1 - widget.preferredArea2Fraction!;
+    }
+
+    final lockedArea1Fraction = _lockedArea1Fraction;
+    if (lockedArea1Fraction != null) {
+      return lockedArea1Fraction;
+    }
+
+    final lockedArea2Fraction = _lockedArea2Fraction;
+    if (lockedArea2Fraction != null) {
+      return 1 - lockedArea2Fraction;
+    }
+
+    return null;
+  }
+
   ({double area1, double area2}) _resolveMinimumWidths(double totalWidth) {
+    final lockedArea1Fraction = _lockedArea1Fraction;
+    if (lockedArea1Fraction != null) {
+      final area1 = totalWidth * lockedArea1Fraction;
+      return (area1: area1, area2: totalWidth - area1);
+    }
+
+    final lockedArea2Fraction = _lockedArea2Fraction;
+    if (lockedArea2Fraction != null) {
+      final area2 = totalWidth * lockedArea2Fraction;
+      return (area1: totalWidth - area2, area2: area2);
+    }
+
     var area1 = widget.minArea1Width;
     var area2 = widget.minArea2Width;
 
+    if (widget.minArea1Fraction != null) {
+      area1 = math.max(area1, totalWidth * widget.minArea1Fraction!);
+    }
+    if (widget.minArea2Fraction != null) {
+      area2 = math.max(area2, totalWidth * widget.minArea2Fraction!);
+    }
+
     final availableWidth = math.max(totalWidth, _collapsedWidth * 2);
     if (area1 + area2 <= availableWidth) {
+      return (area1: area1, area2: area2);
+    }
+
+    if (widget.minArea2Fraction != null) {
+      area2 = math.min(area2, availableWidth - _collapsedWidth);
+      area1 = math.max(_collapsedWidth, availableWidth - area2);
+      return (area1: area1, area2: area2);
+    }
+
+    if (widget.minArea1Fraction != null) {
+      area1 = math.min(area1, availableWidth - _collapsedWidth);
+      area2 = math.max(_collapsedWidth, availableWidth - area1);
       return (area1: area1, area2: area2);
     }
 
@@ -68,13 +151,16 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         }
 
         final size = constraints.maxWidth;
+        if (!size.isFinite || size <= 0) {
+          return;
+        }
         final minimums = _resolveMinimumWidths(size);
         final minArea1Size = minimums.area1 / size;
         final minArea2Size = minimums.area2 / size;
-        final maxArea1Size = 1 - minArea2Size;
-        final maxArea2Size = 1 - minArea1Size;
+        final maxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
+        final maxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
 
-        final defaultSize = (_area1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
+        final defaultSize = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
 
         final newPan1 = ShadPanelInfo(id: _area1Id, minSize: minArea1Size, maxSize: maxArea1Size, defaultSize: defaultSize);
         final newPan2 = ShadPanelInfo(id: _area2Id, minSize: minArea2Size, maxSize: maxArea2Size, defaultSize: 1 - defaultSize);
@@ -110,6 +196,23 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
     if (!widget.allowCollapse && _collapsed) {
       _collapsed = false;
+    }
+
+    final sizingChanged =
+        oldWidget.minArea1Width != widget.minArea1Width ||
+        oldWidget.minArea2Width != widget.minArea2Width ||
+        oldWidget.minArea1Fraction != widget.minArea1Fraction ||
+        oldWidget.minArea2Fraction != widget.minArea2Fraction ||
+        oldWidget.maxArea1Fraction != widget.maxArea1Fraction ||
+        oldWidget.maxArea2Fraction != widget.maxArea2Fraction ||
+        oldWidget.preferredArea1Fraction != widget.preferredArea1Fraction ||
+        oldWidget.preferredArea2Fraction != widget.preferredArea2Fraction ||
+        oldWidget.split != widget.split;
+
+    if (sizingChanged) {
+      _area1Ratio = _preferredArea1Ratio;
+      lastConstraints = null;
+      resizeDebounceTimer?.cancel();
     }
   }
 
@@ -169,13 +272,17 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = constraints.maxWidth;
+        if (!size.isFinite || size <= 0) {
+          lastConstraints = null;
+          return const SizedBox.shrink();
+        }
         final minimums = _resolveMinimumWidths(size);
         final minArea1Size = minimums.area1 / size;
         final minArea2Size = minimums.area2 / size;
-        final maxArea1Size = 1 - minArea2Size;
-        final maxArea2Size = 1 - minArea1Size;
+        final maxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
+        final maxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
 
-        final defaultSize = (_defaultWidth / size).clamp(minArea1Size, maxArea1Size);
+        final defaultSize = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
 
         _area1Ratio ??= defaultSize;
 
