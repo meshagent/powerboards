@@ -235,6 +235,14 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     setState(() {});
   }
 
+  void _onThreadStatusChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+  }
+
   Future<void> _closeThreadListDocument() async {
     final document = _threadListDocument;
     final path = _threadListPath;
@@ -423,6 +431,11 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (oldWidget.client != widget.client) {
+      oldWidget.client.messaging.removeListener(_onThreadStatusChanged);
+      widget.client.messaging.addListener(_onThreadStatusChanged);
+    }
+
     if (oldWidget.agentName != widget.agentName ||
         oldWidget.threadingMode != widget.threadingMode ||
         oldWidget.documentPath != widget.documentPath ||
@@ -455,12 +468,14 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     _chatController = MeshagentRoomChatThreadController(room: widget.client);
     _documentPath = widget.documentPath;
     _initialMessageText = widget.initialMessageText;
+    widget.client.messaging.addListener(_onThreadStatusChanged);
 
     unawaited(_rebindThreadListDocument());
   }
 
   @override
   void dispose() {
+    widget.client.messaging.removeListener(_onThreadStatusChanged);
     unawaited(_closeThreadListDocument());
     _chatController.dispose();
 
@@ -533,7 +548,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     final tt = ShadTheme.of(context).textTheme;
 
     return ColoredBox(
-      color: cs.background,
+      color: Colors.transparent, //cs.background,
       child: SizedBox(
         width: _threadListPanelWidth,
         child: Column(
@@ -565,7 +580,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.fromLTRB(40, 8, 16, 8),
                 child: Text("Threads", style: tt.small.copyWith(color: cs.foreground.withValues(alpha: .5))),
               ),
             ),
@@ -584,6 +599,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                             padding: const EdgeInsets.only(bottom: 4),
                             child: _ThreadListItem(
                               entry: entry,
+                              threadStatus: ma.resolveChatThreadStatus(room: widget.client, path: entry.path, agentName: widget.agentName),
                               selected: entry.path == activePath,
                               onOpen: () => _openThreadFromList(entry.path),
                               onRename: () => _renameThread(entry),
@@ -666,6 +682,7 @@ class _ThreadListEntry {
 class _ThreadListItem extends StatefulWidget {
   const _ThreadListItem({
     required this.entry,
+    required this.threadStatus,
     required this.selected,
     required this.onOpen,
     required this.onRename,
@@ -673,6 +690,7 @@ class _ThreadListItem extends StatefulWidget {
   });
 
   final _ThreadListEntry entry;
+  final ma.ChatThreadStatusState threadStatus;
   final bool selected;
   final VoidCallback onOpen;
   final VoidCallback onRename;
@@ -707,6 +725,19 @@ class _ThreadListItemState extends State<_ThreadListItem> {
             onPressed: widget.onOpen,
             mainAxisAlignment: MainAxisAlignment.start,
             expands: true,
+            leading: SizedBox(
+              width: 16,
+              height: 16,
+              child: Center(
+                child: ma.ChatThreadStatusIndicator(
+                  statusText: widget.threadStatus.text,
+                  startedAt: widget.threadStatus.startedAt,
+                  reserveSpace: true,
+                  size: 14,
+                  strokeWidth: 2,
+                ),
+              ),
+            ),
             trailing: AdaptiveShadContextMenu(
               controller: _menuController,
               constraints: const BoxConstraints(minWidth: 180),
@@ -741,13 +772,14 @@ class _ThreadListItemState extends State<_ThreadListItem> {
             ),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(
-                widget.entry.name,
+              child: ma.ChatThreadProcessingSweepText(
+                text: widget.entry.name,
+                style: widget.selected ? tt.small.copyWith(fontWeight: FontWeight.w700) : tt.small,
+                animate: widget.threadStatus.hasStatus,
                 textAlign: TextAlign.start,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 softWrap: false,
-                style: widget.selected ? tt.small.copyWith(fontWeight: FontWeight.w700) : tt.small,
               ),
             ),
           ),
