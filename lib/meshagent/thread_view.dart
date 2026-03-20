@@ -4,14 +4,15 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:super_sliver_list/super_sliver_list.dart';
 import 'package:uuid/uuid.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
@@ -243,11 +244,13 @@ class MeshagentThreadListPane extends StatefulWidget {
 }
 
 class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
+  static final TextStyle _threadNameStyle = GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: shadForeground);
+
   MeshDocument? _threadListDocument;
   RoomClient? _threadListClient;
   String? _threadListPath;
   Object? _threadListError;
-  bool _threadListLoading = false;
+  bool _threadListLoading = true;
 
   String? _normalizedThreadListPath(String? path) {
     if (path == null) {
@@ -516,60 +519,83 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   @override
   Widget build(BuildContext context) {
     final entries = _threadListEntries();
-    final cs = ShadTheme.of(context).colorScheme;
-    final tt = ShadTheme.of(context).textTheme;
 
     return ColoredBox(
       color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-            child: ShadButton.ghost(
-              onPressed: widget.selectedThreadPath == null ? null : () => widget.onSelectedThreadPathChanged(null),
-              mainAxisAlignment: MainAxisAlignment.start,
-              expands: true,
-              leading: const Icon(LucideIcons.plus, size: 16),
-              child: const Align(
-                alignment: Alignment.centerLeft,
-                child: Text("New Thread", textAlign: TextAlign.start),
-              ),
+        children: [Expanded(child: _buildThreadListSurface(entries))],
+      ),
+    );
+  }
+
+  Widget _buildThreadListSurface(List<_ThreadListEntry> entries) {
+    return _buildThreadListBody(entries);
+  }
+
+  Widget _buildThreadListBody(List<_ThreadListEntry> entries) {
+    if (_threadListLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_threadListError != null) {
+      return _buildCenteredState(
+        icon: LucideIcons.triangleAlert,
+        title: "Unable to load threads",
+        description: "Check the room connection and try again.",
+      );
+    }
+
+    if (entries.isEmpty) {
+      return _buildCenteredState(
+        icon: LucideIcons.messageSquarePlus,
+        title: "No threads yet",
+        description: "Create a thread to start a new conversation with this agent.",
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 8),
+      itemCount: entries.length + 1,
+      separatorBuilder: (_, _) => const SizedBox(height: 4),
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return _ThreadListCreateItem(selected: widget.selectedThreadPath == null, onOpen: () => widget.onSelectedThreadPathChanged(null));
+        }
+
+        final entry = entries[index - 1];
+        return _ThreadListItem(
+          entry: entry,
+          selected: entry.path == widget.selectedThreadPath,
+          onOpen: () => widget.onSelectedThreadPathChanged(entry.path),
+          onRename: () => _renameThread(entry),
+          onDelete: () => _deleteThread(entry),
+        );
+      },
+    );
+  }
+
+  Widget _buildCenteredState({required IconData icon, required String title, required String description}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 44, color: shadMutedForeground),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
             ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text("Threads", style: tt.small.copyWith(color: cs.foreground.withValues(alpha: .5))),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: shadMutedForeground),
             ),
-          ),
-          Expanded(
-            child: _threadListLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _threadListError != null
-                ? const Center(child: Text("Unable to load thread list"))
-                : entries.isEmpty
-                ? const Center(child: Text("No threads yet"))
-                : SuperListView(
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                    children: [
-                      for (final entry in entries)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: _ThreadListItem(
-                            entry: entry,
-                            selected: entry.path == widget.selectedThreadPath,
-                            onOpen: () => widget.onSelectedThreadPathChanged(entry.path),
-                            onRename: () => _renameThread(entry),
-                            onDelete: () => _deleteThread(entry),
-                          ),
-                        ),
-                    ],
-                  ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -610,6 +636,79 @@ class _ThreadListItem extends StatefulWidget {
   State<_ThreadListItem> createState() => _ThreadListItemState();
 }
 
+class _ThreadListCreateItem extends StatelessWidget {
+  const _ThreadListCreateItem({required this.selected, required this.onOpen});
+
+  final bool selected;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
+
+    return HoverBuilder(
+      builder: (context, hovered, focused) {
+        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+        final backgroundColor = selected ? ShadTheme.of(context).colorScheme.card : Colors.transparent;
+        final borderColor = hovered || focused ? shadBorder : Colors.transparent;
+
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(radius.topLeft.x),
+              topRight: Radius.circular(radius.topRight.x),
+              bottomLeft: Radius.circular(radius.bottomLeft.x),
+              bottomRight: Radius.circular(radius.bottomRight.x),
+            ),
+            border: Border.all(color: borderColor),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(radius.topLeft.x),
+                topRight: Radius.circular(radius.topRight.x),
+                bottomLeft: Radius.circular(radius.bottomLeft.x),
+                bottomRight: Radius.circular(radius.bottomRight.x),
+              ),
+              splashFactory: NoSplash.splashFactory,
+              overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+              hoverColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              splashColor: Colors.transparent,
+              onTap: onOpen,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 36),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: 0),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        child: Center(child: Icon(LucideIcons.messageSquarePlus, size: 16, color: shadForeground)),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          "New thread",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _MeshagentThreadListPaneState._threadNameStyle.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ThreadListItemState extends State<_ThreadListItem> {
   late final ShadContextMenuController _menuController = ShadContextMenuController();
 
@@ -621,61 +720,100 @@ class _ThreadListItemState extends State<_ThreadListItem> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = ShadTheme.of(context).colorScheme;
-    final tt = ShadTheme.of(context).textTheme;
-
     return HoverBuilder(
       builder: (context, hovered, focused) {
         final isMobile = ResponsiveBreakpoints.of(context).isMobile;
         final showMenuIcon = hovered || focused || isMobile;
+        final selected = widget.selected;
+        final rowColor = selected ? ShadTheme.of(context).colorScheme.card : Colors.transparent;
+        final borderColor = hovered || focused ? shadBorder : Colors.transparent;
+        final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
 
-        return Container(
-          decoration: BoxDecoration(color: widget.selected ? cs.secondary : Colors.transparent, borderRadius: BorderRadius.circular(8)),
-          child: ShadButton.ghost(
-            onPressed: widget.onOpen,
-            mainAxisAlignment: MainAxisAlignment.start,
-            expands: true,
-            trailing: AdaptiveShadContextMenu(
-              controller: _menuController,
-              constraints: const BoxConstraints(minWidth: 180),
-              estimatedMenuWidth: 180,
-              estimatedMenuHeight: 2 * 40.0 + 8.0,
-              items: [
-                ShadContextMenuItem(
-                  height: 40,
-                  leading: const Icon(LucideIcons.pencil, size: 16),
-                  onPressed: widget.onRename,
-                  child: const Text("Rename"),
-                ),
-                ShadContextMenuItem(
-                  height: 40,
-                  leading: const Icon(LucideIcons.trash, size: 16),
-                  onPressed: widget.onDelete,
-                  child: const Text("Delete"),
-                ),
-              ],
-              child: ShadButton.ghost(
-                onPressed: _menuController.show,
-                hoverBackgroundColor: Colors.transparent,
-                backgroundColor: Colors.transparent,
-                padding: EdgeInsets.zero,
-                decoration: ShadDecoration.none,
-                child: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: Center(child: Icon(LucideIcons.ellipsis, size: 20, color: showMenuIcon ? cs.foreground : Colors.transparent)),
-                ),
-              ),
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: rowColor,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(radius.topLeft.x),
+              topRight: Radius.circular(radius.topRight.x),
+              bottomLeft: Radius.circular(radius.bottomLeft.x),
+              bottomRight: Radius.circular(radius.bottomRight.x),
             ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                widget.entry.name,
-                textAlign: TextAlign.start,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                softWrap: false,
-                style: widget.selected ? tt.small.copyWith(fontWeight: FontWeight.w700) : tt.small,
+            border: Border.all(color: borderColor),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(radius.topLeft.x),
+                topRight: Radius.circular(radius.topRight.x),
+                bottomLeft: Radius.circular(radius.bottomLeft.x),
+                bottomRight: Radius.circular(radius.bottomRight.x),
+              ),
+              splashFactory: NoSplash.splashFactory,
+              overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+              hoverColor: Colors.transparent,
+              highlightColor: Colors.transparent,
+              splashColor: Colors.transparent,
+              onTap: widget.onOpen,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 36),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: 0),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 16,
+                        child: Center(
+                          child: selected ? const Icon(LucideIcons.dot, size: 22, color: shadForeground) : const SizedBox.shrink(),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          widget.entry.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: _MeshagentThreadListPaneState._threadNameStyle.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      AdaptiveShadContextMenu(
+                        controller: _menuController,
+                        constraints: const BoxConstraints(minWidth: 180),
+                        estimatedMenuWidth: 180,
+                        estimatedMenuHeight: 2 * 40.0 + 8.0,
+                        items: [
+                          ShadContextMenuItem(
+                            height: 40,
+                            leading: const Icon(LucideIcons.pencil, size: 16),
+                            onPressed: widget.onRename,
+                            child: const Text("Rename"),
+                          ),
+                          ShadContextMenuItem(
+                            height: 40,
+                            leading: const Icon(LucideIcons.trash, size: 16),
+                            onPressed: widget.onDelete,
+                            child: const Text("Delete"),
+                          ),
+                        ],
+                        child: ShadButton.ghost(
+                          onPressed: _menuController.show,
+                          hoverBackgroundColor: Colors.transparent,
+                          backgroundColor: Colors.transparent,
+                          padding: EdgeInsets.zero,
+                          decoration: ShadDecoration.none,
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: Center(
+                              child: Icon(LucideIcons.ellipsis, size: 20, color: showMenuIcon ? shadForeground : Colors.transparent),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),

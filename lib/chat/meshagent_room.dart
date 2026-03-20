@@ -1294,7 +1294,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final descriptor = _selectedAgentConversationDescriptor(supported);
     final agentKey = _selectedThreadAgentKey(supported);
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final horizontalInset = isMobile ? 12.0 : 12.0;
+    final horizontalInset = isMobile ? 12.0 : 20.0;
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
 
     if (descriptor?.isMultiThreadChat != true) {
@@ -1354,7 +1354,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               );
             },
           ),
-        if (!isMobile) _buildDesktopPaneContentSpacer(context),
+        if (!isMobile) _buildDesktopSecondaryControlSpacer(context),
         Expanded(
           child: Padding(
             padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
