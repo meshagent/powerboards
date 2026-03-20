@@ -203,7 +203,19 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           )
         : _buildThread(path: threadPath, initialMessageText: null);
 
-    return threadContent;
+    if (threadPath != null) {
+      return threadContent;
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sideInset = constraints.maxWidth * 0.1;
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: sideInset),
+          child: threadContent,
+        );
+      },
+    );
   }
 
   @override
@@ -534,6 +546,8 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   }
 
   Widget _buildThreadListBody(List<_ThreadListEntry> entries) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
     if (_threadListLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -557,7 +571,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 8),
       itemCount: entries.length + 1,
-      separatorBuilder: (_, _) => const SizedBox(height: 4),
+      separatorBuilder: (_, _) => SizedBox(height: isMobile ? 4 : 4),
       itemBuilder: (context, index) {
         if (index == 0) {
           return _ThreadListCreateItem(selected: widget.selectedThreadPath == null, onOpen: () => widget.onSelectedThreadPathChanged(null));
@@ -679,16 +693,16 @@ class _ThreadListCreateItem extends StatelessWidget {
               splashColor: Colors.transparent,
               onTap: onOpen,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 36),
+                constraints: BoxConstraints(minHeight: isMobile ? 0 : 36),
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: 0),
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 12, vertical: isMobile ? 14 : 0),
                   child: Row(
                     children: [
-                      const SizedBox(
-                        width: 16,
-                        child: Center(child: Icon(LucideIcons.messageSquarePlus, size: 16, color: shadForeground)),
+                      SizedBox(
+                        width: isMobile ? 36 : 16,
+                        child: const Center(child: Icon(LucideIcons.messageSquarePlus, size: 16, color: shadForeground)),
                       ),
-                      const SizedBox(width: 6),
+                      SizedBox(width: isMobile ? 4 : 6),
                       Expanded(
                         child: Text(
                           "New thread",
@@ -756,18 +770,18 @@ class _ThreadListItemState extends State<_ThreadListItem> {
               splashColor: Colors.transparent,
               onTap: widget.onOpen,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 36),
+                constraints: BoxConstraints(minHeight: isMobile ? 0 : 36),
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: 0),
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 12, vertical: isMobile ? 14 : 0),
                   child: Row(
                     children: [
                       SizedBox(
-                        width: 16,
+                        width: isMobile ? 36 : 16,
                         child: Center(
                           child: selected ? const Icon(LucideIcons.dot, size: 22, color: shadForeground) : const SizedBox.shrink(),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      SizedBox(width: isMobile ? 4 : 6),
                       Expanded(
                         child: Text(
                           widget.entry.name,
