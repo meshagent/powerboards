@@ -8,14 +8,16 @@ class CameraBox extends StatelessWidget {
   final bool muted;
   final bool showName;
   final Alignment overlayAlignment;
+  final ParticipantOverlayContextMenuConfig? overlayContextMenu;
 
   const CameraBox({
     super.key,
     required this.camera,
     required this.participantName,
-    this.overlayAlignment = .bottomLeft,
+    this.overlayAlignment = .topRight,
     this.showName = false,
     this.muted = false,
+    this.overlayContextMenu,
   });
 
   @override
@@ -28,7 +30,7 @@ class CameraBox extends StatelessWidget {
           alignment: overlayAlignment,
           child: Padding(
             padding: const .all(5),
-            child: ParticipantOverlay(name: participantName, muted: muted, showName: showName),
+            child: ParticipantOverlay(name: participantName, muted: muted, showName: showName, contextMenu: overlayContextMenu),
           ),
         ),
       ],
