@@ -1296,6 +1296,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final horizontalInset = isMobile ? 12.0 : 20.0;
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
+    void handleThreadSelection(String? path) {
+      _setSelectedThreadPath(agentKey, path);
+      if (isMobile) {
+        controller.hideThreads();
+      }
+    }
 
     if (descriptor?.isMultiThreadChat != true) {
       return _buildErrorArea(context, "Threads are only available for multi-thread agents", actions);
@@ -1364,7 +1370,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               threadListPath: descriptor!.threadListPath,
               selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
               newThreadResetVersion: _newThreadResetVersion,
-              onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
+              onSelectedThreadPathChanged: handleThreadSelection,
             ),
           ),
         ),
