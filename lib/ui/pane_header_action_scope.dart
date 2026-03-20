@@ -46,7 +46,8 @@ class PaneHeaderActionState {
 
   static const expanded = PaneHeaderActionState();
   static const overflow = PaneHeaderActionState(overflowCollapsed: true);
-  static const compactOnly = PaneHeaderActionState(compact: true, overflowCollapsed: true);
+  static const iconOnly = PaneHeaderActionState(compact: true);
+  static const compactOverflow = PaneHeaderActionState(compact: true, overflowCollapsed: true);
 
   bool get isExpanded => !compact && !overflowCollapsed;
 
@@ -64,6 +65,7 @@ PaneHeaderActionState resolvePaneHeaderActionState(
   required List<Widget> actions,
   double minimumLeadingWidth = 0,
   double reserve = desktopPaneHeaderActionReserve,
+  bool preferCompactBeforeOverflow = false,
 }) {
   if (actions.isEmpty) {
     return PaneHeaderActionState.expanded;
@@ -78,19 +80,30 @@ PaneHeaderActionState resolvePaneHeaderActionState(
     return PaneHeaderActionState.expanded;
   }
 
+  final compactThreshold =
+      normalizedMinimumLeadingWidth + estimatedPaneHeaderActionsWidth(actions, compact: true, overflowCollapsed: false) + reserve;
+  if (preferCompactBeforeOverflow && availableWidth >= compactThreshold) {
+    return PaneHeaderActionState.iconOnly;
+  }
+
   final overflowThreshold =
       normalizedMinimumLeadingWidth + estimatedPaneHeaderActionsWidth(actions, compact: false, overflowCollapsed: true) + reserve;
-  if (availableWidth >= overflowThreshold) {
+  if (!preferCompactBeforeOverflow && availableWidth >= overflowThreshold) {
     return PaneHeaderActionState.overflow;
   }
 
-  final compactThreshold =
-      normalizedMinimumLeadingWidth + estimatedPaneHeaderActionsWidth(actions, compact: true, overflowCollapsed: true) + reserve;
-  if (availableWidth >= compactThreshold) {
-    return PaneHeaderActionState.compactOnly;
+  if (!preferCompactBeforeOverflow && availableWidth >= compactThreshold) {
+    return PaneHeaderActionState.iconOnly;
   }
 
-  return PaneHeaderActionState.compactOnly;
+  final compactOverflowThreshold =
+      normalizedMinimumLeadingWidth + estimatedPaneHeaderActionsWidth(actions, compact: true, overflowCollapsed: true) + reserve;
+
+  if (availableWidth >= compactOverflowThreshold) {
+    return PaneHeaderActionState.compactOverflow;
+  }
+
+  return PaneHeaderActionState.compactOverflow;
 }
 
 class CompactHeaderActions extends InheritedWidget {

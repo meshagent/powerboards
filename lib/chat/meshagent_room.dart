@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
@@ -51,6 +52,9 @@ import 'package:powerboards/ui/sweep_status_text.dart';
 
 const defaultDebugSize = 0.4;
 final meetingHeaderTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600);
+const double _meetingToolbarCompactThreshold = 440;
+const double _meetingToolbarPreferredExpandedWidth = 400;
+const double _meetingToolbarPreferredCompactWidth = 320;
 
 EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
   if (compact) {
@@ -520,11 +524,13 @@ class ActionsRow extends StatelessWidget {
     }
 
     final spacerIndex = act.indexWhere((widget) => widget is Spacer);
+    final leadingActions = spacerIndex == -1 ? const <Widget>[] : act.take(spacerIndex).toList(growable: false);
     final trailingActions = spacerIndex == -1 ? act : act.skip(spacerIndex + 1).toList(growable: false);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final state = resolvePaneHeaderActionState(constraints, leadingWidth: 320, minimumLeadingWidth: 220, actions: trailingActions);
+        final visibleTrailingActions = visiblePaneHeaderActions(trailingActions, overflowCollapsed: state.overflowCollapsed);
 
         return CompactHeaderActions(
           state: state,
@@ -535,7 +541,24 @@ class ActionsRow extends StatelessWidget {
                 height: desktopPaneHeaderContentHeight,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(spacing: 8, crossAxisAlignment: CrossAxisAlignment.center, children: act),
+                  child: Row(
+                    spacing: 8,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      if (leadingActions.isNotEmpty)
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: leadingActions),
+                            ),
+                          ),
+                        ),
+                      if (visibleTrailingActions.isNotEmpty)
+                        Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: visibleTrailingActions),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -867,8 +890,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
-  List<Widget> _meetingToolbarControls(BuildContext context) {
-    final meetingViewController = Controller.ofType<MeetingViewController>(context);
+  List<Widget> _meetingToolbarControls(BuildContext context, {bool compact = false}) {
     final model = room.VideoRoomModel.maybeOf(context);
     if (model?.room == null) {
       return [];
@@ -877,15 +899,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return [
       HangupButton(
         onPressed: () {
-          meetingViewController.endMeeting();
-          //onCancel();
+          _leaveMeeting();
         },
       ),
       room.MicToggle(),
       room.CameraToggle(),
       room.ChangeSettings(),
-      room.ShareScreen(),
-      MeetingToolkits(room: widget.room),
+      room.ShareScreen(compact: compact),
+      MeetingToolkits(room: widget.room, compact: compact),
     ];
   }
 
@@ -928,6 +949,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   List<Widget> _meetingPaneActions(BuildContext context, {required bool canViewStorageAllowed}) {
     final meetingSessionActive = _isMeetingSessionActive(context);
+    final activeMeetingPane = meetingSessionActive && controller.inMeeting;
     final supported = services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!);
     final showThreadsButton = _selectedAgentShowsThreadsButton(supported);
     return [
@@ -935,23 +957,26 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         PaneHeaderActionItem(
           expandedWidth: desktopPaneHeaderThreadsButtonWidth,
           compactWidth: desktopPaneHeaderCompactButtonWidth,
+          overflowOnCompact: activeMeetingPane,
           child: ThreadsButton(controller: controller),
         ),
       if (canViewStorageAllowed)
         PaneHeaderActionItem(
           expandedWidth: desktopPaneHeaderFilesButtonWidth,
           compactWidth: desktopPaneHeaderCompactButtonWidth,
+          overflowOnCompact: activeMeetingPane,
           child: FilesButton(controller: controller),
         ),
       PaneHeaderActionItem(
         expandedWidth: desktopPaneHeaderMeetButtonWidth,
         compactWidth: desktopPaneHeaderCompactButtonWidth,
+        overflowOnCompact: activeMeetingPane,
         child: MeetButton(controller: controller, meetingSessionActive: meetingSessionActive),
       ),
       PaneHeaderActionItem(
         expandedWidth: desktopPaneHeaderInviteButtonWidth,
         compactWidth: desktopPaneHeaderCompactButtonWidth,
-        overflowOnCompact: true,
+        overflowOnCompact: !activeMeetingPane,
         child: InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
       ),
       PaneHeaderActionItem(
@@ -964,6 +989,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           isOwner: isOwner,
           canViewDeveloperLogs: canViewDeveloperLogs,
           boundaryContext: context,
+          showMeetingPaneEntriesInOverflow: activeMeetingPane,
+          showThreadsAction: showThreadsButton,
+          showFilesAction: canViewStorageAllowed,
+          showMeetAction: true,
         ),
       ),
       PaneHeaderActionItem(
@@ -1231,6 +1260,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final horizontalInset = isMobile ? 12.0 : 20.0;
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
+    final meetingSessionActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
       color: cs.background,
@@ -1240,7 +1270,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
-              child: FileManagerView(client: widget.room, hideSystem: true, desktopHeaderActions: isMobile ? const [] : actions),
+              child: FileManagerView(
+                client: widget.room,
+                hideSystem: true,
+                desktopHeaderActions: isMobile ? const [] : actions,
+                desktopHeaderActionLeadingWidthFloor: meetingSessionActive ? _meetingActivePaneActionLeadingWidthFloor : 0,
+                desktopHeaderActionMinimumLeadingWidth: meetingSessionActive ? 160 : 0,
+                desktopHeaderActionReserve: meetingSessionActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
+              ),
             ),
           ),
         ],
@@ -1271,11 +1308,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         else
           LayoutBuilder(
             builder: (context, constraints) {
-              final leadingWidth = _measureMeetingHeaderTitleWidth(context, constraints.maxWidth);
+              final meetingSessionActive = _isMeetingSessionActive(context);
+              final leadingWidth = math.max(
+                _measureMeetingHeaderTitleWidth(context, constraints.maxWidth),
+                meetingSessionActive ? _meetingActivePaneActionLeadingWidthFloor : 0.0,
+              );
               final localActionState = resolvePaneHeaderActionState(
                 constraints,
                 leadingWidth: leadingWidth,
-                minimumLeadingWidth: 120,
+                minimumLeadingWidth: meetingSessionActive ? 160.0 : 120.0,
+                reserve: meetingSessionActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
                 actions: actions,
               );
               final actionState = localActionState;
@@ -1353,8 +1395,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 final localActionState = resolvePaneHeaderActionState(
                   constraints,
                   leadingWidth: leadingWidth,
-                  minimumLeadingWidth: meetingIsActive ? 176 : 120,
+                  minimumLeadingWidth: meetingIsActive ? _meetingToolbarPreferredCompactWidth : 120,
+                  reserve: meetingIsActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
                   actions: actions,
+                  preferCompactBeforeOverflow: meetingIsActive,
                 );
                 final actionState = localActionState;
                 final visibleActions = visiblePaneHeaderActions(actions, overflowCollapsed: actionState.overflowCollapsed);
@@ -1372,13 +1416,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   spacing: desktopPaneHeaderButtonGap,
                                   children: [
                                     Expanded(
-                                      child: SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          spacing: desktopPaneHeaderButtonGap,
-                                          children: _meetingToolbarControls(context),
-                                        ),
+                                      child: LayoutBuilder(
+                                        builder: (context, toolbarConstraints) {
+                                          final compactControls = toolbarConstraints.maxWidth < _meetingToolbarCompactThreshold;
+                                          return SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              spacing: desktopPaneHeaderButtonGap,
+                                              children: _meetingToolbarControls(context, compact: compactControls),
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ),
                                     if (visibleActions.isNotEmpty)
@@ -1447,7 +1496,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _leaveMeeting() {
+    final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final navController = Controller.ofType<NavController>(context);
+    meetingViewController.resetToLobby();
     navController.showNav();
     controller.exitMeeting();
   }
@@ -1601,8 +1652,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   double _measureActiveMeetingHeaderWidth(double maxWidth) {
-    return (maxWidth * 0.42).clamp(260.0, 420.0);
+    return _meetingToolbarPreferredExpandedWidth.clamp(0.0, maxWidth);
   }
+
+  static const double _meetingActivePaneActionLeadingWidthFloor = 260;
 
   @override
   Widget build(BuildContext context) {

@@ -145,8 +145,19 @@ class FileManagerView extends StatefulWidget {
   final RoomClient client;
   final bool hideSystem;
   final List<Widget> desktopHeaderActions;
+  final double desktopHeaderActionLeadingWidthFloor;
+  final double desktopHeaderActionMinimumLeadingWidth;
+  final double desktopHeaderActionReserve;
 
-  const FileManagerView({super.key, required this.client, this.hideSystem = false, this.desktopHeaderActions = const []});
+  const FileManagerView({
+    super.key,
+    required this.client,
+    this.hideSystem = false,
+    this.desktopHeaderActions = const [],
+    this.desktopHeaderActionLeadingWidthFloor = 0,
+    this.desktopHeaderActionMinimumLeadingWidth = 0,
+    this.desktopHeaderActionReserve = desktopPaneHeaderActionReserve,
+  });
 
   @override
   State<FileManagerView> createState() => _FileManagerViewState();
@@ -944,11 +955,15 @@ class _FileManagerViewState extends State<FileManagerView> {
           height: headerHeight,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final leadingWidth = _estimateDesktopHeaderLeadingWidth(context, constraints.maxWidth);
+              final leadingWidth = math.max(
+                _estimateDesktopHeaderLeadingWidth(context, constraints.maxWidth),
+                widget.desktopHeaderActionLeadingWidthFloor,
+              );
               final localActionState = resolvePaneHeaderActionState(
                 constraints,
                 leadingWidth: leadingWidth,
-                minimumLeadingWidth: _minimumDesktopHeaderLeadingWidth(),
+                minimumLeadingWidth: math.max(_minimumDesktopHeaderLeadingWidth(), widget.desktopHeaderActionMinimumLeadingWidth),
+                reserve: widget.desktopHeaderActionReserve,
                 actions: desktopActions,
               );
               final actionState = localActionState;
