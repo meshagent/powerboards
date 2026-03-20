@@ -1130,6 +1130,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
               child: FileManagerView(
                 client: widget.room,
+                services: services,
                 hideSystem: true,
                 desktopHeaderActions: isMobile ? const [] : actions,
                 onDesktopHeaderCompactChanged: controller.setPreferCompactPaneActions,

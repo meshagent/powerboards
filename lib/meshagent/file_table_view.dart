@@ -16,6 +16,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
@@ -143,6 +144,7 @@ class _BreadcrumbSegment {
 
 class FileManagerView extends StatefulWidget {
   final RoomClient client;
+  final Resource<List<ServiceSpec>>? services;
   final bool hideSystem;
   final List<Widget> desktopHeaderActions;
   final ValueChanged<bool>? onDesktopHeaderCompactChanged;
@@ -151,6 +153,7 @@ class FileManagerView extends StatefulWidget {
   const FileManagerView({
     super.key,
     required this.client,
+    this.services,
     this.hideSystem = false,
     this.desktopHeaderActions = const [],
     this.onDesktopHeaderCompactChanged,
@@ -879,7 +882,33 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
     }
 
-    List<ShadContextMenuItem> items() {
+    Future<void> onStartFilePrompt(ChatFilePromptAction action) async {
+      try {
+        final threadPath = await startChatFilePromptThread(room: widget.client, action: action, filePath: fullPath);
+        if (!mounted) {
+          return;
+        }
+
+        _openEntry(threadPath, false);
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+
+        ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to start chat"), description: Text("$error")));
+      }
+    }
+
+    List<ChatFilePromptAction> filePromptActions() {
+      if (isFolder || widget.services?.state.isReady != true) {
+        return const <ChatFilePromptAction>[];
+      }
+
+      return resolveChatFilePromptActions(services: widget.services!.state.value!, filePath: fullPath);
+    }
+
+    List<Widget> items() {
+      final promptActions = filePromptActions();
       return [
         if (!isFolder)
           ShadContextMenuItem(
@@ -922,6 +951,14 @@ class _FileManagerViewState extends State<FileManagerView> {
           onPressed: () => onAction(_FileAction.delete),
           child: const Text('Delete'),
         ),
+        if (promptActions.isNotEmpty) const Divider(height: 1),
+        for (final action in promptActions)
+          ShadContextMenuItem(
+            height: 40.0,
+            leading: const Icon(LucideIcons.messageSquarePlus, size: 16),
+            onPressed: () => onStartFilePrompt(action),
+            child: Text(action.menuLabel),
+          ),
       ];
     }
 
@@ -931,7 +968,10 @@ class _FileManagerViewState extends State<FileManagerView> {
       boundaryContext: boundaryContext,
       items: menuItems,
       estimatedMenuWidth: 200,
-      estimatedMenuHeight: menuItems.length * 40.0 + 8.0,
+      estimatedMenuHeight: menuItems.fold<double>(8.0, (height, item) {
+        return height + (item is Divider ? 17.0 : 40.0);
+      }),
+      onOpen: widget.services == null ? null : () => widget.services!.refresh(),
       showTrigger: showTrigger,
     );
   }
@@ -2134,6 +2174,7 @@ class _FileActionsMenuButton extends StatefulWidget {
     required this.estimatedMenuWidth,
     required this.estimatedMenuHeight,
     required this.showTrigger,
+    this.onOpen,
     this.boundaryContext,
   });
 
@@ -2141,6 +2182,7 @@ class _FileActionsMenuButton extends StatefulWidget {
   final double estimatedMenuWidth;
   final double estimatedMenuHeight;
   final bool showTrigger;
+  final VoidCallback? onOpen;
   final BuildContext? boundaryContext;
 
   @override
@@ -2167,6 +2209,10 @@ class _FileActionsMenuButtonState extends State<_FileActionsMenuButton> {
   void _syncOpenState() {
     if (_menuOpen == _controller.isOpen) {
       return;
+    }
+
+    if (!_menuOpen && _controller.isOpen) {
+      widget.onOpen?.call();
     }
 
     setState(() {
