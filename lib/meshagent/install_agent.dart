@@ -156,10 +156,9 @@ class _AgentInstaller extends State<AgentInstaller> {
     });
   }
 
-  void _handleInstalled(BuildContext context) {
+  void _handleInstalled(BuildContext context, String serviceId) {
     final projectId = _projectId!;
     final roomName = _roomName!;
-    final serviceId = _spec.state.value!.metadata.annotations["meshagent.service.id"]!;
 
     if (widget.onInstalled != null) {
       widget.onInstalled!(context, projectId, roomName, serviceId);
