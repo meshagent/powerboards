@@ -14,10 +14,10 @@ import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/livekit/camera_grid.dart';
 import 'package:powerboards/livekit/camera_strip.dart';
 import 'package:powerboards/livekit/device_preview.dart';
+import 'package:powerboards/livekit/participant_track.dart';
 import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
-
-// import 'meeting_body.dart';
+import 'package:powerboards/ui/participant_overlay.dart';
 
 enum MeetingViewState { preview, joined, ended }
 
@@ -53,38 +53,31 @@ class MeetingView extends StatelessWidget {
   final VoidCallback onCancel;
   final void Function() joinMeeting;
 
+  lk.VideoTrack? _screenShareTrackFor(lk.Participant participant) {
+    final publication = participant.getTrackPublicationBySource(lk.TrackSource.screenShareVideo);
+    final track = publication?.track;
+
+    if (publication == null || publication.muted || track is! lk.VideoTrack) {
+      return null;
+    }
+
+    return track;
+  }
+
+  ({lk.Participant participant, lk.VideoTrack track})? _activeShare(List<lk.Participant> participants) {
+    for (final participant in participants) {
+      final track = _screenShareTrackFor(participant);
+
+      if (track != null) {
+        return (participant: participant, track: track);
+      }
+    }
+
+    return null;
+  }
+
   bool _participantHasActiveShare(lk.Participant participant) {
-    return participant.videoTrackPublications.any(
-      (track) => track.source == lk.TrackSource.screenShareVideo && !track.muted && track.track != null,
-    );
-  }
-
-  lk.TrackPublication? _activeSharePublication(lk.Participant participant) {
-    return participant.videoTrackPublications.firstWhereOrNull(
-      (track) => track.source == lk.TrackSource.screenShareVideo && !track.muted && track.track != null,
-    );
-  }
-
-  lk.VideoTrack? _activeShareTrack(List<lk.Participant> participants) {
-    for (final participant in participants) {
-      final publication = _activeSharePublication(participant);
-      final track = publication?.track;
-      if (track is lk.VideoTrack) {
-        return track;
-      }
-    }
-
-    return null;
-  }
-
-  lk.Participant? _activeSharer(List<lk.Participant> participants) {
-    for (final participant in participants) {
-      if (_participantHasActiveShare(participant)) {
-        return participant;
-      }
-    }
-
-    return null;
+    return _screenShareTrackFor(participant) != null;
   }
 
   List<lk.Participant> _desktopShareRailParticipants(List<lk.Participant> participants) {
@@ -92,7 +85,7 @@ class MeetingView extends StatelessWidget {
       return const [];
     }
 
-    final sharer = _activeSharer(participants);
+    final sharer = _activeShare(participants)?.participant;
     if (sharer == null) {
       return participants;
     }
@@ -109,63 +102,16 @@ class MeetingView extends StatelessWidget {
   }
 
   Widget _desktopShareLayout(lk.Room room, List<lk.Participant> participants) {
-    final shareTrack = _activeShareTrack(participants);
-    if (shareTrack == null) {
+    final activeShare = _activeShare(participants);
+    if (activeShare == null) {
       return ExpandableCameraGrid(participants: participants);
     }
 
-    final railParticipants = _desktopShareRailParticipants(participants);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const outerPadding = 24.0;
-        const railWidth = 158.4;
-        const railGap = 16.0;
-        const shareAspectRatio = 16 / 9;
-
-        final maxContentWidth = (constraints.maxWidth - outerPadding * 2).clamp(0.0, double.infinity);
-        final maxContentHeight = (constraints.maxHeight - outerPadding * 2).clamp(0.0, double.infinity);
-        final maxShareWidth = (maxContentWidth - railWidth - railGap).clamp(0.0, double.infinity);
-
-        final shareHeightFromWidth = maxShareWidth / shareAspectRatio;
-        final shareHeight = shareHeightFromWidth > maxContentHeight ? maxContentHeight : shareHeightFromWidth;
-        final shareWidth = shareHeight * shareAspectRatio;
-
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(outerPadding),
-            child: SizedBox(
-              width: shareWidth + railGap + railWidth,
-              height: shareHeight,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: shareWidth,
-                    height: shareHeight,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(color: _meetingSurfaceColor, borderRadius: BorderRadius.circular(12)),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: ColoredBox(
-                          color: _meetingSurfaceColor,
-                          child: lk.VideoTrackRenderer(shareTrack, fit: lk.VideoViewFit.contain, autoCenter: true),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: railGap),
-                  SizedBox(
-                    width: railWidth,
-                    height: shareHeight,
-                    child: CameraStrip(room: room, horizontal: false, participants: railParticipants),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+    return _DesktopShareLayout(
+      room: room,
+      activeSharer: activeShare.participant,
+      activeShareTrack: activeShare.track,
+      railParticipants: _desktopShareRailParticipants(participants),
     );
   }
 
@@ -264,6 +210,151 @@ class MeetingView extends StatelessWidget {
         }
 
         return const Text("Unknown state");
+      },
+    );
+  }
+}
+
+class _DesktopShareLayout extends StatefulWidget {
+  const _DesktopShareLayout({
+    required this.room,
+    required this.activeSharer,
+    required this.activeShareTrack,
+    required this.railParticipants,
+  });
+
+  final lk.Room room;
+  final lk.Participant activeSharer;
+  final lk.VideoTrack activeShareTrack;
+  final List<lk.Participant> railParticipants;
+
+  @override
+  State<_DesktopShareLayout> createState() => _DesktopShareLayoutState();
+}
+
+class _DesktopShareLayoutState extends State<_DesktopShareLayout> {
+  static const _outerPadding = 24.0;
+  static const _railWidth = 158.4;
+  static const _railGap = 16.0;
+  static const _shareAspectRatio = 16 / 9;
+
+  late final ShadContextMenuController _menuController = ShadContextMenuController();
+
+  bool _showRail = true;
+  bool? _latchedShowRail;
+
+  bool get _effectiveShowRail => _latchedShowRail ?? _showRail;
+
+  List<ShadContextMenuItem> get _menuItems => [
+    ShadContextMenuItem(
+      height: 40.0,
+      leading: Icon(_effectiveShowRail ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
+      onPressed: () {
+        _menuController.hide();
+        setState(() {
+          _showRail = !_showRail;
+        });
+      },
+      child: Text(_effectiveShowRail ? "Collapse" : "Expand"),
+    ),
+  ];
+
+  void _handleMenuControllerChange() {
+    if (!_menuController.isOpen) {
+      return;
+    }
+
+    if (_latchedShowRail == _showRail) {
+      return;
+    }
+
+    setState(() {
+      _latchedShowRail = _showRail;
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _menuController.addListener(_handleMenuControllerChange);
+  }
+
+  @override
+  void dispose() {
+    _menuController.removeListener(_handleMenuControllerChange);
+    _menuController.dispose();
+    super.dispose();
+  }
+
+  Widget _shareTile(BuildContext context, double width, double height) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(color: MeetingView._meetingSurfaceColor, borderRadius: BorderRadius.circular(12)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: ColoredBox(
+            color: MeetingView._meetingSurfaceColor,
+            child: ParticipantTrack(
+              participant: widget.activeSharer,
+              showName: true,
+              overlayContextMenu: ParticipantOverlayContextMenuConfig(
+                controller: _menuController,
+                items: _menuItems,
+                boundaryContext: context,
+              ),
+              track: lk.VideoTrackRenderer(widget.activeShareTrack, fit: lk.VideoViewFit.contain, autoCenter: true),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxContentWidth = (constraints.maxWidth - _outerPadding * 2).clamp(0.0, double.infinity);
+        final maxContentHeight = (constraints.maxHeight - _outerPadding * 2).clamp(0.0, double.infinity);
+
+        if (!_showRail) {
+          final shareWidthFromHeight = maxContentHeight * _shareAspectRatio;
+          final shareWidth = shareWidthFromHeight > maxContentWidth ? maxContentWidth : shareWidthFromHeight;
+          final shareHeight = shareWidth / _shareAspectRatio;
+
+          return Center(
+            child: Padding(padding: const EdgeInsets.all(_outerPadding), child: _shareTile(context, shareWidth, shareHeight)),
+          );
+        }
+
+        final maxShareWidth = (maxContentWidth - _railWidth - _railGap).clamp(0.0, double.infinity);
+        final shareHeightFromWidth = maxShareWidth / _shareAspectRatio;
+        final shareHeight = shareHeightFromWidth > maxContentHeight ? maxContentHeight : shareHeightFromWidth;
+        final shareWidth = shareHeight * _shareAspectRatio;
+
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(_outerPadding),
+            child: SizedBox(
+              width: shareWidth + _railGap + _railWidth,
+              height: shareHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _shareTile(context, shareWidth, shareHeight),
+                  const SizedBox(width: _railGap),
+                  SizedBox(
+                    width: _railWidth,
+                    height: shareHeight,
+                    child: CameraStrip(room: widget.room, horizontal: false, participants: widget.railParticipants),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
       },
     );
   }
