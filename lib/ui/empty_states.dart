@@ -13,9 +13,22 @@ import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 
 class EmptyRooms extends StatelessWidget {
-  const EmptyRooms({super.key, this.onCreateRoom});
+  const EmptyRooms({
+    super.key,
+    this.onCreateRoom,
+    this.icon = LucideIcons.packagePlus,
+    this.title = 'Create a room',
+    this.description = 'Rooms bring people, agents, and content together. Create one to:',
+    this.points = const ['Organize discussions', 'Create files with agents', 'Share files', 'Invite members', 'Manage agents and services'],
+    this.actionLabel = 'Continue',
+  });
 
   final VoidCallback? onCreateRoom;
+  final IconData icon;
+  final String title;
+  final String description;
+  final List<String> points;
+  final String actionLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +44,7 @@ class EmptyRooms extends StatelessWidget {
           footer: onCreateRoom != null
               ? Padding(
                   padding: const .only(top: 30),
-                  child: ShadButton(width: .infinity, onPressed: onCreateRoom, child: const Text('Continue')),
+                  child: ShadButton(width: .infinity, onPressed: onCreateRoom, child: Text(actionLabel)),
                 )
               : null,
           child: Column(
@@ -42,65 +55,35 @@ class EmptyRooms extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(color: cs.primary, borderRadius: .circular(12)),
-                child: Icon(LucideIcons.packagePlus, size: 24, color: cs.background),
+                child: Icon(icon, size: 24, color: cs.background),
               ),
               const SizedBox(height: 16),
 
-              Text('Create a room', style: tt.h3.copyWith(fontWeight: .w800)),
+              Text(title, style: tt.h3.copyWith(fontWeight: .w800)),
 
               const SizedBox(height: 8),
-              Text('Rooms bring people, agents, and content together. Create one to:'),
-              const SizedBox(height: 20),
-
-              Padding(
-                padding: const .only(left: 8),
-                child: Column(
-                  crossAxisAlignment: .start,
-                  spacing: 2,
-                  children: [
-                    Row(
-                      crossAxisAlignment: .start,
-                      spacing: 8,
-                      children: [
-                        Text('•'),
-                        Expanded(child: Text('Organize discussions')),
-                      ],
-                    ),
-                    Row(
-                      crossAxisAlignment: .start,
-                      spacing: 8,
-                      children: [
-                        Text('•'),
-                        Expanded(child: Text('Create files with agents')),
-                      ],
-                    ),
-                    Row(
-                      crossAxisAlignment: .start,
-                      spacing: 8,
-                      children: [
-                        Text('•'),
-                        Expanded(child: Text('Share files')),
-                      ],
-                    ),
-                    Row(
-                      crossAxisAlignment: .start,
-                      spacing: 8,
-                      children: [
-                        Text('•'),
-                        Expanded(child: Text('Invite members')),
-                      ],
-                    ),
-                    Row(
-                      crossAxisAlignment: .start,
-                      spacing: 8,
-                      children: [
-                        Text('•'),
-                        Expanded(child: Text('Manage agents and services')),
-                      ],
-                    ),
-                  ],
+              Text(description),
+              if (points.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const .only(left: 8),
+                  child: Column(
+                    crossAxisAlignment: .start,
+                    spacing: 2,
+                    children: [
+                      for (final point in points)
+                        Row(
+                          crossAxisAlignment: .start,
+                          spacing: 8,
+                          children: [
+                            const Text('•'),
+                            Expanded(child: Text(point)),
+                          ],
+                        ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

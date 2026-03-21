@@ -1199,26 +1199,32 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return Column(
       children: [
         ActionsRow(actions: actions),
-        _buildDesktopPaneContentSpacer(context),
+        _buildDesktopChatViewportCutoffSpacer(context),
         _buildAgentsActionRow(context),
         Expanded(
-          child: WaitForAgentParticipantBuilder(
-            key: ValueKey(agentName),
-            room: widget.room,
-            agentName: agentName,
-            builder: (context, participant) => Column(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: participant == null
-                        ? ShadButton(child: Text("Start Voice Session"))
-                        : ConstrainedBox(
-                            constraints: BoxConstraints(maxWidth: 500, maxHeight: 500),
-                            child: VoiceAgentCaller(meeting: MeetingController.of(context), participant: participant),
-                          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) => WaitForAgentParticipantBuilder(
+              key: ValueKey(agentName),
+              room: widget.room,
+              agentName: agentName,
+              builder: (context, participant) => Column(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: participant == null
+                          ? ShadButton(child: Text("Start Voice Session"))
+                          : ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 500),
+                              child: VoiceAgentCaller(
+                                meeting: MeetingController.of(context),
+                                participant: participant,
+                                emptyStateAvailableWidth: constraints.maxWidth,
+                              ),
+                            ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

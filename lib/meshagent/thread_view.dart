@@ -88,6 +88,8 @@ class MeshagentThreadView extends StatefulWidget {
 }
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
+  static const String _threadEmptyDescription = "Connect with this agent and your team";
+
   late final ChatThreadController _chatController;
   late String _documentPath;
   late String? _initialMessageText;
@@ -157,6 +159,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
+    final usesSingleThreadEmptyState = widget.threadDisplayMode == ChatThreadDisplayMode.singleThread;
+
     return IconTheme(
       data: const IconThemeData(size: 14),
       child: ChatThreadLoader(
@@ -182,6 +186,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           openFile: _open,
           toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, widget.agentName, controller, snapshot),
           agentName: widget.agentName,
+          emptyStateTitle: usesSingleThreadEmptyState ? "Chat to get started" : null,
+          emptyStateDescription: usesSingleThreadEmptyState ? _threadEmptyDescription : null,
           chatInputBoxBuilder: (context, inputBox) => EnableWebContextMenu(child: inputBox),
         ),
         participantNames: widget.participantNames,
