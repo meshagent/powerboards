@@ -506,6 +506,7 @@ class ActionsRow extends StatelessWidget {
                             ),
                           ),
                         ),
+                      if (leadingActions.isEmpty && visibleTrailingActions.isNotEmpty) const Spacer(),
                       if (visibleTrailingActions.isNotEmpty)
                         Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: visibleTrailingActions),
                     ],
@@ -993,7 +994,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     Widget pill({required VoidCallback? onTap, required Widget child}) {
       return Material(
-        color: theme.colorScheme.background,
+        color: theme.colorScheme.card,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(pillRadius),
           side: BorderSide(color: theme.colorScheme.border.withValues(alpha: onTap == null ? 0.75 : 1)),
@@ -1157,6 +1158,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }) {
     final user = MeshagentAuth.current.getUser();
     final userEmail = user?["email"];
+    final cs = ShadTheme.of(context).colorScheme;
     final documentPath = getDocumentPath(agentName, threadDir: threadDir);
     final isMultiThread = threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
@@ -1188,35 +1190,38 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       ),
     );
 
-    return Column(
-      children: [
-        ActionsRow(actions: chatActions),
-        _buildDesktopChatViewportCutoffSpacer(context),
-        _buildAgentsActionRow(
-          context,
-          mobileBelowDropdown: showMobileThreadActions
-              ? _buildMobileThreadGetStartedActions(
-                  context,
-                  onNewThread: () => onSelectedThreadPathChanged?.call(null),
-                  onViewAll: resolvedThreadListPath == null
-                      ? null
-                      : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey),
-                )
-              : null,
-        ),
-        Expanded(
-          child: showThreadRail
-              ? _buildDesktopChatWithThreadRail(context, chatView: chatView, threadListPath: resolvedThreadListPath, agentKey: agentKey)
-              : showInlineThreadList
-              ? _buildDesktopChatWithInlineThreadList(
-                  context,
-                  chatView: chatView,
-                  threadListPath: resolvedThreadListPath,
-                  agentKey: agentKey,
-                )
-              : chatView,
-        ),
-      ],
+    return ColoredBox(
+      color: isMobile ? cs.card : Colors.transparent,
+      child: Column(
+        children: [
+          ActionsRow(actions: chatActions),
+          _buildDesktopChatViewportCutoffSpacer(context),
+          _buildAgentsActionRow(
+            context,
+            mobileBelowDropdown: showMobileThreadActions
+                ? _buildMobileThreadGetStartedActions(
+                    context,
+                    onNewThread: () => onSelectedThreadPathChanged?.call(null),
+                    onViewAll: resolvedThreadListPath == null
+                        ? null
+                        : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey),
+                  )
+                : null,
+          ),
+          Expanded(
+            child: showThreadRail
+                ? _buildDesktopChatWithThreadRail(context, chatView: chatView, threadListPath: resolvedThreadListPath, agentKey: agentKey)
+                : showInlineThreadList
+                ? _buildDesktopChatWithInlineThreadList(
+                    context,
+                    chatView: chatView,
+                    threadListPath: resolvedThreadListPath,
+                    agentKey: agentKey,
+                  )
+                : chatView,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1350,7 +1355,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingSessionActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
-      color: cs.background,
+      color: isMobile ? cs.card : cs.background,
       child: Column(
         children: [
           if (isMobile) ActionsRow(actions: actions),
@@ -1381,7 +1386,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingIsActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
-      color: cs.background,
+      color: isMobile ? cs.card : cs.background,
       child: Column(
         children: [
           if (isMobile)
@@ -1634,56 +1639,81 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildAgentArea(BuildContext context, List<Widget> actions, {bool showEmbeddedThreadList = true}) {
-    return ChangeNotifierBuilder(
-      source: widget.room.messaging,
-      builder: (context) => SignalBuilder(
-        builder: (context, _) {
-          if (!services.state.isReady) {
-            if (services.state.hasError) {
-              return _buildErrorArea(context, "Unable to load room services: ${services.state.error}", actions);
-            }
-            return _buildRoomLoading(context, title: "Loading room services");
-          }
+    final cs = ShadTheme.of(context).colorScheme;
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
-          final all = services.state.value!;
-          final supported = _supportedServices(all);
-          final selected = _resolveSelectedAgent(supported);
-          final service = selected.service;
-          final developmentParticipant = selected.developmentParticipant;
-
-          if (service == null && developmentParticipant == null) {
-            final requestedRouteId = widget.service;
-            final requestedDevelopmentParticipantName = requestedRouteId == null ? null : developmentAgentNameFromRoute(requestedRouteId);
-            final requestedLegacyDevelopmentParticipantId = requestedRouteId == null
-                ? null
-                : legacyDevelopmentAgentParticipantIdFromRoute(requestedRouteId);
-            if (requestedDevelopmentParticipantName != null || requestedLegacyDevelopmentParticipantId != null) {
-              return _buildErrorArea(context, "Development mode agent is not currently online", actions);
+    return ColoredBox(
+      color: isMobile ? cs.card : Colors.transparent,
+      child: ChangeNotifierBuilder(
+        source: widget.room.messaging,
+        builder: (context) => SignalBuilder(
+          builder: (context, _) {
+            if (!services.state.isReady) {
+              if (services.state.hasError) {
+                return _buildErrorArea(context, "Unable to load room services: ${services.state.error}", actions);
+              }
+              return _buildRoomLoading(context, title: "Loading room services");
             }
 
-            if (supported.isEmpty) {
-              return _buildErrorArea(context, "No supported agents installed", actions);
+            final all = services.state.value!;
+            final supported = _supportedServices(all);
+            final selected = _resolveSelectedAgent(supported);
+            final service = selected.service;
+            final developmentParticipant = selected.developmentParticipant;
+
+            if (service == null && developmentParticipant == null) {
+              final requestedRouteId = widget.service;
+              final requestedDevelopmentParticipantName = requestedRouteId == null ? null : developmentAgentNameFromRoute(requestedRouteId);
+              final requestedLegacyDevelopmentParticipantId = requestedRouteId == null
+                  ? null
+                  : legacyDevelopmentAgentParticipantIdFromRoute(requestedRouteId);
+              if (requestedDevelopmentParticipantName != null || requestedLegacyDevelopmentParticipantId != null) {
+                return _buildErrorArea(context, "Development mode agent is not currently online", actions);
+              }
+
+              if (supported.isEmpty) {
+                return _buildErrorArea(context, "No supported agents installed", actions);
+              }
+
+              return _buildErrorArea(context, "Agent is not installed ${widget.service}", actions);
             }
 
-            return _buildErrorArea(context, "Agent is not installed ${widget.service}", actions);
-          }
+            if (developmentParticipant != null) {
+              final name = participantDisplayName(developmentParticipant);
+              if (name == null) {
+                return _buildErrorArea(context, "Development mode agent is missing a name", actions);
+              }
 
-          if (developmentParticipant != null) {
-            final name = participantDisplayName(developmentParticipant);
-            if (name == null) {
-              return _buildErrorArea(context, "Development mode agent is missing a name", actions);
+              final descriptor = participantConversationDescriptor(developmentParticipant);
+              final agentKey = selected.routeId;
+              if (descriptor?.isVoiceOnly == true) {
+                return _buildVoiceArea(context, name, actions);
+              }
+
+              if (descriptor?.isChat == true) {
+                return _buildChatArea(
+                  context,
+                  name,
+                  actions,
+                  showEmbeddedThreadList: showEmbeddedThreadList,
+                  threadDisplayMode: descriptor!.chatThreadDisplayMode,
+                  threadDir: descriptor.threadDir,
+                  threadListPath: descriptor.threadListPath,
+                  selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
+                  onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
+                );
+              }
+
+              return _buildErrorArea(context, "Selected development mode agent does not support chat or voice", actions);
             }
 
-            final descriptor = participantConversationDescriptor(developmentParticipant);
+            final descriptor = serviceConversationDescriptor(service!, remoteParticipants: widget.room.messaging.remoteParticipants);
+            final type = _serviceType(service);
             final agentKey = selected.routeId;
-            if (descriptor?.isVoiceOnly == true) {
-              return _buildVoiceArea(context, name, actions);
-            }
-
             if (descriptor?.isChat == true) {
               return _buildChatArea(
                 context,
-                name,
+                service.agents[0].name,
                 actions,
                 showEmbeddedThreadList: showEmbeddedThreadList,
                 threadDisplayMode: descriptor!.chatThreadDisplayMode,
@@ -1692,38 +1722,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
                 onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
               );
+            } else if (descriptor?.isVoiceOnly == true) {
+              return _buildVoiceArea(context, service.agents[0].name, actions);
+            } else if (type == "MeetingTranscriber") {
+              return _buildMeetingTranscriberArea(context, service.agents[0].name, actions);
+            } else if (type == "Shell") {
+              return _buildShellArea(context, service, actions);
+            } else if (service.metadata.annotations["meshagent.service.readme"] != null) {
+              return MarkdownViewer(markdown: service.metadata.annotations["meshagent.service.readme"] ?? "");
+            } else {
+              return _buildErrorArea(context, "Agent type '$type' is not currently supported by Powerboards", actions);
             }
-
-            return _buildErrorArea(context, "Selected development mode agent does not support chat or voice", actions);
-          }
-
-          final descriptor = serviceConversationDescriptor(service!, remoteParticipants: widget.room.messaging.remoteParticipants);
-          final type = _serviceType(service);
-          final agentKey = selected.routeId;
-          if (descriptor?.isChat == true) {
-            return _buildChatArea(
-              context,
-              service.agents[0].name,
-              actions,
-              showEmbeddedThreadList: showEmbeddedThreadList,
-              threadDisplayMode: descriptor!.chatThreadDisplayMode,
-              threadDir: descriptor.threadDir,
-              threadListPath: descriptor.threadListPath,
-              selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
-              onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
-            );
-          } else if (descriptor?.isVoiceOnly == true) {
-            return _buildVoiceArea(context, service.agents[0].name, actions);
-          } else if (type == "MeetingTranscriber") {
-            return _buildMeetingTranscriberArea(context, service.agents[0].name, actions);
-          } else if (type == "Shell") {
-            return _buildShellArea(context, service, actions);
-          } else if (service.metadata.annotations["meshagent.service.readme"] != null) {
-            return MarkdownViewer(markdown: service.metadata.annotations["meshagent.service.readme"] ?? "");
-          } else {
-            return _buildErrorArea(context, "Agent type '$type' is not currently supported by Powerboards", actions);
-          }
-        },
+          },
+        ),
       ),
     );
   }
