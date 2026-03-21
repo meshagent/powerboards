@@ -20,7 +20,6 @@ class RoomOptionsMenu extends StatefulWidget {
   final Resource<bool> canViewDeveloperLogs;
   final BuildContext? boundaryContext;
   final bool showMeetingPaneEntriesInOverflow;
-  final bool showThreadsAction;
   final bool showFilesAction;
   final bool showMeetAction;
 
@@ -33,7 +32,6 @@ class RoomOptionsMenu extends StatefulWidget {
     required this.canViewDeveloperLogs,
     this.boundaryContext,
     this.showMeetingPaneEntriesInOverflow = false,
-    this.showThreadsAction = false,
     this.showFilesAction = false,
     this.showMeetAction = false,
   });
@@ -70,14 +68,6 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
         final showInlineMeetingInvite = widget.showMeetingPaneEntriesInOverflow && !isMobile;
 
         final entries = <AppMenuEntry>[
-          if (widget.showMeetingPaneEntriesInOverflow && overflowCollapsed && widget.showThreadsAction)
-            AppMenuEntry(
-              title: "Threads",
-              description: widget.roomController.isThreadsShown ? "Hide the threads pane." : "Show the threads pane.",
-              icon: LucideIcons.messagesSquare,
-              selected: widget.roomController.isThreadsShown,
-              onPressed: widget.roomController.isThreadsShown ? widget.roomController.hideThreads : widget.roomController.showThreads,
-            ),
           if (widget.showMeetingPaneEntriesInOverflow && overflowCollapsed && widget.showFilesAction)
             AppMenuEntry(
               title: "Files",

@@ -6,7 +6,6 @@ const double desktopPaneHeaderButtonGap = 8;
 const double desktopPaneHeaderCompactButtonWidth = 48;
 const double desktopPaneHeaderFilesButtonWidth = 96;
 const double desktopPaneHeaderMeetButtonWidth = 96;
-const double desktopPaneHeaderThreadsButtonWidth = 108;
 const double desktopPaneHeaderInviteButtonWidth = 104;
 const double desktopPaneHeaderOptionsButtonWidth = 48;
 const double desktopPaneHeaderAvatarButtonWidth = 56;

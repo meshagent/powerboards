@@ -52,6 +52,21 @@ const breakpointsLandscape = [
   Breakpoint(start: 2561, end: double.infinity, name: '4K'),
 ];
 
+ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
+  final screenWidth = MediaQuery.maybeOf(context)?.size.width ?? 1024.0;
+  final isMobile = screenWidth < 600;
+  final maxWidth = isMobile ? screenWidth * 0.8 : 512.0;
+  final closeInset = isMobile ? 24.0 : 8.0;
+
+  return ShadDialogTheme(
+    backgroundColor: shadCard,
+    constraints: BoxConstraints(maxWidth: maxWidth),
+    radius: BorderRadius.circular(20),
+    removeBorderRadiusWhenTiny: false,
+    closeIconPosition: ShadPosition(top: closeInset, right: closeInset),
+  );
+}
+
 void _configureDebugPrintFilter() {
   final originalDebugPrint = debugPrint;
   debugPrint = (String? message, {int? wrapWidth}) {
@@ -213,8 +228,8 @@ class MyApp extends StatelessWidget {
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
         textTheme: powerboardsShadTextTheme(),
-        primaryDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
-        alertDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        primaryDialogTheme: _powerboardsDialogThemeForContext(context),
+        alertDialogTheme: _powerboardsDialogThemeForContext(context),
         popoverTheme: ShadPopoverTheme(
           decoration: ShadDecoration(
             color: shadCard,
@@ -315,8 +330,8 @@ class _RootProvidersState extends State<_RootProviders> {
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
         textTheme: powerboardsShadTextTheme(),
-        primaryDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
-        alertDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        primaryDialogTheme: _powerboardsDialogThemeForContext(context),
+        alertDialogTheme: _powerboardsDialogThemeForContext(context),
         popoverTheme: ShadPopoverTheme(
           decoration: ShadDecoration(
             color: shadCard,

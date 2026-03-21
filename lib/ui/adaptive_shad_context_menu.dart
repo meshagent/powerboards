@@ -7,6 +7,23 @@ enum ShadMenuHorizontalPosition { automatic, left, right }
 
 enum ShadMenuVerticalPosition { automatic, down, up }
 
+RenderBox? _safeRenderBox(BuildContext? context) {
+  if (context == null || !context.mounted) {
+    return null;
+  }
+
+  try {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached || !renderObject.hasSize) {
+      return null;
+    }
+
+    return renderObject;
+  } catch (_) {
+    return null;
+  }
+}
+
 ShadAnchor resolveAdaptiveShadMenuAnchor(
   BuildContext context, {
   BuildContext? boundaryContext,
@@ -18,53 +35,56 @@ ShadAnchor resolveAdaptiveShadMenuAnchor(
   ShadMenuHorizontalPosition horizontalPosition = ShadMenuHorizontalPosition.automatic,
   ShadMenuVerticalPosition verticalPosition = ShadMenuVerticalPosition.automatic,
 }) {
-  final overlayBox = Overlay.maybeOf(context)?.context.findRenderObject();
-  final renderBox = context.findRenderObject();
-
-  if (renderBox is! RenderBox || !renderBox.hasSize) {
-    return const ShadAnchor(childAlignment: Alignment.topLeft, overlayAlignment: Alignment.bottomLeft, offset: Offset(0, 8));
+  const fallbackAnchor = ShadAnchor(childAlignment: Alignment.topLeft, overlayAlignment: Alignment.bottomLeft, offset: Offset(0, 8));
+  final renderBox = _safeRenderBox(context);
+  if (renderBox == null) {
+    return fallbackAnchor;
   }
 
-  final overlayRenderBox = overlayBox is RenderBox && overlayBox.hasSize ? overlayBox : null;
-  final boundaryRenderObject = boundaryContext?.findRenderObject();
-  final boundaryRenderBox = boundaryRenderObject is RenderBox && boundaryRenderObject.hasSize ? boundaryRenderObject : overlayRenderBox;
-  final viewportSize = boundaryRenderBox?.size ?? MediaQuery.sizeOf(context);
-  final triggerOrigin = boundaryRenderBox != null
-      ? renderBox.localToGlobal(Offset.zero, ancestor: boundaryRenderBox)
-      : renderBox.localToGlobal(Offset.zero);
-  final triggerBottom = triggerOrigin.dy + renderBox.size.height;
-  final triggerRight = triggerOrigin.dx + renderBox.size.width;
-  final triggerCenter = triggerOrigin + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
+  final overlayRenderBox = _safeRenderBox(Overlay.maybeOf(context)?.context);
+  final boundaryRenderBox = _safeRenderBox(boundaryContext) ?? overlayRenderBox;
 
-  final alignLeft = _shouldAlignMenuLeft(
-    triggerOriginX: triggerOrigin.dx,
-    triggerRightX: triggerRight,
-    triggerCenterX: triggerCenter.dx,
-    viewportWidth: viewportSize.width,
-    viewportEdgePadding: viewportEdgePadding,
-    estimatedMenuWidth: estimatedMenuWidth,
-    horizontalPosition: horizontalPosition,
-  );
+  try {
+    final viewportSize = boundaryRenderBox?.size ?? MediaQuery.sizeOf(context);
+    final triggerOrigin = boundaryRenderBox != null
+        ? renderBox.localToGlobal(Offset.zero, ancestor: boundaryRenderBox)
+        : renderBox.localToGlobal(Offset.zero);
+    final triggerBottom = triggerOrigin.dy + renderBox.size.height;
+    final triggerRight = triggerOrigin.dx + renderBox.size.width;
+    final triggerCenter = triggerOrigin + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
 
-  final openDown = switch (verticalPosition) {
-    ShadMenuVerticalPosition.down => true,
-    ShadMenuVerticalPosition.up => false,
-    ShadMenuVerticalPosition.automatic => _shouldOpenMenuDown(
-      triggerOriginY: triggerOrigin.dy,
-      triggerBottomY: triggerBottom,
-      triggerCenterY: triggerCenter.dy,
-      viewportHeight: viewportSize.height,
-      viewportVerticalSplit: viewportVerticalSplit,
-      estimatedMenuHeight: estimatedMenuHeight,
+    final alignLeft = _shouldAlignMenuLeft(
+      triggerOriginX: triggerOrigin.dx,
+      triggerRightX: triggerRight,
+      triggerCenterX: triggerCenter.dx,
+      viewportWidth: viewportSize.width,
       viewportEdgePadding: viewportEdgePadding,
-    ),
-  };
+      estimatedMenuWidth: estimatedMenuWidth,
+      horizontalPosition: horizontalPosition,
+    );
 
-  return ShadAnchor(
-    childAlignment: Alignment(alignLeft ? -1 : 1, openDown ? -1 : 1),
-    overlayAlignment: Alignment(alignLeft ? -1 : 1, openDown ? 1 : -1),
-    offset: Offset(0, openDown ? gap : -gap),
-  );
+    final openDown = switch (verticalPosition) {
+      ShadMenuVerticalPosition.down => true,
+      ShadMenuVerticalPosition.up => false,
+      ShadMenuVerticalPosition.automatic => _shouldOpenMenuDown(
+        triggerOriginY: triggerOrigin.dy,
+        triggerBottomY: triggerBottom,
+        triggerCenterY: triggerCenter.dy,
+        viewportHeight: viewportSize.height,
+        viewportVerticalSplit: viewportVerticalSplit,
+        estimatedMenuHeight: estimatedMenuHeight,
+        viewportEdgePadding: viewportEdgePadding,
+      ),
+    };
+
+    return ShadAnchor(
+      childAlignment: Alignment(alignLeft ? -1 : 1, openDown ? -1 : 1),
+      overlayAlignment: Alignment(alignLeft ? -1 : 1, openDown ? 1 : -1),
+      offset: Offset(0, openDown ? gap : -gap),
+    );
+  } catch (_) {
+    return fallbackAnchor;
+  }
 }
 
 bool _shouldAlignMenuLeft({
@@ -214,6 +234,10 @@ class _AdaptiveShadContextMenuState extends State<AdaptiveShadContextMenu> {
   }
 
   void _syncFrozenAnchor() {
+    if (!mounted) {
+      return;
+    }
+
     final controller = widget.controller;
     if (controller == null) {
       return;

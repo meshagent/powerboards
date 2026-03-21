@@ -325,60 +325,6 @@ class FilesButton extends StatelessWidget {
   }
 }
 
-class ThreadsButton extends StatelessWidget {
-  const ThreadsButton({super.key, required this.controller});
-
-  final MeshagentRoomController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final compact = CompactHeaderActions.compactOf(context);
-    final buttonWidth = isMobile || compact ? desktopPaneHeaderCompactButtonWidth : desktopPaneHeaderThreadsButtonWidth;
-    final buttonPadding = _paneHeaderButtonPadding(compact: isMobile || compact);
-
-    return controller.isThreadsShown
-        ? Tooltip(
-            message: "Hide threads",
-            child: SizedBox(
-              width: buttonWidth,
-              child: ShadButton(
-                padding: buttonPadding,
-                leading: Icon(LucideIcons.messagesSquare),
-                onPressed: controller.hideThreads,
-                child: isMobile || compact ? null : Text("Threads"),
-              ),
-            ),
-          )
-        : Tooltip(
-            message: "Show threads",
-            child: SizedBox(
-              width: buttonWidth,
-              child: ShadButton.outline(
-                padding: buttonPadding,
-                leading: Icon(LucideIcons.messagesSquare),
-                onPressed: controller.showThreads,
-                child: isMobile || compact ? null : Text("Threads"),
-              ),
-            ),
-          );
-  }
-}
-
-class NewThreadButton extends StatelessWidget {
-  const NewThreadButton({super.key, required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: "Start a new thread",
-      child: ShadIconButton.ghost(icon: const Icon(LucideIcons.messageSquarePlus, size: 18), onPressed: onPressed),
-    );
-  }
-}
-
 class BackButton extends StatelessWidget {
   const BackButton({super.key, required this.projectId});
 
@@ -421,36 +367,36 @@ class BackButton extends StatelessWidget {
 
 class MeshagentRoomController extends Controller {
   bool _isFilesShown = false;
-  bool _isThreadsShown = false;
   bool _isDebugShown = false;
   bool _inMeeting = false;
 
   bool get isFilesShown => _isFilesShown;
-  bool get isThreadsShown => _isThreadsShown;
   bool get isDebugShown => _isDebugShown;
   bool get inMeeting => _inMeeting;
 
   void showFiles() {
+    if (_isFilesShown && !_inMeeting) {
+      return;
+    }
     _isFilesShown = true;
-    _isThreadsShown = false;
     _inMeeting = false;
     notifyListeners();
   }
 
   void hideFiles() {
+    if (!_isFilesShown) {
+      return;
+    }
     _isFilesShown = false;
     notifyListeners();
   }
 
-  void showThreads() {
-    _isThreadsShown = true;
+  void showChat() {
+    if (!_isFilesShown && !_inMeeting) {
+      return;
+    }
     _isFilesShown = false;
     _inMeeting = false;
-    notifyListeners();
-  }
-
-  void hideThreads() {
-    _isThreadsShown = false;
     notifyListeners();
   }
 
@@ -465,13 +411,18 @@ class MeshagentRoomController extends Controller {
   }
 
   void enterMeeting() {
+    if (_inMeeting && !_isFilesShown) {
+      return;
+    }
     _inMeeting = true;
-    _isThreadsShown = false;
     _isFilesShown = false;
     notifyListeners();
   }
 
   void exitMeeting() {
+    if (!_inMeeting) {
+      return;
+    }
     _inMeeting = false;
     notifyListeners();
   }
@@ -797,26 +748,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return _developmentParticipants(supported).isNotEmpty;
   }
 
-  AgentConversationDescriptor? _selectedAgentConversationDescriptor(List<ServiceSpec> supported) {
-    final selected = _resolveSelectedAgent(supported);
-    final developmentParticipant = selected.developmentParticipant;
-    if (developmentParticipant != null) {
-      return participantConversationDescriptor(developmentParticipant);
-    }
-
-    final service = selected.service;
-    if (service == null) {
-      return null;
-    }
-
-    return serviceConversationDescriptor(service, remoteParticipants: widget.room.messaging.remoteParticipants);
-  }
-
-  bool _selectedAgentShowsThreadsButton(List<ServiceSpec> supported) {
-    final descriptor = _selectedAgentConversationDescriptor(supported);
-    return descriptor?.isMultiThreadChat == true;
-  }
-
   String? _selectedThreadAgentKey(List<ServiceSpec> supported) {
     return _resolveSelectedAgent(supported).routeId;
   }
@@ -837,6 +768,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     setState(() {
       if (path == null || path.trim().isEmpty) {
         _selectedThreadPathByAgentKey.remove(agentKey);
+        _newThreadResetVersion++;
       } else {
         _selectedThreadPathByAgentKey[agentKey] = path;
       }
@@ -875,6 +807,22 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length - 1) : trimmed;
+  }
+
+  String? _resolvedThreadListPath(String? threadListPath, {String? threadDir}) {
+    if (threadListPath != null) {
+      final trimmed = threadListPath.trim();
+      if (trimmed.isNotEmpty) {
+        return trimmed;
+      }
+    }
+
+    final normalizedThreadDir = _normalizedThreadDocumentDir(threadDir);
+    if (normalizedThreadDir == null) {
+      return null;
+    }
+
+    return "$normalizedThreadDir/index.threadl";
   }
 
   String getDocumentPath(String? agent, {String? threadDir}) {
@@ -925,11 +873,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return meetingViewController.state == MeetingViewState.joined && videoRoom != null;
   }
 
-  void _syncSecondaryPaneVisibility(List<ServiceSpec> supported, {required bool canViewStorageAllowed}) {
-    final shouldHideThreads = controller.isThreadsShown && !_selectedAgentShowsThreadsButton(supported);
+  void _syncSecondaryPaneVisibility({required bool canViewStorageAllowed}) {
     final shouldHideFiles = controller.isFilesShown && !canViewStorageAllowed;
 
-    if (!shouldHideThreads && !shouldHideFiles) {
+    if (!shouldHideFiles) {
       return;
     }
 
@@ -938,9 +885,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         return;
       }
 
-      if (shouldHideThreads) {
-        controller.hideThreads();
-      }
       if (shouldHideFiles) {
         controller.hideFiles();
       }
@@ -950,16 +894,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   List<Widget> _meetingPaneActions(BuildContext context, {required bool canViewStorageAllowed}) {
     final meetingSessionActive = _isMeetingSessionActive(context);
     final activeMeetingPane = meetingSessionActive && controller.inMeeting;
-    final supported = services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!);
-    final showThreadsButton = _selectedAgentShowsThreadsButton(supported);
     return [
-      if (showThreadsButton)
-        PaneHeaderActionItem(
-          expandedWidth: desktopPaneHeaderThreadsButtonWidth,
-          compactWidth: desktopPaneHeaderCompactButtonWidth,
-          overflowOnCompact: activeMeetingPane,
-          child: ThreadsButton(controller: controller),
-        ),
       if (canViewStorageAllowed)
         PaneHeaderActionItem(
           expandedWidth: desktopPaneHeaderFilesButtonWidth,
@@ -990,7 +925,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           canViewDeveloperLogs: canViewDeveloperLogs,
           boundaryContext: context,
           showMeetingPaneEntriesInOverflow: activeMeetingPane,
-          showThreadsAction: showThreadsButton,
           showFilesAction: canViewStorageAllowed,
           showMeetAction: true,
         ),
@@ -1012,7 +946,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     services.refresh();
   }
 
-  Widget _buildAgentsActionRow(BuildContext context, {bool showNewThreadButton = false}) {
+  Widget _buildAgentsActionRow(BuildContext context, {Widget? mobileBelowDropdown}) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     if (!isMobile) return const SizedBox.shrink();
 
@@ -1031,19 +965,80 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
 
     return Align(
-      alignment: AlignmentGeometry.centerLeft,
+      alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-        child: showNewThreadButton
-            ? Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            dropdown,
+            if (mobileBelowDropdown != null) ...[const SizedBox(height: 10), mobileBelowDropdown],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileThreadGetStartedActions(BuildContext context, {required VoidCallback onNewThread, VoidCallback? onViewAll}) {
+    final theme = ShadTheme.of(context);
+    final createActionStyle = GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: theme.colorScheme.foreground);
+    final secondaryActionStyle = GoogleFonts.inter(
+      fontSize: 15,
+      fontWeight: FontWeight.w500,
+      color: onViewAll == null ? theme.colorScheme.mutedForeground.withValues(alpha: 0.7) : theme.colorScheme.mutedForeground,
+    );
+    const outerHorizontalInset = 8.0;
+    const pillRadius = 999.0;
+
+    Widget pill({required VoidCallback? onTap, required Widget child}) {
+      return Material(
+        color: theme.colorScheme.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(pillRadius),
+          side: BorderSide(color: theme.colorScheme.border.withValues(alpha: onTap == null ? 0.75 : 1)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(pillRadius),
+          onTap: onTap,
+          child: SizedBox(
+            height: 48,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              child: Center(child: child),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: outerHorizontalInset),
+      child: Row(
+        children: [
+          Expanded(
+            child: pill(
+              onTap: onNewThread,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  dropdown,
-                  NewThreadButton(onPressed: _showNewThreadComposer),
+                  Icon(LucideIcons.messageSquarePlus, size: 16, color: theme.colorScheme.foreground),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text("New thread", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: createActionStyle),
+                  ),
                 ],
-              )
-            : dropdown,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: pill(
+              onTap: onViewAll,
+              child: Text("View all", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: secondaryActionStyle),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1153,6 +1148,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     BuildContext context,
     String? agentName,
     List<Widget> actions, {
+    bool showEmbeddedThreadList = true,
     ChatThreadDisplayMode threadDisplayMode = ChatThreadDisplayMode.singleThread,
     String? threadListPath,
     String? threadDir,
@@ -1167,31 +1163,116 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final chatActions = actions;
     final chatHorizontalInset = isMobile ? 0.0 : desktopPaneChatHorizontalInset;
     final chatBottomInset = isMobile ? 0.0 : desktopPaneBottomInset - 8;
+    final resolvedThreadListPath = _resolvedThreadListPath(threadListPath, threadDir: threadDir);
+    final hasThreadList = isMultiThread && resolvedThreadListPath != null;
+    final showThreadRail = !isMobile && showEmbeddedThreadList && hasThreadList;
+    final showInlineThreadList = !isMobile && !showEmbeddedThreadList && hasThreadList;
+    final showMobileThreadActions = isMobile && isMultiThread;
+    final agentKey = _selectedThreadAgentKey(
+      services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!),
+    );
+    final chatView = Padding(
+      padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
+      child: MeshagentThreadView(
+        agentName: agentName,
+        threadDisplayMode: threadDisplayMode,
+        threadListPath: resolvedThreadListPath,
+        newThreadResetVersion: _newThreadResetVersion,
+        key: ValueKey("thread-view-$documentPath-${selectedThreadPath ?? "composer"}"),
+        client: widget.room,
+        documentPath: documentPath,
+        selectedThreadPath: selectedThreadPath,
+        onSelectedThreadPathChanged: onSelectedThreadPathChanged,
+        participantNames: [if (userEmail is String && userEmail.isNotEmpty) userEmail, if (agentName != null) agentName],
+        joinMeeting: _joinMeeting,
+      ),
+    );
 
     return Column(
       children: [
         ActionsRow(actions: chatActions),
         _buildDesktopChatViewportCutoffSpacer(context),
-        _buildAgentsActionRow(context, showNewThreadButton: isMultiThread && isMobile),
+        _buildAgentsActionRow(
+          context,
+          mobileBelowDropdown: showMobileThreadActions
+              ? _buildMobileThreadGetStartedActions(
+                  context,
+                  onNewThread: () => onSelectedThreadPathChanged?.call(null),
+                  onViewAll: resolvedThreadListPath == null
+                      ? null
+                      : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey),
+                )
+              : null,
+        ),
         Expanded(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
-            child: MeshagentThreadView(
-              agentName: agentName,
-              threadDisplayMode: threadDisplayMode,
-              threadListPath: threadListPath,
-              newThreadResetVersion: _newThreadResetVersion,
-              key: ValueKey("thread-view-$documentPath-${selectedThreadPath ?? "composer"}"),
-              client: widget.room,
-              documentPath: documentPath,
-              selectedThreadPath: selectedThreadPath,
-              onSelectedThreadPathChanged: onSelectedThreadPathChanged,
-              participantNames: [if (userEmail is String && userEmail.isNotEmpty) userEmail, if (agentName != null) agentName],
-              joinMeeting: _joinMeeting,
-            ),
-          ),
+          child: showThreadRail
+              ? _buildDesktopChatWithThreadRail(context, chatView: chatView, threadListPath: resolvedThreadListPath, agentKey: agentKey)
+              : showInlineThreadList
+              ? _buildDesktopChatWithInlineThreadList(
+                  context,
+                  chatView: chatView,
+                  threadListPath: resolvedThreadListPath,
+                  agentKey: agentKey,
+                )
+              : chatView,
         ),
       ],
+    );
+  }
+
+  Widget _buildDesktopChatWithThreadRail(
+    BuildContext context, {
+    required Widget chatView,
+    required String threadListPath,
+    required String? agentKey,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalWidth = constraints.maxWidth;
+        if (!totalWidth.isFinite || totalWidth < 700) {
+          return chatView;
+        }
+
+        final railMaxWidth = math.min(360.0, math.max(260.0, totalWidth - 440.0));
+        final railWidth = (totalWidth * 0.28).clamp(260.0, railMaxWidth).toDouble();
+
+        return Row(
+          children: [
+            Expanded(child: chatView),
+            SizedBox(
+              width: railWidth,
+              child: _buildDesktopThreadRail(context, threadListPath: threadListPath, agentKey: agentKey),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopChatWithInlineThreadList(
+    BuildContext context, {
+    required Widget chatView,
+    required String threadListPath,
+    required String? agentKey,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxWidth = math.min(420.0, math.max(320.0, constraints.maxWidth * 0.42));
+
+        return Column(
+          children: [
+            Align(
+              alignment: Alignment.topLeft,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: _buildDesktopInlineThreadList(context, agentKey: agentKey),
+              ),
+            ),
+            const SizedBox(height: desktopPaneSecondaryRowContentGap),
+            Expanded(child: chatView),
+          ],
+        );
+      },
     );
   }
 
@@ -1288,99 +1369,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildThreadsArea(BuildContext context, List<Widget> actions) {
-    if (!services.state.isReady) {
-      return _buildRoomLoading(context, title: "Loading room services");
-    }
-
-    final supported = _supportedServices(services.state.value!);
-    final descriptor = _selectedAgentConversationDescriptor(supported);
-    final agentKey = _selectedThreadAgentKey(supported);
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final horizontalInset = isMobile ? 12.0 : 20.0;
-    final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
-    void handleThreadSelection(String? path) {
-      _setSelectedThreadPath(agentKey, path);
-      if (isMobile) {
-        controller.hideThreads();
-      }
-    }
-
-    if (descriptor?.isMultiThreadChat != true) {
-      return _buildErrorArea(context, "Threads are only available for multi-thread agents", actions);
-    }
-
-    return Column(
-      children: [
-        if (isMobile)
-          ActionsRow(actions: actions)
-        else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final meetingSessionActive = _isMeetingSessionActive(context);
-              final leadingWidth = math.max(
-                _measureMeetingHeaderTitleWidth(context, constraints.maxWidth),
-                meetingSessionActive ? _meetingActivePaneActionLeadingWidthFloor : 0.0,
-              );
-              final localActionState = resolvePaneHeaderActionState(
-                constraints,
-                leadingWidth: leadingWidth,
-                minimumLeadingWidth: meetingSessionActive ? 160.0 : 120.0,
-                reserve: meetingSessionActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
-                actions: actions,
-              );
-              final actionState = localActionState;
-              final visibleActions = visiblePaneHeaderActions(actions, overflowCollapsed: actionState.overflowCollapsed);
-              return CompactHeaderActions(
-                state: actionState,
-                child: SizedBox(
-                  height: headerHeight,
-                  child: Center(
-                    child: SizedBox(
-                      height: desktopPaneHeaderContentHeight,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          spacing: desktopPaneHeaderButtonGap,
-                          children: [
-                            Expanded(
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text("Threads", style: meetingHeaderTitleStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              ),
-                            ),
-                            if (visibleActions.isNotEmpty)
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: visibleActions),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        if (!isMobile) _buildDesktopSecondaryControlSpacer(context),
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
-            child: MeshagentThreadListPane(
-              key: ValueKey("threads-pane-${agentKey ?? "none"}"),
-              client: widget.room,
-              threadListPath: descriptor!.threadListPath,
-              selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
-              newThreadResetVersion: _newThreadResetVersion,
-              onSelectedThreadPathChanged: handleThreadSelection,
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -1522,15 +1510,100 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     controller.enterMeeting();
   }
 
-  void _showNewThreadComposer() {
-    final supported = services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!);
-    final agentKey = _selectedThreadAgentKey(supported);
-    setState(() {
-      _newThreadResetVersion++;
-      if (agentKey != null) {
-        _selectedThreadPathByAgentKey.remove(agentKey);
-      }
-    });
+  void _showMaximizedChat() {
+    controller.showChat();
+  }
+
+  Future<void> _showMobileThreadPicker({required String threadListPath, required String? agentKey}) async {
+    await showShadDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final size = MediaQuery.sizeOf(dialogContext);
+
+        Widget footerButton({required VoidCallback onPressed, required Widget child, bool primary = false}) {
+          final button = primary ? ShadButton.new : ShadButton.outline;
+          return SizedBox(
+            width: double.infinity,
+            child: button(onPressed: onPressed, child: child),
+          );
+        }
+
+        return ShadDialog(
+          useSafeArea: false,
+          title: const Text("Threads"),
+          description: const Padding(padding: EdgeInsets.only(bottom: 8), child: Text("Select a thread to view or manage it.")),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: math.min(size.width * 0.8, 360.0), maxHeight: math.min(size.height * 0.65, 520.0)),
+            child: Column(
+              children: [
+                Expanded(
+                  child: MeshagentThreadListPane(
+                    key: ValueKey("mobile-threads-${agentKey ?? "none"}"),
+                    client: widget.room,
+                    threadListPath: threadListPath,
+                    selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
+                    newThreadResetVersion: _newThreadResetVersion,
+                    showCreateItem: false,
+                    onSelectedThreadPathChanged: (path) {
+                      _setSelectedThreadPath(agentKey, path);
+                      Navigator.of(dialogContext).pop();
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    footerButton(
+                      primary: true,
+                      onPressed: () {
+                        _setSelectedThreadPath(agentKey, null);
+                        Navigator.of(dialogContext).pop();
+                      },
+                      child: const Text("New Thread"),
+                    ),
+                    const SizedBox(height: 12),
+                    footerButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close")),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopThreadRail(BuildContext context, {required String threadListPath, required String? agentKey}) {
+    return Align(
+      alignment: Alignment.topCenter,
+      child: FractionallySizedBox(
+        widthFactor: 0.72,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: desktopPaneBottomInset),
+          child: MeshagentThreadListPane(
+            key: ValueKey("embedded-threads-${agentKey ?? "none"}"),
+            client: widget.room,
+            threadListPath: threadListPath,
+            selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
+            newThreadResetVersion: _newThreadResetVersion,
+            onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopInlineThreadList(BuildContext context, {required String? agentKey}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 16, desktopPaneBottomInset),
+      child: MeshagentInlineThreadCreatePrompt(
+        key: ValueKey("inline-thread-create-${agentKey ?? "none"}"),
+        createItemTopPadding: 0,
+        onOpen: () => _setSelectedThreadPath(agentKey, null),
+        onViewAllThreads: _showMaximizedChat,
+      ),
+    );
   }
 
   Widget _buildDesktopPaneContentSpacer(BuildContext context) {
@@ -1560,7 +1633,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return const SizedBox(height: desktopPaneSecondaryControlTopOffset);
   }
 
-  Widget _buildAgentArea(BuildContext context, List<Widget> actions) {
+  Widget _buildAgentArea(BuildContext context, List<Widget> actions, {bool showEmbeddedThreadList = true}) {
     return ChangeNotifierBuilder(
       source: widget.room.messaging,
       builder: (context) => SignalBuilder(
@@ -1612,6 +1685,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 context,
                 name,
                 actions,
+                showEmbeddedThreadList: showEmbeddedThreadList,
                 threadDisplayMode: descriptor!.chatThreadDisplayMode,
                 threadDir: descriptor.threadDir,
                 threadListPath: descriptor.threadListPath,
@@ -1631,6 +1705,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               context,
               service.agents[0].name,
               actions,
+              showEmbeddedThreadList: showEmbeddedThreadList,
               threadDisplayMode: descriptor!.chatThreadDisplayMode,
               threadDir: descriptor.threadDir,
               threadListPath: descriptor.threadListPath,
@@ -1712,10 +1787,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             final filesVisible = canViewStorageAllowed && controller.isFilesShown;
                             final supported = _supportedServices(services.state.value!);
                             final selected = _resolveSelectedAgent(supported);
-                            _syncSecondaryPaneVisibility(supported, canViewStorageAllowed: canViewStorageAllowed);
+                            _syncSecondaryPaneVisibility(canViewStorageAllowed: canViewStorageAllowed);
                             final meetingSessionActive = _isMeetingSessionActive(context);
-                            final threadsVisible = controller.isThreadsShown && _selectedAgentShowsThreadsButton(supported);
-                            final split = filesVisible || threadsVisible || controller.inMeeting;
+                            final split = filesVisible || controller.inMeeting;
 
                             if (!_hasVisibleAgents(supported)) {
                               final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
@@ -1790,8 +1864,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             return ToolConnectionScope(
                               tools: [UIToolkit(context, room: widget.room)],
                               builder: (context, error) {
-                                final theme = ShadTheme.of(context);
-                                final cs = theme.colorScheme;
+                                final cs = ShadTheme.of(context).colorScheme;
 
                                 if (isMobile) {
                                   final actions = [
@@ -1799,16 +1872,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                     Spacer(),
                                     (split ? ShadButton.outline : ShadButton.new)(
                                       onPressed: () {
-                                        setState(() {
-                                          controller.exitMeeting();
-                                          controller.hideFiles();
-                                          controller.hideThreads();
-                                        });
+                                        controller.showChat();
                                       },
                                       leading: Icon(LucideIcons.messageSquareText),
                                     ),
-                                    if (threadsVisible || _selectedAgentShowsThreadsButton(supported))
-                                      ThreadsButton(controller: controller),
                                     if (canViewStorageAllowed) FilesButton(controller: controller),
                                     MeetButton(controller: controller, meetingSessionActive: _isMeetingSessionActive(context)),
                                     InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
@@ -1821,8 +1888,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           Expanded(
                                             child: controller.inMeeting
                                                 ? _buildMeeting(context, null, actions)
-                                                : threadsVisible
-                                                ? _buildThreadsArea(context, actions)
                                                 : filesVisible
                                                 ? _buildFilesArea(context, actions)
                                                 : _buildAgentArea(context, actions),
@@ -1875,17 +1940,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                               ),
 
                                               if (!split) ...actions,
-                                            ]),
+                                            ], showEmbeddedThreadList: !split),
                                           ),
                                           area2: !split
                                               ? Container()
                                               : filesVisible
                                               ? _buildFilesArea(context, actions)
-                                              : threadsVisible
-                                              ? _buildThreadsArea(context, actions)
                                               : controller.inMeeting
                                               ? _buildMeeting(context, null, actions)
-                                              : _buildAgentArea(context, actions),
+                                              : _buildAgentArea(context, actions, showEmbeddedThreadList: false),
                                         ),
                                       ),
 
