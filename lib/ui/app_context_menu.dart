@@ -5,7 +5,15 @@ import 'package:powerboards/theme/theme.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class AppMenuEntry {
-  const AppMenuEntry({required this.title, this.description, this.onPressed, this.icon, this.leading, this.selected = false});
+  const AppMenuEntry({
+    required this.title,
+    this.description,
+    this.onPressed,
+    this.icon,
+    this.leading,
+    this.selected = false,
+    this.separatorBefore = false,
+  });
 
   final String title;
   final String? description;
@@ -13,6 +21,7 @@ class AppMenuEntry {
   final IconData? icon;
   final Widget? leading;
   final bool selected;
+  final bool separatorBefore;
 }
 
 class AppContextMenuButton extends StatefulWidget {
@@ -56,7 +65,7 @@ class _AppContextMenuButtonState extends State<AppContextMenuButton> {
       boundaryContext: widget.boundaryContext,
       constraints: widget.constraints,
       estimatedMenuWidth: _estimatedMenuWidth(widget.constraints),
-      estimatedMenuHeight: _estimatedMenuHeight(widget.entries.length, compact: widget.compact),
+      estimatedMenuHeight: _estimatedMenuHeight(widget.entries, compact: widget.compact),
       padding: widget.compact ? const EdgeInsets.symmetric(vertical: 4) : EdgeInsets.zero,
       decoration: widget.compact
           ? null
@@ -81,36 +90,57 @@ double _estimatedMenuWidth(BoxConstraints constraints) {
   return 128;
 }
 
-double _estimatedMenuHeight(int entryCount, {required bool compact}) {
+double _estimatedMenuHeight(List<AppMenuEntry> entries, {required bool compact}) {
+  final entryCount = entries.length;
   if (entryCount <= 0) {
     return 0;
   }
 
+  final extraSeparators = entries.where((entry) => entry.separatorBefore).length;
+
   if (compact) {
-    return entryCount * 40.0;
+    return entryCount * 40.0 + extraSeparators * 13.0;
   }
 
   final separatorCount = entryCount - 1;
-  return entryCount * 80.0 + separatorCount;
+  return entryCount * 80.0 + separatorCount + extraSeparators * 13.0;
 }
 
 List<Widget> _buildCompactItems(List<AppMenuEntry> entries) {
-  return entries
-      .map(
-        (e) => ShadContextMenuItem(
-          height: 40,
-          onPressed: e.onPressed,
-          leading: e.leading ?? (e.icon != null ? Icon(e.icon, size: 16) : null),
-          trailing: e.selected ? const Icon(LucideIcons.check, size: 16) : null,
-          child: Text(e.title, overflow: TextOverflow.ellipsis),
+  final out = <Widget>[];
+  for (final e in entries) {
+    if (e.separatorBefore && out.isNotEmpty) {
+      out.add(
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 6),
+          child: ShadSeparator.horizontal(margin: EdgeInsets.zero),
         ),
-      )
-      .toList(growable: false);
+      );
+    }
+    out.add(
+      ShadContextMenuItem(
+        height: 40,
+        onPressed: e.onPressed,
+        leading: e.leading ?? (e.icon != null ? Icon(e.icon, size: 16) : null),
+        trailing: e.selected ? const Icon(LucideIcons.check, size: 16) : null,
+        child: Text(e.title, overflow: TextOverflow.ellipsis),
+      ),
+    );
+  }
+  return out;
 }
 
 List<Widget> _buildItems(List<AppMenuEntry> entries, {required double radius}) {
   final out = <Widget>[];
   for (var i = 0; i < entries.length; i++) {
+    if (entries[i].separatorBefore && out.isNotEmpty) {
+      out.add(
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 6),
+          child: ShadSeparator.horizontal(margin: EdgeInsets.zero),
+        ),
+      );
+    }
     out.add(_menuItem(entries[i], index: i, count: entries.length, radius: radius));
     if (i != entries.length - 1) {
       out.add(ShadSeparator.horizontal(margin: EdgeInsets.zero));

@@ -10,6 +10,8 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
 
+typedef ConfigureServiceTemplateDone = void Function(BuildContext context, String serviceId);
+
 class ConfigureServiceTemplateDialog extends StatelessWidget {
   const ConfigureServiceTemplateDialog({
     super.key,
@@ -61,7 +63,7 @@ class ConfigureServiceTemplateDialog extends StatelessWidget {
           manifest: manifest,
           roomName: roomName,
           prefilledVars: prefilledVars,
-          onDone: (context) {
+          onDone: (context, _) {
             Navigator.of(context).pop(true);
           },
         ),
@@ -92,7 +94,7 @@ class ConfigureServiceTemplate extends StatefulWidget {
   final List<Widget> customActions;
   final List<Widget> header;
   final String template;
-  final void Function(BuildContext) onDone;
+  final ConfigureServiceTemplateDone onDone;
 
   @override
   State<ConfigureServiceTemplate> createState() => _ConfigureServiceTemplateState();
@@ -306,16 +308,21 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
         roomClient.dispose();
       }
 
-      if (widget.serviceId != null) {
-        await client.updateRoomServiceFromTemplate(
-          projectId: projectId,
-          serviceId: widget.serviceId!,
-          template: widget.template,
-          values: vars,
-          roomName: roomName,
-        );
-      } else {
-        await client.createRoomServiceFromTemplate(projectId: projectId, template: widget.template, values: vars, roomName: roomName);
+      final savedService = widget.serviceId != null
+          ? await client.updateRoomServiceFromTemplate(
+              projectId: projectId,
+              serviceId: widget.serviceId!,
+              template: widget.template,
+              values: vars,
+              roomName: roomName,
+            )
+          : await client.createRoomServiceFromTemplate(projectId: projectId, template: widget.template, values: vars, roomName: roomName);
+
+      final savedServiceId = savedService.metadata.annotations['meshagent.service.id']?.trim();
+      final resolvedServiceId = savedServiceId != null && savedServiceId.isNotEmpty ? savedServiceId : serviceId;
+
+      if (resolvedServiceId.isEmpty) {
+        throw RoomServerException('saved service is missing meshagent.service.id annotation');
       }
 
       try {
@@ -370,7 +377,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
       if (!mounted) {
         return;
       }
-      widget.onDone(context);
+      widget.onDone(context, resolvedServiceId);
     } catch (error) {
       _showError(error);
     } finally {
@@ -484,7 +491,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
       if (!mounted) {
         return;
       }
-      widget.onDone(context);
+      widget.onDone(context, serviceId);
     } catch (error) {
       _showError(error);
     } finally {

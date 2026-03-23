@@ -26,6 +26,7 @@ class ResizableSplitView extends StatefulWidget {
     this.maxArea2Fraction,
     this.preferredArea1Fraction,
     this.preferredArea2Fraction,
+    this.onArea2FractionChanged,
   });
 
   final Widget area1;
@@ -40,6 +41,7 @@ class ResizableSplitView extends StatefulWidget {
   final double? maxArea2Fraction;
   final double? preferredArea1Fraction;
   final double? preferredArea2Fraction;
+  final ValueChanged<double>? onArea2FractionChanged;
 
   @override
   State createState() => _ResizableSplitViewState();
@@ -52,6 +54,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
   bool _collapsed = false;
   double? _area1Ratio;
+  double? _lastReportedArea2Ratio;
 
   double? get _lockedArea1Fraction {
     final minFraction = widget.minArea1Fraction;
@@ -157,8 +160,10 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         final minimums = _resolveMinimumWidths(size);
         final minArea1Size = minimums.area1 / size;
         final minArea2Size = minimums.area2 / size;
-        final maxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
-        final maxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
+        final rawMaxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
+        final rawMaxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
+        final maxArea1Size = math.max(minArea1Size, rawMaxArea1Size);
+        final maxArea2Size = math.max(minArea2Size, rawMaxArea2Size);
 
         final defaultSize1 = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
         final defaultSize2 = (1 - defaultSize1).clamp(minArea2Size, maxArea2Size);
@@ -207,11 +212,9 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         oldWidget.maxArea1Fraction != widget.maxArea1Fraction ||
         oldWidget.maxArea2Fraction != widget.maxArea2Fraction ||
         oldWidget.preferredArea1Fraction != widget.preferredArea1Fraction ||
-        oldWidget.preferredArea2Fraction != widget.preferredArea2Fraction ||
-        oldWidget.split != widget.split;
+        oldWidget.preferredArea2Fraction != widget.preferredArea2Fraction;
 
     if (sizingChanged) {
-      _area1Ratio = _preferredArea1Ratio;
       lastConstraints = null;
       resizeDebounceTimer?.cancel();
     }
@@ -223,6 +226,15 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
     if (area1Panel.id != _area1Id) return;
     _area1Ratio = area1Panel.size;
+
+    final area2Ratio = 1 - area1Panel.size;
+    final lastReportedArea2Ratio = _lastReportedArea2Ratio;
+    if (lastReportedArea2Ratio != null && (lastReportedArea2Ratio - area2Ratio).abs() < 0.0001) {
+      return;
+    }
+
+    _lastReportedArea2Ratio = area2Ratio;
+    widget.onArea2FractionChanged?.call(area2Ratio);
   }
 
   void _toggleCollapsed() {
@@ -280,8 +292,10 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         final minimums = _resolveMinimumWidths(size);
         final minArea1Size = minimums.area1 / size;
         final minArea2Size = minimums.area2 / size;
-        final maxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
-        final maxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
+        final rawMaxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
+        final rawMaxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
+        final maxArea1Size = math.max(minArea1Size, rawMaxArea1Size);
+        final maxArea2Size = math.max(minArea2Size, rawMaxArea2Size);
 
         final defaultSize1 = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
         final defaultSize2 = (1 - defaultSize1).clamp(minArea2Size, maxArea2Size);
