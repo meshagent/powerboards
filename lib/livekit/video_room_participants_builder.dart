@@ -45,6 +45,7 @@ class _VideoRoomParticipantsBuilderState extends State<VideoRoomParticipantsBuil
     if (oldWidget.room != widget.room) {
       oldWidget.room.removeListener(_onRoomChanged);
       _replaceParticipantListeners(const []);
+
       widget.room.addListener(_onRoomChanged);
 
       participants = _getParticipants();

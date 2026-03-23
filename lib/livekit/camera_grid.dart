@@ -2,11 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
-import 'package:powerboards/ui/participant_overlay.dart';
+import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'audio_stats.dart';
 import 'participant_track.dart';
+import 'expand_participant_controller.dart';
 import 'room.dart';
 
 class ContextMenuCoordinator {
@@ -35,19 +36,17 @@ class ExpandableCameraGrid extends StatefulWidget {
 }
 
 class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
-  String? _expandedIdentity;
-  final _contextMenuCoordinator = ContextMenuCoordinator();
-
   bool _participantHasShare(Participant participant) {
     return participant.videoTrackPublications.any((t) => t.source == TrackSource.screenShareVideo && !t.muted && t.track != null);
   }
 
-  bool _participantHasCamera(Participant participant) {
-    return participant.videoTrackPublications.any((t) => t.kind == TrackType.VIDEO && !t.muted && t.track != null);
-  }
-
   int _getNumberOfShares(List<Participant> participants) {
     return participants.where((p) => _participantHasShare(p)).length;
+  }
+
+  /*
+  bool _participantHasCamera(Participant participant) {
+    return participant.videoTrackPublications.any((t) => t.kind == TrackType.VIDEO && !t.muted && t.track != null);
   }
 
   int _getNumberOfVideos(List<Participant> participants) {
@@ -68,12 +67,6 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
     return participants.any((p) => p.identity == identity && _participantHasCamera(p));
   }
 
-  void _toggleExpanded(String identity) {
-    setState(() {
-      _expandedIdentity = _expandedIdentity == identity ? null : identity;
-    });
-  }
-
   @override
   void didUpdateWidget(covariant ExpandableCameraGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -92,130 +85,48 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
       }
     }
   }
+*/
 
   @override
   Widget build(BuildContext context) {
-    final expandedIdentity = _expandedIdentity;
-    final participants = expandedIdentity == null
+    final expandedController = Controller.ofType<ExpandParticipantController>(context);
+
+    final participants = expandedController.hasExpanded
         ? widget.participants
-        : widget.participants.where((p) => p.identity == expandedIdentity).toList(growable: false);
+        : widget.participants.where((p) => expandedController.isExpanded(p.identity)).toList(growable: false);
 
     final numberOfShares = _getNumberOfShares(widget.participants);
-    final numberOfVideos = _getNumberOfVideos(widget.participants);
 
     return cameraGridBuilder(
       context,
       participants,
       frameBuilder: (context, participant, track, trackWidget, showName) {
-        final isExpanded = expandedIdentity != null && participant.identity == expandedIdentity;
-
         if (numberOfShares > 0) {
-          return _ExpandableParticipantTile(
-            contextMenuCoordinator: _contextMenuCoordinator,
-            participant: participant,
-            trackWidget: trackWidget,
-            showName: showName,
-            isExpanded: isExpanded,
-            onToggle: () => _toggleExpanded(participant.identity),
-          );
+          return _ExpandableParticipantTile(participant: participant, trackWidget: trackWidget, showName: showName);
         }
 
-        if (numberOfShares == 0 && numberOfVideos > 0) {
-          return _ExpandableParticipantTile(
-            contextMenuCoordinator: _contextMenuCoordinator,
-            participant: participant,
-            trackWidget: trackWidget,
-            showName: showName,
-            isExpanded: isExpanded,
-            onToggle: () => _toggleExpanded(participant.identity),
-          );
-        }
-
-        return ParticipantTrack(showName: showName, track: trackWidget, participant: participant);
+        return _ExpandableParticipantTile(participant: participant, trackWidget: trackWidget, showName: showName);
       },
     );
   }
 }
 
-class _ExpandableParticipantTile extends StatefulWidget {
-  const _ExpandableParticipantTile({
-    required this.contextMenuCoordinator,
-    required this.participant,
-    required this.trackWidget,
-    required this.showName,
-    required this.isExpanded,
-    required this.onToggle,
-  });
+class _ExpandableParticipantTile extends StatelessWidget {
+  const _ExpandableParticipantTile({required this.participant, required this.trackWidget, required this.showName});
 
-  final ContextMenuCoordinator contextMenuCoordinator;
   final Participant participant;
   final Widget trackWidget;
   final bool showName;
-  final bool isExpanded;
-  final VoidCallback onToggle;
-
-  @override
-  State<_ExpandableParticipantTile> createState() => _ExpandableParticipantTileState();
-}
-
-class _ExpandableParticipantTileState extends State<_ExpandableParticipantTile> {
-  late final ShadContextMenuController _menuController = ShadContextMenuController();
-
-  // Keep the current label stable while the menu is closing after a toggle.
-  bool? _latchedExpandedState;
-  bool get _effectiveExpandedState => _latchedExpandedState ?? widget.isExpanded;
-
-  List<ShadContextMenuItem> get _menuItems => [
-    ShadContextMenuItem(
-      height: 40.0,
-      leading: Icon(_effectiveExpandedState ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
-      onPressed: () {
-        widget.contextMenuCoordinator.hideCurrent();
-        widget.onToggle();
-      },
-      child: Text(_effectiveExpandedState ? "Collapse" : "Expand"),
-    ),
-  ];
-
-  void _handleMenuControllerChange() {
-    if (!_menuController.isOpen) {
-      return;
-    }
-
-    widget.contextMenuCoordinator.setActive(_menuController);
-
-    if (_latchedExpandedState == widget.isExpanded) {
-      return;
-    }
-
-    setState(() {
-      _latchedExpandedState = widget.isExpanded;
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _menuController.addListener(_handleMenuControllerChange);
-  }
-
-  @override
-  void dispose() {
-    _menuController.removeListener(_handleMenuControllerChange);
-    _menuController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
+    final expandController = Controller.ofType<ExpandParticipantController>(context);
+
     return ShadGestureDetector(
-      onTap: widget.contextMenuCoordinator.hideCurrent,
-      child: ParticipantTrack(
-        participant: widget.participant,
-        track: widget.trackWidget,
-        showName: widget.showName,
-        overlayContextMenu: ParticipantOverlayContextMenuConfig(controller: _menuController, items: _menuItems, boundaryContext: context),
-      ),
+      onTap: () {
+        expandController.toggle(participant.identity);
+      },
+      child: ParticipantTrack(participant: participant, track: trackWidget, showName: showName),
     );
   }
 }
@@ -274,12 +185,9 @@ Widget cameraGridBuilder(
   int columnsDesired = 0,
   bool tryFill = true,
   Color background = const Color(0xFF222222),
-  Widget Function(BuildContext context, Participant participant, VideoTrack? track, Widget trackWidget, bool showName)? frameBuilder,
+  required Widget Function(BuildContext context, Participant participant, VideoTrack? track, Widget trackWidget, bool showName)
+  frameBuilder,
 }) {
-  final wrap =
-      frameBuilder ??
-      (ctx, p, track, trackWidget, tileShowName) => ParticipantTrack(showName: tileShowName, track: trackWidget, participant: p);
-
   final tracks = <Widget>[];
   final trackParticipants = <Participant>[];
   final trackSources = <VideoTrack?>[];
@@ -361,7 +269,7 @@ Widget cameraGridBuilder(
               Positioned(
                 left: c * w + spacing * c,
                 top: r * h + spacing * r,
-                child: SizedBox(width: w, height: h, child: wrap(context, participant, source, track, showNames)),
+                child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, source, track, showNames)),
               ),
             );
           }
@@ -413,7 +321,7 @@ Widget cameraGridBuilder(
               Positioned(
                 left: c * w + spacing * c,
                 top: r * h + spacing * r,
-                child: SizedBox(width: w, height: h, child: wrap(context, participant, source, track, showNames)),
+                child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, source, track, showNames)),
               ),
             );
           }
@@ -471,7 +379,7 @@ Widget cameraGridBuilder(
               Positioned(
                 left: x,
                 top: y,
-                child: SizedBox(width: itemSize, height: itemSize, child: wrap(context, participant, source, track, showNames)),
+                child: SizedBox(width: itemSize, height: itemSize, child: frameBuilder(context, participant, source, track, showNames)),
               ),
             );
 
@@ -502,7 +410,7 @@ Widget cameraGridBuilder(
               Positioned(
                 left: x,
                 top: y,
-                child: SizedBox(width: itemSize, height: itemSize, child: wrap(context, participant, source, track, showNames)),
+                child: SizedBox(width: itemSize, height: itemSize, child: frameBuilder(context, participant, source, track, showNames)),
               ),
             );
 

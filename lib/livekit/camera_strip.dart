@@ -33,71 +33,34 @@ class CameraStrip extends StatelessWidget {
   Widget videoDisplay(BuildContext context, lk.Participant participant, lk.TrackPublication videoTrack) {
     return displayWrapper(
       videoTrack,
-      false, //widget.meetingDoc.activeVideoTrack?.matches(participant, videoTrack.track as lk.VideoTrack?) == true,
+      false,
       participant.hasVideo && videoTrack.track != null
-          ? GestureDetector(
-              onTap: () {
-                // widget.controller.previewLayer = null;
-                // widget.controller.selectedLayer = null;
-                // final part = ParticipantIdentity.parse(participant.identity);
-                // (widget.controller.document as ChatDocument).setActiveVideoTrack(
-                //   ActiveVideoTrack(
-                //     participant: part.url,
-                //     source: switch (videoTrack.source) {
-                //       lk.TrackSource.camera => "camera",
-                //       lk.TrackSource.screenShareVideo => "screen",
-                //       lk.TrackSource.unknown => "unknown",
-                //       _ => "unknown",
-                //     },
-                //     device: part.device,
-                //   ),
-                // );
-              },
-              child: HoverBuilder(
-                cursor: SystemMouseCursors.basic,
-                builder: (hovered) {
-                  final track = videoTrack.track as lk.VideoTrack;
-                  return Container(
-                    color: Colors.transparent,
-                    child: IgnorePointer(
-                      ignoring: true,
-                      child: ParticipantTrack(
-                        showName: hovered,
-                        participant: participant,
-                        track: lk.VideoTrackRenderer(
-                          track,
-                          fit: videoTrack.source == lk.TrackSource.screenShareVideo ? lk.VideoViewFit.contain : lk.VideoViewFit.cover,
-                        ),
+          ? HoverBuilder(
+              cursor: SystemMouseCursors.basic,
+              builder: (hovered) {
+                final track = videoTrack.track as lk.VideoTrack;
+                return Container(
+                  color: Colors.transparent,
+                  child: IgnorePointer(
+                    ignoring: true,
+                    child: ParticipantTrack(
+                      showName: hovered,
+                      participant: participant,
+                      track: lk.VideoTrackRenderer(
+                        track,
+                        fit: videoTrack.source == lk.TrackSource.screenShareVideo ? lk.VideoViewFit.contain : lk.VideoViewFit.cover,
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             )
           : Container(
               color: const Color(0xFF222222),
               alignment: Alignment.center,
               child: participant.identity.contains(".agent")
-                  ? GestureDetector(
-                      onTap: () {
-                        // widget.meetingDoc.setActiveVideoTrack(
-                        //   ActiveVideoTrack(
-                        //     participant: ParticipantIdentity.parse(participant.identity).url,
-                        //     source: "agentTasks",
-                        //     device: null,
-                        //   ),
-                        // );
-                      },
-                      child: const Text("audio stats"), //AudioStats(room: widget.room, participant: participant),
-                    )
+                  ? const Text("audio stats") //AudioStats(room: widget.room, participant: participant),
                   : Text("avatar"),
-
-              // TimuObjectBuilder(
-              //   url: '/api/graph/core:user/${participant.identity}',
-              //   builder: (context, user) {
-              //     return ProfileAvatar(profile: user as User, size: 100);
-              //   },
-              // ),
             ),
     );
   }
@@ -105,13 +68,12 @@ class CameraStrip extends StatelessWidget {
   Widget audioDisplay(BuildContext context, lk.Participant participant) {
     return displayWrapper(
       participant,
-      false, //widget.meetingDoc.activeVideoTrack?.matches(participant) == true,
+      false,
       HoverBuilder(
         cursor: SystemMouseCursors.basic,
         builder: (hovered) {
           return CameraBox(
-            participantName: participant.name,
-            muted: participant.isMuted,
+            participant: participant,
             showName: hovered,
             camera: Container(
               color: const Color(0xFF2A2A2A),
@@ -123,13 +85,6 @@ class CameraStrip extends StatelessWidget {
           );
         },
       ),
-      //  TimuObjectBuilder(
-      //    url: '/api/graph/core:user/${participant.name}',
-      //    error: (_, _) => const Icon(LucideIcons.user, size: 100, color: Colors.grey),
-      //    builder: (context, user) {
-      //      return ProfileAvatar(profile: user as User, size: 100);
-      //    },
-      //  ),
     );
   }
 
