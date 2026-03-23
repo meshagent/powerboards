@@ -52,6 +52,21 @@ const breakpointsLandscape = [
   Breakpoint(start: 2561, end: double.infinity, name: '4K'),
 ];
 
+ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
+  final screenWidth = MediaQuery.maybeOf(context)?.size.width ?? 1024.0;
+  final isMobile = screenWidth < 600;
+  final maxWidth = isMobile ? screenWidth * 0.8 : 512.0;
+  final closeInset = isMobile ? 24.0 : 8.0;
+
+  return ShadDialogTheme(
+    backgroundColor: shadCard,
+    constraints: BoxConstraints(maxWidth: maxWidth),
+    radius: BorderRadius.circular(20),
+    removeBorderRadiusWhenTiny: false,
+    closeIconPosition: ShadPosition(top: closeInset, right: closeInset),
+  );
+}
+
 void _configureDebugPrintFilter() {
   final originalDebugPrint = debugPrint;
   debugPrint = (String? message, {int? wrapWidth}) {
@@ -223,8 +238,8 @@ class MyApp extends StatelessWidget {
             border: ShadBorder.all(color: shadBorder, width: 1),
           ),
         ),
-        primaryDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
-        alertDialogTheme: const ShadDialogTheme(backgroundColor: shadCard),
+        primaryDialogTheme: _powerboardsDialogThemeForContext(context),
+        alertDialogTheme: _powerboardsDialogThemeForContext(context),
         popoverTheme: ShadPopoverTheme(
           decoration: ShadDecoration(
             color: shadCard,
@@ -320,23 +335,66 @@ class _RootProvidersState extends State<_RootProviders> {
         ),
       ),
     );
-
-    return ChromeVisibility(
-      child: Theme(
-        data: materialTheme,
-        child: Material(
-          type: MaterialType.transparency,
-          child: Directionality(
-            key: uiRoot,
-            textDirection: TextDirection.ltr,
-            child: ResponsiveBreakpoints.builder(
-              breakpoints: breakpoints,
-              breakpointsLandscape: breakpointsLandscape,
-              child: ControllerProvider(
-                controller: navController,
+    return ShadTheme(
+      data: ShadThemeData(
+        colorScheme: powerboardsShadColorScheme(),
+        brightness: Brightness.light,
+        textTheme: powerboardsShadTextTheme(),
+        selectTheme: ShadSelectTheme(
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
+        ),
+        tabsTheme: ShadTabsTheme(
+          tabBackgroundColor: shadCard,
+          tabDecoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        primaryDialogTheme: _powerboardsDialogThemeForContext(context),
+        alertDialogTheme: _powerboardsDialogThemeForContext(context),
+        popoverTheme: ShadPopoverTheme(
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        contextMenuTheme: ShadContextMenuTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+          selectedBackgroundColor: shadMuted,
+        ),
+        menubarTheme: ShadMenubarTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(
+            color: shadCard,
+            border: ShadBorder.all(color: shadBorder, width: 1),
+          ),
+        ),
+        outlineButtonTheme: ShadButtonTheme(
+          backgroundColor: shadCard,
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
+        ),
+      ),
+      child: ChromeVisibility(
+        child: Theme(
+          data: materialTheme,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Directionality(
+              key: uiRoot,
+              textDirection: TextDirection.ltr,
+              child: ResponsiveBreakpoints.builder(
+                breakpoints: breakpoints,
+                breakpointsLandscape: breakpointsLandscape,
                 child: ControllerProvider(
-                  controller: meetingViewController,
-                  child: Portal(child: widget.child),
+                  controller: navController,
+                  child: ControllerProvider(
+                    controller: meetingViewController,
+                    child: Portal(child: widget.child),
+                  ),
                 ),
               ),
             ),

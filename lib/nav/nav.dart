@@ -141,7 +141,14 @@ class _NavState extends State<Nav> {
   }
 
   void debounceResize(BoxConstraints constraints) {
-    if (lastConstraints == null || lastConstraints!.maxWidth != constraints.maxWidth) {
+    final width = constraints.maxWidth;
+    if (!width.isFinite || width <= 0) {
+      lastConstraints = null;
+      resizeDebounceTimer?.cancel();
+      return;
+    }
+
+    if (lastConstraints == null || lastConstraints!.maxWidth != width) {
       lastConstraints ??= constraints;
 
       resizeDebounceTimer?.cancel();
@@ -152,17 +159,17 @@ class _NavState extends State<Nav> {
           return;
         }
 
-        final rawMinSize = _navBarMinWidth / constraints.maxWidth;
-        final rawMaxSize = _navBarMaxWidth / constraints.maxWidth;
+        final rawMinSize = _navBarMinWidth / width;
+        final rawMaxSize = _navBarMaxWidth / width;
         final minSize = rawMinSize.clamp(0.0, 1.0);
         final maxSize = rawMaxSize.clamp(minSize, 1.0);
-        final defaultSize = (navBarWidth / constraints.maxWidth).clamp(minSize, maxSize);
+        final defaultSize = (navBarWidth / width).clamp(minSize, maxSize);
 
         final newPanel = ShadPanelInfo(id: "nav", minSize: minSize, maxSize: maxSize, defaultSize: defaultSize);
 
         // Don't change the size - prevent flickering
-        final currentSize = (navPanel.size * lastConstraints!.maxWidth) / constraints.maxWidth;
-        if (currentSize > minSize && currentSize < maxSize) {
+        final currentSize = (navPanel.size * lastConstraints!.maxWidth) / width;
+        if (currentSize.isFinite && currentSize > minSize && currentSize < maxSize) {
           newPanel.size = currentSize;
         }
 
@@ -282,11 +289,18 @@ class _NavState extends State<Nav> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final rawMinRatio = _navBarMinWidth / constraints.maxWidth;
-        final rawMaxRatio = _navBarMaxWidth / constraints.maxWidth;
+        final width = constraints.maxWidth;
+        if (!width.isFinite || width <= 0) {
+          lastConstraints = null;
+          return const SizedBox.shrink();
+        }
+
+        final rawMinRatio = _navBarMinWidth / width;
+        final rawMaxRatio = _navBarMaxWidth / width;
         final minRatio = rawMinRatio.clamp(0.0, 1.0);
         final maxRatio = rawMaxRatio.clamp(minRatio, 1.0);
-        final defaultSize = (navBarWidth / constraints.maxWidth).clamp(minRatio, maxRatio);
+        final defaultSize = (navBarWidth / width).clamp(minRatio, maxRatio);
+        final mainDefaultSize = (1.0 - defaultSize).clamp(0.0, 1.0);
 
         // Debounce resize to avoid excessive rebuilds when resizing the window
         debounceResize(constraints);
@@ -331,11 +345,7 @@ class _NavState extends State<Nav> {
               ),
 
             // main content
-            ShadResizablePanel(
-              id: "main",
-              defaultSize: 1.0 - defaultSize,
-              child: desktopBody(context, userRole, balanceLow, canCreateRooms),
-            ),
+            ShadResizablePanel(id: "main", defaultSize: mainDefaultSize, child: desktopBody(context, userRole, balanceLow, canCreateRooms)),
           ],
         );
       },

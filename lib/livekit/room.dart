@@ -707,11 +707,13 @@ class RoomToolbarButton extends StatelessWidget {
 }
 
 class ShareScreen extends StatefulWidget {
-  const ShareScreen({super.key});
+  const ShareScreen({super.key, this.compact = false});
 
   bool canShareScreen() {
     return !lk.lkPlatformIsMobile();
   }
+
+  final bool compact;
 
   @override
   State<ShareScreen> createState() => _ShareScreenState();
@@ -787,7 +789,7 @@ class _ShareScreenState extends State<ShareScreen> {
       listenable: room,
       builder: (context, _) {
         final on = _hasActiveScreenShare(room.localParticipant);
-        return PresentButton(onPressed: _processing ? null : () => _onPressed(context), on: on);
+        return PresentButton(onPressed: _processing ? null : () => _onPressed(context), on: on, compact: widget.compact);
       },
     );
   }

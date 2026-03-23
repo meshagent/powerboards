@@ -147,8 +147,9 @@ class FileManagerView extends StatefulWidget {
   final Resource<List<ServiceSpec>>? services;
   final bool hideSystem;
   final List<Widget> desktopHeaderActions;
-  final ValueChanged<bool>? onDesktopHeaderCompactChanged;
-  final bool preferDesktopHeaderCompact;
+  final double desktopHeaderActionLeadingWidthFloor;
+  final double desktopHeaderActionMinimumLeadingWidth;
+  final double desktopHeaderActionReserve;
 
   const FileManagerView({
     super.key,
@@ -156,8 +157,9 @@ class FileManagerView extends StatefulWidget {
     this.services,
     this.hideSystem = false,
     this.desktopHeaderActions = const [],
-    this.onDesktopHeaderCompactChanged,
-    this.preferDesktopHeaderCompact = false,
+    this.desktopHeaderActionLeadingWidthFloor = 0,
+    this.desktopHeaderActionMinimumLeadingWidth = 0,
+    this.desktopHeaderActionReserve = desktopPaneHeaderActionReserve,
   });
 
   @override
@@ -172,8 +174,6 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   bool _forceShowSelect = false;
   String _tab = 'preview';
-  bool? _lastReportedDesktopHeaderCompact;
-
   final popoverController = ShadPopoverController();
   final ShadContextMenuController _collapsedBreadcrumbMenuController = ShadContextMenuController();
   final CodePreviewController _codePreviewController = CodePreviewController();
@@ -995,11 +995,19 @@ class _FileManagerViewState extends State<FileManagerView> {
           height: headerHeight,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final compactActions = shouldCompactPaneHeaderActions(
-                constraints,
-                leadingWidth: _estimateDesktopHeaderLeadingWidth(context, constraints.maxWidth),
+              final leadingWidth = math.max(
+                _estimateDesktopHeaderLeadingWidth(context, constraints.maxWidth),
+                widget.desktopHeaderActionLeadingWidthFloor,
               );
-              _reportDesktopHeaderCompactChanged(compactActions);
+              final localActionState = resolvePaneHeaderActionState(
+                constraints,
+                leadingWidth: leadingWidth,
+                minimumLeadingWidth: math.max(_minimumDesktopHeaderLeadingWidth(), widget.desktopHeaderActionMinimumLeadingWidth),
+                reserve: widget.desktopHeaderActionReserve,
+                actions: desktopActions,
+              );
+              final actionState = localActionState;
+              final visibleDesktopActions = visiblePaneHeaderActions(desktopActions, overflowCollapsed: actionState.overflowCollapsed);
 
               return Center(
                 child: SizedBox(
@@ -1014,10 +1022,17 @@ class _FileManagerViewState extends State<FileManagerView> {
                           child: ClipRect(child: _buildDesktopHeaderLeading()),
                         ),
                       ),
-                      if (desktopActions.isNotEmpty)
-                        CompactHeaderActions(
-                          compact: compactActions,
-                          child: Row(mainAxisSize: .min, spacing: desktopPaneHeaderButtonGap, children: desktopActions),
+                      if (visibleDesktopActions.isNotEmpty)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: CompactHeaderActions(
+                            state: actionState,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              spacing: desktopPaneHeaderButtonGap,
+                              children: visibleDesktopActions,
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -1048,6 +1063,14 @@ class _FileManagerViewState extends State<FileManagerView> {
         ),
       ],
     );
+  }
+
+  double _minimumDesktopHeaderLeadingWidth() {
+    if (_openedFile != null) {
+      return 124.0;
+    }
+
+    return 136.0;
   }
 
   Widget _buildDesktopContextToolbar(Set<String> selected) {
@@ -1354,27 +1377,13 @@ class _FileManagerViewState extends State<FileManagerView> {
     return painter.width;
   }
 
-  void _reportDesktopHeaderCompactChanged(bool compactActions) {
-    if (_lastReportedDesktopHeaderCompact == compactActions) {
-      return;
-    }
-
-    _lastReportedDesktopHeaderCompact = compactActions;
-    Future<void>.microtask(() {
-      if (!mounted || _lastReportedDesktopHeaderCompact != compactActions) {
-        return;
-      }
-      widget.onDesktopHeaderCompactChanged?.call(compactActions);
-    });
-  }
-
   double _estimateDesktopHeaderLeadingWidth(BuildContext context, double maxWidth) {
     final openedFile = _openedFile;
     if (openedFile != null) {
       final fileName = openedFile.split('/').last;
       final closeActionWidth = 40.0 + desktopPaneHeaderButtonGap;
       final fileNameWidth = _measureBreadcrumbLabelWidth(context, fileName) + 24.0;
-      return math.min(closeActionWidth + fileNameWidth, maxWidth * 0.5);
+      return math.min(closeActionWidth + fileNameWidth, math.min(180.0, maxWidth * 0.24));
     }
 
     final segments = _folderBreadcrumbSegments();
@@ -1386,7 +1395,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
     }
 
-    return math.min(width, maxWidth * 0.5);
+    return math.min(width, math.min(180.0, maxWidth * 0.24));
   }
 
   List<_BreadcrumbSegment> _folderBreadcrumbSegments() {

@@ -27,7 +27,7 @@ class _EnableWebContextMenuState extends State<EnableWebContextMenu> with Widget
   final key = GlobalKey();
   final id = UniqueKey();
 
-  void getPosition(BuildContext context) {
+  void getPosition() {
     if (!mounted) return;
 
     final ctx = key.currentContext;
@@ -45,7 +45,10 @@ class _EnableWebContextMenuState extends State<EnableWebContextMenu> with Widget
   }
 
   void scheduleUpdate() {
-    WidgetsBinding.instance.addPostFrameCallback((_) => getPosition(context));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      getPosition();
+    });
   }
 
   @override

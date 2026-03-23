@@ -270,16 +270,19 @@ class MeetingView extends StatelessWidget {
 }
 
 class MeetingToolkits extends StatefulWidget {
-  const MeetingToolkits({super.key, required this.room, this.breakoutRoom = ""});
+  const MeetingToolkits({super.key, required this.room, this.breakoutRoom = "", this.compact = false});
 
   final RoomClient room;
   final String breakoutRoom;
+  final bool compact;
 
   @override
   State createState() => _MeetingActions();
 }
 
 class _MeetingActions extends State<MeetingToolkits> {
+  static const double _compactControlWidth = 48;
+
   late final toolkits = Resource<List<ToolkitDescription>>(() => widget.room.agents.listToolkits());
   @override
   void initState() {
@@ -325,35 +328,47 @@ class _MeetingActions extends State<MeetingToolkits> {
           runSpacing: 8,
           children: [
             if (startRecording != null && !transcribing)
-              ShadButton.outline(
-                leading: Icon(LucideIcons.captions),
-
-                onPressed: () async {
-                  widget.room.agents.invokeTool(
-                    toolkit: transcription!.name,
-                    tool: startRecording.name,
-                    input: ToolContentInput(
-                      JsonContent(
-                        json: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
-                      ),
-                    ),
-                  );
-                },
-                child: Text("Start Transcription"),
+              Tooltip(
+                message: "Start Transcription",
+                child: SizedBox(
+                  width: widget.compact ? _compactControlWidth : null,
+                  child: ShadButton.outline(
+                    padding: widget.compact ? const EdgeInsets.symmetric(horizontal: 0) : null,
+                    leading: Icon(LucideIcons.captions),
+                    onPressed: () async {
+                      widget.room.agents.invokeTool(
+                        toolkit: transcription!.name,
+                        tool: startRecording.name,
+                        input: ToolContentInput(
+                          JsonContent(
+                            json: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                          ),
+                        ),
+                      );
+                    },
+                    child: widget.compact ? null : Text("Start Transcription"),
+                  ),
+                ),
               ),
 
             if (stopRecording != null && transcribing)
-              ShadButton.outline(
-                leading: Icon(LucideIcons.captionsOff),
-
-                onPressed: () async {
-                  widget.room.agents.invokeTool(
-                    toolkit: transcription!.name,
-                    tool: stopRecording.name,
-                    input: ToolContentInput(JsonContent(json: {"breakout_room": ""})),
-                  );
-                },
-                child: Text("Stop Transcription"),
+              Tooltip(
+                message: "Stop Transcription",
+                child: SizedBox(
+                  width: widget.compact ? _compactControlWidth : null,
+                  child: ShadButton.outline(
+                    padding: widget.compact ? const EdgeInsets.symmetric(horizontal: 0) : null,
+                    leading: Icon(LucideIcons.captionsOff),
+                    onPressed: () async {
+                      widget.room.agents.invokeTool(
+                        toolkit: transcription!.name,
+                        tool: stopRecording.name,
+                        input: ToolContentInput(JsonContent(json: {"breakout_room": ""})),
+                      );
+                    },
+                    child: widget.compact ? null : Text("Stop Transcription"),
+                  ),
+                ),
               ),
           ],
         );
