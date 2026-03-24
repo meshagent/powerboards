@@ -3,6 +3,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:powerboards/meshagent/project.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 Future<void> showSwitchProjectDialog({
   required BuildContext context,
@@ -50,7 +51,7 @@ class SwitchProjectDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ShadDialog(
+    return PowerboardsShadDialog(
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
       actions: [

@@ -56,14 +56,15 @@ ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
   final screenWidth = MediaQuery.maybeOf(context)?.size.width ?? 1024.0;
   final isMobile = screenWidth < 600;
   final maxWidth = isMobile ? screenWidth * 0.8 : 512.0;
-  final closeInset = isMobile ? 24.0 : 8.0;
+  final closeTop = isMobile ? 24.0 : 20.0;
+  final closeEnd = 24.0;
 
   return ShadDialogTheme(
     backgroundColor: shadCard,
     constraints: BoxConstraints(maxWidth: maxWidth),
     radius: BorderRadius.circular(20),
     removeBorderRadiusWhenTiny: false,
-    closeIconPosition: ShadPosition(top: closeInset, right: closeInset),
+    closeIconPosition: ShadPosition(top: closeTop, right: closeEnd),
   );
 }
 

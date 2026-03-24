@@ -11,6 +11,7 @@ import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:meshagent/meshagent.dart' as ma;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -339,7 +340,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
   Future<void> _openCustomDialog() async {
     final changed = await showShadDialog<bool>(
       context: context,
-      builder: (dialogContext) => ShadDialog(
+      builder: (dialogContext) => PowerboardsShadDialog(
         useSafeArea: false,
         constraints: BoxConstraints(maxWidth: 800),
         title: const Text("Install"),
@@ -405,7 +406,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                     metadata: ServiceTemplateMetadata(name: existing.metadata.name, description: existing.metadata.description),
                   ),
             )
-          : ShadDialog(
+          : PowerboardsShadDialog(
               useSafeArea: false,
               constraints: BoxConstraints(maxWidth: 800),
               title: const Text("Install"),
@@ -475,7 +476,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
             ),
         ];
 
-        return ShadDialog(
+        return PowerboardsShadDialog(
           useSafeArea: false,
           expandActionsWhenTiny: false,
           actionsAxis: Axis.horizontal,

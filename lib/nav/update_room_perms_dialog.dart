@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -274,7 +275,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
             final width = isMobile ? constraints.maxWidth : 512.0;
             final height = isMobile ? constraints.maxHeight : (constraints.maxHeight > 700.0 ? 600.0 : constraints.maxHeight - 100);
 
-            return ShadDialog(
+            return PowerboardsShadDialog(
               scrollable: true,
               titlePinned: true,
               descriptionPinned: true,
@@ -439,7 +440,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
           final cont = await showShadDialog<bool>(
             context: context,
-            builder: (context) => ShadDialog.alert(
+            builder: (context) => PowerboardsShadDialog.alert(
               title: plural ? Text('Users are not in project') : Text('User is not in project'),
               description: Padding(
                 padding: EdgeInsets.only(bottom: 8),
@@ -508,7 +509,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       await showShadDialog(
         context: context,
         builder: (context) {
-          return ShadDialog.alert(
+          return PowerboardsShadDialog.alert(
             useSafeArea: false,
             title: const Text("Something went wrong"),
             description: const Text("An error occurred while adding users to the project. Please try again."),
@@ -544,7 +545,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
             final width = isMobile ? constraints.maxWidth : 512.0;
             final height = isMobile ? constraints.maxHeight : (constraints.maxHeight > 700.0 ? 600.0 : constraints.maxHeight - 100);
 
-            return ShadDialog(
+            return PowerboardsShadDialog(
               scrollable: true,
               titlePinned: true,
               descriptionPinned: true,

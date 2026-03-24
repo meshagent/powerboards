@@ -6,6 +6,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
@@ -154,7 +155,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
         oauthTokenRequestHandler: (RoomClient client, request) async {
           showShadDialog(
             context: context,
-            builder: (context) => ShadDialog(
+            builder: (context) => PowerboardsShadDialog(
               title: Text("An agent would like permission to use one of your accounts"),
               description: Text("You will be redirected to the third party service to login (${request.authorizationEndpoint})."),
               actions: [
@@ -194,7 +195,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
             final secretValue = {};
             final value = await showShadDialog<Map>(
               context: context,
-              builder: (context) => ShadDialog.alert(
+              builder: (context) => PowerboardsShadDialog.alert(
                 title: Text("Secret requested"),
                 description: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -227,7 +228,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
             String secretValue = "";
             final value = await showShadDialog<String>(
               context: context,
-              builder: (context) => ShadDialog.alert(
+              builder: (context) => PowerboardsShadDialog.alert(
                 title: Text("Secret requested"),
                 description: Column(
                   mainAxisSize: MainAxisSize.min,

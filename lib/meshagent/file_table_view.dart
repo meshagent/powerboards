@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_icon/file_icon.dart';
@@ -548,7 +549,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               Navigator.of(context).pop(name);
             }
 
-            return ShadDialog(
+            return PowerboardsShadDialog(
               crossAxisAlignment: CrossAxisAlignment.start,
               title: Text("New folder"),
               actions: [
@@ -601,7 +602,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final name = fullPath.split('/').where((s) => s.isNotEmpty).last;
     final bool? confirmDelete = await showShadDialog<bool>(
       context: context,
-      builder: (context) => ShadDialog.alert(
+      builder: (context) => PowerboardsShadDialog.alert(
         useSafeArea: false,
         title: const Text("Confirm Delete"),
         description: Padding(
@@ -637,7 +638,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final confirmDelete = await showShadDialog<bool>(
       context: context,
-      builder: (context) => ShadDialog.alert(
+      builder: (context) => PowerboardsShadDialog.alert(
         useSafeArea: false,
         title: const Text("Confirm Delete"),
         description: Padding(
@@ -711,7 +712,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 resolvedName = await showShadDialog<String>(
                   context: context,
                   builder: (context) {
-                    return ShadDialog(
+                    return PowerboardsShadDialog(
                       title: const Text("Add .txt extension?"),
                       description: Text("`$trimmedName` has no extension."),
                       actions: [
@@ -734,7 +735,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               Navigator.of(context).pop(resolvedName);
             }
 
-            return ShadDialog(
+            return PowerboardsShadDialog(
               crossAxisAlignment: CrossAxisAlignment.start,
               title: Text("New Text File"),
               actions: [ShadButton(onTapDown: submit, child: const Text("OK"))],

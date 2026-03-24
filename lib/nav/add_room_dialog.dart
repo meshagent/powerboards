@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:meshagent/client.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class RoomNameResult {
   final String name;
@@ -33,7 +34,7 @@ Future<RoomNameResult?> showRoomNameDialog(
         }
       }
 
-      return ShadDialog(
+      return PowerboardsShadDialog(
         useSafeArea: false,
         title: Text(title),
         description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(description)),
@@ -91,7 +92,7 @@ Future<void> showRoomCreationErrorDialog(BuildContext context, Object error) {
   return showShadDialog(
     context: context,
     builder: (context) {
-      return ShadDialog.alert(
+      return PowerboardsShadDialog.alert(
         useSafeArea: false,
         title: Text(title),
         description: Text(description),

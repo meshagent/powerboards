@@ -7,6 +7,7 @@ import 'package:meshagent/protocol.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart' as dev;
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
 
@@ -37,7 +38,7 @@ class ConfigureServiceTemplateDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isInstalled = serviceId != null;
-    return ShadDialog(
+    return PowerboardsShadDialog(
       useSafeArea: false,
       expandActionsWhenTiny: false,
       actionsAxis: Axis.horizontal,
@@ -425,7 +426,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
         }
         final confirmed = await showShadDialog<bool>(
           context: context,
-          builder: (context) => ShadDialog.alert(
+          builder: (context) => PowerboardsShadDialog.alert(
             title: const Text('Delete routes?'),
             actions: [
               ShadButton(
