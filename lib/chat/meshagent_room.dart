@@ -810,7 +810,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length - 1) : trimmed;
   }
 
-  String? _resolvedThreadListPath(String? threadListPath, {String? threadDir}) {
+  String? _defaultThreadDocumentDir(String? agentName) {
+    if (agentName == null) {
+      return null;
+    }
+
+    final trimmed = agentName.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    return '.threads/$trimmed';
+  }
+
+  String? _resolvedThreadListPath(String? threadListPath, {String? threadDir, String? agentName}) {
     if (threadListPath != null) {
       final trimmed = threadListPath.trim();
       if (trimmed.isNotEmpty) {
@@ -820,7 +833,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     final normalizedThreadDir = _normalizedThreadDocumentDir(threadDir);
     if (normalizedThreadDir == null) {
-      return null;
+      final defaultThreadDir = _defaultThreadDocumentDir(agentName);
+      if (defaultThreadDir == null) {
+        return null;
+      }
+      return "$defaultThreadDir/index.threadl";
     }
 
     return "$normalizedThreadDir/index.threadl";
@@ -832,11 +849,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return "$normalizedThreadDir/main.thread";
     }
 
-    if (agent != null) {
-      return '.threads/$agent/main.thread';
-    } else {
-      return '.threads/main.thread';
+    final defaultThreadDir = _defaultThreadDocumentDir(agent);
+    if (defaultThreadDir != null) {
+      return "$defaultThreadDir/main.thread";
     }
+
+    return '.threads/main.thread';
   }
 
   List<Widget> _meetingToolbarControls(BuildContext context, {bool compact = false}) {
@@ -1184,7 +1202,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final chatActions = actions;
     final chatHorizontalInset = isMobile ? 0.0 : desktopPaneChatHorizontalInset;
     final chatBottomInset = isMobile ? 0.0 : desktopPaneBottomInset - 8;
-    final resolvedThreadListPath = _resolvedThreadListPath(threadListPath, threadDir: threadDir);
+    final resolvedThreadListPath = _resolvedThreadListPath(threadListPath, threadDir: threadDir, agentName: agentName);
     final hasThreadList = isMultiThread && resolvedThreadListPath != null;
     final showThreadRail = !isMobile && showEmbeddedThreadList && hasThreadList;
     final showInlineThreadList = !isMobile && !showEmbeddedThreadList && hasThreadList;
