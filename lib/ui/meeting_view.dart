@@ -15,7 +15,6 @@ import 'package:powerboards/livekit/camera_grid.dart';
 import 'package:powerboards/livekit/camera_strip.dart';
 import 'package:powerboards/livekit/device_preview.dart';
 import 'package:powerboards/livekit/expand_participant_controller.dart';
-import 'package:powerboards/livekit/participant_track.dart';
 import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
 
@@ -73,10 +72,6 @@ class _MeetingViewState extends State<MeetingView> {
 
   bool _participantHasActiveShare(lk.Participant participant) {
     return _screenShareTrackFor(participant) != null;
-  }
-
-  int _activeShareCount(List<lk.Participant> participants) {
-    return participants.where(_participantHasActiveShare).length;
   }
 
   Widget _cameraStripBuilder(lk.Room room, bool horizontal, List<lk.Participant> participants) {
@@ -202,6 +197,8 @@ class _DesktopShareLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final expandController = Controller.ofType<ExpandParticipantController>(context);
+
         final maxContentWidth = (constraints.maxWidth - _outerPadding * 2).clamp(0.0, double.infinity);
         final maxContentHeight = (constraints.maxHeight - _outerPadding * 2).clamp(0.0, double.infinity);
 
@@ -209,6 +206,12 @@ class _DesktopShareLayout extends StatelessWidget {
         final shareHeightFromWidth = maxShareWidth / _shareAspectRatio;
         final shareHeight = shareHeightFromWidth > maxContentHeight ? maxContentHeight : shareHeightFromWidth;
         final shareWidth = shareHeight * _shareAspectRatio;
+
+        final expandedParticipants = participants.where((p) => expandController.isExpanded(p.identity)).toList();
+
+        if (expandController.hasExpanded) {
+          return ExpandableCameraGrid(participants: expandedParticipants);
+        }
 
         return Center(
           child: Padding(
@@ -218,9 +221,13 @@ class _DesktopShareLayout extends StatelessWidget {
               height: shareHeight,
               child: Row(
                 crossAxisAlignment: .start,
+                spacing: _railGap,
                 children: [
-                  ExpandableCameraGrid(participants: participants),
-                  const SizedBox(width: _railGap),
+                  SizedBox(
+                    width: shareWidth,
+                    height: shareHeight,
+                    child: ExpandableCameraGrid(participants: participants),
+                  ),
                   SizedBox(
                     width: _railWidth,
                     child: CameraStrip(room: room, horizontal: false, participants: participants),
