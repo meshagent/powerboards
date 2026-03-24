@@ -142,6 +142,25 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     return (area1: area1, area2: area2);
   }
 
+  ({double minArea1Size, double minArea2Size, double maxArea1Size, double maxArea2Size}) _resolvePanelFractions(double size) {
+    final minimums = _resolveMinimumWidths(size);
+    var minArea1Size = (minimums.area1 / size).clamp(0.0, 1.0);
+    var minArea2Size = (minimums.area2 / size).clamp(0.0, 1.0);
+
+    final minimumTotal = minArea1Size + minArea2Size;
+    if (minimumTotal > 1) {
+      minArea1Size /= minimumTotal;
+      minArea2Size /= minimumTotal;
+    }
+
+    final rawMaxArea1Size = (_lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0)).clamp(0.0, 1.0);
+    final rawMaxArea2Size = (_lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0)).clamp(0.0, 1.0);
+    final maxArea1Size = math.max(minArea1Size, rawMaxArea1Size).clamp(0.0, 1.0);
+    final maxArea2Size = math.max(minArea2Size, rawMaxArea2Size).clamp(0.0, 1.0);
+
+    return (minArea1Size: minArea1Size, minArea2Size: minArea2Size, maxArea1Size: maxArea1Size, maxArea2Size: maxArea2Size);
+  }
+
   void debounceResize(BoxConstraints constraints) {
     if (lastConstraints == null || lastConstraints!.maxWidth != constraints.maxWidth) {
       resizeDebounceTimer?.cancel();
@@ -157,13 +176,11 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         if (!size.isFinite || size <= 0) {
           return;
         }
-        final minimums = _resolveMinimumWidths(size);
-        final minArea1Size = minimums.area1 / size;
-        final minArea2Size = minimums.area2 / size;
-        final rawMaxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
-        final rawMaxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
-        final maxArea1Size = math.max(minArea1Size, rawMaxArea1Size);
-        final maxArea2Size = math.max(minArea2Size, rawMaxArea2Size);
+        final panelFractions = _resolvePanelFractions(size);
+        final minArea1Size = panelFractions.minArea1Size;
+        final minArea2Size = panelFractions.minArea2Size;
+        final maxArea1Size = panelFractions.maxArea1Size;
+        final maxArea2Size = panelFractions.maxArea2Size;
 
         final defaultSize1 = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
         final defaultSize2 = (1 - defaultSize1).clamp(minArea2Size, maxArea2Size);
@@ -289,13 +306,11 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
           lastConstraints = null;
           return const SizedBox.shrink();
         }
-        final minimums = _resolveMinimumWidths(size);
-        final minArea1Size = minimums.area1 / size;
-        final minArea2Size = minimums.area2 / size;
-        final rawMaxArea1Size = _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0);
-        final rawMaxArea2Size = _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0);
-        final maxArea1Size = math.max(minArea1Size, rawMaxArea1Size);
-        final maxArea2Size = math.max(minArea2Size, rawMaxArea2Size);
+        final panelFractions = _resolvePanelFractions(size);
+        final minArea1Size = panelFractions.minArea1Size;
+        final minArea2Size = panelFractions.minArea2Size;
+        final maxArea1Size = panelFractions.maxArea1Size;
+        final maxArea2Size = panelFractions.maxArea2Size;
 
         final defaultSize1 = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).clamp(minArea1Size, maxArea1Size);
         final defaultSize2 = (1 - defaultSize1).clamp(minArea2Size, maxArea2Size);
