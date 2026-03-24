@@ -892,6 +892,51 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return meetingViewController.state == MeetingViewState.joined && videoRoom != null;
   }
 
+  Widget _buildAudioAgentEmptyState({
+    required String title,
+    required String description,
+    Widget? action,
+    double verticalOffset = AudioAgentEmptyState.defaultVerticalOffset,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(
+        child: AudioAgentEmptyState(
+          title: title,
+          description: description,
+          availableWidth: constraints.maxWidth,
+          action: action,
+          verticalOffset: verticalOffset,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMeetingTranscriberLobbyEmptyState() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobileScreen = MediaQuery.sizeOf(context).width < 600;
+        final showDescription = constraints.maxWidth >= 480 || isMobileScreen;
+
+        return Center(
+          child: AudioAgentEmptyState(
+            title: "Transcribe your meeting",
+            description: "Meet with this agent and include your team.",
+            availableWidth: constraints.maxWidth,
+            verticalOffset: showDescription ? AudioAgentEmptyState.defaultVerticalOffset - 36 : -30,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMeetingTranscriberTitleOnlyEmptyState(String title) {
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(
+        child: AudioAgentEmptyState(title: title, description: "", availableWidth: constraints.maxWidth, verticalOffset: -30),
+      ),
+    );
+  }
+
   void _syncSecondaryPaneVisibility({required bool canViewStorageAllowed}) {
     final shouldHideFiles = controller.isFilesShown && !canViewStorageAllowed;
 
@@ -1192,6 +1237,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     String? threadDir,
     String? selectedThreadPath,
     ValueChanged<String?>? onSelectedThreadPathChanged,
+    Widget? emptyState,
   }) {
     final user = MeshagentAuth.current.getUser();
     final userEmail = user?["email"];
@@ -1222,8 +1268,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         documentPath: documentPath,
         selectedThreadPath: selectedThreadPath,
         onSelectedThreadPathChanged: onSelectedThreadPathChanged,
-        participantNames: [if (userEmail is String && userEmail.isNotEmpty) userEmail, if (agentName != null) agentName],
+        participantNames: [
+          if (userEmail is String && userEmail.isNotEmpty) userEmail,
+          if (agentName case final String agentParticipantName) agentParticipantName,
+        ],
         joinMeeting: _joinMeeting,
+        emptyState: emptyState,
       ),
     );
 
@@ -1364,6 +1414,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildMeetingTranscriberArea(BuildContext context, String agentName, List<Widget> actions) {
+    final meetingIsActive = _isMeetingSessionActive(context);
+
+    Widget startMeetingAction() {
+      return ShadButton(
+        onPressed: () {
+          _joinMeeting();
+        },
+        child: const Text("Start Meeting"),
+      );
+    }
+
     return WaitForAgentParticipantBuilder(
       key: ValueKey(agentName),
       room: widget.room,
@@ -1377,14 +1438,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             child: participant == null
                 ? _buildRoomLoading(context, title: "Waiting for transcriber agent to join room")
                 : controller.inMeeting
-                ? _buildChatArea(context, null, [])
-                : Center(
-                    child: ShadButton(
-                      onPressed: () {
-                        _joinMeeting();
-                      },
-                      child: Text("Start Meeting"),
-                    ),
+                ? _buildChatArea(
+                    context,
+                    null,
+                    [],
+                    emptyState: !meetingIsActive
+                        ? _buildMeetingTranscriberLobbyEmptyState()
+                        : _buildMeetingTranscriberTitleOnlyEmptyState("Chat or share files"),
+                  )
+                : _buildAudioAgentEmptyState(
+                    title: "Transcribe your meeting",
+                    description: "Meet with this agent and include your team.",
+                    action: startMeetingAction(),
+                    verticalOffset: AudioAgentEmptyState.defaultVerticalOffset - 20,
                   ),
           ),
         ],

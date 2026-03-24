@@ -236,6 +236,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           agentName: widget.agentName,
           emptyStateTitle: usesSingleThreadEmptyState ? "Chat to get started" : null,
           emptyStateDescription: usesSingleThreadEmptyState ? _threadEmptyDescription : null,
+          emptyState: widget.emptyState,
           chatInputBoxBuilder: (context, inputBox) => EnableWebContextMenu(child: inputBox),
         ),
         participantNames: widget.participantNames,
