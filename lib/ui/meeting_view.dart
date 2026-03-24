@@ -8,15 +8,15 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:meshagent/meshagent.dart';
-import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 
-import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/livekit/camera_grid.dart';
 import 'package:powerboards/livekit/camera_strip.dart';
 import 'package:powerboards/livekit/device_preview.dart';
 import 'package:powerboards/livekit/expand_participant_controller.dart';
 import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
+import 'package:powerboards/nav/nav.dart';
+import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 
 const Color _meetingSurfaceColor = Color(0xFF222222);
 
@@ -161,9 +161,9 @@ class _MeetingViewState extends State<MeetingView> {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                spacing: 20,
                 children: [
                   Text("Meeting ended", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 20),
                   ShadButton(
                     onPressed: () {
                       meetingViewController.resetToLobby();
@@ -186,6 +186,7 @@ const _outerPadding = 24.0;
 const _railWidth = 158.4;
 const _railGap = 16.0;
 const _shareAspectRatio = 16 / 9;
+const _compactControlWidth = 48.0;
 
 class _DesktopShareLayout extends StatelessWidget {
   const _DesktopShareLayout({required this.room, required this.participants});
@@ -252,8 +253,6 @@ class MeetingToolkits extends StatefulWidget {
   @override
   State createState() => _MeetingActions();
 }
-
-const double _compactControlWidth = 48;
 
 class _MeetingActions extends State<MeetingToolkits> {
   Timer? timer;

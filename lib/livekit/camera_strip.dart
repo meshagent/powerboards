@@ -41,15 +41,12 @@ class CameraStrip extends StatelessWidget {
                 final track = videoTrack.track as lk.VideoTrack;
                 return Container(
                   color: Colors.transparent,
-                  child: IgnorePointer(
-                    ignoring: true,
-                    child: ParticipantTrack(
-                      showName: hovered,
-                      participant: participant,
-                      track: lk.VideoTrackRenderer(
-                        track,
-                        fit: videoTrack.source == lk.TrackSource.screenShareVideo ? lk.VideoViewFit.contain : lk.VideoViewFit.cover,
-                      ),
+                  child: ParticipantTrack(
+                    showName: hovered,
+                    participant: participant,
+                    track: lk.VideoTrackRenderer(
+                      track,
+                      fit: videoTrack.source == lk.TrackSource.screenShareVideo ? lk.VideoViewFit.contain : lk.VideoViewFit.cover,
                     ),
                   ),
                 );
