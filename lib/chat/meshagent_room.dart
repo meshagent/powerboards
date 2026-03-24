@@ -981,7 +981,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildMobileThreadGetStartedActions(BuildContext context, {required VoidCallback onNewThread, VoidCallback? onViewAll}) {
+  Widget _buildMobileThreadGetStartedActions(
+    BuildContext context, {
+    required VoidCallback onNewThread,
+    required bool isNewThreadSelected,
+    VoidCallback? onViewAll,
+  }) {
     final theme = ShadTheme.of(context);
     final createActionStyle = GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: theme.colorScheme.foreground);
     final secondaryActionStyle = GoogleFonts.inter(
@@ -1023,7 +1028,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(LucideIcons.messageSquarePlus, size: 16, color: theme.colorScheme.foreground),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
+                    ),
+                    child: Icon(
+                      isNewThreadSelected ? LucideIcons.check : LucideIcons.messageSquarePlus,
+                      key: ValueKey(isNewThreadSelected),
+                      size: 16,
+                      color: theme.colorScheme.foreground,
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   Flexible(
                     child: Text("New thread", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: createActionStyle),
@@ -1202,6 +1221,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 ? _buildMobileThreadGetStartedActions(
                     context,
                     onNewThread: () => onSelectedThreadPathChanged?.call(null),
+                    isNewThreadSelected: selectedThreadPath == null,
                     onViewAll: resolvedThreadListPath == null
                         ? null
                         : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
@@ -1620,6 +1640,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       child: MeshagentInlineThreadCreatePrompt(
         key: ValueKey("inline-thread-create-${agentKey ?? "none"}"),
         createItemTopPadding: 0,
+        isSelected: _selectedThreadPathForAgentKey(agentKey) == null,
         onOpen: () => _setSelectedThreadPath(agentKey, null),
         onViewAllThreads: _showMaximizedChat,
       ),

@@ -310,11 +310,18 @@ class MeshagentThreadListPane extends StatefulWidget {
 }
 
 class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
-  const MeshagentInlineThreadCreatePrompt({super.key, required this.onOpen, required this.onViewAllThreads, this.createItemTopPadding = 0});
+  const MeshagentInlineThreadCreatePrompt({
+    super.key,
+    required this.onOpen,
+    required this.onViewAllThreads,
+    this.createItemTopPadding = 0,
+    this.isSelected = false,
+  });
 
   final VoidCallback onOpen;
   final VoidCallback onViewAllThreads;
   final double createItemTopPadding;
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -328,6 +335,7 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
       Widget? leading,
       EdgeInsetsGeometry padding = desktopActionButtonPadding,
       MainAxisAlignment? mainAxisAlignment,
+      bool selected = false,
     }) {
       return ShadButton.ghost(
         height: desktopPaneSecondaryControlHeight,
@@ -356,7 +364,8 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
               children: [
                 desktopActionButton(
                   onPressed: onOpen,
-                  leading: Icon(LucideIcons.messageSquarePlus, size: 16, color: foreground),
+                  selected: isSelected,
+                  leading: _newThreadActionIcon(isSelected, color: foreground),
                   child: Text(
                     "New thread",
                     maxLines: 1,
@@ -387,7 +396,7 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
 class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   static TextStyle threadNameStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w400, Color? color}) {
     final theme = ShadTheme.of(context);
-    return GoogleFonts.inter(fontSize: 14, fontWeight: fontWeight, color: color ?? theme.colorScheme.mutedForeground);
+    return GoogleFonts.inter(fontSize: 13, fontWeight: fontWeight, color: color ?? theme.colorScheme.mutedForeground);
   }
 
   static TextStyle createActionStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w700}) {
@@ -704,6 +713,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   Widget _buildThreadListBody(List<_ThreadListEntry> entries) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final showCreateItem = widget.showCreateItem;
+    final showDraftThreadEntry = isMobile && widget.selectedThreadPath == null && entries.isNotEmpty;
 
     if (_threadListLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -722,25 +732,36 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     }
 
     final createItemCount = showCreateItem ? 1 : 0;
+    final contentItemCount = entries.isEmpty ? 1 : entries.length + (showDraftThreadEntry ? 1 : 0);
 
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 8),
-      itemCount: entries.isEmpty ? createItemCount + 1 : entries.length + createItemCount,
+      itemCount: createItemCount + contentItemCount,
       separatorBuilder: (_, _) => SizedBox(height: isMobile ? 4 : 4),
       itemBuilder: (context, index) {
         if (showCreateItem && index == 0) {
-          return _ThreadListCreateItem(topPadding: widget.createItemTopPadding, onOpen: () => widget.onSelectedThreadPathChanged(null));
+          return _ThreadListCreateItem(
+            topPadding: widget.createItemTopPadding,
+            selected: widget.selectedThreadPath == null,
+            onOpen: () => widget.onSelectedThreadPathChanged(null),
+          );
         }
+
+        final contentIndex = index - createItemCount;
 
         if (entries.isEmpty) {
           return const _ThreadListEmptyHint();
         }
 
-        final entry = entries[index - createItemCount];
+        if (showDraftThreadEntry && contentIndex == 0) {
+          return _DraftThreadListItem(showUnderline: contentItemCount > 1, onOpen: () => widget.onSelectedThreadPathChanged(null));
+        }
+
+        final entry = entries[contentIndex - (showDraftThreadEntry ? 1 : 0)];
         return _ThreadListItem(
           entry: entry,
           threadStatus: ma.resolveChatThreadStatus(room: widget.client, path: entry.path, agentName: widget.agentName),
-          showUnderline: index != entries.length + createItemCount - 1,
+          showUnderline: contentIndex != contentItemCount - 1,
           selected: entry.path == widget.selectedThreadPath,
           onOpen: () => widget.onSelectedThreadPathChanged(entry.path),
           onRename: () => _renameThread(entry),
@@ -817,10 +838,11 @@ class _ThreadListItem extends StatefulWidget {
 }
 
 class _ThreadListCreateItem extends StatelessWidget {
-  const _ThreadListCreateItem({required this.onOpen, this.topPadding = 0});
+  const _ThreadListCreateItem({required this.onOpen, this.topPadding = 0, this.selected = false});
 
   final VoidCallback onOpen;
   final double topPadding;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -837,7 +859,7 @@ class _ThreadListCreateItem extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           hoverBackgroundColor: theme.colorScheme.accent,
           pressedBackgroundColor: theme.colorScheme.accent,
-          leading: Icon(LucideIcons.messageSquarePlus, size: 16, color: foreground),
+          leading: _newThreadActionIcon(selected, color: foreground),
           gap: 12,
           mainAxisAlignment: MainAxisAlignment.start,
           onPressed: onOpen,
@@ -897,7 +919,8 @@ class _ThreadListEmptyHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final leadingInset = (isMobile ? 12.0 : 0.0) + (isMobile ? 36.0 : 20.0) + 10.0;
+    final leadingInset =
+        (isMobile ? 12.0 : _desktopThreadListHorizontalPadding) + _threadListLeadingWidth(isMobile) + _threadListGap(isMobile);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(leadingInset, isMobile ? 4 : 8, 0, 0),
@@ -909,16 +932,21 @@ class _ThreadListEmptyHint extends StatelessWidget {
   }
 }
 
+Widget _newThreadActionIcon(bool selected, {required Color color}) {
+  return AnimatedSwitcher(
+    duration: const Duration(milliseconds: 180),
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeInCubic,
+    transitionBuilder: (child, animation) => FadeTransition(
+      opacity: animation,
+      child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
+    ),
+    child: Icon(selected ? LucideIcons.check : LucideIcons.messageSquarePlus, key: ValueKey(selected), size: 16, color: color),
+  );
+}
+
 class _ThreadListItemState extends State<_ThreadListItem> {
   late final ShadContextMenuController _menuController = ShadContextMenuController();
-
-  EdgeInsets _rowPadding(bool isMobile) {
-    if (isMobile) {
-      return const EdgeInsets.symmetric(vertical: 14);
-    }
-
-    return const EdgeInsets.symmetric(vertical: 0);
-  }
 
   @override
   void dispose() {
@@ -955,11 +983,11 @@ class _ThreadListItemState extends State<_ThreadListItem> {
               child: ConstrainedBox(
                 constraints: BoxConstraints(minHeight: isMobile ? 0 : 36),
                 child: Padding(
-                  padding: _rowPadding(isMobile),
+                  padding: _threadListRowPadding(isMobile),
                   child: Row(
                     children: [
                       SizedBox(
-                        width: isMobile ? 36 : 20,
+                        width: _threadListLeadingWidth(isMobile),
                         child: Center(
                           child: selected && !widget.threadStatus.hasStatus
                               ? const Icon(LucideIcons.check, size: 16, color: shadForeground)
@@ -972,7 +1000,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                                 ),
                         ),
                       ),
-                      SizedBox(width: isMobile ? 10 : 10),
+                      SizedBox(width: _threadListGap(isMobile)),
                       Expanded(
                         child: ma.ChatThreadProcessingSweepText(
                           text: widget.entry.name,
@@ -1027,6 +1055,69 @@ class _ThreadListItemState extends State<_ThreadListItem> {
           ),
         );
       },
+    );
+  }
+}
+
+EdgeInsets _threadListRowPadding(bool isMobile) {
+  if (isMobile) {
+    return const EdgeInsets.symmetric(vertical: 14);
+  }
+
+  return const EdgeInsets.only(left: _desktopThreadListHorizontalPadding);
+}
+
+double _threadListLeadingWidth(bool isMobile) => isMobile ? 36 : 16;
+
+double _threadListGap(bool isMobile) => isMobile ? 10 : 12;
+
+const double _desktopThreadListHorizontalPadding = 16;
+
+class _DraftThreadListItem extends StatelessWidget {
+  const _DraftThreadListItem({required this.showUnderline, required this.onOpen});
+
+  final bool showUnderline;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final textStyle = _MeshagentThreadListPaneState.threadNameStyle(context, fontWeight: FontWeight.w700, color: shadForeground);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: showUnderline ? Border(bottom: BorderSide(color: shadBorder.withValues(alpha: 0.5))) : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          onTap: onOpen,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: isMobile ? 0 : 36),
+            child: Padding(
+              padding: _threadListRowPadding(isMobile),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: _threadListLeadingWidth(isMobile),
+                    child: const Center(child: Icon(LucideIcons.check, size: 16, color: shadForeground)),
+                  ),
+                  SizedBox(width: _threadListGap(isMobile)),
+                  Expanded(
+                    child: Text("My new thread", maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: textStyle),
+                  ),
+                  const SizedBox(width: 52),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
