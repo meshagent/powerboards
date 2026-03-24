@@ -4,6 +4,22 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+Future<void> showSwitchProjectDialog({
+  required BuildContext context,
+  required String currentProjectId,
+  required Resource<List<Project>> projects,
+  required void Function(Project) onSwitch,
+  required VoidCallback onNewProject,
+}) {
+  projects.refresh();
+
+  return showShadDialog<void>(
+    context: context,
+    builder: (context) =>
+        SwitchProjectDialog(currentProjectId: currentProjectId, projects: projects, onSwitch: onSwitch, onNewProject: onNewProject),
+  );
+}
+
 class SwitchProjectDialog extends StatelessWidget {
   const SwitchProjectDialog({
     super.key,
@@ -49,7 +65,7 @@ class SwitchProjectDialog extends StatelessWidget {
         ),
       ],
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 300),
+        constraints: const BoxConstraints(maxWidth: 320, maxHeight: 420),
         child: SignalBuilder(
           builder: (context, _) {
             final items = projects.state.value;
@@ -58,14 +74,19 @@ class SwitchProjectDialog extends StatelessWidget {
               return const Center(child: CircularProgressIndicator());
             }
 
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: items
-                  .map((project) {
-                    return _buildProjectItem(context, project);
-                  })
-                  .toList(growable: false),
+            return ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: items
+                      .map((project) {
+                        return _buildProjectItem(context, project);
+                      })
+                      .toList(growable: false),
+                ),
+              ),
             );
           },
         ),

@@ -113,16 +113,12 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
   }
 
   void _switchProject() {
-    widget.projects.refresh();
-
-    showShadDialog(
+    showSwitchProjectDialog(
       context: context,
-      builder: (context) => SwitchProjectDialog(
-        currentProjectId: widget.projectId ?? "",
-        projects: widget.projects,
-        onSwitch: (project) => _goToProject(project.id),
-        onNewProject: _onNewProject,
-      ),
+      currentProjectId: widget.projectId ?? "",
+      projects: widget.projects,
+      onSwitch: (project) => _goToProject(project.id),
+      onNewProject: _onNewProject,
     );
   }
 
