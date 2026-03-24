@@ -12,7 +12,6 @@ import 'package:meshagent/room_server_client.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 
 import 'package:powerboards/livekit/change_device_button.dart';
-import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_dialog.dart';
 
 class ConnectionInfo {
@@ -516,7 +515,7 @@ class _CameraToggleState extends State<CameraToggle> {
       on: state,
       onColor: ShadTheme.of(context).colorScheme.foreground,
       onForeground: ShadTheme.of(context).colorScheme.background,
-      offColor: Colors.red,
+      offColor: ShadTheme.of(context).colorScheme.destructive,
       offForeground: Colors.white,
       icon: state ? LucideIcons.video : LucideIcons.videoOff,
       onPressed: local == null
@@ -596,7 +595,7 @@ class _MicToggleState extends State<MicToggle> {
       on: state,
       onColor: ShadTheme.of(context).colorScheme.foreground,
       onForeground: ShadTheme.of(context).colorScheme.background,
-      offColor: Colors.red,
+      offColor: ShadTheme.of(context).colorScheme.destructive,
       offForeground: Colors.white,
       icon: state ? LucideIcons.mic : LucideIcons.micOff,
       onPressed: local == null
@@ -694,12 +693,15 @@ class RoomToolbarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final disabled = !on && onPressed == null;
+
     return Tooltip(
       message: text,
       child: ShadIconButton(
         onPressed: onPressed,
-        backgroundColor: on ? onColor : offColor,
-        foregroundColor: on ? onForeground : (onPressed != null ? offForeground : disabledToolIconColor),
+        backgroundColor: on ? onColor : (disabled ? theme.colorScheme.destructive : offColor),
+        foregroundColor: on ? onForeground : (disabled ? Colors.white : offForeground),
         icon: Icon(icon, size: 22),
       ),
     );

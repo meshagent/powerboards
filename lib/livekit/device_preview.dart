@@ -295,7 +295,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                     on: videoOn,
                     onColor: ShadTheme.of(context).colorScheme.foreground,
                     onForeground: ShadTheme.of(context).colorScheme.background,
-                    offColor: Colors.red,
+                    offColor: ShadTheme.of(context).colorScheme.destructive,
                     offForeground: Colors.white,
                     onPressed: deviceManager.canTurnOnCamera
                         ? () {
@@ -314,7 +314,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                     on: audioOn,
                     onColor: ShadTheme.of(context).colorScheme.foreground,
                     onForeground: ShadTheme.of(context).colorScheme.background,
-                    offColor: Colors.red,
+                    offColor: ShadTheme.of(context).colorScheme.destructive,
                     offForeground: Colors.white,
                     onPressed: deviceManager.canTurnOnMicrophone
                         ? () {
