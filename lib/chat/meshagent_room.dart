@@ -1545,24 +1545,33 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         return PowerboardsShadDialog(
           useSafeArea: false,
           title: const Text("Threads"),
-          description: const Padding(padding: EdgeInsets.only(bottom: 8), child: Text("Select a thread to view or manage it.")),
+          description: const Text("Select a thread to view or manage it."),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: math.min(size.width * 0.8, 360.0), maxHeight: math.min(size.height * 0.65, 520.0)),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: MeshagentThreadListPane(
-                    key: ValueKey("mobile-threads-${agentKey ?? "none"}"),
-                    client: widget.room,
-                    agentName: agentName,
-                    threadListPath: threadListPath,
-                    selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
-                    newThreadResetVersion: _newThreadResetVersion,
-                    showCreateItem: false,
-                    onSelectedThreadPathChanged: (path) {
-                      _setSelectedThreadPath(agentKey, path);
-                      Navigator.of(dialogContext).pop();
-                    },
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 18, bottom: 18),
+                    child: MeshagentThreadListPane(
+                      key: ValueKey("mobile-threads-${agentKey ?? "none"}"),
+                      client: widget.room,
+                      agentName: agentName,
+                      threadListPath: threadListPath,
+                      selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
+                      newThreadResetVersion: _newThreadResetVersion,
+                      mobileListTopPadding: 0,
+                      mobileListBottomPadding: 0,
+                      mobileRowVerticalPadding: 16,
+                      mobileUseDialogListStyle: true,
+                      showCreateItem: false,
+                      onSelectedThreadPathChanged: (path) {
+                        _setSelectedThreadPath(agentKey, path);
+                        Navigator.of(dialogContext).pop();
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),

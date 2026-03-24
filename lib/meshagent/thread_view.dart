@@ -294,6 +294,10 @@ class MeshagentThreadListPane extends StatefulWidget {
     this.selectedThreadPath,
     this.newThreadResetVersion = 0,
     this.createItemTopPadding = 0,
+    this.mobileListTopPadding = 0,
+    this.mobileListBottomPadding = 8,
+    this.mobileRowVerticalPadding = 14,
+    this.mobileUseDialogListStyle = false,
     this.showCreateItem = true,
   });
 
@@ -303,6 +307,10 @@ class MeshagentThreadListPane extends StatefulWidget {
   final String? selectedThreadPath;
   final int newThreadResetVersion;
   final double createItemTopPadding;
+  final double mobileListTopPadding;
+  final double mobileListBottomPadding;
+  final double mobileRowVerticalPadding;
+  final bool mobileUseDialogListStyle;
   final bool showCreateItem;
   final ValueChanged<String?> onSelectedThreadPathChanged;
 
@@ -738,9 +746,10 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     final createItemCount = showCreateItem ? 1 : 0;
 
     return ListView.separated(
-      padding: const EdgeInsets.only(bottom: 8),
+      shrinkWrap: isMobile && widget.mobileUseDialogListStyle,
+      padding: EdgeInsets.only(top: isMobile ? widget.mobileListTopPadding : 0, bottom: isMobile ? widget.mobileListBottomPadding : 8),
       itemCount: entries.isEmpty ? createItemCount + 1 : entries.length + createItemCount,
-      separatorBuilder: (_, _) => SizedBox(height: isMobile ? 4 : 4),
+      separatorBuilder: (_, _) => SizedBox(height: isMobile && widget.mobileUseDialogListStyle ? 0 : 4),
       itemBuilder: (context, index) {
         if (showCreateItem && index == 0) {
           return _ThreadListCreateItem(topPadding: widget.createItemTopPadding, onOpen: () => widget.onSelectedThreadPathChanged(null));
@@ -756,6 +765,8 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
           threadStatus: ma.resolveChatThreadStatus(room: widget.client, path: entry.path, agentName: widget.agentName),
           showUnderline: index != entries.length + createItemCount - 1,
           selected: entry.path == widget.selectedThreadPath,
+          mobileRowVerticalPadding: widget.mobileRowVerticalPadding,
+          mobileUseDialogListStyle: widget.mobileUseDialogListStyle,
           onOpen: () => widget.onSelectedThreadPathChanged(entry.path),
           onRename: () => _renameThread(entry),
           onDelete: () => _deleteThread(entry),
@@ -813,6 +824,8 @@ class _ThreadListItem extends StatefulWidget {
     required this.threadStatus,
     required this.showUnderline,
     required this.selected,
+    required this.mobileRowVerticalPadding,
+    required this.mobileUseDialogListStyle,
     required this.onOpen,
     required this.onRename,
     required this.onDelete,
@@ -822,6 +835,8 @@ class _ThreadListItem extends StatefulWidget {
   final ma.ChatThreadStatusState threadStatus;
   final bool showUnderline;
   final bool selected;
+  final double mobileRowVerticalPadding;
+  final bool mobileUseDialogListStyle;
   final VoidCallback onOpen;
   final VoidCallback onRename;
   final VoidCallback onDelete;
@@ -903,11 +918,31 @@ class _ThreadListItemState extends State<_ThreadListItem> {
   late final ShadContextMenuController _menuController = ShadContextMenuController();
 
   EdgeInsets _rowPadding(bool isMobile) {
+    if (isMobile && widget.mobileUseDialogListStyle) {
+      return EdgeInsets.symmetric(horizontal: 12, vertical: widget.mobileRowVerticalPadding);
+    }
+
     if (isMobile) {
-      return const EdgeInsets.symmetric(vertical: 14);
+      return EdgeInsets.symmetric(vertical: widget.mobileRowVerticalPadding);
     }
 
     return const EdgeInsets.symmetric(vertical: 0);
+  }
+
+  double _leadingWidth(bool isMobile) {
+    if (isMobile && widget.mobileUseDialogListStyle) {
+      return 24;
+    }
+
+    return isMobile ? 36 : 20;
+  }
+
+  double _trailingButtonHeight(bool isMobile) {
+    if (isMobile && widget.mobileUseDialogListStyle) {
+      return 24;
+    }
+
+    return 40;
   }
 
   @override
@@ -923,11 +958,13 @@ class _ThreadListItemState extends State<_ThreadListItem> {
         final isMobile = ResponsiveBreakpoints.of(context).isMobile;
         final showMenuIcon = widget.selected || hovered || focused || isMobile || _menuController.isOpen;
         final selected = widget.selected;
-        final textStyle = _MeshagentThreadListPaneState.threadNameStyle(
-          context,
-          fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-          color: selected || widget.threadStatus.hasStatus ? shadForeground : shadMutedForeground,
-        );
+        final textStyle = isMobile && widget.mobileUseDialogListStyle
+            ? TextStyle(inherit: true, fontWeight: selected ? FontWeight.w700 : FontWeight.w400, color: shadForeground)
+            : _MeshagentThreadListPaneState.threadNameStyle(
+                context,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                color: selected || widget.threadStatus.hasStatus ? shadForeground : shadMutedForeground,
+              );
 
         return DecoratedBox(
           decoration: BoxDecoration(
@@ -949,7 +986,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                   child: Row(
                     children: [
                       SizedBox(
-                        width: isMobile ? 36 : 20,
+                        width: _leadingWidth(isMobile),
                         child: Center(
                           child: selected && !widget.threadStatus.hasStatus
                               ? const Icon(LucideIcons.check, size: 16, color: shadForeground)
@@ -964,15 +1001,24 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                       ),
                       SizedBox(width: isMobile ? 10 : 10),
                       Expanded(
-                        child: ma.ChatThreadProcessingSweepText(
-                          text: widget.entry.name,
-                          style: textStyle,
-                          animate: widget.threadStatus.hasStatus,
-                          textAlign: TextAlign.start,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
-                        ),
+                        child: isMobile && widget.mobileUseDialogListStyle
+                            ? Text(
+                                widget.entry.name,
+                                style: textStyle,
+                                textAlign: TextAlign.start,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                              )
+                            : ma.ChatThreadProcessingSweepText(
+                                text: widget.entry.name,
+                                style: textStyle,
+                                animate: widget.threadStatus.hasStatus,
+                                textAlign: TextAlign.start,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                              ),
                       ),
                       const SizedBox(width: 12),
                       AdaptiveShadContextMenu(
@@ -996,13 +1042,15 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                         ],
                         child: ShadButton.ghost(
                           onPressed: _menuController.show,
+                          width: 40,
+                          height: _trailingButtonHeight(isMobile),
                           hoverBackgroundColor: Colors.transparent,
                           backgroundColor: Colors.transparent,
                           padding: EdgeInsets.zero,
                           decoration: ShadDecoration.none,
                           child: SizedBox(
                             width: 40,
-                            height: 40,
+                            height: _trailingButtonHeight(isMobile),
                             child: Center(
                               child: Icon(LucideIcons.ellipsis, size: 20, color: showMenuIcon ? shadForeground : Colors.transparent),
                             ),

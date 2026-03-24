@@ -6,6 +6,9 @@ const double _desktopDialogCloseButtonSize = 32;
 const double _desktopDialogCloseIconSize = 24;
 const double _desktopDialogCloseButtonTop = 20;
 const double _desktopDialogCloseButtonInset = 24;
+const double _compactDesktopDialogWidthThreshold = 420;
+const double _desktopDialogActionMinWidth = 152;
+const double _desktopDialogActionMaxWidth = 220;
 
 class PowerboardsShadDialog extends StatelessWidget {
   const PowerboardsShadDialog({
@@ -124,18 +127,30 @@ class PowerboardsShadDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.maybeOf(context)?.size.width ?? 1024.0;
     final isMobile = screenWidth < 600;
+    final effectiveDialogMaxWidth = constraints?.maxWidth ?? (isMobile ? screenWidth * 0.8 : 512.0);
+    final isCompactDesktopDialog = !isMobile && effectiveDialogMaxWidth <= _compactDesktopDialogWidthThreshold;
 
     final effectiveCloseIcon = closeIcon ?? (isMobile ? null : _PowerboardsDialogCloseButton(iconData: closeIconData));
     final effectiveCloseIconPosition =
         closeIconPosition ??
         (isMobile ? null : const ShadPosition(top: _desktopDialogCloseButtonTop, right: _desktopDialogCloseButtonInset));
+    final effectiveActions = _buildDialogActions(
+      actions,
+      isMobile: isMobile,
+      isCompactDesktopDialog: isCompactDesktopDialog,
+      effectiveDialogMaxWidth: effectiveDialogMaxWidth,
+      actionsGap: actionsGap ?? 8,
+    );
+    final effectiveActionsMainAxisSize = actionsMainAxisSize ?? (isCompactDesktopDialog ? MainAxisSize.max : MainAxisSize.min);
+    final effectiveActionsMainAxisAlignment =
+        actionsMainAxisAlignment ?? (isCompactDesktopDialog ? MainAxisAlignment.start : MainAxisAlignment.end);
 
     return ShadDialog.raw(
       key: key,
       variant: variant,
       title: title,
       description: description,
-      actions: actions,
+      actions: effectiveActions,
       closeIcon: effectiveCloseIcon,
       closeIconData: effectiveCloseIcon == null ? closeIconData : null,
       closeIconPosition: effectiveCloseIconPosition,
@@ -149,8 +164,8 @@ class PowerboardsShadDialog extends StatelessWidget {
       shadows: shadows,
       removeBorderRadiusWhenTiny: removeBorderRadiusWhenTiny,
       actionsAxis: actionsAxis,
-      actionsMainAxisSize: actionsMainAxisSize,
-      actionsMainAxisAlignment: actionsMainAxisAlignment,
+      actionsMainAxisSize: effectiveActionsMainAxisSize,
+      actionsMainAxisAlignment: effectiveActionsMainAxisAlignment,
       actionsVerticalDirection: actionsVerticalDirection,
       titleStyle: titleStyle,
       descriptionStyle: descriptionStyle,
@@ -169,6 +184,31 @@ class PowerboardsShadDialog extends StatelessWidget {
       child: child,
     );
   }
+}
+
+List<Widget> _buildDialogActions(
+  List<Widget> actions, {
+  required bool isMobile,
+  required bool isCompactDesktopDialog,
+  required double effectiveDialogMaxWidth,
+  required double actionsGap,
+}) {
+  if (actions.isEmpty) {
+    return actions;
+  }
+
+  if (isMobile) {
+    return actions;
+  }
+
+  if (isCompactDesktopDialog) {
+    return actions.map((action) => Expanded(child: action)).toList(growable: false);
+  }
+
+  final usableWidth = effectiveDialogMaxWidth - 48 - (actionsGap * (actions.length - 1));
+  final actionWidth = (usableWidth / actions.length).clamp(_desktopDialogActionMinWidth, _desktopDialogActionMaxWidth);
+
+  return actions.map((action) => SizedBox(width: actionWidth, child: action)).toList(growable: false);
 }
 
 class _PowerboardsDialogCloseButton extends StatelessWidget {
