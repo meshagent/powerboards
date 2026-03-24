@@ -1269,7 +1269,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = math.min(420.0, math.max(320.0, constraints.maxWidth * 0.42));
+        final maxWidth = math.min(520.0, math.max(420.0, constraints.maxWidth * 0.55));
 
         return Column(
           children: [

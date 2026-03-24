@@ -65,7 +65,6 @@ class MeshagentThreadView extends StatefulWidget {
     this.agentName,
     this.selectedThreadPath,
     this.onSelectedThreadPathChanged,
-
     this.emptyState,
   });
 
@@ -319,7 +318,29 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = ShadTheme.of(context).colorScheme.foreground;
+    final theme = ShadTheme.of(context);
+    final foreground = theme.colorScheme.foreground;
+    const desktopActionButtonPadding = EdgeInsets.symmetric(horizontal: 16);
+
+    Widget desktopActionButton({
+      required VoidCallback onPressed,
+      required Widget child,
+      Widget? leading,
+      EdgeInsetsGeometry padding = desktopActionButtonPadding,
+      MainAxisAlignment? mainAxisAlignment,
+    }) {
+      return ShadButton.ghost(
+        height: desktopPaneSecondaryControlHeight,
+        padding: padding,
+        hoverBackgroundColor: theme.colorScheme.accent,
+        pressedBackgroundColor: theme.colorScheme.accent,
+        leading: leading,
+        gap: 12,
+        mainAxisAlignment: mainAxisAlignment,
+        onPressed: onPressed,
+        child: child,
+      );
+    }
 
     return ColoredBox(
       color: Colors.transparent,
@@ -331,62 +352,27 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
             width: double.infinity,
             height: desktopPaneSecondaryControlHeight,
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      splashFactory: NoSplash.splashFactory,
-                      overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-                      hoverColor: Colors.transparent,
-                      highlightColor: Colors.transparent,
-                      splashColor: Colors.transparent,
-                      onTap: onOpen,
-                      child: SizedBox(
-                        height: double.infinity,
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 20,
-                              child: Center(child: Icon(LucideIcons.messageSquarePlus, size: 16, color: foreground)),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                "New thread",
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: _MeshagentThreadListPaneState.createActionStyle(context),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                          ],
-                        ),
-                      ),
-                    ),
+                desktopActionButton(
+                  onPressed: onOpen,
+                  leading: Icon(LucideIcons.messageSquarePlus, size: 16, color: foreground),
+                  child: Text(
+                    "New thread",
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _MeshagentThreadListPaneState.createActionStyle(context),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onViewAllThreads,
-                      child: SizedBox(
-                        height: double.infinity,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            "View all threads",
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            softWrap: false,
-                            style: _MeshagentThreadListPaneState.threadNameStyle(context),
-                          ),
-                        ),
-                      ),
-                    ),
+                const SizedBox(width: desktopPaneHeaderButtonGap),
+                desktopActionButton(
+                  onPressed: onViewAllThreads,
+                  padding: desktopActionButtonPadding,
+                  child: Text(
+                    "View all threads",
+                    maxLines: 1,
+                    softWrap: false,
+                    style: _MeshagentThreadListPaneState.threadNameStyle(context),
                   ),
                 ),
               ],
@@ -839,7 +825,31 @@ class _ThreadListCreateItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final foreground = ShadTheme.of(context).colorScheme.foreground;
+    final theme = ShadTheme.of(context);
+    final foreground = theme.colorScheme.foreground;
+
+    if (!isMobile) {
+      return Padding(
+        padding: EdgeInsets.only(top: topPadding),
+        child: ShadButton.ghost(
+          width: double.infinity,
+          height: desktopPaneSecondaryControlHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          hoverBackgroundColor: theme.colorScheme.accent,
+          pressedBackgroundColor: theme.colorScheme.accent,
+          leading: Icon(LucideIcons.messageSquarePlus, size: 16, color: foreground),
+          gap: 12,
+          mainAxisAlignment: MainAxisAlignment.start,
+          onPressed: onOpen,
+          child: Text(
+            "New thread",
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _MeshagentThreadListPaneState.createActionStyle(context),
+          ),
+        ),
+      );
+    }
 
     return Padding(
       padding: EdgeInsets.only(top: topPadding),
