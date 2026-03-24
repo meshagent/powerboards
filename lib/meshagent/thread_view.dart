@@ -66,6 +66,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.selectedThreadPath,
     this.onSelectedThreadPathChanged,
     this.emptyState,
+    this.newThreadEmptyStateVerticalOffset = 0,
   });
 
   final String? agentName;
@@ -83,6 +84,7 @@ class MeshagentThreadView extends StatefulWidget {
   final String? selectedThreadPath;
   final ValueChanged<String?>? onSelectedThreadPathChanged;
   final Widget? emptyState;
+  final double newThreadEmptyStateVerticalOffset;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -90,52 +92,19 @@ class MeshagentThreadView extends StatefulWidget {
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
-  static const double _descriptionVisibilityMinWidth = 480;
-  static const double _mobileScreenWidthMax = 600;
 
   Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description}) {
-    double titleScale(double width) {
-      if (width >= 820) {
-        return 1;
-      }
-      if (width <= 440) {
-        return 0.72;
-      }
-      return 0.72 + ((width - 440) / 380) * 0.28;
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+      child: ChatThreadEmptyStateContent(title: title, description: description),
+    );
+
+    final verticalOffset = widget.newThreadEmptyStateVerticalOffset;
+    if (verticalOffset == 0) {
+      return content;
     }
 
-    final theme = ShadTheme.of(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isMobileScreen = MediaQuery.sizeOf(context).width < _mobileScreenWidthMax;
-        final scale = titleScale(constraints.maxWidth);
-        final titleStyle = theme.textTheme.h1;
-        final titleFontSize = (titleStyle.fontSize ?? 64) * scale;
-        final showDescription = constraints.maxWidth >= _descriptionVisibilityMinWidth || isMobileScreen;
-
-        return ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: titleStyle.copyWith(fontSize: titleFontSize),
-                  textAlign: TextAlign.center,
-                ),
-                if (showDescription) ...[
-                  const SizedBox(height: 8),
-                  Text(description, style: theme.textTheme.p, textAlign: TextAlign.center),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    return Transform.translate(offset: Offset(0, verticalOffset), child: content);
   }
 
   late final ChatThreadController _chatController;

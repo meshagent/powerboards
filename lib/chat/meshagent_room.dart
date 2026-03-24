@@ -17,6 +17,7 @@ import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:meshagent_flutter_dev/developer_console.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
@@ -929,6 +930,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  Widget _buildMeetingSingleThreadChatEmptyState(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+      child: ChatThreadEmptyStateContent(title: title),
+    );
+  }
+
   Widget _buildMeetingTranscriberTitleOnlyEmptyState(String title) {
     return LayoutBuilder(
       builder: (context, constraints) => Center(
@@ -1253,6 +1261,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final showThreadRail = !isMobile && showEmbeddedThreadList && hasThreadList;
     final showInlineThreadList = !isMobile && !showEmbeddedThreadList && hasThreadList;
     final showMobileThreadActions = isMobile && isMultiThread;
+    final newThreadEmptyStateVerticalOffset = showInlineThreadList
+        ? -((desktopPaneSecondaryControlHeight + desktopPaneBottomInset + desktopPaneSecondaryRowContentGap) / 2)
+        : 0.0;
+    final meetingActiveSingleThreadEmptyState =
+        emptyState ??
+        (_isMeetingSessionActive(context) && threadDisplayMode == ChatThreadDisplayMode.singleThread
+            ? _buildMeetingSingleThreadChatEmptyState("Chat or share files")
+            : null);
     final agentKey = _selectedThreadAgentKey(
       services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!),
     );
@@ -1272,8 +1288,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           if (userEmail is String && userEmail.isNotEmpty) userEmail,
           if (agentName case final String agentParticipantName) agentParticipantName,
         ],
+        newThreadEmptyStateVerticalOffset: newThreadEmptyStateVerticalOffset,
         joinMeeting: _joinMeeting,
-        emptyState: emptyState,
+        emptyState: meetingActiveSingleThreadEmptyState,
       ),
     );
 
