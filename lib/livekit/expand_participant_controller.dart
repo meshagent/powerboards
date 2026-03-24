@@ -3,8 +3,6 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 class ExpandParticipantController extends Controller {
   String? _expandedIdentity;
 
-  String? get expandedIdentity => _expandedIdentity;
-
   void expand(String identity) {
     _expandedIdentity = identity;
     notifyListeners();

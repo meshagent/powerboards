@@ -14,8 +14,8 @@ class ParticipantTrack extends StatelessWidget {
   Widget build(BuildContext context) {
     return CameraBox(
       camera: IgnorePointer(ignoring: true, child: track),
-      showName: showName,
       participant: participant,
+      showName: showName,
     );
   }
 }

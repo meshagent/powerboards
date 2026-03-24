@@ -35,6 +35,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
         height: 40.0,
         leading: Icon(expanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
         onPressed: () {
+          expandController.toggle(widget.participant.identity);
           _menuController.hide();
         },
         child: Text(expanded ? "Collapse" : "Expand"),

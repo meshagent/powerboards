@@ -58,9 +58,7 @@ class CameraStrip extends StatelessWidget {
           : Container(
               color: const Color(0xFF222222),
               alignment: Alignment.center,
-              child: participant.identity.contains(".agent")
-                  ? const Text("audio stats") //AudioStats(room: widget.room, participant: participant),
-                  : Text("avatar"),
+              child: participant.identity.contains(".agent") ? const Text("audio stats") : Text("avatar"),
             ),
     );
   }
