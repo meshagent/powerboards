@@ -6,17 +6,16 @@ import 'package:powerboards/ui/camera_box.dart';
 class ParticipantTrack extends StatelessWidget {
   const ParticipantTrack({super.key, required this.participant, required this.track, this.showName = true});
 
-  final bool showName;
   final lk.Participant participant;
   final Widget track;
+  final bool showName;
 
   @override
   Widget build(BuildContext context) {
     return CameraBox(
       camera: IgnorePointer(ignoring: true, child: track),
+      participant: participant,
       showName: showName,
-      participantName: participant.name,
-      muted: participant.isMuted,
     );
   }
 }
