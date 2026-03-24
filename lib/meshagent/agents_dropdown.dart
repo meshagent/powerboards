@@ -60,12 +60,11 @@ class AgentsDropdown extends StatelessWidget {
 
   void _navigateToRoute(BuildContext context, String routeId) {
     final pid = fromUUID(projectId);
+    final currentUri = PathRouteMatch.of(context).uri;
+    final nextPath = _isBaseRouteId(routeId) ? '/p/$pid/r/${room.roomName}' : '/p/$pid/r/${room.roomName}/a/$routeId';
+    final nextUri = currentUri.replace(path: nextPath);
 
-    if (_isBaseRouteId(routeId)) {
-      context.go('/p/$pid/r/${room.roomName}');
-    } else {
-      context.go('/p/$pid/r/${room.roomName}/a/$routeId');
-    }
+    context.go(nextUri.toString());
   }
 
   List<_DevelopmentAgentMenuItem> _developmentAgents() {
