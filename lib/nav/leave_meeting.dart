@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 Future<bool> showLeaveMeeting(BuildContext context) async {
   final tt = ShadTheme.of(context).textTheme;
 
   final res = await showShadDialog<bool>(
     context: context,
-    builder: (ctx) => ShadDialog(
-      useSafeArea: false,
+    builder: (ctx) => PowerboardsShadDialog.compact(
       title: Text("Leave meeting in progress", style: tt.h3),
       description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text("Are you sure you want to leave this meeting?")),
       actions: [

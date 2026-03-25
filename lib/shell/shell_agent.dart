@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_dev/terminal.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class ShellAgent extends StatefulWidget {
   const ShellAgent({super.key, required this.command, required this.room, required this.service});
@@ -56,7 +57,7 @@ class _ShellAgent extends State<ShellAgent> {
       if (!mounted) return null;
       final check = await showShadDialog(
         context: context,
-        builder: (context) => ShadDialog.alert(
+        builder: (context) => PowerboardsShadDialog.compactAlert(
           title: Text("Permission Requested"),
 
           actions: [

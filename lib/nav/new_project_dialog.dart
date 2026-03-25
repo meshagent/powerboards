@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class NewProjectDialog extends StatelessWidget {
   const NewProjectDialog({super.key, required this.formKey});
@@ -11,8 +12,7 @@ class NewProjectDialog extends StatelessWidget {
     final tt = ShadTheme.of(context).textTheme;
     final labelStyle = tt.small.copyWith(fontWeight: FontWeight.w600);
 
-    return ShadDialog(
-      useSafeArea: false,
+    return PowerboardsShadDialog.compact(
       title: Text("New Project"),
       description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('Each project has its own members and billing')),
       actions: [

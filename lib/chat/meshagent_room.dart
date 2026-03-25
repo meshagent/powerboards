@@ -11,6 +11,7 @@ import 'package:meshagent_flutter_shadcn/file_preview/markdown.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/shell/shell_agent.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -1531,8 +1532,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     await showShadDialog<void>(
       context: context,
       builder: (dialogContext) {
-        final size = MediaQuery.sizeOf(dialogContext);
-
         Widget footerButton({required VoidCallback onPressed, required Widget child, bool primary = false}) {
           final button = primary ? ShadButton.new : ShadButton.outline;
           return SizedBox(
@@ -1541,27 +1540,35 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           );
         }
 
-        return ShadDialog(
-          useSafeArea: false,
+        return PowerboardsShadDialog.listPicker(
           title: const Text("Threads"),
-          description: const Padding(padding: EdgeInsets.only(bottom: 8), child: Text("Select a thread to view or manage it.")),
+          description: const Text("Select a thread to view or manage it."),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: math.min(size.width * 0.8, 360.0), maxHeight: math.min(size.height * 0.65, 520.0)),
+            constraints: const BoxConstraints(maxWidth: 360.0, maxHeight: 520.0),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: MeshagentThreadListPane(
-                    key: ValueKey("mobile-threads-${agentKey ?? "none"}"),
-                    client: widget.room,
-                    agentName: agentName,
-                    threadListPath: threadListPath,
-                    selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
-                    newThreadResetVersion: _newThreadResetVersion,
-                    showCreateItem: false,
-                    onSelectedThreadPathChanged: (path) {
-                      _setSelectedThreadPath(agentKey, path);
-                      Navigator.of(dialogContext).pop();
-                    },
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Padding(
+                    padding: powerboardsDialogScrollableListPadding,
+                    child: MeshagentThreadListPane(
+                      key: ValueKey("mobile-threads-${agentKey ?? "none"}"),
+                      client: widget.room,
+                      agentName: agentName,
+                      threadListPath: threadListPath,
+                      selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
+                      newThreadResetVersion: _newThreadResetVersion,
+                      mobileListTopPadding: 0,
+                      mobileListBottomPadding: 0,
+                      mobileRowVerticalPadding: 16,
+                      mobileUseDialogListStyle: true,
+                      showCreateItem: false,
+                      onSelectedThreadPathChanged: (path) {
+                        _setSelectedThreadPath(agentKey, path);
+                        Navigator.of(dialogContext).pop();
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),

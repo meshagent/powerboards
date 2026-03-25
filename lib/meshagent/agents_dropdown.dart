@@ -11,6 +11,7 @@ import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class _DevelopmentAgentMenuItem {
   const _DevelopmentAgentMenuItem({required this.participant, required this.name});
@@ -184,7 +185,7 @@ class AgentsDropdown extends StatelessWidget {
                 onPressed: () {
                   showShadDialog(
                     context: context,
-                    builder: (context) => ShadDialog(
+                    builder: (context) => PowerboardsShadDialog(
                       constraints: BoxConstraints(
                         maxWidth: min(MediaQuery.of(context).size.width - 60, 800),
                         maxHeight: min(MediaQuery.of(context).size.height - 60, 800),

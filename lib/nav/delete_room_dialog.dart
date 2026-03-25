@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 Future<bool?> showDeleteRoomDialog(
   BuildContext context, {
@@ -13,8 +14,7 @@ Future<bool?> showDeleteRoomDialog(
   return showShadDialog<bool?>(
     context: context,
     barrierDismissible: barrierDismissible,
-    builder: (ctx) => ShadDialog(
-      useSafeArea: false,
+    builder: (ctx) => PowerboardsShadDialog.compact(
       title: Text(title),
       description: description != null ? Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(description)) : null,
       // Content area can be left null for a plain confirm

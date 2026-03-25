@@ -3,6 +3,7 @@ import 'package:meshagent/agent.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 final askUserSchema = {
   "type": "object",
@@ -136,7 +137,7 @@ class AskUser extends FunctionTool {
       context: this.context,
       builder: (context) {
         return ControlledForm(
-          builder: (context, controller, formKey) => ShadDialog(
+          builder: (context, controller, formKey) => PowerboardsShadDialog(
             crossAxisAlignment: CrossAxisAlignment.start,
             title: Text(arguments["subject"]),
             actions: [
