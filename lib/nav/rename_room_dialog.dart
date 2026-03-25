@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 Future<String?> showRenameRoomDialog(
   BuildContext context, {
@@ -25,8 +26,7 @@ Future<String?> showRenameRoomDialog(
         }
       }
 
-      return ShadDialog(
-        useSafeArea: false,
+      return PowerboardsShadDialog.compact(
         title: Text(title),
         description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(description)),
         actions: [

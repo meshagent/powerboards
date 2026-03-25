@@ -1,6 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -15,6 +16,15 @@ import 'package:powerboards/widgets/select_users.dart';
 enum _View { permissions, addUser }
 
 enum _LoadingState { loading, loaded }
+
+double _desktopTaskDialogHeight(BoxConstraints constraints) {
+  final maxHeight = constraints.maxHeight;
+  if (!maxHeight.isFinite) {
+    return 600.0;
+  }
+
+  return (maxHeight - 100.0).clamp(0.0, 600.0).toDouble();
+}
 
 class _UserSettingsMenuButton extends StatefulWidget {
   const _UserSettingsMenuButton({required this.role, required this.onSetOwner, required this.onSetNonOwner, required this.onRemove});
@@ -261,55 +271,48 @@ class _PermissionDialogState extends State<_PermissionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
     final sortedGrants = grants.values.where((g) => !isMe(g.userId)).toList()
       ..sort((a, b) => _grantToEmail(a).toLowerCase().compareTo(_grantToEmail(b).toLowerCase()));
 
-    return ShadResponsiveBuilder(
-      builder: (context, breakpoint) {
-        final isMobile = breakpoint == theme.breakpoints.tn;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = _desktopTaskDialogHeight(constraints);
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final width = isMobile ? constraints.maxWidth : 512.0;
-            final height = isMobile ? constraints.maxHeight : (constraints.maxHeight > 700.0 ? 600.0 : constraints.maxHeight - 100);
+        return PowerboardsShadDialog.task(
+          scrollable: false,
+          constraints: BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height),
+          title: Text(widget.title),
+          description: Text(widget.description),
+          actions: [
+            ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Close')),
+            if (canEdit)
+              ShadButton(onPressed: widget.onAddUser, leading: const Icon(LucideIcons.userPlus, size: 16), child: const Text('Add user')),
+          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+              Expanded(
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: (state == _LoadingState.loading)
+                      ? const Center(child: CircularProgressIndicator())
+                      : SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: .min,
+                            crossAxisAlignment: .stretch,
+                            children: [
+                              if (myGrant != null) _userRowBuilder(context, myGrant!),
 
-            return ShadDialog(
-              scrollable: true,
-              titlePinned: true,
-              descriptionPinned: true,
-              actionsPinned: true,
-              constraints: BoxConstraints(minWidth: width, maxWidth: width, minHeight: height, maxHeight: height),
-              title: Text(widget.title),
-              description: Text(widget.description),
-              actions: [
-                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Close')),
-                if (canEdit)
-                  ShadButton(
-                    onPressed: widget.onAddUser,
-                    leading: const Icon(LucideIcons.userPlus, size: 16),
-                    child: const Text('Add user'),
-                  ),
-              ],
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 420),
-                child: (state == _LoadingState.loading)
-                    ? const Center(child: CircularProgressIndicator())
-                    : Padding(
-                        padding: const .symmetric(vertical: 8.0),
-                        child: Column(
-                          mainAxisSize: .min,
-                          crossAxisAlignment: .stretch,
-                          children: [
-                            if (myGrant != null) _userRowBuilder(context, myGrant!),
-
-                            ...sortedGrants.map((g) => _userRowBuilder(context, g)),
-                          ],
+                              ...sortedGrants.map((g) => _userRowBuilder(context, g)),
+                            ],
+                          ),
                         ),
-                      ),
+                ),
               ),
-            );
-          },
+              const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+            ],
+          ),
         );
       },
     );
@@ -439,7 +442,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
           final cont = await showShadDialog<bool>(
             context: context,
-            builder: (context) => ShadDialog.alert(
+            builder: (context) => PowerboardsShadDialog.compactAlert(
               title: plural ? Text('Users are not in project') : Text('User is not in project'),
               description: Padding(
                 padding: EdgeInsets.only(bottom: 8),
@@ -508,8 +511,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       await showShadDialog(
         context: context,
         builder: (context) {
-          return ShadDialog.alert(
-            useSafeArea: false,
+          return PowerboardsShadDialog.compactAlert(
             title: const Text("Something went wrong"),
             description: const Text("An error occurred while adding users to the project. Please try again."),
             actions: [
@@ -535,150 +537,146 @@ class _AddUserDialogState extends State<AddUserDialog> {
     final theme = ShadTheme.of(context);
     final inputLabelStyle = theme.decoration.labelStyle?.copyWith(fontWeight: .w700);
 
-    return ShadResponsiveBuilder(
-      builder: (context, breakpoint) {
-        final isMobile = breakpoint == theme.breakpoints.tn;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = _desktopTaskDialogHeight(constraints);
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final width = isMobile ? constraints.maxWidth : 512.0;
-            final height = isMobile ? constraints.maxHeight : (constraints.maxHeight > 700.0 ? 600.0 : constraints.maxHeight - 100);
+        return PowerboardsShadDialog.task(
+          scrollable: false,
+          constraints: BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height),
+          title: Text(widget.title),
+          description: Padding(padding: .only(bottom: 15.0), child: Text(widget.description)),
+          actions: [
+            if (widget.onBack != null)
+              ShadButton.outline(onPressed: widget.onBack, leading: const Icon(LucideIcons.arrowLeft, size: 16), child: const Text('Back')),
+            ShadButton(
+              onPressed: onAdded,
+              enabled: !submitting,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: submitting ? [Icon(Icons.hourglass_top, size: 16), SizedBox(width: 6), Text('Saving...')] : [Text('Save')],
+              ),
+            ),
+          ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 415),
+                    child: SignalBuilder(
+                      builder: (context, _) {
+                        final selected = selectedUsers.value;
 
-            return ShadDialog(
-              scrollable: true,
-              titlePinned: true,
-              descriptionPinned: true,
-              actionsPinned: true,
-              constraints: BoxConstraints(minWidth: width, maxWidth: width, minHeight: height, maxHeight: height),
-              title: Text(widget.title),
-              description: Padding(padding: .only(bottom: 15.0), child: Text(widget.description)),
-              actions: [
-                if (widget.onBack != null)
-                  ShadButton.outline(
-                    onPressed: widget.onBack,
-                    leading: const Icon(LucideIcons.arrowLeft, size: 16),
-                    child: const Text('Back'),
-                  ),
-                ShadButton(
-                  onPressed: onAdded,
-                  enabled: !submitting,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: submitting ? [Icon(Icons.hourglass_top, size: 16), SizedBox(width: 6), Text('Saving...')] : [Text('Save')],
-                  ),
-                ),
-              ],
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 415),
-                child: SignalBuilder(
-                  builder: (context, _) {
-                    final selected = selectedUsers.value;
+                        final roomGrants = grants.state.value ?? {};
+                        final projUsersMap = projectUsersMap.state.value ?? {};
 
-                    final roomGrants = grants.state.value ?? {};
-                    final projUsersMap = projectUsersMap.state.value ?? {};
+                        return Column(
+                          mainAxisSize: .min,
+                          crossAxisAlignment: .stretch,
+                          children: [
+                            Text('Enter email address', style: inputLabelStyle),
+                            const SizedBox(height: 8),
+                            SelectUsers(
+                              autofocus: true,
+                              projectUsers: projUsersMap.values.toList(),
+                              controller: controller,
+                              textController: textController,
+                              onChanged: (value) {
+                                final updated = <AddedUser>[];
 
-                    return Column(
-                      mainAxisSize: .min,
-                      crossAxisAlignment: .stretch,
-                      children: [
-                        Text('Enter email address', style: inputLabelStyle),
-                        const SizedBox(height: 8),
-                        SelectUsers(
-                          autofocus: true,
-                          projectUsers: projUsersMap.values.toList(),
-                          controller: controller,
-                          textController: textController,
-                          onChanged: (value) {
-                            final updated = <AddedUser>[];
+                                for (final email in value) {
+                                  final lcEmail = email.toLowerCase().trim();
 
-                            for (final email in value) {
-                              final lcEmail = email.toLowerCase().trim();
+                                  final user = selectedUsers.value.firstWhereOrNull((u) => u.email.toLowerCase() == lcEmail);
+                                  if (user != null) {
+                                    updated.add(user);
+                                    continue;
+                                  }
 
-                              final user = selectedUsers.value.firstWhereOrNull((u) => u.email.toLowerCase() == lcEmail);
-                              if (user != null) {
-                                updated.add(user);
-                                continue;
-                              }
+                                  final projectUser = projUsersMap[lcEmail];
+                                  final inProject = projectUser != null;
 
-                              final projectUser = projUsersMap[lcEmail];
-                              final inProject = projectUser != null;
+                                  if (inProject) {
+                                    final grants = roomGrants[projectUser.id];
+                                    final role = grants != null ? grants.role : GrantRole.nonOwner;
 
-                              if (inProject) {
-                                final grants = roomGrants[projectUser.id];
-                                final role = grants != null ? grants.role : GrantRole.nonOwner;
+                                    updated.add(AddedUser(email: email, role: role));
+                                  } else {
+                                    updated.add(AddedUser(email: email, role: GrantRole.nonOwner));
+                                  }
+                                }
 
-                                updated.add(AddedUser(email: email, role: role));
-                              } else {
-                                updated.add(AddedUser(email: email, role: GrantRole.nonOwner));
-                              }
-                            }
+                                selectedUsers.value = updated;
+                              },
+                            ),
+                            const SizedBox(height: 30),
+                            ValueListenableBuilder(
+                              valueListenable: textController,
+                              builder: (context, textEditingValue, _) {
+                                final text = textEditingValue.text.trim();
+                                final isEmail = SelectUsersController.emailRegex.hasMatch(text);
+                                final items = isEmail ? [...selected, AddedUser(email: text, role: GrantRole.nonOwner)] : selected;
+                                final usersNotInProject = items
+                                    .where((u) => !projUsersMap.containsKey(u.email.toLowerCase()))
+                                    .map((u) => u.email)
+                                    .join(', ');
 
-                            selectedUsers.value = updated;
-                          },
-                        ),
-                        const SizedBox(height: 30),
-                        ValueListenableBuilder(
-                          valueListenable: textController,
-                          builder: (context, textEditingValue, _) {
-                            final text = textEditingValue.text.trim();
-                            final isEmail = SelectUsersController.emailRegex.hasMatch(text);
-                            final items = isEmail ? [...selected, AddedUser(email: text, role: GrantRole.nonOwner)] : selected;
-                            final usersNotInProject = items
-                                .where((u) => !projUsersMap.containsKey(u.email.toLowerCase()))
-                                .map((u) => u.email)
-                                .join(', ');
+                                if (usersNotInProject.isEmpty) {
+                                  return const SizedBox.shrink();
+                                }
 
-                            if (usersNotInProject.isEmpty) {
-                              return const SizedBox.shrink();
-                            }
+                                const textColor = Color(0xFFE65100);
+                                const backgroundColor = Color(0xFFFCEBEB);
 
-                            const textColor = Color(0xFFE65100);
-                            const backgroundColor = Color(0xFFFCEBEB);
-
-                            return Column(
-                              crossAxisAlignment: .start,
-                              spacing: 30.0,
-                              children: [
-                                ShadAlert(
-                                  icon: Icon(LucideIcons.triangleAlert),
-                                  iconColor: textColor,
-                                  iconSize: 24,
-                                  description: RichText(
-                                    text: TextSpan(
-                                      style: TextStyle(color: textColor),
-                                      children: [
-                                        TextSpan(
-                                          text: 'The following email addresses',
-                                          style: TextStyle(color: textColor, height: 1.4),
+                                return Column(
+                                  crossAxisAlignment: .start,
+                                  spacing: 30.0,
+                                  children: [
+                                    ShadAlert(
+                                      icon: Icon(LucideIcons.triangleAlert),
+                                      iconColor: textColor,
+                                      iconSize: 24,
+                                      description: RichText(
+                                        text: TextSpan(
+                                          style: TextStyle(color: textColor),
+                                          children: [
+                                            TextSpan(
+                                              text: 'The following email addresses',
+                                              style: TextStyle(color: textColor, height: 1.4),
+                                            ),
+                                            TextSpan(
+                                              text: ' ($usersNotInProject) ',
+                                              style: TextStyle(fontWeight: .bold, color: textColor, height: 1.4),
+                                            ),
+                                            TextSpan(
+                                              text:
+                                                  'are not project members. Adding them to the room will add them as members to the project.',
+                                              style: TextStyle(color: textColor, height: 1.4),
+                                            ),
+                                          ],
                                         ),
-                                        TextSpan(
-                                          text: ' ($usersNotInProject) ',
-                                          style: TextStyle(fontWeight: .bold, color: textColor, height: 1.4),
-                                        ),
-                                        TextSpan(
-                                          text: 'are not project members. Adding them to the room will add them as members to the project.',
-                                          style: TextStyle(color: textColor, height: 1.4),
-                                        ),
-                                      ],
+                                      ),
+                                      decoration: ShadDecoration(
+                                        color: backgroundColor,
+                                        border: .all(color: textColor),
+                                      ),
                                     ),
-                                  ),
-                                  decoration: ShadDecoration(
-                                    color: backgroundColor,
-                                    border: .all(color: textColor),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 30),
-                      ],
-                    );
-                  },
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 30),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
-            );
-          },
+            ],
+          ),
         );
       },
     );

@@ -19,10 +19,10 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/nav/switch_project_dialog.dart';
 import 'package:powerboards/ui/empty_states.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
-import 'package:powerboards/ui/powerboards_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
 
@@ -137,14 +137,19 @@ class _NavState extends State<Nav> {
     final pid = fromUUID(widget.projectId!);
     final redirectUrl = uri.replace(path: "/p/$pid").replace(queryParameters: {"ref": "low_balance_warning"});
 
-    launchUrl(redirectUrl, webOnlyWindowName: "_self");
+    launchUrl(redirectUrl);
+  }
+
+  void _resetResizeState() {
+    resizeDebounceTimer?.cancel();
+    resizeDebounceTimer = null;
+    lastConstraints = null;
   }
 
   void debounceResize(BoxConstraints constraints) {
     final width = constraints.maxWidth;
     if (!width.isFinite || width <= 0) {
-      lastConstraints = null;
-      resizeDebounceTimer?.cancel();
+      _resetResizeState();
       return;
     }
 
@@ -153,6 +158,16 @@ class _NavState extends State<Nav> {
 
       resizeDebounceTimer?.cancel();
       resizeDebounceTimer = Timer(const Duration(milliseconds: 30), () {
+        resizeDebounceTimer = null;
+        if (!mounted) {
+          return;
+        }
+
+        final previousWidth = lastConstraints?.maxWidth;
+        if (previousWidth == null || !previousWidth.isFinite || previousWidth <= 0) {
+          return;
+        }
+
         final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
         final mainPanel = resizeController.panelsInfo.where((panel) => panel.id == "main").firstOrNull;
         if (navPanel == null || mainPanel == null) {
@@ -168,7 +183,7 @@ class _NavState extends State<Nav> {
         final newPanel = ShadPanelInfo(id: "nav", minSize: minSize, maxSize: maxSize, defaultSize: defaultSize);
 
         // Don't change the size - prevent flickering
-        final currentSize = (navPanel.size * lastConstraints!.maxWidth) / width;
+        final currentSize = (navPanel.size * previousWidth) / width;
         if (currentSize.isFinite && currentSize > minSize && currentSize < maxSize) {
           newPanel.size = currentSize;
         }
@@ -254,6 +269,7 @@ class _NavState extends State<Nav> {
 
   @override
   void dispose() {
+    _resetResizeState();
     projects.dispose();
     isBalanceLowRes.dispose();
     rooms.dispose();
@@ -291,7 +307,7 @@ class _NavState extends State<Nav> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         if (!width.isFinite || width <= 0) {
-          lastConstraints = null;
+          _resetResizeState();
           return const SizedBox.shrink();
         }
 
@@ -353,7 +369,7 @@ class _NavState extends State<Nav> {
   }
 
   Widget mobileView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
-    lastConstraints = null;
+    _resetResizeState();
 
     if (userRole == ProjectRole.none) {
       return forbiddenView(context);
@@ -670,222 +686,148 @@ class _NavBarTop extends StatefulWidget {
 }
 
 class _NavBarTopState extends State<_NavBarTop> {
-  static const _newProjectValue = '__new_project__';
-
-  final dialogController = DialogController();
-  final popoverController = ShadPopoverController();
-
-  late final projectSelectController = ShadSelectController<String?>(initialValue: {widget.projectId});
-
   void toggleChromeVisibility() {
     final visibility = !ChromeVisibilityState.of(context).visible;
     ChromeVisibilityState.of(context).visible = visibility;
     FullScreenWindow.setFullScreen(!visibility);
   }
 
-  @override
-  void initState() {
-    super.initState();
-
-    popoverController.addListener(() {
-      if (popoverController.isOpen) {
-        widget.projects.refresh();
-      }
-    });
-  }
-
-  @override
-  void didUpdateWidget(_NavBarTop oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.projectId != widget.projectId) {
-      projectSelectController.value = {widget.projectId};
-    }
-  }
-
-  @override
-  void dispose() {
-    dialogController.dispose();
-    projectSelectController.dispose();
-    popoverController.dispose();
-    super.dispose();
+  void _switchProject() {
+    showSwitchProjectDialog(
+      context: context,
+      currentProjectId: widget.projectId ?? "",
+      projects: widget.projects,
+      onSwitch: (project) {
+        localStorage.setItem("lastProjectId", project.id);
+        context.go("/p/${fromUUID(project.id)}");
+      },
+      onNewProject: () {
+        widget.onCreateProject();
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final projectsReady = widget.projects.state.isReady;
-    final projectList = projectsReady ? widget.projects.state.value! : const <Project>[];
+    final theme = ShadTheme.of(context);
+    final projectList = widget.projects.state.value ?? const <Project>[];
     final selectedProject = projectList.firstWhereOrNull((p) => p.id == widget.projectId);
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
-    final selectHeight = MediaQuery.of(context).size.height;
+    final displayName = selectedProject?.name ?? "Select project";
 
-    return DialogAnchor(
-      controller: dialogController,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          spacing: 8,
-          children: [
-            if (isSmallDisplay)
-              SizedBox(
-                height: headerHeight,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const NavMainLogo(),
-                    const Spacer(),
-                    if (isSmallDisplay)
-                      UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
-                  ],
-                ),
-              ),
-            if (!isSmallDisplay)
-              SizedBox(
-                height: headerHeight,
-                child: Center(
-                  child: SizedBox(
-                    height: desktopPaneHeaderContentHeight,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: ShadSelect<String?>(
-                            anchor: const ShadAnchor(
-                              childAlignment: Alignment.topRight,
-                              overlayAlignment: Alignment.bottomRight,
-                              offset: Offset(0, 4),
-                            ),
-                            decoration: .none,
-                            padding: .zero,
-                            maxHeight: selectHeight,
-                            controller: projectSelectController,
-                            popoverController: popoverController,
-                            placeholder: Padding(
-                              padding: const EdgeInsets.only(left: desktopPaneSideHeaderVisualInset),
-                              child: Center(
-                                child: Text('Select project', overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
-                              ),
-                            ),
-                            trailing: SizedBox(
-                              width: desktopPaneSideHeaderVisualInset,
-                              child: Align(
-                                alignment: Alignment.centerRight,
-                                child: Icon(LucideIcons.chevronsUpDown, size: 20, color: ShadTheme.of(context).colorScheme.foreground),
-                              ),
-                            ),
-                            showScrollToTopChevron: false,
-                            showScrollToBottomChevron: false,
-                            onChanged: (value) {
-                              if (value != null && context.mounted) {
-                                localStorage.setItem("lastProjectId", value);
-                                context.go("/p/${fromUUID(value)}");
-                              }
-                            },
-                            options: [
-                              if (projectsReady)
-                                ...projectList.map(
-                                  (project) => ShadOption<String?>(
-                                    value: project.id,
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(minWidth: 200),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 4),
-                                        child: Text(
-                                          project.name,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(color: ShadTheme.of(context).colorScheme.foreground),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                            footer: Column(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        spacing: 8,
+        children: [
+          if (isSmallDisplay)
+            SizedBox(
+              height: headerHeight,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final maxLabelWidth = (constraints.maxWidth - 160).clamp(80.0, 320.0);
+
+                  return Stack(
+                    children: [
+                      const Align(alignment: Alignment.centerLeft, child: NavMainLogo()),
+                      Center(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _switchProject,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                ShadSeparator.horizontal(margin: .zero),
-                                _ProjectSelectFooterButton(onPressed: widget.onCreateProject),
-                              ],
-                            ),
-                            selectedOptionBuilder: (context, value) {
-                              final effectiveValue = value == _newProjectValue ? widget.projectId : value;
-                              final displayName = effectiveValue == null
-                                  ? selectedProject?.name
-                                  : projectList.firstWhereOrNull((p) => p.id == effectiveValue)?.name ?? selectedProject?.name;
-                              return Padding(
-                                padding: const EdgeInsets.only(left: desktopPaneSideHeaderVisualInset),
-                                child: Center(
+                                ConstrainedBox(
+                                  constraints: BoxConstraints(maxWidth: maxLabelWidth),
                                   child: Text(
-                                    displayName ?? 'Select project',
+                                    displayName,
                                     style: GoogleFonts.inter(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w500,
-                                      color: ShadTheme.of(context).colorScheme.foreground,
+                                      color: theme.colorScheme.foreground,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
                                     maxLines: 1,
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                        const Positioned(
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                          child: IgnorePointer(
-                            child: SizedBox(
-                              width: desktopPaneSideHeaderSlotSize,
-                              height: desktopPaneSideHeaderSlotSize,
-                              child: Center(child: NavMainLogo(size: desktopPaneSideHeaderSlotSize)),
+                                const SizedBox(width: 8),
+                                Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                              ],
                             ),
                           ),
                         ),
-                      ],
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          if (!isSmallDisplay)
+            SizedBox(
+              height: headerHeight,
+              child: Center(
+                child: SizedBox(
+                  height: desktopPaneHeaderContentHeight,
+                  width: double.infinity,
+                  child: Tooltip(
+                    message: "Switch project",
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _switchProject,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              const Positioned(
+                                left: 0,
+                                child: SizedBox(
+                                  width: desktopPaneSideHeaderSlotSize,
+                                  height: desktopPaneSideHeaderSlotSize,
+                                  child: Center(child: NavMainLogo(size: desktopPaneSideHeaderSlotSize)),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHeaderVisualInset),
+                                child: Text(
+                                  displayName,
+                                  style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: theme.colorScheme.foreground),
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                ),
+                              ),
+                              Positioned(
+                                right: 0,
+                                child: SizedBox(
+                                  width: desktopPaneSideHeaderVisualInset,
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProjectSelectFooterButton extends StatelessWidget {
-  const _ProjectSelectFooterButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final radius = theme.radius;
-
-    return ShadButton.ghost(
-      width: double.infinity,
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      hoverBackgroundColor: theme.colorScheme.accent,
-      pressedBackgroundColor: theme.colorScheme.accent,
-      decoration: ShadDecoration(
-        border: ShadBorder.all(
-          radius: BorderRadius.only(bottomLeft: radius.bottomLeft, bottomRight: radius.bottomRight),
-        ),
-        secondaryBorder: ShadBorder.none,
-        focusedBorder: ShadBorder.none,
-        secondaryFocusedBorder: ShadBorder.none,
-      ),
-      onPressed: onPressed,
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [Icon(LucideIcons.plus, size: 16), SizedBox(width: 12), Text("New Project")],
+            ),
+        ],
       ),
     );
   }

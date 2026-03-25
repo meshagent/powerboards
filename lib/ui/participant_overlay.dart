@@ -1,24 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:shadcn_ui/shadcn_ui.dart';
+
+import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
+import 'package:powerboards/livekit/expand_participant_controller.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 
 const audioIconSize = 16.0;
 const audioIconColor = Colors.white;
-const textStyle = TextStyle(color: audioIconColor, fontSize: 11, fontFamily: "Roboto", fontWeight: FontWeight.w500);
+const textStyle = TextStyle(color: audioIconColor, fontSize: 11, fontWeight: .w500);
 
 class ParticipantOverlay extends StatefulWidget {
-  const ParticipantOverlay({super.key, required this.name, required this.muted, this.showName = true});
+  const ParticipantOverlay({super.key, required this.participant, this.showName = true});
 
-  final String name;
-  final bool muted;
+  final lk.Participant participant;
   final bool showName;
 
   @override
-  ParticipantOverlayState createState() => ParticipantOverlayState();
+  State createState() => _ParticipantOverlayState();
 }
 
-class ParticipantOverlayState extends State<ParticipantOverlay> with SingleTickerProviderStateMixin {
+class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTickerProviderStateMixin {
+  final _menuController = ShadContextMenuController();
+
   late AnimationController _animationController;
   late Animation<double> _animation;
+
+  List<ShadContextMenuItem> _getMenuItems() {
+    final expandController = Controller.ofType<ExpandParticipantController>(context);
+    final expanded = expandController.isExpanded(widget.participant.identity);
+
+    return [
+      ShadContextMenuItem(
+        height: 40.0,
+        leading: Icon(expanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
+        onPressed: () {
+          expandController.toggle(widget.participant.identity);
+          _menuController.hide();
+        },
+        child: Text(expanded ? "Collapse" : "Expand"),
+      ),
+    ];
+  }
 
   @override
   void initState() {
@@ -39,6 +62,7 @@ class ParticipantOverlayState extends State<ParticipantOverlay> with SingleTicke
   @override
   void didUpdateWidget(covariant ParticipantOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
+
     if (widget.showName != oldWidget.showName) {
       widget.showName ? _animationController.forward() : _animationController.reverse();
     }
@@ -47,21 +71,29 @@ class ParticipantOverlayState extends State<ParticipantOverlay> with SingleTicke
   @override
   void dispose() {
     _animationController.dispose();
+    _menuController.dispose();
+
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final muted = widget.participant.isMuted;
+    final name = widget.participant.name;
+
+    final menuItems = _getMenuItems();
+
     return Container(
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: const Color(0x992f2d57)),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const .symmetric(horizontal: 12, vertical: 8),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: .min,
+        mainAxisAlignment: .start,
+        crossAxisAlignment: .center,
         children: [
-          Icon(widget.muted ? LucideIcons.micOff : LucideIcons.mic, color: audioIconColor, size: audioIconSize),
-          if (widget.name.isNotEmpty)
+          Icon(muted ? LucideIcons.micOff : LucideIcons.mic, color: audioIconColor, size: audioIconSize),
+
+          if (name.isNotEmpty)
             AnimatedBuilder(
               animation: _animationController,
               builder: (context, child) {
@@ -69,16 +101,36 @@ class ParticipantOverlayState extends State<ParticipantOverlay> with SingleTicke
                   child: SizedBox(
                     height: audioIconSize,
                     child: ClipRect(
-                      child: Align(alignment: Alignment.centerLeft, widthFactor: _animation.value, child: child),
+                      child: Align(alignment: .centerLeft, widthFactor: _animation.value, child: child),
                     ),
                   ),
                 );
               },
               child: Padding(
-                padding: const EdgeInsets.only(left: 1, right: 3),
-                child: Text(widget.name, style: textStyle, overflow: TextOverflow.ellipsis),
+                padding: const .only(left: 1, right: 3),
+                child: Text(name, style: textStyle, overflow: .ellipsis),
               ),
             ),
+
+          Padding(
+            padding: const .only(left: 2),
+            child: AdaptiveShadContextMenu(
+              controller: _menuController,
+              boundaryContext: context,
+              estimatedMenuWidth: 128,
+              estimatedMenuHeight: menuItems.length * 40.0 + 8.0,
+              items: menuItems,
+              child: ShadIconButton.ghost(
+                width: 20.0,
+                height: 20.0,
+                hoverBackgroundColor: Colors.transparent,
+                icon: const Icon(LucideIcons.ellipsis, color: audioIconColor, size: 14),
+                onPressed: () {
+                  _menuController.toggle();
+                },
+              ),
+            ),
+          ),
         ],
       ),
     );

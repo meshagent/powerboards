@@ -11,6 +11,7 @@ import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class _DevelopmentAgentMenuItem {
   const _DevelopmentAgentMenuItem({required this.participant, required this.name});
@@ -60,12 +61,11 @@ class AgentsDropdown extends StatelessWidget {
 
   void _navigateToRoute(BuildContext context, String routeId) {
     final pid = fromUUID(projectId);
+    final currentUri = PathRouteMatch.of(context).uri;
+    final nextPath = _isBaseRouteId(routeId) ? '/p/$pid/r/${room.roomName}' : '/p/$pid/r/${room.roomName}/a/$routeId';
+    final nextUri = currentUri.replace(path: nextPath);
 
-    if (_isBaseRouteId(routeId)) {
-      context.go('/p/$pid/r/${room.roomName}');
-    } else {
-      context.go('/p/$pid/r/${room.roomName}/a/$routeId');
-    }
+    context.go(nextUri.toString());
   }
 
   List<_DevelopmentAgentMenuItem> _developmentAgents() {
@@ -184,7 +184,7 @@ class AgentsDropdown extends StatelessWidget {
                 onPressed: () {
                   showShadDialog(
                     context: context,
-                    builder: (context) => ShadDialog(
+                    builder: (context) => PowerboardsShadDialog(
                       constraints: BoxConstraints(
                         maxWidth: min(MediaQuery.of(context).size.width - 60, 800),
                         maxHeight: min(MediaQuery.of(context).size.height - 60, 800),
