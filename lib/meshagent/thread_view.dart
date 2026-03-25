@@ -50,6 +50,7 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
 class MeshagentThreadView extends StatefulWidget {
   const MeshagentThreadView({
     super.key,
+    required this.projectId,
     required this.client,
     required this.joinMeeting,
     this.documentPath = ".threads/main.thread",
@@ -69,6 +70,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.emptyState,
   });
 
+  final String projectId;
   final String? agentName;
   final ChatThreadDisplayMode threadDisplayMode;
   final String? threadListPath;
@@ -233,7 +235,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           onMessageSent: _onMessageSent,
           fileInThreadBuilder: _fileInThreadBuilder,
           openFile: _open,
-          toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, widget.agentName, controller, snapshot),
+          toolsBuilder: (context, controller, snapshot) =>
+              buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
           agentName: widget.agentName,
           emptyStateTitle: usesSingleThreadEmptyState ? "Chat to get started" : null,
           emptyStateDescription: usesSingleThreadEmptyState ? _threadEmptyDescription : null,
@@ -259,7 +262,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                 ),
             controller: _chatController,
             onThreadPathChanged: _onThreadPathChanged,
-            toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, agentName, controller, snapshot),
+            toolsBuilder: (context, controller, snapshot) =>
+                buildTools(context, widget.projectId, widget.client, agentName, controller, snapshot),
             builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
           )
         : _buildThread(path: threadPath, initialMessageText: null);
@@ -1101,11 +1105,31 @@ String? getBaseUrl(ServiceSpec s, PortSpec p, EndpointSpec e) {
   return baseWithPath.replace(port: port).toString();
 }
 
-Widget buildTools(BuildContext context, RoomClient room, String? agentName, ChatThreadController controller, ChatThreadSnapshot state) {
+Widget buildTools(
+  BuildContext context,
+  String projectId,
+  RoomClient room,
+  String? agentName,
+  ChatThreadController controller,
+  ChatThreadSnapshot state,
+) {
+  Future<RoomClient> connectRoomClient(String roomName) async {
+    final client = getMeshagentClient();
+    final conn = await client.connectRoom(projectId: projectId, roomName: roomName);
+    final roomClient = RoomClient(
+      protocol: WebSocketClientProtocol(url: conn.roomUrl, token: conn.jwt),
+    );
+    await roomClient.start();
+    await roomClient.ready;
+    return roomClient;
+  }
+
   return ChatThreadAttachButton(
     agentName: agentName,
     alwaysShowAttachFiles: true, // agentName == null ? true : null,
     controller: controller,
+    availableRooms: () => listMeshagentRooms(projectId),
+    connectRoomClient: connectRoomClient,
     onConnectorSetup: (connector) async {
       await connector.authenticate(
         room,
