@@ -83,7 +83,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
     );
   }
 
-  Widget _connectionProgress([RoomClient? room]) {
+  Widget _connectionProgress({RoomClient? room, String? fallbackStatusText}) {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
@@ -98,7 +98,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
                 style: ShadTheme.of(context).textTheme.p.copyWith(fontWeight: FontWeight.w700),
               ),
               if (room == null)
-                SweepStatusText(text: _lastConnectionStatusText, style: ShadTheme.of(context).textTheme.muted)
+                SweepStatusText(text: fallbackStatusText ?? _lastConnectionStatusText, style: ShadTheme.of(context).textTheme.muted)
               else
                 StreamBuilder<RoomStatusEvent>(
                   stream: room.events.where((event) => event is RoomStatusEvent).cast<RoomStatusEvent>(),
@@ -257,7 +257,8 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
           }
         },
         authorizingBuilder: (context) => _withReservedRoomHeader(_connectionProgress()),
-        connectingBuilder: (context, client) => _withReservedRoomHeader(_connectionProgress(client)),
+        retryingBuilder: (context, error) => _withReservedRoomHeader(_connectionProgress(fallbackStatusText: "waiting to retry")),
+        connectingBuilder: (context, client) => _withReservedRoomHeader(_connectionProgress(room: client)),
         doneBuilder: (context, error) {
           if (error != null) {
             return SafeArea(
@@ -301,7 +302,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
               }
 
               if (snapshot.connectionState != ConnectionState.done) {
-                return _withReservedRoomHeader(_connectionProgress(client));
+                return _withReservedRoomHeader(_connectionProgress(room: client));
               }
 
               return widget.builder(context, client);
