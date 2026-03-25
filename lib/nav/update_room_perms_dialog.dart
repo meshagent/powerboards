@@ -23,11 +23,7 @@ double _desktopTaskDialogHeight(BoxConstraints constraints) {
     return 600.0;
   }
 
-  if (maxHeight > 700.0) {
-    return 600.0;
-  }
-
-  return (maxHeight - 100.0).clamp(360.0, 600.0).toDouble();
+  return (maxHeight - 100.0).clamp(0.0, 600.0).toDouble();
 }
 
 class _UserSettingsMenuButton extends StatefulWidget {

@@ -244,23 +244,13 @@ AgentRuntimeStatus parseStatus(dynamic raw) {
   return AgentRuntimeStatus.unknown;
 }
 
-double _desktopTaskDialogHeight(
-  BoxConstraints constraints, {
-  required double preferredHeight,
-  required double verticalInset,
-  required double minHeight,
-}) {
+double _desktopTaskDialogHeight(BoxConstraints constraints, {required double preferredHeight, required double verticalInset}) {
   final maxHeight = constraints.maxHeight;
   if (!maxHeight.isFinite) {
     return preferredHeight;
   }
 
-  final availableHeight = maxHeight - verticalInset;
-  if (availableHeight >= preferredHeight) {
-    return preferredHeight;
-  }
-
-  return availableHeight.clamp(minHeight, preferredHeight).toDouble();
+  return (maxHeight - verticalInset).clamp(0.0, preferredHeight).toDouble();
 }
 
 class _InstallAgentDialog extends StatelessWidget {
@@ -274,7 +264,7 @@ class _InstallAgentDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = _desktopTaskDialogHeight(constraints, preferredHeight: 620.0, verticalInset: 140.0, minHeight: 420.0);
+        final height = _desktopTaskDialogHeight(constraints, preferredHeight: 620.0, verticalInset: 140.0);
 
         return PowerboardsShadDialog.task(
           scrollable: false,
@@ -499,7 +489,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
         return LayoutBuilder(
           builder: (context, constraints) {
             final maxViewportHeight = constraints.maxHeight;
-            final maxHeight = maxViewportHeight.isFinite ? (maxViewportHeight * 0.7).clamp(420.0, 860.0).toDouble() : 620.0;
+            final maxHeight = maxViewportHeight.isFinite ? (maxViewportHeight * 0.7).clamp(0.0, 860.0).toDouble() : 620.0;
 
             return PowerboardsShadDialog.task(
               scrollable: false,

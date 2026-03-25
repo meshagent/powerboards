@@ -41,9 +41,7 @@ class ConfigureServiceTemplateDialog extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxHeight = constraints.maxHeight;
-        final height = !maxHeight.isFinite
-            ? 500.0
-            : ((maxHeight - 100.0) >= 500.0 ? 500.0 : (maxHeight - 100.0).clamp(360.0, 500.0).toDouble());
+        final height = !maxHeight.isFinite ? 500.0 : (maxHeight - 100.0).clamp(0.0, 500.0).toDouble();
 
         return PowerboardsShadDialog.task(
           scrollable: false,
