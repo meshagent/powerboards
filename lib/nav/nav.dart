@@ -140,11 +140,16 @@ class _NavState extends State<Nav> {
     launchUrl(redirectUrl, webOnlyWindowName: "_self");
   }
 
+  void _resetResizeState() {
+    resizeDebounceTimer?.cancel();
+    resizeDebounceTimer = null;
+    lastConstraints = null;
+  }
+
   void debounceResize(BoxConstraints constraints) {
     final width = constraints.maxWidth;
     if (!width.isFinite || width <= 0) {
-      lastConstraints = null;
-      resizeDebounceTimer?.cancel();
+      _resetResizeState();
       return;
     }
 
@@ -153,6 +158,16 @@ class _NavState extends State<Nav> {
 
       resizeDebounceTimer?.cancel();
       resizeDebounceTimer = Timer(const Duration(milliseconds: 30), () {
+        resizeDebounceTimer = null;
+        if (!mounted) {
+          return;
+        }
+
+        final previousWidth = lastConstraints?.maxWidth;
+        if (previousWidth == null || !previousWidth.isFinite || previousWidth <= 0) {
+          return;
+        }
+
         final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
         final mainPanel = resizeController.panelsInfo.where((panel) => panel.id == "main").firstOrNull;
         if (navPanel == null || mainPanel == null) {
@@ -168,7 +183,7 @@ class _NavState extends State<Nav> {
         final newPanel = ShadPanelInfo(id: "nav", minSize: minSize, maxSize: maxSize, defaultSize: defaultSize);
 
         // Don't change the size - prevent flickering
-        final currentSize = (navPanel.size * lastConstraints!.maxWidth) / width;
+        final currentSize = (navPanel.size * previousWidth) / width;
         if (currentSize.isFinite && currentSize > minSize && currentSize < maxSize) {
           newPanel.size = currentSize;
         }
@@ -254,6 +269,7 @@ class _NavState extends State<Nav> {
 
   @override
   void dispose() {
+    _resetResizeState();
     projects.dispose();
     isBalanceLowRes.dispose();
     rooms.dispose();
@@ -291,7 +307,7 @@ class _NavState extends State<Nav> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         if (!width.isFinite || width <= 0) {
-          lastConstraints = null;
+          _resetResizeState();
           return const SizedBox.shrink();
         }
 
@@ -353,7 +369,7 @@ class _NavState extends State<Nav> {
   }
 
   Widget mobileView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
-    lastConstraints = null;
+    _resetResizeState();
 
     if (userRole == ProjectRole.none) {
       return forbiddenView(context);

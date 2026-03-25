@@ -428,11 +428,7 @@ BoxConstraints? _resolveDialogConstraints(
   required bool isMobile,
   required PowerboardsDialogMobilePresentation mobilePresentation,
 }) {
-  if (!isMobile) {
-    return constraints;
-  }
-
-  if (mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen) {
+  if (isMobile && mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen) {
     return BoxConstraints(
       minWidth: screenSize.width,
       maxWidth: screenSize.width,
@@ -441,14 +437,18 @@ BoxConstraints? _resolveDialogConstraints(
     );
   }
 
-  return _clampToMobileViewport(
-    constraints,
-    maxWidth: _mobileInsetExtent(screenSize.width),
-    maxHeight: _mobileInsetExtent(screenSize.height),
-  );
+  if (!isMobile) {
+    if (constraints == null) {
+      return null;
+    }
+
+    return _clampToViewport(constraints, maxWidth: _dialogInsetExtent(screenSize.width), maxHeight: _dialogInsetExtent(screenSize.height));
+  }
+
+  return _clampToViewport(constraints, maxWidth: _dialogInsetExtent(screenSize.width), maxHeight: _dialogInsetExtent(screenSize.height));
 }
 
-BoxConstraints _clampToMobileViewport(BoxConstraints? constraints, {required double maxWidth, required double maxHeight}) {
+BoxConstraints _clampToViewport(BoxConstraints? constraints, {required double maxWidth, required double maxHeight}) {
   final resolvedMaxWidth = constraints == null
       ? maxWidth
       : (constraints.hasBoundedWidth ? constraints.maxWidth.clamp(0.0, maxWidth).toDouble() : maxWidth);
@@ -469,10 +469,10 @@ double _dialogMaxWidth(BoxConstraints? constraints, {required Size screenSize, r
     return constraints.maxWidth;
   }
 
-  return isMobile ? _mobileInsetExtent(screenSize.width) : 512.0;
+  return isMobile ? _dialogInsetExtent(screenSize.width) : 512.0;
 }
 
-double _mobileInsetExtent(double screenExtent) {
+double _dialogInsetExtent(double screenExtent) {
   final availableExtent = screenExtent - (powerboardsMobileDialogEdgeInset * 2);
   return availableExtent > 0 ? availableExtent : screenExtent;
 }

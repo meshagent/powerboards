@@ -60,7 +60,7 @@ ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
   final isMobile = screenWidth < 600;
   final mobileInset = powerboardsMobileDialogEdgeInset * 2;
   final maxWidth = isMobile ? ((screenWidth - mobileInset) > 0 ? screenWidth - mobileInset : screenWidth) : 512.0;
-  final maxHeight = isMobile ? ((screenHeight - mobileInset) > 0 ? screenHeight - mobileInset : screenHeight) : double.infinity;
+  final maxHeight = (screenHeight - mobileInset) > 0 ? screenHeight - mobileInset : screenHeight;
   final closeTop = isMobile ? 24.0 : 20.0;
   final closeEnd = 24.0;
 
