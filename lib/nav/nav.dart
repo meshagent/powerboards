@@ -137,7 +137,7 @@ class _NavState extends State<Nav> {
     final pid = fromUUID(widget.projectId!);
     final redirectUrl = uri.replace(path: "/p/$pid").replace(queryParameters: {"ref": "low_balance_warning"});
 
-    launchUrl(redirectUrl, webOnlyWindowName: "_self");
+    launchUrl(redirectUrl);
   }
 
   void _resetResizeState() {

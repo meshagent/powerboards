@@ -587,7 +587,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     });
 
     customViewers["thread"] = ({Key? key, required RoomClient room, required String filename, required Uri url}) {
-      return MeshagentThreadView(client: room, participantNames: [], documentPath: filename, joinMeeting: _joinMeeting);
+      return MeshagentThreadView(
+        client: room,
+        participantNames: [],
+        documentPath: filename,
+        joinMeeting: _joinMeeting,
+        projectId: widget.projectId,
+      );
     };
   }
 
@@ -1292,6 +1298,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         newThreadEmptyStateVerticalOffset: newThreadEmptyStateVerticalOffset,
         joinMeeting: _joinMeeting,
         emptyState: meetingActiveSingleThreadEmptyState,
+        projectId: widget.projectId,
       ),
     );
 
