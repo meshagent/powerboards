@@ -23,8 +23,12 @@ class PaneEmptyState extends StatelessWidget {
   final double iconGap;
   final double actionGap;
 
+  static const double _mobileScreenWidthMax = 600;
+
   @override
   Widget build(BuildContext context) {
+    final hideAction = MediaQuery.sizeOf(context).width < _mobileScreenWidthMax;
+
     return Center(
       child: Transform.translate(
         offset: Offset(0, verticalOffset),
@@ -37,7 +41,7 @@ class PaneEmptyState extends StatelessWidget {
               children: [
                 if (icon != null) ...[icon!, SizedBox(height: iconGap)],
                 ChatThreadEmptyStateContent(title: title, description: description, titleScaleOverride: titleScaleOverride),
-                if (action != null) ...[SizedBox(height: actionGap), action!],
+                if (!hideAction && action != null) ...[SizedBox(height: actionGap), action!],
               ],
             ),
           ),
