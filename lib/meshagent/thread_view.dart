@@ -92,6 +92,7 @@ class MeshagentThreadView extends StatefulWidget {
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
+  final Set<String> _emptyThreadCleanupPaths = <String>{};
 
   String _chatPlaceholderText(String? agentName) {
     final normalizedAgentName = agentName?.trim();
@@ -184,9 +185,45 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
   }
 
-  Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
-    final usesSingleThreadEmptyState = widget.threadDisplayMode == ChatThreadDisplayMode.singleThread;
+  Future<void> _onVisibleMessagesEmpty(String path) async {
+    if (widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer || widget.selectedThreadPath != path) {
+      return;
+    }
+    if (!_emptyThreadCleanupPaths.add(path)) {
+      return;
+    }
 
+    try {
+      widget.onSelectedThreadPathChanged?.call(null);
+      await WidgetsBinding.instance.endOfFrame;
+
+      await widget.client.storage.delete(path);
+
+      final threadListPath = widget.threadListPath?.trim();
+      if (threadListPath != null && threadListPath.isNotEmpty) {
+        MeshDocument? threadListDocument;
+        try {
+          threadListDocument = await widget.client.sync.open(threadListPath);
+          final threadEntry = threadListDocument.root.getChildren().whereType<MeshElement>().firstWhereOrNull(
+            (node) => node.tagName == "thread" && node.getAttribute("path") == path,
+          );
+          threadEntry?.delete();
+        } finally {
+          try {
+            await widget.client.sync.close(threadListPath);
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to remove empty thread: $e")));
+      }
+    } finally {
+      _emptyThreadCleanupPaths.remove(path);
+    }
+  }
+
+  Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
     return IconTheme(
       data: const IconThemeData(size: 14),
       child: ChatThreadLoader(
@@ -212,9 +249,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           openFile: _open,
           toolsBuilder: (context, controller, snapshot) => buildTools(context, widget.client, widget.agentName, controller, snapshot),
           agentName: widget.agentName,
-          emptyStateTitle: usesSingleThreadEmptyState ? "Chat to get started" : null,
-          emptyStateDescription: usesSingleThreadEmptyState ? _threadEmptyDescription : null,
+          emptyStateTitle: "Chat to get started",
+          emptyStateDescription: _threadEmptyDescription,
           emptyState: widget.emptyState,
+          onVisibleMessagesEmpty: widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
+              ? () => _onVisibleMessagesEmpty(path)
+              : null,
           chatInputBoxBuilder: (context, inputBox) => EnableWebContextMenu(child: inputBox),
         ),
         participantNames: widget.participantNames,
@@ -952,82 +992,91 @@ class _ThreadListItemState extends State<_ThreadListItem> {
           ),
           child: Material(
             color: Colors.transparent,
-            child: InkWell(
-              splashFactory: NoSplash.splashFactory,
-              overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-              hoverColor: Colors.transparent,
-              highlightColor: Colors.transparent,
-              splashColor: Colors.transparent,
-              onTap: widget.onOpen,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: isMobile ? 0 : 36),
-                child: Padding(
-                  padding: _threadListRowPadding(isMobile),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: _threadListLeadingWidth(isMobile),
-                        child: Center(
-                          child: selected && !widget.threadStatus.hasStatus
-                              ? const Icon(LucideIcons.check, size: 16, color: shadForeground)
-                              : ma.ChatThreadStatusIndicator(
-                                  statusText: widget.threadStatus.text,
-                                  startedAt: widget.threadStatus.startedAt,
-                                  reserveSpace: true,
-                                  size: 14,
-                                  strokeWidth: 2,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: isMobile ? 0 : 36),
+              child: Padding(
+                padding: _threadListRowPadding(isMobile),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        splashFactory: NoSplash.splashFactory,
+                        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                        hoverColor: Colors.transparent,
+                        highlightColor: Colors.transparent,
+                        splashColor: Colors.transparent,
+                        onTap: widget.onOpen,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: _threadListLeadingWidth(isMobile),
+                                child: Center(
+                                  child: selected && !widget.threadStatus.hasStatus
+                                      ? const Icon(LucideIcons.check, size: 16, color: shadForeground)
+                                      : ma.ChatThreadStatusIndicator(
+                                          statusText: widget.threadStatus.text,
+                                          startedAt: widget.threadStatus.startedAt,
+                                          reserveSpace: true,
+                                          size: 14,
+                                          strokeWidth: 2,
+                                        ),
                                 ),
-                        ),
-                      ),
-                      SizedBox(width: _threadListGap(isMobile)),
-                      Expanded(
-                        child: ma.ChatThreadProcessingSweepText(
-                          text: widget.entry.name,
-                          style: textStyle,
-                          animate: widget.threadStatus.hasStatus,
-                          textAlign: TextAlign.start,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      AdaptiveShadContextMenu(
-                        controller: _menuController,
-                        constraints: const BoxConstraints(minWidth: 180),
-                        estimatedMenuWidth: 180,
-                        estimatedMenuHeight: 2 * 40.0 + 8.0,
-                        items: [
-                          ShadContextMenuItem(
-                            height: 40,
-                            leading: const Icon(LucideIcons.pencil, size: 16),
-                            onPressed: widget.onRename,
-                            child: const Text("Rename"),
-                          ),
-                          ShadContextMenuItem(
-                            height: 40,
-                            leading: const Icon(LucideIcons.trash, size: 16),
-                            onPressed: widget.onDelete,
-                            child: const Text("Delete"),
-                          ),
-                        ],
-                        child: ShadButton.ghost(
-                          onPressed: _menuController.show,
-                          hoverBackgroundColor: Colors.transparent,
-                          backgroundColor: Colors.transparent,
-                          padding: EdgeInsets.zero,
-                          decoration: ShadDecoration.none,
-                          child: SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: Center(
-                              child: Icon(LucideIcons.ellipsis, size: 20, color: showMenuIcon ? shadForeground : Colors.transparent),
-                            ),
+                              ),
+                              SizedBox(width: _threadListGap(isMobile)),
+                              Expanded(
+                                child: ma.ChatThreadProcessingSweepText(
+                                  text: widget.entry.name,
+                                  style: textStyle,
+                                  animate: widget.threadStatus.hasStatus,
+                                  textAlign: TextAlign.start,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 12),
+                    AdaptiveShadContextMenu(
+                      controller: _menuController,
+                      constraints: const BoxConstraints(minWidth: 180),
+                      estimatedMenuWidth: 180,
+                      estimatedMenuHeight: 2 * 40.0 + 8.0,
+                      items: [
+                        ShadContextMenuItem(
+                          height: 40,
+                          leading: const Icon(LucideIcons.pencil, size: 16),
+                          onPressed: widget.onRename,
+                          child: const Text("Rename"),
+                        ),
+                        ShadContextMenuItem(
+                          height: 40,
+                          leading: const Icon(LucideIcons.trash, size: 16),
+                          onPressed: widget.onDelete,
+                          child: const Text("Delete"),
+                        ),
+                      ],
+                      child: ShadButton.ghost(
+                        onPressed: _menuController.show,
+                        hoverBackgroundColor: Colors.transparent,
+                        backgroundColor: Colors.transparent,
+                        padding: EdgeInsets.zero,
+                        decoration: ShadDecoration.none,
+                        child: SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Center(
+                            child: Icon(LucideIcons.ellipsis, size: 20, color: showMenuIcon ? shadForeground : Colors.transparent),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
