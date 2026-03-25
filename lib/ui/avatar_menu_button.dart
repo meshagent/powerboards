@@ -98,12 +98,12 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
     if (billingUrl == null) return;
 
     if (widget.projectId == null) {
-      launchUrl(billingUrl!, webOnlyWindowName: "_self");
+      launchUrl(billingUrl!);
     } else {
       final pid = fromUUID(widget.projectId!);
       final pUrl = billingUrl!.replace(path: "/p/$pid");
 
-      launchUrl(pUrl, webOnlyWindowName: "_self");
+      launchUrl(pUrl);
     }
   }
 
