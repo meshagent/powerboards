@@ -30,6 +30,7 @@ import 'nav/nav.dart';
 import 'theme/theme.dart';
 import 'ui/link_listener.dart';
 import 'ui/meeting_view.dart';
+import 'ui/powerboards_shad_dialog.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
 import 'web_context_menu_manager/web_context_menu_manager.dart';
@@ -53,15 +54,19 @@ const breakpointsLandscape = [
 ];
 
 ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
-  final screenWidth = MediaQuery.maybeOf(context)?.size.width ?? 1024.0;
+  final mediaQuery = MediaQuery.maybeOf(context);
+  final screenWidth = mediaQuery?.size.width ?? 1024.0;
+  final screenHeight = mediaQuery?.size.height ?? 768.0;
   final isMobile = screenWidth < 600;
-  final maxWidth = isMobile ? screenWidth * 0.8 : 512.0;
+  final mobileInset = powerboardsMobileDialogEdgeInset * 2;
+  final maxWidth = isMobile ? ((screenWidth - mobileInset) > 0 ? screenWidth - mobileInset : screenWidth) : 512.0;
+  final maxHeight = isMobile ? ((screenHeight - mobileInset) > 0 ? screenHeight - mobileInset : screenHeight) : double.infinity;
   final closeTop = isMobile ? 24.0 : 20.0;
   final closeEnd = 24.0;
 
   return ShadDialogTheme(
     backgroundColor: shadCard,
-    constraints: BoxConstraints(maxWidth: maxWidth),
+    constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
     radius: BorderRadius.circular(20),
     removeBorderRadiusWhenTiny: false,
     closeIconPosition: ShadPosition(top: closeTop, right: closeEnd),

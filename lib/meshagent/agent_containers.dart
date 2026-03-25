@@ -38,37 +38,42 @@ class ConfigureServiceTemplateDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isInstalled = serviceId != null;
-    return PowerboardsShadDialog(
-      useSafeArea: false,
-      expandActionsWhenTiny: false,
-      actionsAxis: Axis.horizontal,
-      constraints: BoxConstraints(maxWidth: 600, minWidth: 600),
-      scrollable: false,
-      title: Text(isInstalled ? 'Edit agent' : 'Install agent'),
-      description: Text(
-        isInstalled
-            ? 'Update variables or uninstall this agent.'
-            : 'Installing this agent will grant it access to your room. Review the details before continuing.',
-      ),
-      child: SizedBox(
-        height: 500,
-        child: ConfigureServiceTemplate(
-          template: template,
-          header: [
-            const SizedBox(height: 8),
-            dev.ServiceNameCard(manifest: manifest),
-            if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: manifest)],
-          ],
-          projectId: projectId,
-          serviceId: serviceId,
-          manifest: manifest,
-          roomName: roomName,
-          prefilledVars: prefilledVars,
-          onDone: (context, _) {
-            Navigator.of(context).pop(true);
-          },
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxHeight = constraints.maxHeight;
+        final height = !maxHeight.isFinite
+            ? 500.0
+            : ((maxHeight - 100.0) >= 500.0 ? 500.0 : (maxHeight - 100.0).clamp(360.0, 500.0).toDouble());
+
+        return PowerboardsShadDialog.task(
+          scrollable: false,
+          constraints: BoxConstraints(minWidth: 600.0, maxWidth: 600.0, minHeight: height, maxHeight: height),
+          title: Text(isInstalled ? 'Edit agent' : 'Install agent'),
+          description: Text(
+            isInstalled
+                ? 'Update variables or uninstall this agent.'
+                : 'Installing this agent will grant it access to your room. Review the details before continuing.',
+          ),
+          child: SizedBox.expand(
+            child: ConfigureServiceTemplate(
+              template: template,
+              header: [
+                const SizedBox(height: 8),
+                dev.ServiceNameCard(manifest: manifest),
+                if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: manifest)],
+              ],
+              projectId: projectId,
+              serviceId: serviceId,
+              manifest: manifest,
+              roomName: roomName,
+              prefilledVars: prefilledVars,
+              onDone: (context, _) {
+                Navigator.of(context).pop(true);
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }

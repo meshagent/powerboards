@@ -64,7 +64,7 @@ class SwitchProjectDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PowerboardsShadDialog.compact(
+    return PowerboardsShadDialog.listPicker(
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
       actions: [

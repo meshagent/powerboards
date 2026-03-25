@@ -1532,8 +1532,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     await showShadDialog<void>(
       context: context,
       builder: (dialogContext) {
-        final size = MediaQuery.sizeOf(dialogContext);
-
         Widget footerButton({required VoidCallback onPressed, required Widget child, bool primary = false}) {
           final button = primary ? ShadButton.new : ShadButton.outline;
           return SizedBox(
@@ -1542,12 +1540,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           );
         }
 
-        return PowerboardsShadDialog(
-          useSafeArea: false,
+        return PowerboardsShadDialog.listPicker(
           title: const Text("Threads"),
           description: const Text("Select a thread to view or manage it."),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: math.min(size.width * 0.8, 360.0), maxHeight: math.min(size.height * 0.65, 520.0)),
+            constraints: const BoxConstraints(maxWidth: 360.0, maxHeight: 520.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

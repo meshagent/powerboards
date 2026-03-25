@@ -4,6 +4,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 const double powerboardsCompactDesktopDialogWidth = 360;
 const BoxConstraints powerboardsCompactDesktopDialogConstraints = BoxConstraints(maxWidth: powerboardsCompactDesktopDialogWidth);
+const double powerboardsMobileDialogEdgeInset = 16;
 const double powerboardsDialogScrollViewportVerticalInset = 18;
 const EdgeInsets powerboardsDialogScrollViewportPadding = EdgeInsets.symmetric(vertical: powerboardsDialogScrollViewportVerticalInset);
 const EdgeInsets powerboardsDialogScrollableListPadding = powerboardsDialogScrollViewportPadding;
@@ -15,6 +16,8 @@ const double _desktopDialogCloseButtonInset = 24;
 const double _compactDesktopDialogWidthThreshold = 420;
 const double _desktopDialogActionMinWidth = 152;
 const double _desktopDialogActionMaxWidth = 220;
+
+enum PowerboardsDialogMobilePresentation { inherit, inset, fullScreen }
 
 class PowerboardsShadDialog extends StatelessWidget {
   const PowerboardsShadDialog({
@@ -54,6 +57,8 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.descriptionPinned,
     this.actionsPinned,
     this.expandDesktopActions,
+    this.mobilePresentation = PowerboardsDialogMobilePresentation.inherit,
+    this.stackActionsOnMobile = false,
   }) : variant = ShadDialogVariant.primary;
 
   const PowerboardsShadDialog.compact({
@@ -93,6 +98,49 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.descriptionPinned,
     this.actionsPinned,
     this.expandDesktopActions,
+    this.mobilePresentation = PowerboardsDialogMobilePresentation.inset,
+    this.stackActionsOnMobile = true,
+  }) : variant = ShadDialogVariant.primary;
+
+  const PowerboardsShadDialog.listPicker({
+    super.key,
+    this.title,
+    this.description,
+    this.child,
+    this.actions = const [],
+    this.closeIcon,
+    this.closeIconData,
+    this.closeIconPosition,
+    this.radius,
+    this.backgroundColor,
+    this.expandActionsWhenTiny,
+    this.padding,
+    this.gap,
+    this.constraints = powerboardsCompactDesktopDialogConstraints,
+    this.border,
+    this.shadows,
+    this.removeBorderRadiusWhenTiny,
+    this.actionsAxis,
+    this.actionsMainAxisSize,
+    this.actionsMainAxisAlignment,
+    this.actionsVerticalDirection,
+    this.titleStyle,
+    this.descriptionStyle,
+    this.titleTextAlign,
+    this.descriptionTextAlign,
+    this.alignment,
+    this.mainAxisAlignment,
+    this.crossAxisAlignment,
+    this.scrollable,
+    this.scrollPadding,
+    this.actionsGap,
+    this.useSafeArea = false,
+    this.titlePinned,
+    this.descriptionPinned,
+    this.actionsPinned,
+    this.expandDesktopActions,
+    this.mobilePresentation = PowerboardsDialogMobilePresentation.inset,
+    this.stackActionsOnMobile = true,
   }) : variant = ShadDialogVariant.primary;
 
   const PowerboardsShadDialog.alert({
@@ -132,6 +180,8 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.descriptionPinned,
     this.actionsPinned,
     this.expandDesktopActions,
+    this.mobilePresentation = PowerboardsDialogMobilePresentation.inherit,
+    this.stackActionsOnMobile = false,
   }) : variant = ShadDialogVariant.alert;
 
   const PowerboardsShadDialog.compactAlert({
@@ -171,7 +221,50 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.descriptionPinned,
     this.actionsPinned,
     this.expandDesktopActions,
+    this.mobilePresentation = PowerboardsDialogMobilePresentation.inset,
+    this.stackActionsOnMobile = true,
   }) : variant = ShadDialogVariant.alert;
+
+  const PowerboardsShadDialog.task({
+    super.key,
+    this.title,
+    this.description,
+    this.child,
+    this.actions = const [],
+    this.closeIcon,
+    this.closeIconData,
+    this.closeIconPosition,
+    this.radius,
+    this.backgroundColor,
+    this.expandActionsWhenTiny,
+    this.padding,
+    this.gap,
+    this.constraints,
+    this.border,
+    this.shadows,
+    this.removeBorderRadiusWhenTiny,
+    this.actionsAxis,
+    this.actionsMainAxisSize,
+    this.actionsMainAxisAlignment,
+    this.actionsVerticalDirection,
+    this.titleStyle,
+    this.descriptionStyle,
+    this.titleTextAlign,
+    this.descriptionTextAlign,
+    this.alignment,
+    this.mainAxisAlignment,
+    this.crossAxisAlignment,
+    this.scrollable,
+    this.scrollPadding,
+    this.actionsGap,
+    this.useSafeArea = false,
+    this.titlePinned,
+    this.descriptionPinned,
+    this.actionsPinned,
+    this.expandDesktopActions = true,
+    this.mobilePresentation = PowerboardsDialogMobilePresentation.fullScreen,
+    this.stackActionsOnMobile = true,
+  }) : variant = ShadDialogVariant.primary;
 
   final Widget? title;
   final Widget? description;
@@ -209,12 +302,21 @@ class PowerboardsShadDialog extends StatelessWidget {
   final bool? descriptionPinned;
   final bool? actionsPinned;
   final bool? expandDesktopActions;
+  final PowerboardsDialogMobilePresentation mobilePresentation;
+  final bool stackActionsOnMobile;
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.maybeOf(context)?.size.width ?? 1024.0;
-    final isMobile = screenWidth < 600;
-    final effectiveDialogMaxWidth = constraints?.maxWidth ?? (isMobile ? screenWidth * 0.8 : 512.0);
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final screenSize = mediaQuery?.size ?? const Size(1024.0, 768.0);
+    final isMobile = screenSize.width < 600;
+    final effectiveConstraints = _resolveDialogConstraints(
+      constraints,
+      screenSize: screenSize,
+      isMobile: isMobile,
+      mobilePresentation: mobilePresentation,
+    );
+    final effectiveDialogMaxWidth = _dialogMaxWidth(effectiveConstraints, screenSize: screenSize, isMobile: isMobile);
     final isCompactDesktopDialog = !isMobile && effectiveDialogMaxWidth <= _compactDesktopDialogWidthThreshold;
 
     final effectiveCloseIcon = closeIcon ?? (isMobile ? null : _PowerboardsDialogCloseButton(iconData: closeIconData));
@@ -228,12 +330,21 @@ class PowerboardsShadDialog extends StatelessWidget {
       expandDesktopActions: expandDesktopActions ?? false,
       effectiveDialogMaxWidth: effectiveDialogMaxWidth,
       actionsGap: actionsGap ?? 8,
+      stackActionsOnMobile: stackActionsOnMobile,
     );
+    final effectiveActionsAxis = actionsAxis ?? (isMobile && stackActionsOnMobile ? Axis.vertical : null);
     final effectiveActionsMainAxisSize =
-        actionsMainAxisSize ?? ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisSize.max : MainAxisSize.min);
+        actionsMainAxisSize ??
+        (isMobile && stackActionsOnMobile
+            ? MainAxisSize.max
+            : ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisSize.max : MainAxisSize.min));
     final effectiveActionsMainAxisAlignment =
         actionsMainAxisAlignment ??
-        ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisAlignment.start : MainAxisAlignment.end);
+        (isMobile && stackActionsOnMobile
+            ? MainAxisAlignment.start
+            : ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisAlignment.start : MainAxisAlignment.end));
+    final effectiveTitleTextAlign = titleTextAlign ?? TextAlign.left;
+    final effectiveDescriptionTextAlign = descriptionTextAlign ?? TextAlign.left;
 
     return ShadDialog.raw(
       key: key,
@@ -249,18 +360,18 @@ class PowerboardsShadDialog extends StatelessWidget {
       expandActionsWhenTiny: expandActionsWhenTiny,
       padding: padding,
       gap: gap,
-      constraints: constraints,
+      constraints: effectiveConstraints,
       border: border,
       shadows: shadows,
       removeBorderRadiusWhenTiny: removeBorderRadiusWhenTiny,
-      actionsAxis: actionsAxis,
+      actionsAxis: effectiveActionsAxis,
       actionsMainAxisSize: effectiveActionsMainAxisSize,
       actionsMainAxisAlignment: effectiveActionsMainAxisAlignment,
       actionsVerticalDirection: actionsVerticalDirection,
       titleStyle: titleStyle,
       descriptionStyle: descriptionStyle,
-      titleTextAlign: titleTextAlign,
-      descriptionTextAlign: descriptionTextAlign,
+      titleTextAlign: effectiveTitleTextAlign,
+      descriptionTextAlign: effectiveDescriptionTextAlign,
       alignment: alignment,
       mainAxisAlignment: mainAxisAlignment,
       crossAxisAlignment: crossAxisAlignment,
@@ -283,13 +394,18 @@ List<Widget> _buildDialogActions(
   required bool expandDesktopActions,
   required double effectiveDialogMaxWidth,
   required double actionsGap,
+  required bool stackActionsOnMobile,
 }) {
   if (actions.isEmpty) {
     return actions;
   }
 
   if (isMobile) {
-    return actions;
+    if (!stackActionsOnMobile) {
+      return actions;
+    }
+
+    return actions.map((action) => SizedBox(width: double.infinity, child: action)).toList(growable: false);
   }
 
   if (isCompactDesktopDialog) {
@@ -304,6 +420,61 @@ List<Widget> _buildDialogActions(
   final actionWidth = (usableWidth / actions.length).clamp(_desktopDialogActionMinWidth, _desktopDialogActionMaxWidth);
 
   return actions.map((action) => SizedBox(width: actionWidth, child: action)).toList(growable: false);
+}
+
+BoxConstraints? _resolveDialogConstraints(
+  BoxConstraints? constraints, {
+  required Size screenSize,
+  required bool isMobile,
+  required PowerboardsDialogMobilePresentation mobilePresentation,
+}) {
+  if (!isMobile) {
+    return constraints;
+  }
+
+  if (mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen) {
+    return BoxConstraints(
+      minWidth: screenSize.width,
+      maxWidth: screenSize.width,
+      minHeight: screenSize.height,
+      maxHeight: screenSize.height,
+    );
+  }
+
+  return _clampToMobileViewport(
+    constraints,
+    maxWidth: _mobileInsetExtent(screenSize.width),
+    maxHeight: _mobileInsetExtent(screenSize.height),
+  );
+}
+
+BoxConstraints _clampToMobileViewport(BoxConstraints? constraints, {required double maxWidth, required double maxHeight}) {
+  final resolvedMaxWidth = constraints == null
+      ? maxWidth
+      : (constraints.hasBoundedWidth ? constraints.maxWidth.clamp(0.0, maxWidth).toDouble() : maxWidth);
+  final resolvedMaxHeight = constraints == null
+      ? maxHeight
+      : (constraints.hasBoundedHeight ? constraints.maxHeight.clamp(0.0, maxHeight).toDouble() : maxHeight);
+
+  return BoxConstraints(
+    minWidth: (constraints?.minWidth ?? 0.0).clamp(0.0, resolvedMaxWidth).toDouble(),
+    maxWidth: resolvedMaxWidth,
+    minHeight: (constraints?.minHeight ?? 0.0).clamp(0.0, resolvedMaxHeight).toDouble(),
+    maxHeight: resolvedMaxHeight,
+  );
+}
+
+double _dialogMaxWidth(BoxConstraints? constraints, {required Size screenSize, required bool isMobile}) {
+  if (constraints != null && constraints.hasBoundedWidth) {
+    return constraints.maxWidth;
+  }
+
+  return isMobile ? _mobileInsetExtent(screenSize.width) : 512.0;
+}
+
+double _mobileInsetExtent(double screenExtent) {
+  final availableExtent = screenExtent - (powerboardsMobileDialogEdgeInset * 2);
+  return availableExtent > 0 ? availableExtent : screenExtent;
 }
 
 class _PowerboardsDialogCloseButton extends StatelessWidget {
