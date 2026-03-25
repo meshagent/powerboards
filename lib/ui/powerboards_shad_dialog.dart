@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+const double powerboardsCompactDesktopDialogWidth = 360;
+const BoxConstraints powerboardsCompactDesktopDialogConstraints = BoxConstraints(maxWidth: powerboardsCompactDesktopDialogWidth);
+const double powerboardsDialogScrollViewportVerticalInset = 18;
+const EdgeInsets powerboardsDialogScrollViewportPadding = EdgeInsets.symmetric(vertical: powerboardsDialogScrollViewportVerticalInset);
+const EdgeInsets powerboardsDialogScrollableListPadding = powerboardsDialogScrollViewportPadding;
+
 const double _desktopDialogCloseButtonSize = 32;
 const double _desktopDialogCloseIconSize = 24;
 const double _desktopDialogCloseButtonTop = 20;
@@ -47,6 +53,46 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.titlePinned,
     this.descriptionPinned,
     this.actionsPinned,
+    this.expandDesktopActions,
+  }) : variant = ShadDialogVariant.primary;
+
+  const PowerboardsShadDialog.compact({
+    super.key,
+    this.title,
+    this.description,
+    this.child,
+    this.actions = const [],
+    this.closeIcon,
+    this.closeIconData,
+    this.closeIconPosition,
+    this.radius,
+    this.backgroundColor,
+    this.expandActionsWhenTiny,
+    this.padding,
+    this.gap,
+    this.constraints = powerboardsCompactDesktopDialogConstraints,
+    this.border,
+    this.shadows,
+    this.removeBorderRadiusWhenTiny,
+    this.actionsAxis,
+    this.actionsMainAxisSize,
+    this.actionsMainAxisAlignment,
+    this.actionsVerticalDirection,
+    this.titleStyle,
+    this.descriptionStyle,
+    this.titleTextAlign,
+    this.descriptionTextAlign,
+    this.alignment,
+    this.mainAxisAlignment,
+    this.crossAxisAlignment,
+    this.scrollable,
+    this.scrollPadding,
+    this.actionsGap,
+    this.useSafeArea = false,
+    this.titlePinned,
+    this.descriptionPinned,
+    this.actionsPinned,
+    this.expandDesktopActions,
   }) : variant = ShadDialogVariant.primary;
 
   const PowerboardsShadDialog.alert({
@@ -85,6 +131,46 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.titlePinned,
     this.descriptionPinned,
     this.actionsPinned,
+    this.expandDesktopActions,
+  }) : variant = ShadDialogVariant.alert;
+
+  const PowerboardsShadDialog.compactAlert({
+    super.key,
+    this.title,
+    this.description,
+    this.child,
+    this.actions = const [],
+    this.closeIcon,
+    this.closeIconData,
+    this.closeIconPosition,
+    this.radius,
+    this.backgroundColor,
+    this.expandActionsWhenTiny,
+    this.padding,
+    this.gap,
+    this.constraints = powerboardsCompactDesktopDialogConstraints,
+    this.border,
+    this.shadows,
+    this.removeBorderRadiusWhenTiny,
+    this.actionsAxis,
+    this.actionsMainAxisSize,
+    this.actionsMainAxisAlignment,
+    this.actionsVerticalDirection,
+    this.titleStyle,
+    this.descriptionStyle,
+    this.titleTextAlign,
+    this.descriptionTextAlign,
+    this.alignment,
+    this.mainAxisAlignment,
+    this.crossAxisAlignment,
+    this.scrollable,
+    this.scrollPadding,
+    this.actionsGap,
+    this.useSafeArea = false,
+    this.titlePinned,
+    this.descriptionPinned,
+    this.actionsPinned,
+    this.expandDesktopActions,
   }) : variant = ShadDialogVariant.alert;
 
   final Widget? title;
@@ -122,6 +208,7 @@ class PowerboardsShadDialog extends StatelessWidget {
   final bool? titlePinned;
   final bool? descriptionPinned;
   final bool? actionsPinned;
+  final bool? expandDesktopActions;
 
   @override
   Widget build(BuildContext context) {
@@ -138,12 +225,15 @@ class PowerboardsShadDialog extends StatelessWidget {
       actions,
       isMobile: isMobile,
       isCompactDesktopDialog: isCompactDesktopDialog,
+      expandDesktopActions: expandDesktopActions ?? false,
       effectiveDialogMaxWidth: effectiveDialogMaxWidth,
       actionsGap: actionsGap ?? 8,
     );
-    final effectiveActionsMainAxisSize = actionsMainAxisSize ?? (isCompactDesktopDialog ? MainAxisSize.max : MainAxisSize.min);
+    final effectiveActionsMainAxisSize =
+        actionsMainAxisSize ?? ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisSize.max : MainAxisSize.min);
     final effectiveActionsMainAxisAlignment =
-        actionsMainAxisAlignment ?? (isCompactDesktopDialog ? MainAxisAlignment.start : MainAxisAlignment.end);
+        actionsMainAxisAlignment ??
+        ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisAlignment.start : MainAxisAlignment.end);
 
     return ShadDialog.raw(
       key: key,
@@ -190,6 +280,7 @@ List<Widget> _buildDialogActions(
   List<Widget> actions, {
   required bool isMobile,
   required bool isCompactDesktopDialog,
+  required bool expandDesktopActions,
   required double effectiveDialogMaxWidth,
   required double actionsGap,
 }) {
@@ -202,6 +293,10 @@ List<Widget> _buildDialogActions(
   }
 
   if (isCompactDesktopDialog) {
+    return actions.map((action) => Expanded(child: action)).toList(growable: false);
+  }
+
+  if (expandDesktopActions) {
     return actions.map((action) => Expanded(child: action)).toList(growable: false);
   }
 

@@ -57,7 +57,7 @@ class _ShellAgent extends State<ShellAgent> {
       if (!mounted) return null;
       final check = await showShadDialog(
         context: context,
-        builder: (context) => PowerboardsShadDialog.alert(
+        builder: (context) => PowerboardsShadDialog.compactAlert(
           title: Text("Permission Requested"),
 
           actions: [

@@ -14,8 +14,7 @@ Future<bool?> showDeleteRoomDialog(
   return showShadDialog<bool?>(
     context: context,
     barrierDismissible: barrierDismissible,
-    builder: (ctx) => PowerboardsShadDialog(
-      useSafeArea: false,
+    builder: (ctx) => PowerboardsShadDialog.compact(
       title: Text(title),
       description: description != null ? Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(description)) : null,
       // Content area can be left null for a plain confirm

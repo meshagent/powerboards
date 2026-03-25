@@ -426,7 +426,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
         }
         final confirmed = await showShadDialog<bool>(
           context: context,
-          builder: (context) => PowerboardsShadDialog.alert(
+          builder: (context) => PowerboardsShadDialog.compactAlert(
             title: const Text('Delete routes?'),
             actions: [
               ShadButton(

@@ -155,7 +155,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
         oauthTokenRequestHandler: (RoomClient client, request) async {
           showShadDialog(
             context: context,
-            builder: (context) => PowerboardsShadDialog(
+            builder: (context) => PowerboardsShadDialog.compact(
               title: Text("An agent would like permission to use one of your accounts"),
               description: Text("You will be redirected to the third party service to login (${request.authorizationEndpoint})."),
               actions: [

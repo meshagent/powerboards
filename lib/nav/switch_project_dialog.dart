@@ -64,8 +64,7 @@ class SwitchProjectDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PowerboardsShadDialog(
-      constraints: const BoxConstraints(maxWidth: 360),
+    return PowerboardsShadDialog.compact(
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
       actions: [
@@ -80,7 +79,7 @@ class SwitchProjectDialog extends StatelessWidget {
         ),
       ],
       child: Padding(
-        padding: const EdgeInsets.only(top: 18, bottom: 18),
+        padding: powerboardsDialogScrollableListPadding,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 320, maxHeight: 420),
           child: SignalBuilder(

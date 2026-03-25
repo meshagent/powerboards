@@ -12,8 +12,7 @@ class NewProjectDialog extends StatelessWidget {
     final tt = ShadTheme.of(context).textTheme;
     final labelStyle = tt.small.copyWith(fontWeight: FontWeight.w600);
 
-    return PowerboardsShadDialog(
-      useSafeArea: false,
+    return PowerboardsShadDialog.compact(
       title: Text("New Project"),
       description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('Each project has its own members and billing')),
       actions: [

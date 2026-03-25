@@ -1554,7 +1554,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 Flexible(
                   fit: FlexFit.loose,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 18, bottom: 18),
+                    padding: powerboardsDialogScrollableListPadding,
                     child: MeshagentThreadListPane(
                       key: ValueKey("mobile-threads-${agentKey ?? "none"}"),
                       client: widget.room,

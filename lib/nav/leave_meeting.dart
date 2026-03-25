@@ -7,8 +7,7 @@ Future<bool> showLeaveMeeting(BuildContext context) async {
 
   final res = await showShadDialog<bool>(
     context: context,
-    builder: (ctx) => PowerboardsShadDialog(
-      useSafeArea: false,
+    builder: (ctx) => PowerboardsShadDialog.compact(
       title: Text("Leave meeting in progress", style: tt.h3),
       description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text("Are you sure you want to leave this meeting?")),
       actions: [

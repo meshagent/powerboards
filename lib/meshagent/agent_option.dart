@@ -478,75 +478,90 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
 
         return PowerboardsShadDialog(
           useSafeArea: false,
+          scrollable: false,
           expandActionsWhenTiny: false,
           actionsAxis: Axis.horizontal,
           constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height - 150, maxWidth: 500),
           crossAxisAlignment: CrossAxisAlignment.start,
-          titlePinned: true,
           title: const Text('Agents & Services'),
           actions: [
             ShadButton.outline(onPressed: _openCustomDialog, child: const Text('Install')),
             ShadButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Close')),
           ],
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildError(context),
-                const SizedBox(height: 12),
-                for (var i = 0; i < optionsToShow.length; i++) ...[
-                  Builder(
-                    builder: (context) {
-                      final option = optionsToShow[i];
-                      final service = services.state.value?.firstWhereOrNull(
-                        (s) => s.metadata.annotations["meshagent.service.id"] == option.id,
-                      );
-                      final inRoom = service != null;
-                      final identity = service?.agents.firstOrNull?.name;
-                      final hasMessaging = service != null && hasMessagingParticipant(service);
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+              Expanded(
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildError(context),
+                        const SizedBox(height: 12),
+                        for (var i = 0; i < optionsToShow.length; i++) ...[
+                          Builder(
+                            builder: (context) {
+                              final option = optionsToShow[i];
+                              final service = services.state.value?.firstWhereOrNull(
+                                (s) => s.metadata.annotations["meshagent.service.id"] == option.id,
+                              );
+                              final inRoom = service != null;
+                              final identity = service?.agents.firstOrNull?.name;
+                              final hasMessaging = service != null && hasMessagingParticipant(service);
 
-                      final status = !hasMessaging
-                          ? AgentRuntimeStatus.running
-                          : (identity == null ||
-                                    widget.room.messaging.remoteParticipants.firstWhereOrNull((x) => x.getAttribute("name") == identity) ==
-                                        null
-                                ? AgentRuntimeStatus.notRunning
-                                : AgentRuntimeStatus.running);
-                      return AgentOptionTile(
-                        option: option,
-                        inRoom: inRoom,
-                        status: status,
-                        mailboxes:
-                            (mailboxes.state.value
-                                ?.where(
-                                  (x) =>
-                                      x.annotations["meshagent.service.id"] != null &&
-                                      x.annotations["meshagent.service.id"] == service?.metadata.annotations["meshagent.service.id"],
-                                )
-                                .toList()) ??
-                            [],
-                        routes:
-                            (routes.state.value
-                                ?.where(
-                                  (x) =>
-                                      x.annotations["meshagent.service.id"] != null &&
-                                      x.annotations["meshagent.service.id"] == service?.metadata.annotations["meshagent.service.id"],
-                                )
-                                .toList()) ??
-                            [],
-                        busy: false,
-                        version: "latest",
-                        versionHasUpdate: false,
-                        onPrimaryTap: () => _openManageDialog(option: option, existing: service),
-                      );
-                    },
+                              final status = !hasMessaging
+                                  ? AgentRuntimeStatus.running
+                                  : (identity == null ||
+                                            widget.room.messaging.remoteParticipants.firstWhereOrNull(
+                                                  (x) => x.getAttribute("name") == identity,
+                                                ) ==
+                                                null
+                                        ? AgentRuntimeStatus.notRunning
+                                        : AgentRuntimeStatus.running);
+                              return AgentOptionTile(
+                                option: option,
+                                inRoom: inRoom,
+                                status: status,
+                                mailboxes:
+                                    (mailboxes.state.value
+                                        ?.where(
+                                          (x) =>
+                                              x.annotations["meshagent.service.id"] != null &&
+                                              x.annotations["meshagent.service.id"] ==
+                                                  service?.metadata.annotations["meshagent.service.id"],
+                                        )
+                                        .toList()) ??
+                                    [],
+                                routes:
+                                    (routes.state.value
+                                        ?.where(
+                                          (x) =>
+                                              x.annotations["meshagent.service.id"] != null &&
+                                              x.annotations["meshagent.service.id"] ==
+                                                  service?.metadata.annotations["meshagent.service.id"],
+                                        )
+                                        .toList()) ??
+                                    [],
+                                busy: false,
+                                version: "latest",
+                                versionHasUpdate: false,
+                                onPrimaryTap: () => _openManageDialog(option: option, existing: service),
+                              );
+                            },
+                          ),
+                          if (i < optionsToShow.length - 1) const SizedBox(height: 16),
+                        ],
+                      ],
+                    ),
                   ),
-                  if (i < optionsToShow.length - 1) const SizedBox(height: 16),
-                ],
-              ],
-            ),
+                ),
+              ),
+              const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+            ],
           ),
         );
       },

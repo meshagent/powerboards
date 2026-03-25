@@ -26,8 +26,7 @@ Future<String?> showRenameRoomDialog(
         }
       }
 
-      return PowerboardsShadDialog(
-        useSafeArea: false,
+      return PowerboardsShadDialog.compact(
         title: Text(title),
         description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(description)),
         actions: [

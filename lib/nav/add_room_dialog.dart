@@ -34,8 +34,7 @@ Future<RoomNameResult?> showRoomNameDialog(
         }
       }
 
-      return PowerboardsShadDialog(
-        useSafeArea: false,
+      return PowerboardsShadDialog.compact(
         title: Text(title),
         description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(description)),
         actions: [
@@ -92,8 +91,7 @@ Future<void> showRoomCreationErrorDialog(BuildContext context, Object error) {
   return showShadDialog(
     context: context,
     builder: (context) {
-      return PowerboardsShadDialog.alert(
-        useSafeArea: false,
+      return PowerboardsShadDialog.compactAlert(
         title: Text(title),
         description: Text(description),
         actions: [ShadButton(onPressed: () => Navigator.of(context).pop(), child: const Text("OK"))],
