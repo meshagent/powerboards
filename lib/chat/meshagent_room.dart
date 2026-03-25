@@ -18,6 +18,7 @@ import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:meshagent_flutter_dev/developer_console.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
@@ -811,7 +812,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length - 1) : trimmed;
   }
 
-  String? _resolvedThreadListPath(String? threadListPath, {String? threadDir}) {
+  String? _defaultThreadDocumentDir(String? agentName) {
+    if (agentName == null) {
+      return null;
+    }
+
+    final trimmed = agentName.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+
+    return '.threads/$trimmed';
+  }
+
+  String? _resolvedThreadListPath(String? threadListPath, {String? threadDir, String? agentName}) {
     if (threadListPath != null) {
       final trimmed = threadListPath.trim();
       if (trimmed.isNotEmpty) {
@@ -821,7 +835,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     final normalizedThreadDir = _normalizedThreadDocumentDir(threadDir);
     if (normalizedThreadDir == null) {
-      return null;
+      final defaultThreadDir = _defaultThreadDocumentDir(agentName);
+      if (defaultThreadDir == null) {
+        return null;
+      }
+      return "$defaultThreadDir/index.threadl";
     }
 
     return "$normalizedThreadDir/index.threadl";
@@ -833,11 +851,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return "$normalizedThreadDir/main.thread";
     }
 
-    if (agent != null) {
-      return '.threads/$agent/main.thread';
-    } else {
-      return '.threads/main.thread';
+    final defaultThreadDir = _defaultThreadDocumentDir(agent);
+    if (defaultThreadDir != null) {
+      return "$defaultThreadDir/main.thread";
     }
+
+    return '.threads/main.thread';
   }
 
   List<Widget> _meetingToolbarControls(BuildContext context, {bool compact = false}) {
@@ -873,6 +892,58 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final videoRoom = room.VideoRoomModel.maybeOf(context)?.room;
     return meetingViewController.state == MeetingViewState.joined && videoRoom != null;
+  }
+
+  Widget _buildAudioAgentEmptyState({
+    required String title,
+    required String description,
+    Widget? action,
+    double verticalOffset = AudioAgentEmptyState.defaultVerticalOffset,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(
+        child: AudioAgentEmptyState(
+          title: title,
+          description: description,
+          availableWidth: constraints.maxWidth,
+          action: action,
+          verticalOffset: verticalOffset,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMeetingTranscriberLobbyEmptyState() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobileScreen = MediaQuery.sizeOf(context).width < 600;
+        final showDescription = constraints.maxWidth >= 480 || isMobileScreen;
+
+        return Center(
+          child: AudioAgentEmptyState(
+            title: "Transcribe your meeting",
+            description: "Meet with this agent and include your team.",
+            availableWidth: constraints.maxWidth,
+            verticalOffset: showDescription ? AudioAgentEmptyState.defaultVerticalOffset - 36 : -30,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMeetingSingleThreadChatEmptyState(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
+      child: ChatThreadEmptyStateContent(title: title),
+    );
+  }
+
+  Widget _buildMeetingTranscriberTitleOnlyEmptyState(String title) {
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(
+        child: AudioAgentEmptyState(title: title, description: "", availableWidth: constraints.maxWidth, verticalOffset: -30),
+      ),
+    );
   }
 
   void _syncSecondaryPaneVisibility({required bool canViewStorageAllowed}) {
@@ -982,7 +1053,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildMobileThreadGetStartedActions(BuildContext context, {required VoidCallback onNewThread, VoidCallback? onViewAll}) {
+  Widget _buildMobileThreadGetStartedActions(
+    BuildContext context, {
+    required VoidCallback onNewThread,
+    required bool isNewThreadSelected,
+    VoidCallback? onViewAll,
+  }) {
     final theme = ShadTheme.of(context);
     final createActionStyle = GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: theme.colorScheme.foreground);
     final secondaryActionStyle = GoogleFonts.inter(
@@ -1024,7 +1100,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(LucideIcons.messageSquarePlus, size: 16, color: theme.colorScheme.foreground),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
+                    ),
+                    child: Icon(
+                      isNewThreadSelected ? LucideIcons.check : LucideIcons.messageSquarePlus,
+                      key: ValueKey(isNewThreadSelected),
+                      size: 16,
+                      color: theme.colorScheme.foreground,
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   Flexible(
                     child: Text("New thread", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: createActionStyle),
@@ -1156,6 +1246,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     String? threadDir,
     String? selectedThreadPath,
     ValueChanged<String?>? onSelectedThreadPathChanged,
+    Widget? emptyState,
   }) {
     final user = MeshagentAuth.current.getUser();
     final userEmail = user?["email"];
@@ -1166,11 +1257,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final chatActions = actions;
     final chatHorizontalInset = isMobile ? 0.0 : desktopPaneChatHorizontalInset;
     final chatBottomInset = isMobile ? 0.0 : desktopPaneBottomInset - 8;
-    final resolvedThreadListPath = _resolvedThreadListPath(threadListPath, threadDir: threadDir);
+    final resolvedThreadListPath = _resolvedThreadListPath(threadListPath, threadDir: threadDir, agentName: agentName);
     final hasThreadList = isMultiThread && resolvedThreadListPath != null;
     final showThreadRail = !isMobile && showEmbeddedThreadList && hasThreadList;
     final showInlineThreadList = !isMobile && !showEmbeddedThreadList && hasThreadList;
     final showMobileThreadActions = isMobile && isMultiThread;
+    final newThreadEmptyStateVerticalOffset = showInlineThreadList
+        ? -((desktopPaneSecondaryControlHeight + desktopPaneBottomInset + desktopPaneSecondaryRowContentGap) / 2)
+        : 0.0;
+    final meetingActiveSingleThreadEmptyState =
+        emptyState ??
+        (_isMeetingSessionActive(context) && threadDisplayMode == ChatThreadDisplayMode.singleThread
+            ? _buildMeetingSingleThreadChatEmptyState("Chat or share files")
+            : null);
     final agentKey = _selectedThreadAgentKey(
       services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!),
     );
@@ -1186,8 +1285,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         documentPath: documentPath,
         selectedThreadPath: selectedThreadPath,
         onSelectedThreadPathChanged: onSelectedThreadPathChanged,
-        participantNames: [if (userEmail is String && userEmail.isNotEmpty) userEmail, if (agentName != null) agentName],
+        participantNames: [
+          if (userEmail is String && userEmail.isNotEmpty) userEmail,
+          if (agentName case final String agentParticipantName) agentParticipantName,
+        ],
+        newThreadEmptyStateVerticalOffset: newThreadEmptyStateVerticalOffset,
         joinMeeting: _joinMeeting,
+        emptyState: meetingActiveSingleThreadEmptyState,
       ),
     );
 
@@ -1203,6 +1307,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 ? _buildMobileThreadGetStartedActions(
                     context,
                     onNewThread: () => onSelectedThreadPathChanged?.call(null),
+                    isNewThreadSelected: selectedThreadPath == null,
                     onViewAll: resolvedThreadListPath == null
                         ? null
                         : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
@@ -1270,7 +1375,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = math.min(420.0, math.max(320.0, constraints.maxWidth * 0.42));
+        final maxWidth = math.min(520.0, math.max(420.0, constraints.maxWidth * 0.55));
 
         return Column(
           children: [
@@ -1327,6 +1432,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildMeetingTranscriberArea(BuildContext context, String agentName, List<Widget> actions) {
+    final meetingIsActive = _isMeetingSessionActive(context);
+
+    Widget startMeetingAction() {
+      return ShadButton(
+        onPressed: () {
+          _joinMeeting();
+        },
+        child: const Text("Start Meeting"),
+      );
+    }
+
     return WaitForAgentParticipantBuilder(
       key: ValueKey(agentName),
       room: widget.room,
@@ -1340,14 +1456,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             child: participant == null
                 ? _buildRoomLoading(context, title: "Waiting for transcriber agent to join room")
                 : controller.inMeeting
-                ? _buildChatArea(context, null, [])
-                : Center(
-                    child: ShadButton(
-                      onPressed: () {
-                        _joinMeeting();
-                      },
-                      child: Text("Start Meeting"),
-                    ),
+                ? _buildChatArea(
+                    context,
+                    null,
+                    [],
+                    emptyState: !meetingIsActive
+                        ? _buildMeetingTranscriberLobbyEmptyState()
+                        : _buildMeetingTranscriberTitleOnlyEmptyState("Chat or share files"),
+                  )
+                : _buildAudioAgentEmptyState(
+                    title: "Transcribe your meeting",
+                    description: "Meet with this agent and include your team.",
+                    action: startMeetingAction(),
+                    verticalOffset: AudioAgentEmptyState.defaultVerticalOffset - 20,
                   ),
           ),
         ],
@@ -1627,6 +1748,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       child: MeshagentInlineThreadCreatePrompt(
         key: ValueKey("inline-thread-create-${agentKey ?? "none"}"),
         createItemTopPadding: 0,
+        isSelected: _selectedThreadPathForAgentKey(agentKey) == null,
         onOpen: () => _setSelectedThreadPath(agentKey, null),
         onViewAllThreads: _showMaximizedChat,
       ),

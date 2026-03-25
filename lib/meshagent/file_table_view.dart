@@ -30,6 +30,7 @@ import 'package:powerboards/settings/format_date.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
+import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/text_validators.dart';
 
@@ -1692,6 +1693,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                                       onToggleSelected: _toggleSelected,
                                       onToggleAllSelected: _toggleAllSelected,
                                       onSortChanged: _setSort,
+                                      onUploadFiles: () => _addFiles(folder),
+                                      onCreateFolder: () => _addFolder(folder),
+                                      onCreateTextFile: _showNewTextFileDialog,
                                       buildActionsMenu: _buildActionsMenu,
                                     );
                                   },
@@ -1725,6 +1729,9 @@ class FileTableView extends StatefulWidget {
   final void Function(String key, bool selected) onToggleSelected;
   final void Function(bool selected) onToggleAllSelected;
   final void Function(FileSort) onSortChanged;
+  final VoidCallback onUploadFiles;
+  final VoidCallback onCreateFolder;
+  final VoidCallback onCreateTextFile;
   final Widget Function(BuildContext? boundaryContext, String fullPath, bool isFolder, bool showTrigger) buildActionsMenu;
 
   const FileTableView({
@@ -1739,6 +1746,9 @@ class FileTableView extends StatefulWidget {
     required this.onToggleSelected,
     required this.onToggleAllSelected,
     required this.onSortChanged,
+    required this.onUploadFiles,
+    required this.onCreateFolder,
+    required this.onCreateTextFile,
     required this.buildActionsMenu,
   });
 
@@ -1806,27 +1816,51 @@ class _FileTableViewState extends State<FileTableView> {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    return _buildTableCard(
-      Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(LucideIcons.folder, size: 80, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              Text(
-                "This folder is empty",
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600, color: shadSecondaryForeground),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "It looks like there are no files here",
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: shadMutedForeground),
-              ),
-            ],
+    Widget createMenuButton() {
+      return AppContextMenuButton(
+        boundaryContext: context,
+        entries: [
+          AppMenuEntry(
+            title: "New folder",
+            description: "Create a folder in this location",
+            icon: LucideIcons.folderPlus,
+            onPressed: widget.onCreateFolder,
           ),
+          AppMenuEntry(
+            title: "New Text File",
+            description: "Create a new text file in this folder",
+            icon: LucideIcons.fileText,
+            onPressed: widget.onCreateTextFile,
+          ),
+        ],
+        constraints: const BoxConstraints(minWidth: 220),
+        childBuilder: (context, controller) {
+          return ShadButton.outline(
+            leading: const Icon(LucideIcons.plus),
+            trailing: const Icon(LucideIcons.chevronDown),
+            onPressed: () {
+              if (!controller.isOpen) {
+                controller.show();
+              }
+            },
+            child: const Text("Create..."),
+          );
+        },
+      );
+    }
+
+    return _buildTableCard(
+      PaneEmptyState(
+        title: "This folder is empty",
+        titleScaleOverride: 0.72,
+        verticalOffset: -28,
+        action: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ShadButton.outline(leading: const Icon(LucideIcons.upload), onPressed: widget.onUploadFiles, child: const Text("Upload files")),
+            const SizedBox(width: 8),
+            createMenuButton(),
+          ],
         ),
       ),
     );

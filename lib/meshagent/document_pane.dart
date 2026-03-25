@@ -13,6 +13,7 @@ import 'package:meshagent_flutter_shadcn/viewers/transcript.dart';
 import 'package:path/path.dart' as p;
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
+import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -104,6 +105,10 @@ class _DocumentPane extends State<DocumentPane> {
 
   Widget _meshagentPreview() {
     final ext = _ext(widget.path);
+    final allowEmptyDocumentViewer = switch (ext) {
+      "transcript" => true,
+      _ => false,
+    };
 
     return DocumentConnectionScope(
       key: ValueKey('${widget.path}:$_reload'),
@@ -118,7 +123,7 @@ class _DocumentPane extends State<DocumentPane> {
               builder: (context) => Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  (document.root.getChildren().isNotEmpty)
+                  (document.root.getChildren().isNotEmpty || allowEmptyDocumentViewer)
                       ? Expanded(
                           child: switch (ext) {
                             "document" => SingleChildScrollView(
@@ -152,35 +157,20 @@ class _DocumentPane extends State<DocumentPane> {
   }
 
   Widget _noPreview({String? subtitle}) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
+    return PaneEmptyState(
+      title: "No preview available",
+      description: subtitle,
+      titleScaleOverride: 0.72,
+      verticalOffset: -28,
+      action: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            "No preview available",
-            style: TextStyle(color: ShadTheme.of(context).colorScheme.accentForeground, fontSize: 18, fontWeight: FontWeight.w500),
+          Tooltip(
+            message: "Download",
+            child: ShadButton.outline(leading: const Icon(LucideIcons.download), onPressed: _download, child: const Text("Download")),
           ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: ShadTheme.of(context).colorScheme.mutedForeground),
-            ),
-          ],
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Tooltip(
-                message: "Download",
-                child: ShadButton.outline(leading: const Icon(LucideIcons.download), onPressed: _download, child: const Text("Download")),
-              ),
-              const SizedBox(width: 8),
-              _openWithMenuButton(),
-            ],
-          ),
+          const SizedBox(width: 8),
+          _openWithMenuButton(),
         ],
       ),
     );
