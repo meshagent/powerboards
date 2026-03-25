@@ -1022,6 +1022,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
 
     return 40;
   }
+
   @override
   void dispose() {
     _menuController.dispose();
@@ -1153,14 +1154,6 @@ class _ThreadListItemState extends State<_ThreadListItem> {
       },
     );
   }
-}
-
-EdgeInsets _threadListRowPadding(bool isMobile) {
-  if (isMobile) {
-    return const EdgeInsets.symmetric(vertical: 14);
-  }
-
-  return const EdgeInsets.only(left: _desktopThreadListHorizontalPadding);
 }
 
 double _threadListLeadingWidth(bool isMobile) => isMobile ? 36 : 16;
