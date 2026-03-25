@@ -93,6 +93,15 @@ class MeshagentThreadView extends StatefulWidget {
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
 
+  String _chatPlaceholderText(String? agentName) {
+    final normalizedAgentName = agentName?.trim();
+    if (normalizedAgentName == null || normalizedAgentName.isEmpty) {
+      return "Type a message";
+    }
+
+    return "Type a message or @$normalizedAgentName";
+  }
+
   Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description}) {
     final content = Padding(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
@@ -190,7 +199,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           document: document,
           room: widget.client,
           controller: _chatController,
-          inputPlaceholder: Text("Send a message or @developer"),
+          inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
           initialMessage: initialMessageText == null
               ? null
               : ma.ChatMessage(
