@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -185,6 +186,9 @@ class _DesktopShareLayout extends StatelessWidget {
   final lk.Room room;
   final List<lk.Participant> participants;
 
+  static const double _leftStripWidth = 250.0;
+  static const double _topStripHeight = 100.0;
+
   Iterable<lk.TrackPublication> getSharePublications(List<lk.Participant> participants) sync* {
     for (final participant in participants) {
       final publication = participant.getTrackPublicationBySource(lk.TrackSource.screenShareVideo);
@@ -195,6 +199,62 @@ class _DesktopShareLayout extends StatelessWidget {
     }
   }
 
+  Size _fitAspect({
+    required double aspectRatio,
+    required double maxWidth,
+    required double maxHeight,
+  }) {
+    if (maxWidth <= 0 || maxHeight <= 0 || aspectRatio <= 0) {
+      return Size.zero;
+    }
+
+    double width = maxWidth;
+    double height = width / aspectRatio;
+
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * aspectRatio;
+    }
+
+    return Size(width, height);
+  }
+
+  bool _shouldPutStripOnLeft({
+    required BoxConstraints constraints,
+    required double aspectRatio,
+    required bool hasExpanded,
+  }) {
+    if (hasExpanded) {
+      return false;
+    }
+
+    final maxWidth = constraints.maxWidth;
+    final maxHeight = constraints.maxHeight;
+
+    final leftAvailableWidth = math.max(0.0, maxWidth - _leftStripWidth - _railGap);
+    final leftAvailableHeight = maxHeight;
+
+    final topAvailableWidth = maxWidth;
+    final topAvailableHeight = math.max(0.0, maxHeight - _topStripHeight - _railGap);
+
+    final leftFit = _fitAspect(
+      aspectRatio: aspectRatio,
+      maxWidth: leftAvailableWidth,
+      maxHeight: leftAvailableHeight,
+    );
+
+    final topFit = _fitAspect(
+      aspectRatio: aspectRatio,
+      maxWidth: topAvailableWidth,
+      maxHeight: topAvailableHeight,
+    );
+
+    final leftArea = leftFit.width * leftFit.height;
+    final topArea = topFit.width * topFit.height;
+
+    return leftArea >= topArea;
+  }
+
   @override
   Widget build(BuildContext context) {
     final expandController = Controller.ofType<ExpandParticipantController>(context);
@@ -203,42 +263,61 @@ class _DesktopShareLayout extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         bool stripOnLeft = true;
-        if (sharePublications.length == 1) {
+
+        if (!expandController.hasExpanded && sharePublications.length == 1) {
           final track = sharePublications.first;
           final dimensions = track.dimensions;
 
-          if (dimensions != null) {
-            stripOnLeft = dimensions.width <= dimensions.height;
+          if (dimensions != null && dimensions.width > 0 && dimensions.height > 0) {
+            final aspectRatio = dimensions.width / dimensions.height;
+
+            stripOnLeft = _shouldPutStripOnLeft(
+              constraints: constraints,
+              aspectRatio: aspectRatio,
+              hasExpanded: expandController.hasExpanded,
+            );
           }
         }
 
         if (stripOnLeft) {
           return Row(
-            crossAxisAlignment: .start,
-            spacing: _railGap,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: ExpandableCameraGrid(participants: participants)),
-
-              if (!expandController.hasExpanded)
+              Expanded(
+                child: ExpandableCameraGrid(participants: participants),
+              ),
+              if (!expandController.hasExpanded) ...[
+                const SizedBox(width: _railGap),
                 SizedBox(
-                  width: 250.0,
-                  child: CameraStrip(room: room, horizontal: false, participants: participants),
+                  width: _leftStripWidth,
+                  child: CameraStrip(
+                    room: room,
+                    horizontal: false,
+                    participants: participants,
+                  ),
                 ),
+              ],
             ],
           );
         }
 
         return Column(
-          crossAxisAlignment: .stretch,
-          spacing: _railGap,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!expandController.hasExpanded)
+            if (!expandController.hasExpanded) ...[
               SizedBox(
-                height: 100.0,
-                child: CameraStrip(room: room, horizontal: true, participants: participants),
+                height: _topStripHeight,
+                child: CameraStrip(
+                  room: room,
+                  horizontal: true,
+                  participants: participants,
+                ),
               ),
-
-            Expanded(child: ExpandableCameraGrid(participants: participants)),
+              const SizedBox(height: _railGap),
+            ],
+            Expanded(
+              child: ExpandableCameraGrid(participants: participants),
+            ),
           ],
         );
       },
