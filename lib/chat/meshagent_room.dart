@@ -952,24 +952,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  void _syncSecondaryPaneVisibility({required bool canViewStorageAllowed}) {
-    final shouldHideFiles = controller.isFilesShown && !canViewStorageAllowed;
-
-    if (!shouldHideFiles) {
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-
-      if (shouldHideFiles) {
-        controller.hideFiles();
-      }
-    });
-  }
-
   List<Widget> _meetingPaneActions(BuildContext context, {required bool canViewStorageAllowed}) {
     final meetingSessionActive = _isMeetingSessionActive(context);
     final activeMeetingPane = meetingSessionActive && controller.inMeeting;
@@ -1949,7 +1931,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             final filesVisible = canViewStorageAllowed && controller.isFilesShown;
                             final supported = _supportedServices(services.state.value!);
                             final selected = _resolveSelectedAgent(supported);
-                            _syncSecondaryPaneVisibility(canViewStorageAllowed: canViewStorageAllowed);
                             final meetingSessionActive = _isMeetingSessionActive(context);
                             final split = filesVisible || controller.inMeeting;
 
