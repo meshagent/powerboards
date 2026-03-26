@@ -10,6 +10,7 @@ import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/meshagent/route_service_match.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:meshagent/meshagent.dart' as ma;
@@ -523,6 +524,9 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                                   final service = services.state.value?.firstWhereOrNull(
                                     (s) => s.metadata.annotations["meshagent.service.id"] == option.id,
                                   );
+                                  final serviceRoutes = service == null
+                                      ? const <ma.Route>[]
+                                      : routesForService(routes: routes.state.value ?? const <ma.Route>[], service: service);
                                   final inRoom = service != null;
                                   final identity = service?.agents.firstOrNull?.name;
                                   final hasMessaging = service != null && hasMessagingParticipant(service);
@@ -550,16 +554,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                                             )
                                             .toList()) ??
                                         [],
-                                    routes:
-                                        (routes.state.value
-                                            ?.where(
-                                              (x) =>
-                                                  x.annotations["meshagent.service.id"] != null &&
-                                                  x.annotations["meshagent.service.id"] ==
-                                                      service?.metadata.annotations["meshagent.service.id"],
-                                            )
-                                            .toList()) ??
-                                        [],
+                                    routes: serviceRoutes,
                                     busy: false,
                                     version: "latest",
                                     versionHasUpdate: false,
