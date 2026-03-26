@@ -61,6 +61,13 @@ class MeetingView extends StatefulWidget {
 class _MeetingViewState extends State<MeetingView> {
   final expandParticipantController = ExpandParticipantController();
 
+  @override
+  void dispose() {
+    super.dispose();
+
+    expandParticipantController.dispose();
+  }
+
   lk.VideoTrack? _screenShareTrackFor(lk.Participant participant) {
     final publication = participant.getTrackPublicationBySource(lk.TrackSource.screenShareVideo);
     final track = publication?.track;
@@ -199,11 +206,7 @@ class _DesktopShareLayout extends StatelessWidget {
     }
   }
 
-  Size _fitAspect({
-    required double aspectRatio,
-    required double maxWidth,
-    required double maxHeight,
-  }) {
+  Size _fitAspect({required double aspectRatio, required double maxWidth, required double maxHeight}) {
     if (maxWidth <= 0 || maxHeight <= 0 || aspectRatio <= 0) {
       return Size.zero;
     }
@@ -219,11 +222,7 @@ class _DesktopShareLayout extends StatelessWidget {
     return Size(width, height);
   }
 
-  bool _shouldPutStripOnLeft({
-    required BoxConstraints constraints,
-    required double aspectRatio,
-    required bool hasExpanded,
-  }) {
+  bool _shouldPutStripOnLeft({required BoxConstraints constraints, required double aspectRatio, required bool hasExpanded}) {
     if (hasExpanded) {
       return false;
     }
@@ -237,17 +236,9 @@ class _DesktopShareLayout extends StatelessWidget {
     final topAvailableWidth = maxWidth;
     final topAvailableHeight = math.max(0.0, maxHeight - _topStripHeight - _railGap);
 
-    final leftFit = _fitAspect(
-      aspectRatio: aspectRatio,
-      maxWidth: leftAvailableWidth,
-      maxHeight: leftAvailableHeight,
-    );
+    final leftFit = _fitAspect(aspectRatio: aspectRatio, maxWidth: leftAvailableWidth, maxHeight: leftAvailableHeight);
 
-    final topFit = _fitAspect(
-      aspectRatio: aspectRatio,
-      maxWidth: topAvailableWidth,
-      maxHeight: topAvailableHeight,
-    );
+    final topFit = _fitAspect(aspectRatio: aspectRatio, maxWidth: topAvailableWidth, maxHeight: topAvailableHeight);
 
     final leftArea = leftFit.width * leftFit.height;
     final topArea = topFit.width * topFit.height;
@@ -283,18 +274,12 @@ class _DesktopShareLayout extends StatelessWidget {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: ExpandableCameraGrid(participants: participants),
-              ),
+              Expanded(child: ExpandableCameraGrid(participants: participants)),
               if (!expandController.hasExpanded) ...[
                 const SizedBox(width: _railGap),
                 SizedBox(
                   width: _leftStripWidth,
-                  child: CameraStrip(
-                    room: room,
-                    horizontal: false,
-                    participants: participants,
-                  ),
+                  child: CameraStrip(room: room, horizontal: false, participants: participants),
                 ),
               ],
             ],
@@ -307,17 +292,11 @@ class _DesktopShareLayout extends StatelessWidget {
             if (!expandController.hasExpanded) ...[
               SizedBox(
                 height: _topStripHeight,
-                child: CameraStrip(
-                  room: room,
-                  horizontal: true,
-                  participants: participants,
-                ),
+                child: CameraStrip(room: room, horizontal: true, participants: participants),
               ),
               const SizedBox(height: _railGap),
             ],
-            Expanded(
-              child: ExpandableCameraGrid(participants: participants),
-            ),
+            Expanded(child: ExpandableCameraGrid(participants: participants)),
           ],
         );
       },

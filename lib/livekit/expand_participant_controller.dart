@@ -4,11 +4,19 @@ class ExpandParticipantController extends Controller {
   String? _expandedIdentity;
 
   void expand(String identity) {
+    if (_expandedIdentity == identity) {
+      return;
+    }
+
     _expandedIdentity = identity;
     notifyListeners();
   }
 
   void collapse() {
+    if (_expandedIdentity == null) {
+      return;
+    }
+
     _expandedIdentity = null;
     notifyListeners();
   }

@@ -1,5 +1,4 @@
 import 'dart:core';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -8,7 +7,6 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/device_manager.dart';
-import 'package:powerboards/theme/theme.dart';
 
 import 'room.dart';
 

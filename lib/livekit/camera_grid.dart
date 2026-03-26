@@ -33,10 +33,14 @@ class ExpandableCameraGrid extends StatefulWidget {
   final List<Participant> participants;
 
   @override
-  State<ExpandableCameraGrid> createState() => _ExpandableCameraGridState();
+  State createState() => _ExpandableCameraGridState();
 }
 
 class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
+  late ExpandParticipantController _expandedController;
+
+  bool _collapseScheduled = false;
+
   bool _participantHasShare(Participant participant) {
     return _activeVideoPublications(participant, source: TrackSource.screenShareVideo).isNotEmpty;
   }
@@ -53,45 +57,67 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
     return participants.where((p) => _participantHasCamera(p)).length;
   }
 
-  bool _expandedShareStillAvailable(List<Participant> participants) {
-    final expandedController = Controller.ofType<ExpandParticipantController>(context);
-
-    return participants.any((p) => expandedController.isExpanded(p.identity) && _participantHasShare(p));
+  bool _expandedCameraStillAvailable(List<Participant> participants) {
+    return participants.any((p) => _expandedController.isExpanded(p.identity) && _participantHasCamera(p));
   }
 
-  bool _expandedCameraStillAvailable(List<Participant> participants) {
-    final expandedController = Controller.ofType<ExpandParticipantController>(context);
+  bool _expandedVideoStillAvailable(List<Participant> participants) {
+    return participants.any((p) => _expandedController.isExpanded(p.identity) && (_participantHasShare(p) || _participantHasCamera(p)));
+  }
 
-    return participants.any((p) => expandedController.isExpanded(p.identity) && _participantHasCamera(p));
+  bool _shouldCollapseExpandedParticipant(List<Participant> participants) {
+    if (!_expandedController.hasExpanded) {
+      return false;
+    }
+
+    final numberOfShares = _getNumberOfShares(participants);
+    if (numberOfShares > 0) {
+      return !_expandedVideoStillAvailable(participants);
+    }
+
+    final numberOfVideos = _getNumberOfVideos(participants);
+    if (numberOfVideos > 0) {
+      return !_expandedCameraStillAvailable(participants);
+    }
+
+    return false;
+  }
+
+  void _scheduleCollapseIfNeeded() {
+    if (_collapseScheduled || !_shouldCollapseExpandedParticipant(widget.participants)) {
+      return;
+    }
+
+    _collapseScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _collapseScheduled = false;
+
+      if (!mounted || !_shouldCollapseExpandedParticipant(widget.participants)) {
+        return;
+      }
+
+      _expandedController.collapse();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    _expandedController = Controller.ofType<ExpandParticipantController>(context);
   }
 
   @override
   void didUpdateWidget(covariant ExpandableCameraGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final expandedController = Controller.ofType<ExpandParticipantController>(context);
-
-    if (expandedController.hasExpanded) {
-      final numberOfShares = _getNumberOfShares(widget.participants);
-      if (numberOfShares > 0) {
-        if (!_expandedShareStillAvailable(widget.participants)) {
-          expandedController.collapse();
-        }
-      } else {
-        final numberOfVideos = _getNumberOfVideos(widget.participants);
-        if (numberOfVideos > 0 && !_expandedCameraStillAvailable(widget.participants)) {
-          expandedController.collapse();
-        }
-      }
-    }
+    _scheduleCollapseIfNeeded();
   }
 
   @override
   Widget build(BuildContext context) {
-    final expandController = Controller.ofType<ExpandParticipantController>(context);
-
-    final participants = expandController.hasExpanded
-        ? widget.participants.where((p) => expandController.isExpanded(p.identity)).toList(growable: false)
+    final participants = _expandedController.hasExpanded
+        ? widget.participants.where((p) => _expandedController.isExpanded(p.identity)).toList(growable: false)
         : widget.participants;
 
     return cameraGridBuilder(
