@@ -18,7 +18,8 @@ import 'package:powerboards/livekit/video_room_participants_builder.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 
-const Color _meetingSurfaceColor = Color(0xFF222222);
+const _railGap = 16.0;
+const _compactControlWidth = 48.0;
 
 enum MeetingViewState { preview, joined, ended }
 
@@ -74,18 +75,21 @@ class _MeetingViewState extends State<MeetingView> {
     return _screenShareTrackFor(participant) != null;
   }
 
-  Widget _cameraStripBuilder(lk.Room room, bool horizontal, List<lk.Participant> participants) {
-    final hasShare = participants.any(_participantHasActiveShare);
+  Widget _mobileLayout(lk.Room room, List<lk.Participant> participants, bool hasShare) {
+    return Column(
+      crossAxisAlignment: .stretch,
+      children: [
+        if (hasShare)
+          SizedBox(
+            height: 100,
+            child: Padding(
+              padding: .fromLTRB(5, 0, 0, 5),
+              child: CameraStrip(room: room, horizontal: true),
+            ),
+          ),
 
-    if (!hasShare) return const SizedBox.shrink();
-
-    return SizedBox(
-      width: horizontal ? null : 250,
-      height: horizontal ? 100 : null,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(5, 0, horizontal ? 0 : 5, horizontal ? 5 : 0),
-        child: CameraStrip(room: room, horizontal: horizontal),
-      ),
+        Expanded(child: ExpandableCameraGrid(participants: participants)),
+      ],
     );
   }
 
@@ -104,58 +108,51 @@ class _MeetingViewState extends State<MeetingView> {
               (videoRoom == null && meetingViewController.state == MeetingViewState.joined);
 
           if (inPreview) {
-            return DevicePreview(
-              onJoin: (enableVideo, enableAudio) {
-                final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
-                final navController = Controller.ofType<NavController>(context);
+            return Padding(
+              padding: const .symmetric(horizontal: 20.0),
+              child: DevicePreview(
+                onJoin: (enableVideo, enableAudio) {
+                  final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
+                  final navController = Controller.ofType<NavController>(context);
 
-                if (videoChatConnection != null) {
-                  videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
-                }
+                  if (videoChatConnection != null) {
+                    videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
+                  }
 
-                meetingViewController.enterMeeting();
-                navController.hideNav();
-              },
-              onCancel: widget.onCancel,
+                  meetingViewController.enterMeeting();
+                  navController.hideNav();
+                },
+                onCancel: widget.onCancel,
+              ),
             );
           } else if (meetingViewController.state == MeetingViewState.joined) {
             final room = VideoRoomModel.maybeOf(context)?.room;
             if (room == null) return const SizedBox.shrink();
 
-            return VideoRoomParticipantsBuilder(
-              room: room,
-              builder: (context, participants) {
-                return ControllerBuilder<ExpandParticipantController>(
-                  controller: expandParticipantController,
-                  builder: (context) {
-                    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-                    final hasShare = participants.any(_participantHasActiveShare);
+            return Padding(
+              padding: const .all(20),
+              child: VideoRoomParticipantsBuilder(
+                room: room,
+                builder: (context, participants) {
+                  return ControllerBuilder<ExpandParticipantController>(
+                    controller: expandParticipantController,
+                    builder: (context) {
+                      final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+                      final hasShare = participants.any(_participantHasActiveShare);
 
-                    if (hasShare && !isMobile) {
-                      return _DesktopShareLayout(room: room, participants: participants);
-                    }
+                      if (isMobile) {
+                        return _mobileLayout(room, participants, hasShare);
+                      }
 
-                    return ColoredBox(
-                      color: _meetingSurfaceColor,
-                      child: isMobile
-                          ? Column(
-                              crossAxisAlignment: .stretch,
-                              children: [
-                                _cameraStripBuilder(room, true, participants),
-                                Expanded(child: ExpandableCameraGrid(participants: participants)),
-                              ],
-                            )
-                          : Row(
-                              crossAxisAlignment: .stretch,
-                              children: [
-                                Expanded(child: ExpandableCameraGrid(participants: participants)),
-                                _cameraStripBuilder(room, false, participants),
-                              ],
-                            ),
-                    );
-                  },
-                );
-              },
+                      if (hasShare) {
+                        return _DesktopShareLayout(room: room, participants: participants);
+                      }
+
+                      return ExpandableCameraGrid(participants: participants);
+                    },
+                  );
+                },
+              ),
             );
           } else if (meetingViewController.state == MeetingViewState.ended) {
             return Center(
@@ -182,61 +179,67 @@ class _MeetingViewState extends State<MeetingView> {
   }
 }
 
-const _outerPadding = 24.0;
-const _railWidth = 158.4;
-const _railGap = 16.0;
-const _shareAspectRatio = 16 / 9;
-const _compactControlWidth = 48.0;
-
 class _DesktopShareLayout extends StatelessWidget {
   const _DesktopShareLayout({required this.room, required this.participants});
 
   final lk.Room room;
   final List<lk.Participant> participants;
 
+  Iterable<lk.TrackPublication> getSharePublications(List<lk.Participant> participants) sync* {
+    for (final participant in participants) {
+      final publication = participant.getTrackPublicationBySource(lk.TrackSource.screenShareVideo);
+
+      if (publication != null && !publication.muted && publication.track is lk.VideoTrack) {
+        yield publication;
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final expandController = Controller.ofType<ExpandParticipantController>(context);
+    final sharePublications = getSharePublications(participants).toList(growable: false);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final expandController = Controller.ofType<ExpandParticipantController>(context);
+        bool stripOnLeft = true;
+        if (sharePublications.length == 1) {
+          final track = sharePublications.first;
+          final dimensions = track.dimensions;
 
-        final maxContentWidth = (constraints.maxWidth - _outerPadding * 2).clamp(0.0, double.infinity);
-        final maxContentHeight = (constraints.maxHeight - _outerPadding * 2).clamp(0.0, double.infinity);
-
-        final maxShareWidth = (maxContentWidth - _railWidth - _railGap).clamp(0.0, double.infinity);
-        final shareHeightFromWidth = maxShareWidth / _shareAspectRatio;
-        final shareHeight = shareHeightFromWidth > maxContentHeight ? maxContentHeight : shareHeightFromWidth;
-        final shareWidth = shareHeight * _shareAspectRatio;
-
-        final expandedParticipants = participants.where((p) => expandController.isExpanded(p.identity)).toList();
-
-        if (expandController.hasExpanded) {
-          return ExpandableCameraGrid(participants: expandedParticipants);
+          if (dimensions != null) {
+            stripOnLeft = dimensions.width <= dimensions.height;
+          }
         }
 
-        return Center(
-          child: Padding(
-            padding: const .all(_outerPadding),
-            child: SizedBox(
-              width: shareWidth + _railGap + _railWidth,
-              height: shareHeight,
-              child: Row(
-                crossAxisAlignment: .start,
-                spacing: _railGap,
-                children: [
-                  SizedBox(
-                    width: shareWidth,
-                    height: shareHeight,
-                    child: ExpandableCameraGrid(participants: participants),
-                  ),
-                  SizedBox(
-                    width: _railWidth,
-                    child: CameraStrip(room: room, horizontal: false, participants: participants),
-                  ),
-                ],
+        if (stripOnLeft) {
+          return Row(
+            crossAxisAlignment: .start,
+            spacing: _railGap,
+            children: [
+              Expanded(child: ExpandableCameraGrid(participants: participants)),
+
+              if (!expandController.hasExpanded)
+                SizedBox(
+                  width: 250.0,
+                  child: CameraStrip(room: room, horizontal: false, participants: participants),
+                ),
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: .stretch,
+          spacing: _railGap,
+          children: [
+            if (!expandController.hasExpanded)
+              SizedBox(
+                height: 100.0,
+                child: CameraStrip(room: room, horizontal: true, participants: participants),
               ),
-            ),
-          ),
+
+            Expanded(child: ExpandableCameraGrid(participants: participants)),
+          ],
         );
       },
     );
@@ -251,10 +254,10 @@ class MeetingToolkits extends StatefulWidget {
   final bool compact;
 
   @override
-  State createState() => _MeetingActions();
+  State createState() => _MeetingToolkitsState();
 }
 
-class _MeetingActions extends State<MeetingToolkits> {
+class _MeetingToolkitsState extends State<MeetingToolkits> {
   Timer? timer;
 
   late final toolkits = Resource<List<ToolkitDescription>>(() => widget.room.agents.listToolkits());

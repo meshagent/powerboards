@@ -88,17 +88,21 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
 
   @override
   Widget build(BuildContext context) {
-    final expandedController = Controller.ofType<ExpandParticipantController>(context);
+    final expandController = Controller.ofType<ExpandParticipantController>(context);
 
-    final participants = expandedController.hasExpanded
-        ? widget.participants.where((p) => expandedController.isExpanded(p.identity)).toList(growable: false)
+    final participants = expandController.hasExpanded
+        ? widget.participants.where((p) => expandController.isExpanded(p.identity)).toList(growable: false)
         : widget.participants;
 
     return cameraGridBuilder(
       context,
       participants,
+      spacing: 12.0,
       frameBuilder: (context, participant, track, trackWidget, showName) {
-        return ParticipantTrack(participant: participant, track: trackWidget, showName: showName);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: ParticipantTrack(participant: participant, track: trackWidget, showName: showName),
+        );
       },
     );
   }
@@ -157,7 +161,6 @@ Widget cameraGridBuilder(
   int rowsDesired = 0,
   int columnsDesired = 0,
   bool tryFill = true,
-  Color background = const Color(0xFF222222),
   required Widget Function(BuildContext context, Participant participant, VideoTrack? track, Widget trackWidget, bool showName)
   frameBuilder,
 }) {
@@ -207,8 +210,8 @@ Widget cameraGridBuilder(
       tracks.add(
         Container(
           color: const Color(0xFF222222),
-          alignment: Alignment.center,
-          child: p.identity.contains(".agent") ? AudioStats(room: room, participant: p) : const SizedBox(),
+          alignment: .center,
+          child: p.identity.contains(".agent") ? AudioStats(room: room, participant: p) : const SizedBox.shrink(),
         ),
       );
     }
@@ -216,7 +219,7 @@ Widget cameraGridBuilder(
 
   final slots = tracks.length;
   if (slots == 0) {
-    return Container(color: background);
+    return const SizedBox.shrink();
   }
 
   return LayoutBuilder(
@@ -259,7 +262,7 @@ Widget cameraGridBuilder(
 
       var slots = tracks.length;
       if (slots == 0) {
-        return Container(color: background, width: constraints.biggest.width, height: constraints.biggest.width);
+        return const SizedBox.shrink();
       }
 
       final objectWidth = constraints.biggest.width;
