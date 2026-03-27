@@ -70,6 +70,11 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
       return false;
     }
 
+    // expanded participant should be in the list of participants. If not, collapse.
+    if (!participants.any((p) => _expandedController.isExpanded(p.identity))) {
+      return true;
+    }
+
     final numberOfShares = _getNumberOfShares(participants);
     if (numberOfShares > 0) {
       return !_expandedVideoStillAvailable(participants);
@@ -84,7 +89,7 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 
   void _scheduleCollapseIfNeeded() {
-    if (_collapseScheduled || !_shouldCollapseExpandedParticipant(widget.participants)) {
+    if (_collapseScheduled) {
       return;
     }
 
@@ -92,12 +97,19 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _collapseScheduled = false;
 
-      if (!mounted || !_shouldCollapseExpandedParticipant(widget.participants)) {
-        return;
-      }
+      if (!mounted) return;
 
-      _expandedController.collapse();
+      if (_shouldCollapseExpandedParticipant(widget.participants)) {
+        _expandedController.collapse();
+      }
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    _scheduleCollapseIfNeeded();
   }
 
   @override

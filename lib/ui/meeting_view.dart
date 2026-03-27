@@ -87,7 +87,7 @@ class _MeetingViewState extends State<MeetingView> {
     return Column(
       crossAxisAlignment: .stretch,
       children: [
-        if (hasShare)
+        if (hasShare && !expandParticipantController.hasExpanded)
           SizedBox(
             height: 100,
             child: Padding(
