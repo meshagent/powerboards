@@ -402,15 +402,18 @@ class _NavState extends State<Nav> {
           child: Column(
             children: [
               _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
-              Expanded(
-                child: _NavBar(
-                  projectId: widget.projectId,
-                  rooms: filteredRooms,
-                  canCreateRooms: canCreateRooms,
-                  onSave: () => rooms.refresh(),
-                  onRefresh: () => rooms.refresh(),
-                  setFilter: setFilter,
-                  balanceLow: balanceLow,
+
+              SignalBuilder(
+                builder: (context, _) => Expanded(
+                  child: _NavBar(
+                    projectId: widget.projectId,
+                    rooms: rooms.state.isReady ? filteredRooms : [],
+                    canCreateRooms: canCreateRooms,
+                    setFilter: setFilter,
+                    onSave: () => rooms.refresh(),
+                    onRefresh: () => rooms.refresh(),
+                    balanceLow: balanceLow,
+                  ),
                 ),
               ),
             ],
