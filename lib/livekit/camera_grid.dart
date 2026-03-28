@@ -33,10 +33,14 @@ class ExpandableCameraGrid extends StatefulWidget {
   final List<Participant> participants;
 
   @override
-  State<ExpandableCameraGrid> createState() => _ExpandableCameraGridState();
+  State createState() => _ExpandableCameraGridState();
 }
 
 class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
+  late ExpandParticipantController _expandedController;
+
+  bool _collapseScheduled = false;
+
   bool _participantHasShare(Participant participant) {
     return _activeVideoPublications(participant, source: TrackSource.screenShareVideo).isNotEmpty;
   }
@@ -53,52 +57,90 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
     return participants.where((p) => _participantHasCamera(p)).length;
   }
 
-  bool _expandedShareStillAvailable(List<Participant> participants) {
-    final expandedController = Controller.ofType<ExpandParticipantController>(context);
-
-    return participants.any((p) => expandedController.isExpanded(p.identity) && _participantHasShare(p));
+  bool _expandedCameraStillAvailable(List<Participant> participants) {
+    return participants.any((p) => _expandedController.isExpanded(p.identity) && _participantHasCamera(p));
   }
 
-  bool _expandedCameraStillAvailable(List<Participant> participants) {
-    final expandedController = Controller.ofType<ExpandParticipantController>(context);
+  bool _expandedVideoStillAvailable(List<Participant> participants) {
+    return participants.any((p) => _expandedController.isExpanded(p.identity) && (_participantHasShare(p) || _participantHasCamera(p)));
+  }
 
-    return participants.any((p) => expandedController.isExpanded(p.identity) && _participantHasCamera(p));
+  bool _shouldCollapseExpandedParticipant(List<Participant> participants) {
+    if (!_expandedController.hasExpanded) {
+      return false;
+    }
+
+    // expanded participant should be in the list of participants. If not, collapse.
+    if (!participants.any((p) => _expandedController.isExpanded(p.identity))) {
+      return true;
+    }
+
+    final numberOfShares = _getNumberOfShares(participants);
+    if (numberOfShares > 0) {
+      return !_expandedVideoStillAvailable(participants);
+    }
+
+    final numberOfVideos = _getNumberOfVideos(participants);
+    if (numberOfVideos > 0) {
+      return !_expandedCameraStillAvailable(participants);
+    }
+
+    return false;
+  }
+
+  void _scheduleCollapseIfNeeded() {
+    if (_collapseScheduled) {
+      return;
+    }
+
+    _collapseScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _collapseScheduled = false;
+
+      if (!mounted) return;
+
+      if (_shouldCollapseExpandedParticipant(widget.participants)) {
+        _expandedController.collapse();
+      }
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    _scheduleCollapseIfNeeded();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    _expandedController = Controller.ofType<ExpandParticipantController>(context);
   }
 
   @override
   void didUpdateWidget(covariant ExpandableCameraGrid oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final expandedController = Controller.ofType<ExpandParticipantController>(context);
-
-    if (expandedController.hasExpanded) {
-      final numberOfShares = _getNumberOfShares(widget.participants);
-      if (numberOfShares > 0) {
-        if (!_expandedShareStillAvailable(widget.participants)) {
-          expandedController.collapse();
-        }
-      } else {
-        final numberOfVideos = _getNumberOfVideos(widget.participants);
-        if (numberOfVideos > 0 && !_expandedCameraStillAvailable(widget.participants)) {
-          expandedController.collapse();
-        }
-      }
-    }
+    _scheduleCollapseIfNeeded();
   }
 
   @override
   Widget build(BuildContext context) {
-    final expandedController = Controller.ofType<ExpandParticipantController>(context);
-
-    final participants = expandedController.hasExpanded
-        ? widget.participants.where((p) => expandedController.isExpanded(p.identity)).toList(growable: false)
+    final participants = _expandedController.hasExpanded
+        ? widget.participants.where((p) => _expandedController.isExpanded(p.identity)).toList(growable: false)
         : widget.participants;
 
     return cameraGridBuilder(
       context,
       participants,
+      spacing: 12.0,
       frameBuilder: (context, participant, track, trackWidget, showName) {
-        return ParticipantTrack(participant: participant, track: trackWidget, showName: showName);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: ParticipantTrack(participant: participant, track: trackWidget, showName: showName),
+        );
       },
     );
   }
@@ -157,7 +199,6 @@ Widget cameraGridBuilder(
   int rowsDesired = 0,
   int columnsDesired = 0,
   bool tryFill = true,
-  Color background = const Color(0xFF222222),
   required Widget Function(BuildContext context, Participant participant, VideoTrack? track, Widget trackWidget, bool showName)
   frameBuilder,
 }) {
@@ -207,8 +248,8 @@ Widget cameraGridBuilder(
       tracks.add(
         Container(
           color: const Color(0xFF222222),
-          alignment: Alignment.center,
-          child: p.identity.contains(".agent") ? AudioStats(room: room, participant: p) : const SizedBox(),
+          alignment: .center,
+          child: p.identity.contains(".agent") ? AudioStats(room: room, participant: p) : const SizedBox.shrink(),
         ),
       );
     }
@@ -216,7 +257,7 @@ Widget cameraGridBuilder(
 
   final slots = tracks.length;
   if (slots == 0) {
-    return Container(color: background);
+    return const SizedBox.shrink();
   }
 
   return LayoutBuilder(
@@ -259,7 +300,7 @@ Widget cameraGridBuilder(
 
       var slots = tracks.length;
       if (slots == 0) {
-        return Container(color: background, width: constraints.biggest.width, height: constraints.biggest.width);
+        return const SizedBox.shrink();
       }
 
       final objectWidth = constraints.biggest.width;

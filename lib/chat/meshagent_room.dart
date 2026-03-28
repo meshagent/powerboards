@@ -545,6 +545,8 @@ class _ResolvedAgentSelection {
 
 class MeshagentRoomState extends State<MeshagentRoom> {
   final videoChatKey = GlobalKey();
+  final meetingViewKey = GlobalKey();
+
   final Map<String, String> _selectedThreadPathByAgentKey = <String, String>{};
   static const Duration _roomResourceTimeout = Duration(seconds: 30);
 
@@ -1497,11 +1499,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildMeeting(BuildContext context, String? agentName, List<Widget> actions) {
-    final cs = ShadTheme.of(context).colorScheme;
-    final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
+    final theme = ShadTheme.of(context);
+    final cs = theme.colorScheme;
+
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final horizontalInset = isMobile ? 12.0 : 20.0;
-    final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
     final meetingIsActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
@@ -1606,12 +1607,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               },
             ),
           Expanded(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(horizontalInset, isMobile ? 0 : desktopPaneHeaderToContentOffset, horizontalInset, bottomInset),
-              child: ClipRRect(
-                borderRadius: radius,
-                child: MeetingView(room: widget.room, onCancel: _leaveMeeting, joinMeeting: _joinMeeting, agentName: agentName),
-              ),
+            child: MeetingView(
+              key: meetingViewKey,
+              room: widget.room,
+              onCancel: _leaveMeeting,
+              joinMeeting: _joinMeeting,
+              agentName: agentName,
             ),
           ),
         ],

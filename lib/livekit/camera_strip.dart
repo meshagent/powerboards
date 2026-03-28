@@ -14,18 +14,12 @@ class CameraStrip extends StatelessWidget {
   final bool horizontal;
   final List<lk.Participant>? participants;
 
-  Widget displayWrapper(Object key, bool selected, Widget child) {
+  Widget displayWrapper(Object key, Widget child) {
     return Container(
       key: ObjectKey(key),
-      margin: EdgeInsets.only(bottom: horizontal ? 0 : gap, right: horizontal ? gap : 0),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
-      foregroundDecoration: selected
-          ? BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(width: 3, color: Colors.blue),
-            )
-          : null,
-      clipBehavior: Clip.antiAlias,
+      margin: .only(bottom: horizontal ? 0 : gap, right: horizontal ? gap : 0),
+      decoration: BoxDecoration(borderRadius: .circular(8)),
+      clipBehavior: .antiAlias,
       child: AspectRatio(aspectRatio: 16 / 9, child: child),
     );
   }
@@ -33,12 +27,12 @@ class CameraStrip extends StatelessWidget {
   Widget videoDisplay(BuildContext context, lk.Participant participant, lk.TrackPublication videoTrack) {
     return displayWrapper(
       videoTrack,
-      false,
       participant.hasVideo && videoTrack.track != null
           ? HoverBuilder(
               cursor: SystemMouseCursors.basic,
               builder: (hovered) {
                 final track = videoTrack.track as lk.VideoTrack;
+
                 return Container(
                   color: Colors.transparent,
                   child: ParticipantTrack(
@@ -54,7 +48,7 @@ class CameraStrip extends StatelessWidget {
             )
           : Container(
               color: const Color(0xFF222222),
-              alignment: Alignment.center,
+              alignment: .center,
               child: participant.identity.contains(".agent") ? const Text("audio stats") : Text("avatar"),
             ),
     );
@@ -63,7 +57,6 @@ class CameraStrip extends StatelessWidget {
   Widget audioDisplay(BuildContext context, lk.Participant participant) {
     return displayWrapper(
       participant,
-      false,
       HoverBuilder(
         cursor: SystemMouseCursors.basic,
         builder: (hovered) {
@@ -93,7 +86,7 @@ class CameraStrip extends StatelessWidget {
             <lk.Participant>[...(room.remoteParticipants.values), if (room.localParticipant != null) room.localParticipant!];
 
         return ListView(
-          scrollDirection: horizontal ? Axis.horizontal : Axis.vertical,
+          scrollDirection: horizontal ? .horizontal : .vertical,
           children: [
             for (final participant in stripParticipants)
               ...() {

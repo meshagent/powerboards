@@ -7,7 +7,6 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/device_manager.dart';
-import 'package:powerboards/theme/theme.dart';
 
 import 'room.dart';
 
@@ -244,27 +243,39 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final tt = theme.textTheme;
+
+    final deviceManager = DeviceManagerProvider.of(context);
+    final videoOn = _videoOn && deviceManager.canTurnOnCamera;
+    final audioOn = _audioOn && deviceManager.canTurnOnMicrophone;
+
+    final aspectRatio = 3 / 2;
+
+    final cameraStatusText = videoOn ? "Turn off camera" : "Turn on camera";
+    final audioStatusText = audioOn ? "Turn off microphone" : "Turn on microphone";
+    final cameraTooltipText = deviceManager.canTurnOnCamera ? cameraStatusText : "Camera disabled";
+    final audioTooltipText = deviceManager.canTurnOnMicrophone ? audioStatusText : "Microphone disabled";
+
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        var aspectRatio = 3 / 2;
-        var width = constraints.maxWidth;
-        var height = width / aspectRatio;
-        if (constraints.hasBoundedHeight && height > constraints.maxHeight - 150) {
-          height = constraints.maxHeight - 150;
-          width = height * aspectRatio;
+        final maxWidth = constraints.maxWidth;
+        final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - 150 : double.infinity;
+
+        // Cap the width to 800px - large monitors preview overwhelming
+        double width = maxWidth > 800 ? 800 : maxWidth;
+        double height = width / aspectRatio;
+
+        if (height > maxHeight) {
+          width = maxHeight * aspectRatio;
+          height = maxHeight;
         }
 
-        final deviceManager = DeviceManagerProvider.of(context);
-        final videoOn = _videoOn && deviceManager.canTurnOnCamera;
-        final audioOn = _audioOn && deviceManager.canTurnOnMicrophone;
-
         return Column(
+          mainAxisAlignment: .center,
+          spacing: 20,
           children: [
-            Container(
-              height: headerHeight,
-              alignment: Alignment.center,
-              child: _loaded ? Text(key: const Key('device-settings-title'), title, textAlign: TextAlign.center) : null,
-            ),
+            Container(child: _loaded ? Text(title, style: tt.large) : null),
             SizedBox(
               height: height,
               width: width,
@@ -277,7 +288,6 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 ),
               ),
             ),
-            const SizedBox(height: 20),
             Center(
               child: Wrap(
                 alignment: WrapAlignment.center,
@@ -286,12 +296,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 runSpacing: 8,
                 children: [
                   RoomToolbarButton(
-                    key: const Key('device-setttings-camera-button'),
-                    text: deviceManager.canTurnOnCamera
-                        ? videoOn
-                              ? "Turn off camera"
-                              : "Turn on camera"
-                        : "Camera disabled",
+                    text: cameraTooltipText,
                     on: videoOn,
                     onColor: ShadTheme.of(context).colorScheme.foreground,
                     onForeground: ShadTheme.of(context).colorScheme.background,
@@ -305,12 +310,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                     icon: videoOn ? LucideIcons.video : LucideIcons.videoOff,
                   ),
                   RoomToolbarButton(
-                    key: const Key('device-setttings-mic-button'),
-                    text: deviceManager.canTurnOnMicrophone
-                        ? audioOn
-                              ? "Turn off microphone"
-                              : "Turn on microphone"
-                        : "Microphone disabled",
+                    text: audioTooltipText,
                     on: audioOn,
                     onColor: ShadTheme.of(context).colorScheme.foreground,
                     onForeground: ShadTheme.of(context).colorScheme.background,
@@ -361,7 +361,6 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 ],
               ),
             ),
-            Expanded(child: Container()),
           ],
         );
       },
