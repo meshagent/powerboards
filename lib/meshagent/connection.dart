@@ -60,6 +60,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   Exception? error;
   int conectionNumber = 0;
   String _lastConnectionStatusText = _defaultConnectionStatusText;
+  bool _roomWasConnected = false;
 
   Widget _backHeader() {
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
@@ -140,6 +141,33 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
     );
   }
 
+  void _reconnect() {
+    setState(() {
+      _roomWasConnected = false;
+      conectionNumber += 1;
+    });
+  }
+
+  Widget _roomDisconnectedCard() {
+    return SafeArea(
+      child: _loadingBody(
+        RoomEndedCard(
+          title: "Disconnected from room",
+          description: "You were disconnected from the room due to inactivity.",
+          onReconnect: _reconnect,
+        ),
+      ),
+    );
+  }
+
+  Widget _roomConnectionFailedCard() {
+    return SafeArea(
+      child: _loadingBody(
+        RoomEndedCard(title: "Unable to connect to room", description: "Please try reconnecting.", onReconnect: _reconnect),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ShadToaster(
@@ -147,9 +175,13 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
         key: ValueKey("room-connection-${widget.roomName}-$conectionNumber"),
         authorization: () {
           _lastConnectionStatusText = _defaultConnectionStatusText;
+          _roomWasConnected = false;
           final client = getMeshagentClient();
 
           return client.connectRoom(projectId: widget.projectId, roomName: widget.roomName);
+        },
+        onReady: (client) {
+          _roomWasConnected = true;
         },
         notFoundBuilder: (context) => RoomNotFound(),
         oauthTokenRequestHandler: (RoomClient client, request) async {
@@ -260,45 +292,18 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
         retryingBuilder: (context, error) => _withReservedRoomHeader(_connectionProgress(fallbackStatusText: "waiting to retry")),
         connectingBuilder: (context, client) => _withReservedRoomHeader(_connectionProgress(room: client)),
         doneBuilder: (context, error) {
-          if (error != null) {
-            return SafeArea(
-              child: _loadingBody(
-                ShadCard(
-                  title: Text("Room connection failed"),
-                  description: Text("$error"),
-                  footer: ShadButton(
-                    onPressed: () {
-                      setState(() {
-                        conectionNumber += 1;
-                      });
-                    },
-                    child: Text("Reconnect"),
-                  ),
-                ),
-              ),
-            );
+          if (_roomWasConnected || error == null) {
+            return _roomDisconnectedCard();
           }
 
-          return SafeArea(
-            child: _loadingBody(
-              RoomEndedCard(
-                onReconnect: () {
-                  setState(() {
-                    conectionNumber += 1;
-                  });
-                },
-              ),
-            ),
-          );
+          return _roomConnectionFailedCard();
         },
         builder: (context, client) {
           return FutureBuilder(
             future: client.ready,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return SafeArea(
-                  child: _loadingBody(ShadAlert.destructive(description: Text("Failed to connect to room: ${snapshot.error}"))),
-                );
+                return _roomConnectionFailedCard();
               }
 
               if (snapshot.connectionState != ConnectionState.done) {
