@@ -617,7 +617,7 @@ class ChangeSettings extends StatelessWidget {
 
   final String? kind;
 
-  void _selectVideoInput(BuildContext context, lk.MediaDevice device) async {
+  Future<void> _selectVideoInput(BuildContext context, lk.MediaDevice device) async {
     final room = VideoRoomModel.maybeOf(context)?.room;
     final track = room?.localParticipant?.videoTrackPublications.firstOrNull?.track;
 
@@ -632,12 +632,12 @@ class ChangeSettings extends StatelessWidget {
     }
   }
 
-  void _selectAudioInput(BuildContext context, lk.MediaDevice device) async {
+  Future<void> _selectAudioInput(BuildContext context, lk.MediaDevice device) async {
     final room = VideoRoomModel.maybeOf(context)?.room;
     await room?.setAudioInputDevice(device);
   }
 
-  void _selectAudioOutput(BuildContext context, lk.MediaDevice device) async {
+  Future<void> _selectAudioOutput(BuildContext context, lk.MediaDevice device) async {
     final room = VideoRoomModel.maybeOf(context)?.room;
 
     await room?.setAudioOutputDevice(device);
@@ -651,6 +651,9 @@ class ChangeSettings extends StatelessWidget {
       onChangeVideoInput: (device) => _selectVideoInput(context, device),
       onChangeAudioInput: (device) => _selectAudioInput(context, device),
       onChangeAudioOutput: (device) => _selectAudioOutput(context, device),
+      selectedVideoInputDeviceId: () => VideoRoomModel.maybeOf(context)?.room?.selectedVideoInputDeviceId,
+      selectedAudioInputDeviceId: () => VideoRoomModel.maybeOf(context)?.room?.selectedAudioInputDeviceId,
+      selectedAudioOutputDeviceId: () => VideoRoomModel.maybeOf(context)?.room?.selectedAudioOutputDeviceId,
       renderButton: (onPressed) {
         return Tooltip(
           message: "Change device",

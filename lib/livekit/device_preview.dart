@@ -328,7 +328,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                   ChangeDeviceButton(
                     onChangeVideoInput: _selectVideoInput,
                     onChangeAudioInput: _selectAudioInput,
-                    onChangeAudioOutput: (_) {},
+                    onChangeAudioOutput: (_) async {},
+                    selectedVideoInputDeviceId: () => _videoDeviceId,
+                    selectedAudioInputDeviceId: () => _audioDeviceId,
                     presentation: ChangeDeviceButtonPresentation.dialog,
                     renderButton: (onPressed) {
                       return Tooltip(
