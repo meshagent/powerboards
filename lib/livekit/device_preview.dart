@@ -1,6 +1,7 @@
 import 'dart:core';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -243,9 +244,6 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final tt = theme.textTheme;
-
     final deviceManager = DeviceManagerProvider.of(context);
     final videoOn = _videoOn && deviceManager.canTurnOnCamera;
     final audioOn = _audioOn && deviceManager.canTurnOnMicrophone;
@@ -259,6 +257,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
+        final isMobile = MediaQuery.sizeOf(context).width < 600;
+        final statusTextStyle = GoogleFonts.inter(fontSize: isMobile ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
         final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - 150 : double.infinity;
 
@@ -275,7 +275,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           mainAxisAlignment: .center,
           spacing: 20,
           children: [
-            Container(child: _loaded ? Text(title, style: tt.large) : null),
+            Container(
+              child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
+            ),
             SizedBox(
               height: height,
               width: width,
