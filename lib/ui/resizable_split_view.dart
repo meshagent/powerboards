@@ -49,6 +49,7 @@ class ResizableSplitView extends StatefulWidget {
 
 class _ResizableSplitViewState extends State<ResizableSplitView> {
   final ShadResizableController resizeController = ShadResizableController();
+  final GlobalKey _area1Key = GlobalKey();
   BoxConstraints? lastConstraints;
   Timer? resizeDebounceTimer;
 
@@ -245,6 +246,10 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     }
   }
 
+  Widget _stableArea1() {
+    return KeyedSubtree(key: _area1Key, child: widget.area1);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
@@ -252,7 +257,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
     if (!widget.split) {
       lastConstraints = null;
-      return widget.area1;
+      return _stableArea1();
     }
 
     if (widget.allowCollapse && _collapsed) {
@@ -260,6 +265,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
       return Row(
         crossAxisAlignment: .start,
         children: [
+          // Visibility(visible: false, maintainState: true, child: _stableArea1()),
           SizedBox(
             width: _collapsedWidth,
             child: Padding(
@@ -319,7 +325,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
               child: widget.allowCollapse
                   ? Stack(
                       children: [
-                        widget.area1,
+                        _stableArea1(),
                         Positioned(
                           top: 10,
                           right: 10,
@@ -330,7 +336,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
                         ),
                       ],
                     )
-                  : widget.area1,
+                  : _stableArea1(),
             ),
             ShadResizablePanel(id: _area2Id, defaultSize: defaultSize2, minSize: minArea2Size, maxSize: maxArea2Size, child: widget.area2),
           ],
