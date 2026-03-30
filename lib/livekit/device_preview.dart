@@ -329,20 +329,11 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                     onChangeVideoInput: _selectVideoInput,
                     onChangeAudioInput: _selectAudioInput,
                     onChangeAudioOutput: (_) {},
-                    renderButton: (ShadContextMenuController controller) {
+                    presentation: ChangeDeviceButtonPresentation.dialog,
+                    renderButton: (onPressed) {
                       return Tooltip(
                         message: "Change device",
-                        child: ShadIconButton.outline(
-                          onPressed: () {
-                            if (controller.isOpen) {
-                              controller.hide();
-                            } else {
-                              deviceManager.refreshDevices();
-                              controller.show();
-                            }
-                          },
-                          icon: const Icon(LucideIcons.settings),
-                        ),
+                        child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
                       );
                     },
                   ),

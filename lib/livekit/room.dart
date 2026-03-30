@@ -647,22 +647,14 @@ class ChangeSettings extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeDeviceButton(
       kind: kind,
+      presentation: ChangeDeviceButtonPresentation.dialog,
       onChangeVideoInput: (device) => _selectVideoInput(context, device),
       onChangeAudioInput: (device) => _selectAudioInput(context, device),
       onChangeAudioOutput: (device) => _selectAudioOutput(context, device),
-      renderButton: (ShadContextMenuController controller) {
+      renderButton: (onPressed) {
         return Tooltip(
           message: "Change device",
-          child: ShadIconButton.outline(
-            onPressed: () {
-              if (controller.isOpen) {
-                controller.hide();
-              } else {
-                controller.show();
-              }
-            },
-            icon: const Icon(LucideIcons.settings),
-          ),
+          child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
         );
       },
     );
