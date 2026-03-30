@@ -15,6 +15,7 @@ enum ChangeDeviceButtonPresentation { contextMenu, dialog }
 
 const String _defaultDeviceLabelPrefix = 'Default - ';
 const String _builtInDeviceLabelSuffix = ' (Built-in)';
+const String _disabledDeviceDescription = 'Check your device settings';
 const List<String> _builtInDeviceLabelPrefixes = ['macbook ', 'built-in ', 'internal '];
 
 bool _isDefaultAliasDevice(MediaDevice device) {
@@ -371,7 +372,9 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
             selectedDevice: selectedVideoDevice,
             onChange: onChangeVideoInput,
             icon: LucideIcons.video,
+            disabledIcon: LucideIcons.videoOff,
             disabledLabel: "Camera disabled",
+            disabledDescription: _disabledDeviceDescription,
           ),
         if (widget.kind == null || widget.kind == "mic")
           _buildDeviceMenuItem(
@@ -381,7 +384,9 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
             selectedDevice: selectedAudioInputDevice,
             onChange: onChangeAudioInput,
             icon: LucideIcons.mic,
+            disabledIcon: LucideIcons.micOff,
             disabledLabel: "Microphone disabled",
+            disabledDescription: _disabledDeviceDescription,
           ),
         if ((kIsWeb && widget.kind == null) || widget.kind == "mic")
           _buildDeviceMenuItem(
@@ -390,8 +395,10 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
             devices: visibleAudioOutputs,
             selectedDevice: selectedAudioOutputDevice,
             onChange: onChangeAudioOutput,
-            icon: Icons.volume_down,
+            icon: LucideIcons.volume2,
+            disabledIcon: LucideIcons.volumeOff,
             disabledLabel: "Speakers disabled",
+            disabledDescription: _disabledDeviceDescription,
           ),
       ],
       child: widget.renderButton(_handlePressed),
@@ -410,7 +417,9 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     required MediaDevice? selectedDevice,
     required Future<void> Function(MediaDevice device) onChange,
     required IconData icon,
+    required IconData disabledIcon,
     required String disabledLabel,
+    required String disabledDescription,
   }) {
     final theme = ShadTheme.of(context);
     final selectedLabel = _deviceLabel(selectedDevice, label);
@@ -430,8 +439,28 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
         enabled: true,
         closeOnTap: false,
         height: _topLevelItemHeight,
-        leading: Icon(icon, size: 18),
-        child: Text(disabledLabel),
+        leading: Icon(disabledIcon, size: 18, color: theme.colorScheme.destructive),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              disabledLabel,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: theme.colorScheme.destructive),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                disabledDescription,
+                style: theme.textTheme.muted.copyWith(fontSize: 13, color: theme.colorScheme.destructive),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -572,7 +601,9 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
                 setState(() {});
               },
               icon: LucideIcons.video,
+              disabledIcon: LucideIcons.videoOff,
               disabledLabel: "Camera disabled",
+              disabledDescription: _disabledDeviceDescription,
             ),
             if (widget.kind == null || widget.kind == "mic") rowSeparator(),
           ],
@@ -587,7 +618,9 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
                 setState(() {});
               },
               icon: LucideIcons.mic,
+              disabledIcon: LucideIcons.micOff,
               disabledLabel: "Microphone disabled",
+              disabledDescription: _disabledDeviceDescription,
             ),
             if ((kIsWeb && widget.kind == null) || widget.kind == "mic") rowSeparator(),
           ],
@@ -601,8 +634,10 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
                 await widget.onChangeAudioOutput(device);
                 setState(() {});
               },
-              icon: Icons.volume_down,
+              icon: LucideIcons.volume2,
+              disabledIcon: LucideIcons.volumeOff,
               disabledLabel: "Speakers disabled",
+              disabledDescription: _disabledDeviceDescription,
             ),
         ],
       ),
@@ -618,7 +653,9 @@ class _DeviceSettingsRow extends StatefulWidget {
     required this.selectedDevice,
     required this.onChange,
     required this.icon,
+    required this.disabledIcon,
     required this.disabledLabel,
+    required this.disabledDescription,
   });
 
   final BuildContext boundaryContext;
@@ -627,7 +664,9 @@ class _DeviceSettingsRow extends StatefulWidget {
   final MediaDevice? selectedDevice;
   final Future<void> Function(MediaDevice) onChange;
   final IconData icon;
+  final IconData disabledIcon;
   final String disabledLabel;
+  final String disabledDescription;
 
   @override
   State<_DeviceSettingsRow> createState() => _DeviceSettingsRowState();
@@ -648,6 +687,9 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
   Widget build(BuildContext context) {
     final selectedLabel = _deviceLabel(widget.selectedDevice, widget.label);
     final hasOptions = widget.selectedDevice != null && widget.devices.isNotEmpty;
+    final theme = ShadTheme.of(context);
+    final isDisabled = widget.selectedDevice == null;
+    final disabledColor = theme.colorScheme.destructive;
 
     return AdaptiveShadContextMenu(
       controller: _controller,
@@ -677,9 +719,15 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
             : null,
         borderRadius: BorderRadius.circular(12),
         child: PowerboardsMenuRow(
-          title: widget.selectedDevice == null ? widget.disabledLabel : widget.label,
-          description: widget.selectedDevice == null ? null : selectedLabel,
-          leading: Icon(widget.icon, size: _rowIconSize, color: shadForeground),
+          title: isDisabled ? widget.disabledLabel : widget.label,
+          description: isDisabled ? widget.disabledDescription : selectedLabel,
+          titleColor: isDisabled ? disabledColor : null,
+          descriptionColor: isDisabled ? disabledColor : null,
+          leading: Icon(
+            isDisabled ? widget.disabledIcon : widget.icon,
+            size: _rowIconSize,
+            color: isDisabled ? disabledColor : shadForeground,
+          ),
           trailing: hasOptions ? Icon(LucideIcons.chevronsUpDown, size: 21, color: shadSecondaryForeground) : null,
         ),
       ),

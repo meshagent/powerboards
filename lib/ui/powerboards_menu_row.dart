@@ -21,6 +21,8 @@ class PowerboardsMenuRow extends StatelessWidget {
     super.key,
     required this.title,
     this.description,
+    this.titleColor,
+    this.descriptionColor,
     this.leading,
     this.trailing,
     this.leadingSize = powerboardsMenuRowLeadingSize,
@@ -34,6 +36,8 @@ class PowerboardsMenuRow extends StatelessWidget {
 
   final String title;
   final String? description;
+  final Color? titleColor;
+  final Color? descriptionColor;
   final Widget? leading;
   final Widget? trailing;
   final double leadingSize;
@@ -46,8 +50,8 @@ class PowerboardsMenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleStyle = powerboardsMenuRowTitleStyle();
-    final descriptionStyle = powerboardsMenuRowDescriptionStyle();
+    final titleStyle = powerboardsMenuRowTitleStyle().copyWith(color: titleColor);
+    final descriptionStyle = powerboardsMenuRowDescriptionStyle().copyWith(color: descriptionColor);
     final resolvedDescription = description?.trim();
     final showDescription = resolvedDescription != null && resolvedDescription.isNotEmpty;
 
