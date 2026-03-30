@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -18,7 +19,8 @@ import 'package:powerboards/livekit/video_room_participants_builder.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 
-const Color _meetingSurfaceColor = Color(0xFF222222);
+const _railGap = 16.0;
+const _compactControlWidth = 48.0;
 
 enum MeetingViewState { preview, joined, ended }
 
@@ -59,6 +61,13 @@ class MeetingView extends StatefulWidget {
 class _MeetingViewState extends State<MeetingView> {
   final expandParticipantController = ExpandParticipantController();
 
+  @override
+  void dispose() {
+    super.dispose();
+
+    expandParticipantController.dispose();
+  }
+
   lk.VideoTrack? _screenShareTrackFor(lk.Participant participant) {
     final publication = participant.getTrackPublicationBySource(lk.TrackSource.screenShareVideo);
     final track = publication?.track;
@@ -74,18 +83,21 @@ class _MeetingViewState extends State<MeetingView> {
     return _screenShareTrackFor(participant) != null;
   }
 
-  Widget _cameraStripBuilder(lk.Room room, bool horizontal, List<lk.Participant> participants) {
-    final hasShare = participants.any(_participantHasActiveShare);
+  Widget _mobileLayout(lk.Room room, List<lk.Participant> participants, bool hasShare) {
+    return Column(
+      crossAxisAlignment: .stretch,
+      children: [
+        if (hasShare && !expandParticipantController.hasExpanded)
+          SizedBox(
+            height: 100,
+            child: Padding(
+              padding: .fromLTRB(5, 0, 0, 5),
+              child: CameraStrip(room: room, horizontal: true),
+            ),
+          ),
 
-    if (!hasShare) return const SizedBox.shrink();
-
-    return SizedBox(
-      width: horizontal ? null : 250,
-      height: horizontal ? 100 : null,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(5, 0, horizontal ? 0 : 5, horizontal ? 5 : 0),
-        child: CameraStrip(room: room, horizontal: horizontal),
-      ),
+        Expanded(child: ExpandableCameraGrid(participants: participants)),
+      ],
     );
   }
 
@@ -104,58 +116,51 @@ class _MeetingViewState extends State<MeetingView> {
               (videoRoom == null && meetingViewController.state == MeetingViewState.joined);
 
           if (inPreview) {
-            return DevicePreview(
-              onJoin: (enableVideo, enableAudio) {
-                final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
-                final navController = Controller.ofType<NavController>(context);
+            return Padding(
+              padding: const .symmetric(horizontal: 20.0),
+              child: DevicePreview(
+                onJoin: (enableVideo, enableAudio) {
+                  final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
+                  final navController = Controller.ofType<NavController>(context);
 
-                if (videoChatConnection != null) {
-                  videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
-                }
+                  if (videoChatConnection != null) {
+                    videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
+                  }
 
-                meetingViewController.enterMeeting();
-                navController.hideNav();
-              },
-              onCancel: widget.onCancel,
+                  meetingViewController.enterMeeting();
+                  navController.hideNav();
+                },
+                onCancel: widget.onCancel,
+              ),
             );
           } else if (meetingViewController.state == MeetingViewState.joined) {
             final room = VideoRoomModel.maybeOf(context)?.room;
             if (room == null) return const SizedBox.shrink();
 
-            return VideoRoomParticipantsBuilder(
-              room: room,
-              builder: (context, participants) {
-                return ControllerBuilder<ExpandParticipantController>(
-                  controller: expandParticipantController,
-                  builder: (context) {
-                    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-                    final hasShare = participants.any(_participantHasActiveShare);
+            return Padding(
+              padding: const .all(20),
+              child: VideoRoomParticipantsBuilder(
+                room: room,
+                builder: (context, participants) {
+                  return ControllerBuilder<ExpandParticipantController>(
+                    controller: expandParticipantController,
+                    builder: (context) {
+                      final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+                      final hasShare = participants.any(_participantHasActiveShare);
 
-                    if (hasShare && !isMobile) {
-                      return _DesktopShareLayout(room: room, participants: participants);
-                    }
+                      if (isMobile) {
+                        return _mobileLayout(room, participants, hasShare);
+                      }
 
-                    return ColoredBox(
-                      color: _meetingSurfaceColor,
-                      child: isMobile
-                          ? Column(
-                              crossAxisAlignment: .stretch,
-                              children: [
-                                _cameraStripBuilder(room, true, participants),
-                                Expanded(child: ExpandableCameraGrid(participants: participants)),
-                              ],
-                            )
-                          : Row(
-                              crossAxisAlignment: .stretch,
-                              children: [
-                                Expanded(child: ExpandableCameraGrid(participants: participants)),
-                                _cameraStripBuilder(room, false, participants),
-                              ],
-                            ),
-                    );
-                  },
-                );
-              },
+                      if (hasShare) {
+                        return _DesktopShareLayout(room: room, participants: participants);
+                      }
+
+                      return ExpandableCameraGrid(participants: participants);
+                    },
+                  );
+                },
+              ),
             );
           } else if (meetingViewController.state == MeetingViewState.ended) {
             return Center(
@@ -182,61 +187,117 @@ class _MeetingViewState extends State<MeetingView> {
   }
 }
 
-const _outerPadding = 24.0;
-const _railWidth = 158.4;
-const _railGap = 16.0;
-const _shareAspectRatio = 16 / 9;
-const _compactControlWidth = 48.0;
-
 class _DesktopShareLayout extends StatelessWidget {
   const _DesktopShareLayout({required this.room, required this.participants});
 
   final lk.Room room;
   final List<lk.Participant> participants;
 
+  static const double _leftStripWidth = 250.0;
+  static const double _topStripHeight = 100.0;
+
+  Iterable<lk.TrackPublication> getSharePublications(List<lk.Participant> participants) sync* {
+    for (final participant in participants) {
+      final publication = participant.getTrackPublicationBySource(lk.TrackSource.screenShareVideo);
+
+      if (publication != null && !publication.muted && publication.track is lk.VideoTrack) {
+        yield publication;
+      }
+    }
+  }
+
+  Size _fitAspect({required double aspectRatio, required double maxWidth, required double maxHeight}) {
+    if (maxWidth <= 0 || maxHeight <= 0 || aspectRatio <= 0) {
+      return Size.zero;
+    }
+
+    double width = maxWidth;
+    double height = width / aspectRatio;
+
+    if (height > maxHeight) {
+      height = maxHeight;
+      width = height * aspectRatio;
+    }
+
+    return Size(width, height);
+  }
+
+  bool _shouldPutStripOnLeft({required BoxConstraints constraints, required double aspectRatio, required bool hasExpanded}) {
+    if (hasExpanded) {
+      return false;
+    }
+
+    final maxWidth = constraints.maxWidth;
+    final maxHeight = constraints.maxHeight;
+
+    final leftAvailableWidth = math.max(0.0, maxWidth - _leftStripWidth - _railGap);
+    final leftAvailableHeight = maxHeight;
+
+    final topAvailableWidth = maxWidth;
+    final topAvailableHeight = math.max(0.0, maxHeight - _topStripHeight - _railGap);
+
+    final leftFit = _fitAspect(aspectRatio: aspectRatio, maxWidth: leftAvailableWidth, maxHeight: leftAvailableHeight);
+
+    final topFit = _fitAspect(aspectRatio: aspectRatio, maxWidth: topAvailableWidth, maxHeight: topAvailableHeight);
+
+    final leftArea = leftFit.width * leftFit.height;
+    final topArea = topFit.width * topFit.height;
+
+    return leftArea >= topArea;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final expandController = Controller.ofType<ExpandParticipantController>(context);
+    final sharePublications = getSharePublications(participants).toList(growable: false);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final expandController = Controller.ofType<ExpandParticipantController>(context);
+        bool stripOnLeft = true;
 
-        final maxContentWidth = (constraints.maxWidth - _outerPadding * 2).clamp(0.0, double.infinity);
-        final maxContentHeight = (constraints.maxHeight - _outerPadding * 2).clamp(0.0, double.infinity);
+        if (!expandController.hasExpanded && sharePublications.length == 1) {
+          final track = sharePublications.first;
+          final dimensions = track.dimensions;
 
-        final maxShareWidth = (maxContentWidth - _railWidth - _railGap).clamp(0.0, double.infinity);
-        final shareHeightFromWidth = maxShareWidth / _shareAspectRatio;
-        final shareHeight = shareHeightFromWidth > maxContentHeight ? maxContentHeight : shareHeightFromWidth;
-        final shareWidth = shareHeight * _shareAspectRatio;
+          if (dimensions != null && dimensions.width > 0 && dimensions.height > 0) {
+            final aspectRatio = dimensions.width / dimensions.height;
 
-        final expandedParticipants = participants.where((p) => expandController.isExpanded(p.identity)).toList();
-
-        if (expandController.hasExpanded) {
-          return ExpandableCameraGrid(participants: expandedParticipants);
+            stripOnLeft = _shouldPutStripOnLeft(
+              constraints: constraints,
+              aspectRatio: aspectRatio,
+              hasExpanded: expandController.hasExpanded,
+            );
+          }
         }
 
-        return Center(
-          child: Padding(
-            padding: const .all(_outerPadding),
-            child: SizedBox(
-              width: shareWidth + _railGap + _railWidth,
-              height: shareHeight,
-              child: Row(
-                crossAxisAlignment: .start,
-                spacing: _railGap,
-                children: [
-                  SizedBox(
-                    width: shareWidth,
-                    height: shareHeight,
-                    child: ExpandableCameraGrid(participants: participants),
-                  ),
-                  SizedBox(
-                    width: _railWidth,
-                    child: CameraStrip(room: room, horizontal: false, participants: participants),
-                  ),
-                ],
+        if (stripOnLeft) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: ExpandableCameraGrid(participants: participants)),
+              if (!expandController.hasExpanded) ...[
+                const SizedBox(width: _railGap),
+                SizedBox(
+                  width: _leftStripWidth,
+                  child: CameraStrip(room: room, horizontal: false, participants: participants),
+                ),
+              ],
+            ],
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!expandController.hasExpanded) ...[
+              SizedBox(
+                height: _topStripHeight,
+                child: CameraStrip(room: room, horizontal: true, participants: participants),
               ),
-            ),
-          ),
+              const SizedBox(height: _railGap),
+            ],
+            Expanded(child: ExpandableCameraGrid(participants: participants)),
+          ],
         );
       },
     );
@@ -251,10 +312,10 @@ class MeetingToolkits extends StatefulWidget {
   final bool compact;
 
   @override
-  State createState() => _MeetingActions();
+  State createState() => _MeetingToolkitsState();
 }
 
-class _MeetingActions extends State<MeetingToolkits> {
+class _MeetingToolkitsState extends State<MeetingToolkits> {
   Timer? timer;
 
   late final toolkits = Resource<List<ToolkitDescription>>(() => widget.room.agents.listToolkits());

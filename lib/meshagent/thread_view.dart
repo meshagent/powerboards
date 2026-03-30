@@ -197,9 +197,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     try {
       widget.onSelectedThreadPathChanged?.call(null);
-      await WidgetsBinding.instance.endOfFrame;
-
-      await widget.client.storage.delete(path);
 
       final threadListPath = widget.threadListPath?.trim();
       if (threadListPath != null && threadListPath.isNotEmpty) {

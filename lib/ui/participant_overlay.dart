@@ -4,7 +4,6 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/livekit/expand_participant_controller.dart';
-import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 
 const audioIconSize = 16.0;
 const audioIconColor = Colors.white;
@@ -21,27 +20,8 @@ class ParticipantOverlay extends StatefulWidget {
 }
 
 class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTickerProviderStateMixin {
-  final _menuController = ShadContextMenuController();
-
   late AnimationController _animationController;
   late Animation<double> _animation;
-
-  List<ShadContextMenuItem> _getMenuItems() {
-    final expandController = Controller.ofType<ExpandParticipantController>(context);
-    final expanded = expandController.isExpanded(widget.participant.identity);
-
-    return [
-      ShadContextMenuItem(
-        height: 40.0,
-        leading: Icon(expanded ? LucideIcons.minimize2 : LucideIcons.expand, size: 16),
-        onPressed: () {
-          expandController.toggle(widget.participant.identity);
-          _menuController.hide();
-        },
-        child: Text(expanded ? "Collapse" : "Expand"),
-      ),
-    ];
-  }
 
   @override
   void initState() {
@@ -71,7 +51,6 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
   @override
   void dispose() {
     _animationController.dispose();
-    _menuController.dispose();
 
     super.dispose();
   }
@@ -81,10 +60,11 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
     final muted = widget.participant.isMuted;
     final name = widget.participant.name;
 
-    final menuItems = _getMenuItems();
+    final expandController = Controller.ofType<ExpandParticipantController>(context);
+    final expanded = expandController.isExpanded(widget.participant.identity);
 
     return Container(
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: const Color(0x992f2d57)),
+      decoration: BoxDecoration(borderRadius: .circular(12), color: const Color(0x992f2d57)),
       padding: const .symmetric(horizontal: 12, vertical: 8),
       child: Row(
         mainAxisSize: .min,
@@ -114,21 +94,14 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
 
           Padding(
             padding: const .only(left: 2),
-            child: AdaptiveShadContextMenu(
-              controller: _menuController,
-              boundaryContext: context,
-              estimatedMenuWidth: 128,
-              estimatedMenuHeight: menuItems.length * 40.0 + 8.0,
-              items: menuItems,
-              child: ShadIconButton.ghost(
-                width: 20.0,
-                height: 20.0,
-                hoverBackgroundColor: Colors.transparent,
-                icon: const Icon(LucideIcons.ellipsis, color: audioIconColor, size: 14),
-                onPressed: () {
-                  _menuController.toggle();
-                },
-              ),
+            child: ShadIconButton.ghost(
+              width: 20.0,
+              height: 20.0,
+              hoverBackgroundColor: Colors.transparent,
+              icon: Icon(expanded ? LucideIcons.minimize2 : LucideIcons.expand, color: audioIconColor, size: 14),
+              onPressed: () {
+                expandController.toggle(widget.participant.identity);
+              },
             ),
           ),
         ],
