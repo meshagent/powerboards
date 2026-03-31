@@ -87,7 +87,8 @@ class ResizableSplitView extends StatefulWidget {
 }
 
 class _ResizableSplitViewState extends State<ResizableSplitView> {
-  final ShadResizableController resizeController = ShadResizableController();
+  final List<ShadResizableController> _retiredResizeControllers = <ShadResizableController>[];
+  late ShadResizableController resizeController;
   BoxConstraints? lastConstraints;
   Timer? resizeDebounceTimer;
 
@@ -96,12 +97,24 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   double? _lastReportedArea2Ratio;
   int _panelGroupVersion = 0;
 
+  void _attachResizeController(ShadResizableController controller) {
+    controller.addListener(_storeArea1Ratio);
+  }
+
+  void _replaceResizeController() {
+    final previousController = resizeController;
+    previousController.removeListener(_storeArea1Ratio);
+    _retiredResizeControllers.add(previousController);
+
+    resizeController = ShadResizableController();
+    _attachResizeController(resizeController);
+    _panelGroupVersion++;
+  }
+
   void _resetPanelGroupState() {
     resizeDebounceTimer?.cancel();
     lastConstraints = null;
-    resizeController.clear();
-    resizeController.totalAvailableWidth = 0;
-    _panelGroupVersion++;
+    _replaceResizeController();
   }
 
   void _syncControllerCollapsed() {
@@ -297,10 +310,24 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
       safeMaxArea1.clamp(clampedMinArea1, 1 - _panelFractionEpsilon),
       fallback: clampedMinArea1,
     );
-    final area1 = _sanitizePanelFraction(preferredArea1.clamp(clampedMinArea1, clampedMaxArea1), fallback: clampedMinArea1);
-    final area2 = _sanitizePanelFraction((1 - area1).clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon), fallback: 1 - area1);
+    final resolvedArea1 = _sanitizePanelFraction(preferredArea1.clamp(clampedMinArea1, clampedMaxArea1), fallback: clampedMinArea1);
 
-    return (area1: area1, area2: area2);
+    return _normalizeDefaultPanelSizes(area1: resolvedArea1, minArea1Size: clampedMinArea1, maxArea1Size: clampedMaxArea1);
+  }
+
+  ({double area1, double area2}) _normalizeDefaultPanelSizes({
+    required double area1,
+    required double minArea1Size,
+    required double maxArea1Size,
+  }) {
+    final resolvedArea1 = _sanitizePanelFraction(area1, fallback: 0.5).clamp(minArea1Size, maxArea1Size).toDouble();
+    final boundedArea1 = _sanitizePanelFraction(resolvedArea1.clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon), fallback: 0.5);
+    final boundedArea2 = _sanitizePanelFraction(
+      (1 - boundedArea1).clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon),
+      fallback: 1 - boundedArea1,
+    );
+
+    return (area1: boundedArea1, area2: boundedArea2);
   }
 
   void debounceResize(BoxConstraints constraints) {
@@ -368,7 +395,8 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   void initState() {
     super.initState();
 
-    resizeController.addListener(_storeArea1Ratio);
+    resizeController = ShadResizableController();
+    _attachResizeController(resizeController);
     widget.controller?.addListener(_handleControllerChanged);
     _syncControllerCollapsed();
   }
@@ -377,7 +405,11 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   void dispose() {
     resizeDebounceTimer?.cancel();
     widget.controller?.removeListener(_handleControllerChanged);
+    resizeController.removeListener(_storeArea1Ratio);
     resizeController.dispose();
+    for (final controller in _retiredResizeControllers) {
+      controller.dispose();
+    }
 
     super.dispose();
   }

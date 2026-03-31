@@ -530,45 +530,68 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             ),
             SizedBox(
               width: width,
-              child: Row(
-                children: [
-                  Wrap(
-                    alignment: WrapAlignment.start,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: previewControls,
-                  ),
-                  const Spacer(),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final narrowDesktop = constraints.maxWidth < 560;
+                  final actionButtons = <Widget>[
+                    if (widget.onCancel != null)
+                      SizedBox(
+                        width: 120,
+                        child: ShadButton.outline(
+                          onPressed: () {
+                            widget.onCancel?.call();
+                          },
+                          child: const Text("Cancel"),
+                        ),
+                      ),
+                    if (widget.onJoin != null)
+                      SizedBox(
+                        width: 120,
+                        child: ShadButton.destructive(
+                          onPressed: audioPending || videoPending
+                              ? null
+                              : () {
+                                  widget.onJoin?.call(videoOn, audioOn);
+                                },
+                          child: const Text("Meet Now"),
+                        ),
+                      ),
+                  ];
+
+                  if (narrowDesktop) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 12,
+                      children: [
+                        Wrap(
+                          alignment: WrapAlignment.start,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: previewControls,
+                        ),
+                        if (actionButtons.isNotEmpty)
+                          Wrap(alignment: WrapAlignment.start, spacing: 8, runSpacing: 8, children: actionButtons),
+                      ],
+                    );
+                  }
+
+                  return Row(
                     children: [
-                      if (widget.onCancel != null)
-                        SizedBox(
-                          width: 120,
-                          child: ShadButton.outline(
-                            onPressed: () {
-                              widget.onCancel?.call();
-                            },
-                            child: const Text("Cancel"),
-                          ),
+                      Expanded(
+                        child: Wrap(
+                          alignment: WrapAlignment.start,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: previewControls,
                         ),
-                      if (widget.onCancel != null && widget.onJoin != null) const SizedBox(width: 8),
-                      if (widget.onJoin != null)
-                        SizedBox(
-                          width: 120,
-                          child: ShadButton.destructive(
-                            onPressed: audioPending || videoPending
-                                ? null
-                                : () {
-                                    widget.onJoin?.call(videoOn, audioOn);
-                                  },
-                            child: const Text("Meet Now"),
-                          ),
-                        ),
+                      ),
+                      if (actionButtons.isNotEmpty) const SizedBox(width: 12),
+                      if (actionButtons.isNotEmpty) Wrap(spacing: 8, runSpacing: 8, children: actionButtons),
                     ],
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ],
