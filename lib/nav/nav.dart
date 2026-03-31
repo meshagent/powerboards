@@ -717,6 +717,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     final selectedProject = projectList.firstWhereOrNull((p) => p.id == widget.projectId);
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final displayName = selectedProject?.name ?? "Select project";
+    final projectTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: theme.colorScheme.foreground);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
@@ -748,11 +749,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                                   constraints: BoxConstraints(maxWidth: maxLabelWidth),
                                   child: Text(
                                     displayName,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      color: theme.colorScheme.foreground,
-                                    ),
+                                    style: projectTitleStyle,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
                                     maxLines: 1,
@@ -805,7 +802,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                                 padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHeaderVisualInset),
                                 child: Text(
                                   displayName,
-                                  style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: theme.colorScheme.foreground),
+                                  style: projectTitleStyle,
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.center,
                                   maxLines: 1,
