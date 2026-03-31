@@ -50,7 +50,6 @@ class ResizableSplitView extends StatefulWidget {
 
 class _ResizableSplitViewState extends State<ResizableSplitView> {
   final ShadResizableController resizeController = ShadResizableController();
-  final GlobalKey _area1Key = GlobalKey();
   BoxConstraints? lastConstraints;
   Timer? resizeDebounceTimer;
 
@@ -186,38 +185,59 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     if (lastConstraints == null || lastConstraints!.maxWidth != constraints.maxWidth) {
       resizeDebounceTimer?.cancel();
       resizeDebounceTimer = Timer(const Duration(milliseconds: 30), () {
-        final pan1 = resizeController.panelsInfo.where((panel) => panel.id == _area1Id).firstOrNull;
-        final pan2 = resizeController.panelsInfo.where((panel) => panel.id == _area2Id).firstOrNull;
-
-        if (pan1 == null || pan2 == null) {
+        if (!mounted) {
           return;
         }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
 
-        final size = constraints.maxWidth;
-        if (!size.isFinite || size <= 0) {
-          return;
-        }
-        final panelFractions = _resolvePanelFractions(size);
-        final minArea1Size = panelFractions.minArea1Size;
-        final minArea2Size = panelFractions.minArea2Size;
-        final maxArea1Size = panelFractions.maxArea1Size;
-        final maxArea2Size = panelFractions.maxArea2Size;
+          final pan1 = resizeController.panelsInfo.where((panel) => panel.id == _area1Id).firstOrNull;
+          final pan2 = resizeController.panelsInfo.where((panel) => panel.id == _area2Id).firstOrNull;
 
-        final defaultPanelSizes = _resolveDefaultPanelSizes(
-          size: size,
-          minArea1Size: minArea1Size,
-          minArea2Size: minArea2Size,
-          maxArea1Size: maxArea1Size,
-          maxArea2Size: maxArea2Size,
-        );
-        final defaultSize1 = defaultPanelSizes.area1;
-        final defaultSize2 = defaultPanelSizes.area2;
+          if (pan1 == null || pan2 == null) {
+            return;
+          }
 
-        final newPan1 = ShadPanelInfo(id: _area1Id, minSize: minArea1Size, maxSize: maxArea1Size, defaultSize: defaultSize1);
-        final newPan2 = ShadPanelInfo(id: _area2Id, minSize: minArea2Size, maxSize: maxArea2Size, defaultSize: defaultSize2);
+          final size = constraints.maxWidth;
+          if (!size.isFinite || size <= 0) {
+            return;
+          }
+          final panelFractions = _resolvePanelFractions(size);
+          final minArea1Size = panelFractions.minArea1Size;
+          final minArea2Size = panelFractions.minArea2Size;
+          final maxArea1Size = panelFractions.maxArea1Size;
+          final maxArea2Size = panelFractions.maxArea2Size;
 
-        lastConstraints = constraints;
-        resizeController.update([newPan1, newPan2]);
+          final defaultPanelSizes = _resolveDefaultPanelSizes(
+            size: size,
+            minArea1Size: minArea1Size,
+            minArea2Size: minArea2Size,
+            maxArea1Size: maxArea1Size,
+            maxArea2Size: maxArea2Size,
+          );
+          final defaultSize1 = defaultPanelSizes.area1;
+          final defaultSize2 = defaultPanelSizes.area2;
+
+          final unchanged =
+              (pan1.minSize - minArea1Size).abs() < _panelFractionEpsilon &&
+              (pan1.maxSize - maxArea1Size).abs() < _panelFractionEpsilon &&
+              (pan1.defaultSize - defaultSize1).abs() < _panelFractionEpsilon &&
+              (pan2.minSize - minArea2Size).abs() < _panelFractionEpsilon &&
+              (pan2.maxSize - maxArea2Size).abs() < _panelFractionEpsilon &&
+              (pan2.defaultSize - defaultSize2).abs() < _panelFractionEpsilon;
+          if (unchanged) {
+            lastConstraints = constraints;
+            return;
+          }
+
+          final newPan1 = ShadPanelInfo(id: _area1Id, minSize: minArea1Size, maxSize: maxArea1Size, defaultSize: defaultSize1);
+          final newPan2 = ShadPanelInfo(id: _area2Id, minSize: minArea2Size, maxSize: maxArea2Size, defaultSize: defaultSize2);
+
+          lastConstraints = constraints;
+          resizeController.update([newPan1, newPan2]);
+        });
       });
     }
   }
@@ -290,10 +310,6 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     }
   }
 
-  Widget _stableArea1() {
-    return KeyedSubtree(key: _area1Key, child: widget.area1);
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
@@ -301,7 +317,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
     if (!widget.split) {
       lastConstraints = null;
-      return _stableArea1();
+      return widget.area1;
     }
 
     if (widget.allowCollapse && _collapsed) {
@@ -309,7 +325,6 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
       return Row(
         crossAxisAlignment: .start,
         children: [
-          // Visibility(visible: false, maintainState: true, child: _stableArea1()),
           SizedBox(
             width: _collapsedWidth,
             child: Padding(
@@ -374,7 +389,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
               child: widget.allowCollapse
                   ? Stack(
                       children: [
-                        _stableArea1(),
+                        widget.area1,
                         Positioned(
                           top: 10,
                           right: 10,
@@ -385,7 +400,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
                         ),
                       ],
                     )
-                  : _stableArea1(),
+                  : widget.area1,
             ),
             ShadResizablePanel(id: _area2Id, defaultSize: defaultSize2, minSize: minArea2Size, maxSize: maxArea2Size, child: widget.area2),
           ],
