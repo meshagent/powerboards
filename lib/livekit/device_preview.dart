@@ -388,7 +388,33 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           height = maxHeight;
         }
 
-        final previewControls = [
+        Widget buildDeviceSettingsButton({required bool showLabel}) {
+          return ChangeDeviceButton(
+            onChangeVideoInput: _selectVideoInput,
+            onChangeAudioInput: _selectAudioInput,
+            onChangeAudioOutput: _selectAudioOutput,
+            selectedVideoInputDeviceId: () => _videoDeviceId,
+            selectedAudioInputDeviceId: () => _audioDeviceId,
+            selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
+            presentation: ChangeDeviceButtonPresentation.dialog,
+            renderButton: (onPressed) {
+              if (showLabel) {
+                return ShadButton.outline(
+                  onPressed: onPressed,
+                  leading: const Icon(LucideIcons.settings),
+                  child: const Text("Device settings"),
+                );
+              }
+
+              return Tooltip(
+                message: "Device settings",
+                child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
+              );
+            },
+          );
+        }
+
+        final previewControls = <Widget>[
           RoomToolbarButton(
             text: audioTooltipText,
             on: audioOn || audioPending,
@@ -427,22 +453,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 : null,
             icon: (videoOn || videoPending) ? LucideIcons.video : LucideIcons.videoOff,
           ),
-          ChangeDeviceButton(
-            onChangeVideoInput: _selectVideoInput,
-            onChangeAudioInput: _selectAudioInput,
-            onChangeAudioOutput: _selectAudioOutput,
-            selectedVideoInputDeviceId: () => _videoDeviceId,
-            selectedAudioInputDeviceId: () => _audioDeviceId,
-            selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
-            presentation: ChangeDeviceButtonPresentation.dialog,
-            renderButton: (onPressed) {
-              return Tooltip(
-                message: "Device settings",
-                child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
-              );
-            },
-          ),
         ];
+
+        final previewSectionControls = <Widget>[...previewControls, if (isMobile) buildDeviceSettingsButton(showLabel: false)];
 
         final previewSection = Column(
           mainAxisSize: MainAxisSize.min,
@@ -469,7 +482,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 8,
                 runSpacing: 8,
-                children: previewControls,
+                children: previewSectionControls,
               ),
             ),
           ],
@@ -532,63 +545,68 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
               width: width,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final narrowDesktop = constraints.maxWidth < 560;
-                  final actionButtons = <Widget>[
-                    if (widget.onCancel != null)
-                      SizedBox(
-                        width: 120,
-                        child: ShadButton.outline(
-                          onPressed: () {
-                            widget.onCancel?.call();
-                          },
-                          child: const Text("Cancel"),
-                        ),
-                      ),
-                    if (widget.onJoin != null)
-                      SizedBox(
-                        width: 120,
-                        child: ShadButton.destructive(
-                          onPressed: audioPending || videoPending
-                              ? null
-                              : () {
-                                  widget.onJoin?.call(videoOn, audioOn);
-                                },
-                          child: const Text("Meet Now"),
-                        ),
-                      ),
-                  ];
+                  final compactActionButtons = constraints.maxWidth < 560;
+                  final actionButtonSpacing = compactActionButtons ? 6.0 : 8.0;
+                  final showDesktopDeviceSettingsLabel = !compactActionButtons;
+                  final footerControls = [...previewControls, buildDeviceSettingsButton(showLabel: showDesktopDeviceSettingsLabel)];
 
-                  if (narrowDesktop) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      spacing: 12,
-                      children: [
-                        Wrap(
-                          alignment: WrapAlignment.start,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: previewControls,
-                        ),
-                        if (actionButtons.isNotEmpty)
-                          Wrap(alignment: WrapAlignment.start, spacing: 8, runSpacing: 8, children: actionButtons),
-                      ],
+                  Widget buildCancelButton() {
+                    final button = ShadButton.outline(
+                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                      onPressed: () {
+                        widget.onCancel?.call();
+                      },
+                      child: const Text("Cancel"),
                     );
+
+                    if (compactActionButtons) {
+                      return Expanded(child: button);
+                    }
+
+                    return SizedBox(width: 120, child: button);
+                  }
+
+                  Widget buildJoinButton() {
+                    final button = ShadButton.destructive(
+                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                      onPressed: audioPending || videoPending
+                          ? null
+                          : () {
+                              widget.onJoin?.call(videoOn, audioOn);
+                            },
+                      child: const Text("Meet Now"),
+                    );
+
+                    if (compactActionButtons) {
+                      return Expanded(child: button);
+                    }
+
+                    return SizedBox(width: 120, child: button);
                   }
 
                   return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Expanded(
-                        child: Wrap(
-                          alignment: WrapAlignment.start,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: previewControls,
-                        ),
+                      Wrap(
+                        alignment: WrapAlignment.start,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: footerControls,
                       ),
-                      if (actionButtons.isNotEmpty) const SizedBox(width: 12),
-                      if (actionButtons.isNotEmpty) Wrap(spacing: 8, runSpacing: 8, children: actionButtons),
+                      if (widget.onCancel != null || widget.onJoin != null) SizedBox(width: compactActionButtons ? 8 : 12),
+                      if (widget.onCancel != null || widget.onJoin != null)
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (widget.onCancel != null) buildCancelButton(),
+                              if (widget.onCancel != null && widget.onJoin != null) SizedBox(width: actionButtonSpacing),
+                              if (widget.onJoin != null) buildJoinButton(),
+                            ],
+                          ),
+                        ),
+                      if (widget.onCancel == null && widget.onJoin == null) const Spacer(),
                     ],
                   );
                 },
