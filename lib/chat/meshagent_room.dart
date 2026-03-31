@@ -257,6 +257,7 @@ class MeetButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final compact = CompactHeaderActions.compactOf(context);
+    final theme = ShadTheme.of(context);
     final buttonWidth = isMobile || compact ? desktopPaneHeaderCompactButtonWidth : desktopPaneHeaderMeetButtonWidth;
     final buttonPadding = _paneHeaderButtonPadding(compact: isMobile || compact);
 
@@ -265,6 +266,8 @@ class MeetButton extends StatelessWidget {
         : meetingSessionActive
         ? ShadButton.destructive
         : ShadButton.outline;
+    final iconData = meetingSessionActive ? LucideIcons.circleDot : LucideIcons.video;
+    final iconColor = controller.inMeeting && meetingSessionActive ? theme.colorScheme.destructive : null;
 
     return Tooltip(
       message: "Meet",
@@ -272,7 +275,7 @@ class MeetButton extends StatelessWidget {
         width: buttonWidth,
         child: buttonBuilder(
           padding: buttonPadding,
-          leading: Icon(LucideIcons.video),
+          leading: Icon(iconData, color: iconColor),
           onPressed: () {
             if (controller.inMeeting) {
               controller.exitMeeting();

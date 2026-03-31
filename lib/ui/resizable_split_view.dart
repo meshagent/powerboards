@@ -352,6 +352,8 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   void didUpdateWidget(covariant ResizableSplitView oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    var shouldResetPanelGroup = false;
+
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.removeListener(_handleControllerChanged);
       widget.controller?.addListener(_handleControllerChanged);
@@ -361,11 +363,17 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     if (oldWidget.split && !widget.split) {
       _collapsed = false;
       _syncControllerCollapsed();
+      shouldResetPanelGroup = true;
     }
 
     if (!widget.allowCollapse && _collapsed) {
       _collapsed = false;
       _syncControllerCollapsed();
+      shouldResetPanelGroup = true;
+    }
+
+    if (oldWidget.split != widget.split || oldWidget.allowCollapse != widget.allowCollapse) {
+      shouldResetPanelGroup = true;
     }
 
     final sizingChanged =
@@ -382,8 +390,11 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     if (sizingChanged) {
       _area1Ratio = null;
       _lastReportedArea2Ratio = null;
-      lastConstraints = null;
-      resizeDebounceTimer?.cancel();
+      shouldResetPanelGroup = true;
+    }
+
+    if (shouldResetPanelGroup) {
+      _resetPanelGroupState();
     }
   }
 
