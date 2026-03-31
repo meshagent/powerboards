@@ -90,15 +90,15 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   }
 
   void _showUnavailableCameraToast() {
-    ShadToaster.maybeOf(context)?.show(
-      ShadToast.destructive(description: const Text('Camera is unavailable. Check your device settings.')),
-    );
+    ShadToaster.maybeOf(
+      context,
+    )?.show(ShadToast.destructive(description: const Text('Camera is unavailable. Check your device settings.')));
   }
 
   void _showUnavailableMicrophoneToast() {
-    ShadToaster.maybeOf(context)?.show(
-      ShadToast.destructive(description: const Text('Microphone is unavailable. Check your device settings.')),
-    );
+    ShadToaster.maybeOf(
+      context,
+    )?.show(ShadToast.destructive(description: const Text('Microphone is unavailable. Check your device settings.')));
   }
 
   @override
@@ -377,7 +377,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final isMobile = MediaQuery.sizeOf(context).width < 600;
         final statusTextStyle = GoogleFonts.inter(fontSize: isMobile ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
-        final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - 150 : double.infinity;
+        final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - (isMobile ? 190 : 150) : double.infinity;
 
         // Cap the width to 800px - large monitors preview overwhelming
         double width = maxWidth > 800 ? 800 : maxWidth;
@@ -388,8 +388,64 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           height = maxHeight;
         }
 
-        return Column(
-          mainAxisAlignment: .center,
+        final previewControls = [
+          RoomToolbarButton(
+            text: audioTooltipText,
+            on: audioOn || audioPending,
+            onColor: ShadTheme.of(context).colorScheme.foreground,
+            onForeground: ShadTheme.of(context).colorScheme.background,
+            offColor: ShadTheme.of(context).colorScheme.destructive,
+            offForeground: Colors.white,
+            loading: audioPending,
+            onPressed: !audioPending
+                ? () {
+                    if (!deviceManager.canTurnOnMicrophone) {
+                      _showUnavailableMicrophoneToast();
+                      return;
+                    }
+                    audioOn ? _disableAudio() : _enableAudio(showErrors: true);
+                  }
+                : null,
+            icon: (audioOn || audioPending) ? LucideIcons.mic : LucideIcons.micOff,
+          ),
+          RoomToolbarButton(
+            text: cameraTooltipText,
+            on: videoOn || videoPending,
+            onColor: ShadTheme.of(context).colorScheme.foreground,
+            onForeground: ShadTheme.of(context).colorScheme.background,
+            offColor: ShadTheme.of(context).colorScheme.destructive,
+            offForeground: Colors.white,
+            loading: videoPending,
+            onPressed: !videoPending
+                ? () {
+                    if (!deviceManager.canTurnOnCamera) {
+                      _showUnavailableCameraToast();
+                      return;
+                    }
+                    videoOn ? _disableVideo() : _enableVideo(showErrors: true);
+                  }
+                : null,
+            icon: (videoOn || videoPending) ? LucideIcons.video : LucideIcons.videoOff,
+          ),
+          ChangeDeviceButton(
+            onChangeVideoInput: _selectVideoInput,
+            onChangeAudioInput: _selectAudioInput,
+            onChangeAudioOutput: _selectAudioOutput,
+            selectedVideoInputDeviceId: () => _videoDeviceId,
+            selectedAudioInputDeviceId: () => _audioDeviceId,
+            selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
+            presentation: ChangeDeviceButtonPresentation.dialog,
+            renderButton: (onPressed) {
+              return Tooltip(
+                message: "Device settings",
+                child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
+              );
+            },
+          ),
+        ];
+
+        final previewSection = Column(
+          mainAxisSize: MainAxisSize.min,
           spacing: 20,
           children: [
             Container(
@@ -413,76 +469,105 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 8,
                 runSpacing: 8,
+                children: previewControls,
+              ),
+            ),
+          ],
+        );
+
+        if (isMobile) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: Center(child: previewSection)),
+              Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 12,
+                  children: [
+                    if (widget.onJoin != null)
+                      ShadButton.destructive(
+                        onPressed: audioPending || videoPending
+                            ? null
+                            : () {
+                                widget.onJoin?.call(videoOn, audioOn);
+                              },
+                        child: const Text("Meet Now"),
+                      ),
+                    if (widget.onCancel != null)
+                      ShadButton.outline(
+                        onPressed: () {
+                          widget.onCancel?.call();
+                        },
+                        child: const Text("Cancel"),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          spacing: 20,
+          children: [
+            Container(
+              child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
+            ),
+            SizedBox(
+              height: height,
+              width: width,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: Container(
+                  color: const Color(0xFF222222),
+                  foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+                  child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
+                ),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: Row(
                 children: [
-                  RoomToolbarButton(
-                    text: cameraTooltipText,
-                    on: videoOn || videoPending,
-                    onColor: ShadTheme.of(context).colorScheme.foreground,
-                    onForeground: ShadTheme.of(context).colorScheme.background,
-                    offColor: Colors.red,
-                    offForeground: Colors.white,
-                    loading: videoPending,
-                    onPressed: !videoPending
-                        ? () {
-                            if (!deviceManager.canTurnOnCamera) {
-                              _showUnavailableCameraToast();
-                              return;
-                            }
-                            videoOn ? _disableVideo() : _enableVideo(showErrors: true);
-                          }
-                        : null,
-                    icon: (videoOn || videoPending) ? LucideIcons.video : LucideIcons.videoOff,
+                  Wrap(
+                    alignment: WrapAlignment.start,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: previewControls,
                   ),
-                  RoomToolbarButton(
-                    text: audioTooltipText,
-                    on: audioOn || audioPending,
-                    onColor: ShadTheme.of(context).colorScheme.foreground,
-                    onForeground: ShadTheme.of(context).colorScheme.background,
-                    offColor: Colors.red,
-                    offForeground: Colors.white,
-                    loading: audioPending,
-                    onPressed: !audioPending
-                        ? () {
-                            if (!deviceManager.canTurnOnMicrophone) {
-                              _showUnavailableMicrophoneToast();
-                              return;
-                            }
-                            audioOn ? _disableAudio() : _enableAudio(showErrors: true);
-                          }
-                        : null,
-                    icon: (audioOn || audioPending) ? LucideIcons.mic : LucideIcons.micOff,
-                  ),
-                  ChangeDeviceButton(
-                    onChangeVideoInput: _selectVideoInput,
-                    onChangeAudioInput: _selectAudioInput,
-                    onChangeAudioOutput: _selectAudioOutput,
-                    selectedVideoInputDeviceId: () => _videoDeviceId,
-                    selectedAudioInputDeviceId: () => _audioDeviceId,
-                    selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
-                    presentation: ChangeDeviceButtonPresentation.dialog,
-                    renderButton: (onPressed) {
-                      return Tooltip(
-                        message: "Device settings",
-                        child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
-                      );
-                    },
-                  ),
-                  if (widget.onJoin != null)
-                    ShadButton(
-                      onPressed: audioPending || videoPending
-                          ? null
-                          : () {
-                              widget.onJoin?.call(videoOn, audioOn);
+                  const Spacer(),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.onCancel != null)
+                        SizedBox(
+                          width: 120,
+                          child: ShadButton.outline(
+                            onPressed: () {
+                              widget.onCancel?.call();
                             },
-                      child: const Text("Meet Now"),
-                    ),
-                  if (widget.onCancel != null)
-                    ShadButton.outline(
-                      onPressed: () {
-                        widget.onCancel?.call();
-                      },
-                      child: const Text("Cancel"),
-                    ),
+                            child: const Text("Cancel"),
+                          ),
+                        ),
+                      if (widget.onCancel != null && widget.onJoin != null) const SizedBox(width: 8),
+                      if (widget.onJoin != null)
+                        SizedBox(
+                          width: 120,
+                          child: ShadButton.destructive(
+                            onPressed: audioPending || videoPending
+                                ? null
+                                : () {
+                                    widget.onJoin?.call(videoOn, audioOn);
+                                  },
+                            child: const Text("Meet Now"),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),
