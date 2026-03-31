@@ -273,13 +273,7 @@ class MeetButton extends StatelessWidget {
         child: buttonBuilder(
           padding: buttonPadding,
           leading: Icon(LucideIcons.video),
-          onPressed: () {
-            if (controller.inMeeting) {
-              controller.exitMeeting();
-            } else {
-              controller.enterMeeting();
-            }
-          },
+          onPressed: () => controller.selectMeetingTab(isMobile: isMobile),
           child: isMobile || compact ? null : Text("Meet"),
         ),
       ),
@@ -307,7 +301,7 @@ class FilesButton extends StatelessWidget {
               child: ShadButton(
                 padding: buttonPadding,
                 leading: Icon(LucideIcons.files),
-                onPressed: controller.hideFiles,
+                onPressed: () => controller.selectFilesTab(isMobile: isMobile),
                 child: isMobile || compact ? null : Text("Files"),
               ),
             ),
@@ -319,7 +313,7 @@ class FilesButton extends StatelessWidget {
               child: ShadButton.outline(
                 padding: buttonPadding,
                 leading: Icon(LucideIcons.files),
-                onPressed: controller.showFiles,
+                onPressed: () => controller.selectFilesTab(isMobile: isMobile),
                 child: isMobile || compact ? null : Text("Files"),
               ),
             ),
@@ -393,6 +387,19 @@ class MeshagentRoomController extends Controller {
     notifyListeners();
   }
 
+  void selectFilesTab({required bool isMobile}) {
+    if (_isFilesShown) {
+      if (isMobile) {
+        return;
+      }
+
+      hideFiles();
+      return;
+    }
+
+    showFiles();
+  }
+
   void showChat() {
     if (!_isFilesShown && !_inMeeting) {
       return;
@@ -427,6 +434,19 @@ class MeshagentRoomController extends Controller {
     }
     _inMeeting = false;
     notifyListeners();
+  }
+
+  void selectMeetingTab({required bool isMobile}) {
+    if (_inMeeting) {
+      if (isMobile) {
+        return;
+      }
+
+      exitMeeting();
+      return;
+    }
+
+    enterMeeting();
   }
 }
 
