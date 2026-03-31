@@ -94,7 +94,6 @@ class MeshagentThreadView extends StatefulWidget {
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
-  final Set<String> _emptyThreadCleanupPaths = <String>{};
 
   String _chatPlaceholderText(String? agentName) {
     final normalizedAgentName = agentName?.trim();
