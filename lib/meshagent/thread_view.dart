@@ -191,19 +191,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     if (widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer || widget.selectedThreadPath != path) {
       return;
     }
-    if (!_emptyThreadCleanupPaths.add(path)) {
-      return;
-    }
-
-    try {
-      widget.onSelectedThreadPathChanged?.call(null);
-    } catch (e) {
-      if (mounted) {
-        ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to remove empty thread: $e")));
-      }
-    } finally {
-      _emptyThreadCleanupPaths.remove(path);
-    }
   }
 
   Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
