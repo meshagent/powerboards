@@ -54,9 +54,9 @@ import 'package:powerboards/ui/sweep_status_text.dart';
 
 const defaultDebugSize = 0.4;
 final meetingHeaderTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600);
-const double _meetingToolbarCompactThreshold = 440;
-const double _meetingToolbarPreferredExpandedWidth = 400;
-const double _meetingToolbarPreferredCompactWidth = 320;
+const double _meetingToolbarCompactThreshold = 620;
+const double _meetingToolbarPreferredExpandedWidth = 640;
+const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
 
 EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
   if (compact) {
@@ -563,14 +563,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   final List<RoomEvent> events = [];
 
-  void _handleMeetingSplitViewChanged() {
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {});
-  }
-
   late final isOwner = Resource(
     () => grant
         .amIOwnerOfRoom(projectId: widget.projectId, roomName: widget.room.roomName!)
@@ -590,8 +582,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   @override
   void initState() {
     super.initState();
-
-    _meetingSplitViewController.addListener(_handleMeetingSplitViewChanged);
 
     _roomStatusSubscription = widget.room.events.where((event) => event is RoomStatusEvent).cast<RoomStatusEvent>().listen((event) {
       final status = event.description.trim();
@@ -646,7 +636,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   @override
   void dispose() {
-    _meetingSplitViewController.removeListener(_handleMeetingSplitViewChanged);
     _meetingSplitViewController.dispose();
     _roomStatusSubscription?.cancel();
     _roomStatusSubscription = null;
@@ -2093,6 +2082,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           maxArea2Fraction: null,
                                           collapseArea1Width: meetingSessionActive ? 300 : null,
                                           controller: _meetingSplitViewController,
+                                          onCollapsedChanged: (_) {
+                                            if (!mounted) {
+                                              return;
+                                            }
+
+                                            setState(() {});
+                                          },
                                           split: split,
                                           area1: ColoredBox(
                                             color: cs.card,

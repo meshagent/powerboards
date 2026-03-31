@@ -40,12 +40,7 @@ class ResizableSplitViewController extends ChangeNotifier {
   }
 
   void syncCollapsed(bool value) {
-    if (_collapsed == value) {
-      return;
-    }
-
     _collapsed = value;
-    notifyListeners();
   }
 }
 
@@ -66,6 +61,7 @@ class ResizableSplitView extends StatefulWidget {
     this.preferredArea2Fraction,
     this.collapseArea1Width,
     this.controller,
+    this.onCollapsedChanged,
     this.onArea2FractionChanged,
   });
 
@@ -83,6 +79,7 @@ class ResizableSplitView extends StatefulWidget {
   final double? preferredArea2Fraction;
   final double? collapseArea1Width;
   final ResizableSplitViewController? controller;
+  final ValueChanged<bool>? onCollapsedChanged;
   final ValueChanged<double>? onArea2FractionChanged;
 
   @override
@@ -111,6 +108,24 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     widget.controller?.syncCollapsed(_collapsed);
   }
 
+  void _notifyCollapsedChanged() {
+    widget.onCollapsedChanged?.call(_collapsed);
+  }
+
+  void _notifyCollapsedChangedDeferred() {
+    if (widget.onCollapsedChanged == null) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      widget.onCollapsedChanged?.call(_collapsed);
+    });
+  }
+
   void _applyCollapsedState(bool collapsed) {
     if (_collapsed == collapsed) {
       return;
@@ -125,6 +140,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
       _collapsed = collapsed;
     });
     _syncControllerCollapsed();
+    _notifyCollapsedChanged();
   }
 
   void _handleControllerChanged() {
@@ -134,6 +150,15 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     }
 
     _applyCollapsedState(requestedCollapsed);
+  }
+
+  double _sanitizePanelFraction(double? value, {required double fallback}) {
+    final resolved = value;
+    if (resolved == null || !resolved.isFinite || resolved.isNaN) {
+      return fallback.clamp(0.0, 1.0).toDouble();
+    }
+
+    return resolved.clamp(0.0, 1.0).toDouble();
   }
 
   double? get _lockedArea1Fraction {
@@ -233,19 +258,25 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
   ({double minArea1Size, double minArea2Size, double maxArea1Size, double maxArea2Size}) _resolvePanelFractions(double size) {
     final minimums = _resolveMinimumWidths(size);
-    var minArea1Size = (minimums.area1 / size).clamp(0.0, 1.0);
-    var minArea2Size = (minimums.area2 / size).clamp(0.0, 1.0);
+    var minArea1Size = _sanitizePanelFraction(minimums.area1 / size, fallback: 0.5);
+    var minArea2Size = _sanitizePanelFraction(minimums.area2 / size, fallback: 0.5);
 
     final minimumTotal = minArea1Size + minArea2Size;
-    if (minimumTotal > 1) {
+    if (minimumTotal.isFinite && minimumTotal > 1) {
       minArea1Size /= minimumTotal;
       minArea2Size /= minimumTotal;
     }
 
-    final rawMaxArea1Size = (_lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0)).clamp(0.0, 1.0);
-    final rawMaxArea2Size = (_lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0)).clamp(0.0, 1.0);
-    final maxArea1Size = math.max(minArea1Size, rawMaxArea1Size).clamp(0.0, 1.0);
-    final maxArea2Size = math.max(minArea2Size, rawMaxArea2Size).clamp(0.0, 1.0);
+    final rawMaxArea1Size = _sanitizePanelFraction(
+      _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0),
+      fallback: 1.0,
+    );
+    final rawMaxArea2Size = _sanitizePanelFraction(
+      _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0),
+      fallback: 1.0,
+    );
+    final maxArea1Size = _sanitizePanelFraction(math.max(minArea1Size, rawMaxArea1Size), fallback: minArea1Size);
+    final maxArea2Size = _sanitizePanelFraction(math.max(minArea2Size, rawMaxArea2Size), fallback: minArea2Size);
 
     return (minArea1Size: minArea1Size, minArea2Size: minArea2Size, maxArea1Size: maxArea1Size, maxArea2Size: maxArea2Size);
   }
@@ -257,14 +288,17 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     required double maxArea1Size,
     required double maxArea2Size,
   }) {
-    final preferredArea1 = (_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size)).toDouble();
-    final safeMinArea1 = math.max(minArea1Size, 1 - maxArea2Size);
-    final safeMaxArea1 = math.min(maxArea1Size, 1 - minArea2Size);
+    final preferredArea1 = _sanitizePanelFraction(_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size), fallback: 0.5);
+    final safeMinArea1 = _sanitizePanelFraction(math.max(minArea1Size, 1 - maxArea2Size), fallback: minArea1Size);
+    final safeMaxArea1 = _sanitizePanelFraction(math.min(maxArea1Size, 1 - minArea2Size), fallback: maxArea1Size);
 
-    final clampedMinArea1 = safeMinArea1.clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon).toDouble();
-    final clampedMaxArea1 = safeMaxArea1.clamp(clampedMinArea1, 1 - _panelFractionEpsilon).toDouble();
-    final area1 = preferredArea1.clamp(clampedMinArea1, clampedMaxArea1).toDouble();
-    final area2 = (1 - area1).clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon).toDouble();
+    final clampedMinArea1 = _sanitizePanelFraction(safeMinArea1.clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon), fallback: 0.5);
+    final clampedMaxArea1 = _sanitizePanelFraction(
+      safeMaxArea1.clamp(clampedMinArea1, 1 - _panelFractionEpsilon),
+      fallback: clampedMinArea1,
+    );
+    final area1 = _sanitizePanelFraction(preferredArea1.clamp(clampedMinArea1, clampedMaxArea1), fallback: clampedMinArea1);
+    final area2 = _sanitizePanelFraction((1 - area1).clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon), fallback: 1 - area1);
 
     return (area1: area1, area2: area2);
   }
@@ -353,23 +387,31 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     super.didUpdateWidget(oldWidget);
 
     var shouldResetPanelGroup = false;
+    var collapsedChanged = false;
 
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.removeListener(_handleControllerChanged);
       widget.controller?.addListener(_handleControllerChanged);
-      _syncControllerCollapsed();
     }
 
-    if (oldWidget.split && !widget.split) {
+    if (oldWidget.split && !widget.split && _collapsed) {
       _collapsed = false;
-      _syncControllerCollapsed();
+      collapsedChanged = true;
       shouldResetPanelGroup = true;
     }
 
     if (!widget.allowCollapse && _collapsed) {
       _collapsed = false;
-      _syncControllerCollapsed();
+      collapsedChanged = true;
       shouldResetPanelGroup = true;
+    }
+
+    if (oldWidget.controller != widget.controller || collapsedChanged) {
+      _syncControllerCollapsed();
+    }
+
+    if (collapsedChanged) {
+      _notifyCollapsedChangedDeferred();
     }
 
     if (oldWidget.split != widget.split || oldWidget.allowCollapse != widget.allowCollapse) {
