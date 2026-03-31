@@ -1,5 +1,6 @@
 import 'dart:core';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -36,20 +37,68 @@ class _DeviceSettings extends StatefulWidget {
 }
 
 class _DeviceSettingsState extends State<_DeviceSettings> {
+  static const Duration _minimumLobbySwitchPendingDuration = Duration(milliseconds: 350);
   bool _loaded = false;
   bool _audioOn = false;
   bool _videoOn = false;
   bool _audioProcessing = false;
   bool _videoProcessing = false;
   String? _audioDeviceId;
+  String? _audioOutputDeviceId;
   String? _videoDeviceId;
   LocalAudioTrack? _audio;
   LocalVideoTrack? _video;
   late SharedPreferences _preferences;
 
+  bool get _audioPending => _audioOn && _audio == null;
+  bool get _videoPending => _videoOn && _video == null;
+
   bool _isExpectedMediaAccessError(Object error) {
     final message = '$error';
     return message.contains('NotFoundError: Requested device not found') || message.contains('NotAllowedError: Permission denied');
+  }
+
+  String _describeVideoToggleError(Object error) {
+    final message = '$error';
+    if (message.contains('NotAllowedError')) {
+      return 'Camera access was blocked by the browser or system.';
+    }
+    if (message.contains('NotFoundError')) {
+      return 'The selected camera was not found.';
+    }
+    return 'Unable to change camera state: $message';
+  }
+
+  String _describeAudioToggleError(Object error) {
+    final message = '$error';
+    if (message.contains('NotAllowedError')) {
+      return 'Microphone access was blocked by the browser or system.';
+    }
+    if (message.contains('NotFoundError')) {
+      return 'The selected microphone was not found.';
+    }
+    return 'Unable to change microphone state: $message';
+  }
+
+  Future<void> _runWithMinimumProcessingDuration(Future<void> Function() action) async {
+    final startedAt = DateTime.now();
+    await action();
+    final remaining = _minimumLobbySwitchPendingDuration - DateTime.now().difference(startedAt);
+    if (remaining > Duration.zero) {
+      await Future<void>.delayed(remaining);
+    }
+  }
+
+  void _showUnavailableCameraToast() {
+    ShadToaster.maybeOf(context)?.show(
+      ShadToast.destructive(description: const Text('Camera is unavailable. Check your device settings.')),
+    );
+  }
+
+  void _showUnavailableMicrophoneToast() {
+    ShadToaster.maybeOf(context)?.show(
+      ShadToast.destructive(description: const Text('Microphone is unavailable. Check your device settings.')),
+    );
   }
 
   @override
@@ -70,6 +119,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     _preferences = await SharedPreferences.getInstance();
 
     _audioDeviceId = _preferences.getString("audioInput");
+    _audioOutputDeviceId = _preferences.getString("audioOutput");
     _videoDeviceId = _preferences.getString("videoInput");
 
     if (!mounted) return;
@@ -77,6 +127,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
     if (!mounted) return;
     await _enableAudio();
+
+    if (!mounted) return;
+    await _restoreAudioOutputSelection();
 
     if (mounted) {
       final deviceManager = DeviceManagerProvider.of(context);
@@ -90,12 +143,44 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
   Future<void> _selectAudioInput(MediaDevice? device) async {
     _audioDeviceId = device?.deviceId;
-    await _enableAudio();
+    await _runWithMinimumProcessingDuration(_enableAudio);
+    if (_audioDeviceId == device?.deviceId && _audio == null) {
+      throw StateError('Unable to switch microphone to ${device?.deviceId ?? "default"}');
+    }
   }
 
   Future<void> _selectVideoInput(MediaDevice? device) async {
     _videoDeviceId = device?.deviceId;
-    await _enableVideo();
+    await _runWithMinimumProcessingDuration(_enableVideo);
+    if (_videoDeviceId == device?.deviceId && _video == null) {
+      throw StateError('Unable to switch camera to ${device?.deviceId ?? "default"}');
+    }
+  }
+
+  Future<void> _selectAudioOutput(MediaDevice device) async {
+    _audioOutputDeviceId = device.deviceId;
+
+    if (lkPlatformIs(PlatformType.web)) {
+      Hardware.instance.selectedAudioOutput = device;
+      return;
+    }
+
+    await Hardware.instance.selectAudioOutput(device);
+  }
+
+  Future<void> _restoreAudioOutputSelection() async {
+    final preferredAudioOutputDeviceId = _audioOutputDeviceId;
+    if (preferredAudioOutputDeviceId == null || preferredAudioOutputDeviceId.isEmpty) {
+      return;
+    }
+
+    final audioOutputs = await Hardware.instance.audioOutputs();
+    final preferredAudioOutput = audioOutputs.firstWhereOrNull((device) => device.deviceId == preferredAudioOutputDeviceId);
+    if (preferredAudioOutput == null) {
+      return;
+    }
+
+    await _selectAudioOutput(preferredAudioOutput);
   }
 
   Future<void> _guardAudioProcessing(Future<void> Function() action) async {
@@ -132,13 +217,19 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     }
   }
 
-  Future<void> _enableAudio() async {
+  Future<void> _enableAudio({bool showErrors = false}) async {
     setState(() {
       _audioOn = true;
     });
 
     await _guardAudioProcessing(() async {
-      await _audio?.dispose();
+      final existingTrack = _audio;
+      if (mounted && existingTrack != null) {
+        setState(() {
+          _audio = null;
+        });
+      }
+      await existingTrack?.dispose();
       try {
         final track = await LocalAudioTrack.create(AudioCaptureOptions(deviceId: _audioDeviceId));
         if (mounted) {
@@ -154,6 +245,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             _audioOn = false;
             _audio = null;
           });
+          if (showErrors) {
+            ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeAudioToggleError(error))));
+          }
         }
         if (!_isExpectedMediaAccessError(error)) {
           debugPrint('_enableAudio error $error');
@@ -162,13 +256,19 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     });
   }
 
-  Future<void> _enableVideo() async {
+  Future<void> _enableVideo({bool showErrors = false}) async {
     setState(() {
       _videoOn = true;
     });
 
     await _guardVideoProcessing(() async {
-      await _video?.dispose();
+      final existingTrack = _video;
+      if (mounted && existingTrack != null) {
+        setState(() {
+          _video = null;
+        });
+      }
+      await existingTrack?.dispose();
       try {
         final track = await LocalVideoTrack.createCameraTrack(CameraCaptureOptions(deviceId: _videoDeviceId));
         if (mounted) {
@@ -184,6 +284,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             _videoOn = false;
             _video = null;
           });
+          if (showErrors) {
+            ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeVideoToggleError(error))));
+          }
         }
         if (!_isExpectedMediaAccessError(error)) {
           debugPrint('_enableVideo error $error');
@@ -225,12 +328,16 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   String get title {
     final deviceManager = DeviceManagerProvider.of(context);
     final cameraState = deviceManager.canTurnOnCamera
-        ? _videoOn
+        ? _videoPending
+              ? "starting"
+              : _video != null
               ? "on"
               : "off"
         : "disabled";
     final microphoneState = deviceManager.canTurnOnMicrophone
-        ? _audioOn
+        ? _audioPending
+              ? "starting"
+              : _audio != null
               ? "on"
               : "off"
         : "disabled";
@@ -245,13 +352,23 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   @override
   Widget build(BuildContext context) {
     final deviceManager = DeviceManagerProvider.of(context);
-    final videoOn = _videoOn && deviceManager.canTurnOnCamera;
-    final audioOn = _audioOn && deviceManager.canTurnOnMicrophone;
+    final videoOn = _video != null && deviceManager.canTurnOnCamera;
+    final audioOn = _audio != null && deviceManager.canTurnOnMicrophone;
+    final videoPending = _videoPending && deviceManager.canTurnOnCamera;
+    final audioPending = _audioPending && deviceManager.canTurnOnMicrophone;
 
     final aspectRatio = 3 / 2;
 
-    final cameraStatusText = videoOn ? "Turn off camera" : "Turn on camera";
-    final audioStatusText = audioOn ? "Turn off microphone" : "Turn on microphone";
+    final cameraStatusText = videoPending
+        ? "Starting camera"
+        : videoOn
+        ? "Turn off camera"
+        : "Turn on camera";
+    final audioStatusText = audioPending
+        ? "Starting microphone"
+        : audioOn
+        ? "Turn off microphone"
+        : "Turn on microphone";
     final cameraTooltipText = deviceManager.canTurnOnCamera ? cameraStatusText : "Camera disabled";
     final audioTooltipText = deviceManager.canTurnOnMicrophone ? audioStatusText : "Microphone disabled";
 
@@ -299,51 +416,64 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 children: [
                   RoomToolbarButton(
                     text: cameraTooltipText,
-                    on: videoOn,
+                    on: videoOn || videoPending,
                     onColor: ShadTheme.of(context).colorScheme.foreground,
                     onForeground: ShadTheme.of(context).colorScheme.background,
                     offColor: Colors.red,
                     offForeground: Colors.white,
-                    onPressed: deviceManager.canTurnOnCamera
+                    loading: videoPending,
+                    onPressed: !videoPending
                         ? () {
-                            videoOn ? _disableVideo() : _enableVideo();
+                            if (!deviceManager.canTurnOnCamera) {
+                              _showUnavailableCameraToast();
+                              return;
+                            }
+                            videoOn ? _disableVideo() : _enableVideo(showErrors: true);
                           }
                         : null,
-                    icon: videoOn ? LucideIcons.video : LucideIcons.videoOff,
+                    icon: (videoOn || videoPending) ? LucideIcons.video : LucideIcons.videoOff,
                   ),
                   RoomToolbarButton(
                     text: audioTooltipText,
-                    on: audioOn,
+                    on: audioOn || audioPending,
                     onColor: ShadTheme.of(context).colorScheme.foreground,
                     onForeground: ShadTheme.of(context).colorScheme.background,
                     offColor: Colors.red,
                     offForeground: Colors.white,
-                    onPressed: deviceManager.canTurnOnMicrophone
+                    loading: audioPending,
+                    onPressed: !audioPending
                         ? () {
-                            audioOn ? _disableAudio() : _enableAudio();
+                            if (!deviceManager.canTurnOnMicrophone) {
+                              _showUnavailableMicrophoneToast();
+                              return;
+                            }
+                            audioOn ? _disableAudio() : _enableAudio(showErrors: true);
                           }
                         : null,
-                    icon: audioOn ? LucideIcons.mic : LucideIcons.micOff,
+                    icon: (audioOn || audioPending) ? LucideIcons.mic : LucideIcons.micOff,
                   ),
                   ChangeDeviceButton(
                     onChangeVideoInput: _selectVideoInput,
                     onChangeAudioInput: _selectAudioInput,
-                    onChangeAudioOutput: (_) async {},
+                    onChangeAudioOutput: _selectAudioOutput,
                     selectedVideoInputDeviceId: () => _videoDeviceId,
                     selectedAudioInputDeviceId: () => _audioDeviceId,
+                    selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
                     presentation: ChangeDeviceButtonPresentation.dialog,
                     renderButton: (onPressed) {
                       return Tooltip(
-                        message: "Change device",
+                        message: "Device settings",
                         child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
                       );
                     },
                   ),
                   if (widget.onJoin != null)
                     ShadButton(
-                      onPressed: () {
-                        widget.onJoin?.call(videoOn, audioOn);
-                      },
+                      onPressed: audioPending || videoPending
+                          ? null
+                          : () {
+                              widget.onJoin?.call(videoOn, audioOn);
+                            },
                       child: const Text("Meet Now"),
                     ),
                   if (widget.onCancel != null)

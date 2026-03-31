@@ -103,6 +103,17 @@ MediaDevice? _selectedMenuDevice(List<MediaDevice> devices, String? selectedDevi
       visibleDevices.first;
 }
 
+String _describeDeviceSwitchError(String label, Object error) {
+  final message = '$error';
+  if (message.contains('NotAllowedError')) {
+    return '$label access was blocked by the browser or system.';
+  }
+  if (message.contains('NotFoundError')) {
+    return 'The selected ${label.toLowerCase()} was not found.';
+  }
+  return 'Unable to switch ${label.toLowerCase()}: $message';
+}
+
 class ChangeDeviceButton extends StatefulWidget {
   const ChangeDeviceButton({
     super.key,
@@ -427,7 +438,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
         .map(
           (device) => ShadContextMenuItem(
             height: 40,
-            onPressed: () => unawaited(_runDeviceChange(onChange, device)),
+            onPressed: () => unawaited(_runDeviceChange(label, onChange, device)),
             trailing: device.deviceId == selectedDevice?.deviceId ? const Icon(LucideIcons.check, size: 16) : null,
             child: Text(_deviceLabel(device, label), overflow: TextOverflow.ellipsis),
           ),
@@ -485,10 +496,14 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     );
   }
 
-  Future<void> _runDeviceChange(Future<void> Function(MediaDevice) onChange, MediaDevice device) async {
+  Future<void> _runDeviceChange(String label, Future<void> Function(MediaDevice) onChange, MediaDevice device) async {
     try {
       await onChange(device);
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeDeviceSwitchError(label, error))));
       debugPrint('Unable to switch device ${device.deviceId}: $error');
     }
   }
@@ -738,6 +753,10 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
     try {
       await widget.onChange(device);
     } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeDeviceSwitchError(widget.label, error))));
       debugPrint('Unable to switch device ${device.deviceId}: $error');
     }
   }
