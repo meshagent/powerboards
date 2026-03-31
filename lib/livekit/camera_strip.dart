@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
+import 'package:powerboards/livekit/meeting_participants.dart';
 import 'package:powerboards/ui/camera_box.dart';
 
 import 'participant_track.dart';
@@ -42,6 +43,7 @@ class CameraStrip extends StatelessWidget {
                       track,
                       fit: videoTrack.source == lk.TrackSource.screenShareVideo ? lk.VideoViewFit.contain : lk.VideoViewFit.cover,
                     ),
+                    interactive: videoTrack.source != lk.TrackSource.screenShareVideo,
                   ),
                 );
               },
@@ -81,9 +83,7 @@ class CameraStrip extends StatelessWidget {
     return ListenableBuilder(
       listenable: room,
       builder: (context, _) {
-        final stripParticipants =
-            participants ??
-            <lk.Participant>[...(room.remoteParticipants.values), if (room.localParticipant != null) room.localParticipant!];
+        final stripParticipants = participants ?? uniqueMeetingParticipants(room);
 
         return ListenableBuilder(
           listenable: Listenable.merge(stripParticipants),
@@ -92,19 +92,13 @@ class CameraStrip extends StatelessWidget {
             children: [
               for (final participant in stripParticipants)
                 ...() {
-                  final nonShareVideoTracks = participant.trackPublications.values.where(
-                    (track) =>
-                        track.kind == lk.TrackType.VIDEO &&
-                        track.source != lk.TrackSource.screenShareVideo &&
-                        !track.muted &&
-                        track.track != null,
-                  );
+                  final cameraTrack = activeVideoPublicationForSource(participant, lk.TrackSource.camera);
 
-                  if (nonShareVideoTracks.isEmpty) {
+                  if (cameraTrack == null) {
                     return [audioDisplay(context, participant)];
                   }
 
-                  return nonShareVideoTracks.map((track) => videoDisplay(context, participant, track));
+                  return [videoDisplay(context, participant, cameraTrack)];
                 }(),
             ],
           ),

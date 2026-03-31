@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 
+import 'meeting_participants.dart';
+
 class VideoRoomParticipantsBuilder extends StatefulWidget {
   const VideoRoomParticipantsBuilder({super.key, required this.room, required this.builder});
 
@@ -41,23 +43,7 @@ class _VideoRoomParticipantsBuilderState extends State<VideoRoomParticipantsBuil
   }
 
   List<lk.Participant> _getParticipants() {
-    List<lk.Participant> participants = [];
-
-    for (var p in widget.room.remoteParticipants.values) {
-      final isRecorder = p.identity.endsWith(".agent-recorder");
-      final isTranscriber = p.identity.endsWith(".agent-transcriber");
-
-      if (!isRecorder && !isTranscriber) {
-        participants.add(p);
-      }
-    }
-
-    // add our selves
-    if (widget.room.localParticipant != null) {
-      participants.add(widget.room.localParticipant!);
-    }
-
-    return participants;
+    return uniqueMeetingParticipants(widget.room);
   }
 
   void _onRoomChanged() {

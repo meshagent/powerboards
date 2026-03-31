@@ -5,27 +5,11 @@ import 'package:livekit_client/livekit_client.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 
 import 'audio_stats.dart';
+import 'meeting_participants.dart';
 import 'participant_track.dart';
 import 'expand_participant_controller.dart';
+import 'hover_builder.dart';
 import 'room.dart';
-
-bool _isActiveVideoPublication(TrackPublication publication) {
-  return publication.kind == TrackType.VIDEO && !publication.muted && publication.track is VideoTrack;
-}
-
-Iterable<TrackPublication> _activeVideoPublications(Participant participant, {TrackSource? source}) sync* {
-  for (final publication in participant.trackPublications.values) {
-    if (!_isActiveVideoPublication(publication)) {
-      continue;
-    }
-
-    if (source != null && publication.source != source) {
-      continue;
-    }
-
-    yield publication;
-  }
-}
 
 class ExpandableCameraGrid extends StatefulWidget {
   const ExpandableCameraGrid({super.key, required this.participants});
@@ -42,7 +26,7 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   bool _collapseScheduled = false;
 
   bool _participantHasShare(Participant participant) {
-    return _activeVideoPublications(participant, source: TrackSource.screenShareVideo).isNotEmpty;
+    return activeVideoPublicationForSource(participant, TrackSource.screenShareVideo) != null;
   }
 
   int _getNumberOfShares(List<Participant> participants) {
@@ -50,7 +34,7 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 
   bool _participantHasCamera(Participant participant) {
-    return _activeVideoPublications(participant).isNotEmpty;
+    return activeVideoPublicationForSource(participant, TrackSource.camera) != null;
   }
 
   int _getNumberOfVideos(List<Participant> participants) {
@@ -136,10 +120,20 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
       context,
       participants,
       spacing: 12.0,
-      frameBuilder: (context, participant, track, trackWidget, showName) {
+      frameBuilder: (context, participant, publication, trackWidget, showName) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: ParticipantTrack(participant: participant, track: trackWidget, showName: showName),
+          child: HoverBuilder(
+            cursor: SystemMouseCursors.basic,
+            builder: (hovered) {
+              return ParticipantTrack(
+                participant: participant,
+                track: trackWidget,
+                showName: showName && hovered,
+                interactive: publication?.source != TrackSource.screenShareVideo,
+              );
+            },
+          ),
         );
       },
     );
@@ -199,7 +193,7 @@ Widget cameraGridBuilder(
   int rowsDesired = 0,
   int columnsDesired = 0,
   bool tryFill = true,
-  required Widget Function(BuildContext context, Participant participant, VideoTrack? track, Widget trackWidget, bool showName)
+  required Widget Function(BuildContext context, Participant participant, TrackPublication? publication, Widget trackWidget, bool showName)
   frameBuilder,
 }) {
   final room = VideoRoomModel.maybeOf(context)?.room;
@@ -213,17 +207,16 @@ Widget cameraGridBuilder(
     builder: (context, _) {
       final tracks = <Widget>[];
       final trackParticipants = <Participant>[];
-      final trackSources = <VideoTrack?>[];
       final trackPublications = <TrackPublication?>[];
 
-      final hasShare = participants.any((p) => _activeVideoPublications(p, source: TrackSource.screenShareVideo).isNotEmpty);
+      final hasShare = participants.any((p) => activeVideoPublicationForSource(p, TrackSource.screenShareVideo) != null);
 
       for (var p in participants) {
         bool added = false;
 
         final publications = showAllVideos
-            ? _activeVideoPublications(p)
-            : _activeVideoPublications(p, source: hasShare ? TrackSource.screenShareVideo : TrackSource.camera);
+            ? activeVideoPublications(p)
+            : activeVideoPublications(p, source: hasShare ? TrackSource.screenShareVideo : TrackSource.camera);
 
         for (final publication in publications) {
           final track = publication.track;
@@ -233,7 +226,6 @@ Widget cameraGridBuilder(
 
           added = true;
           trackParticipants.add(p);
-          trackSources.add(track);
           trackPublications.add(publication);
           tracks.add(
             IgnorePointer(
@@ -247,7 +239,6 @@ Widget cameraGridBuilder(
 
         if (!hasShare && !added) {
           trackParticipants.add(p);
-          trackSources.add(null);
           trackPublications.add(null);
           tracks.add(
             Container(
@@ -283,14 +274,14 @@ Widget cameraGridBuilder(
                   break;
                 }
                 final participant = trackParticipants[i];
-                final source = trackSources[i];
+                final publication = trackPublications[i];
                 final track = tracks[i];
 
                 cams.add(
                   Positioned(
                     left: c * w + spacing * c,
                     top: r * h + spacing * r,
-                    child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, source, track, showNames)),
+                    child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, publication, track, showNames)),
                   ),
                 );
               }
@@ -331,13 +322,13 @@ Widget cameraGridBuilder(
                 }
                 final participant = trackParticipants[i];
                 final track = tracks[i];
-                final source = trackSources[i];
+                final publication = trackPublications[i];
 
                 cams.add(
                   Positioned(
                     left: c * w + spacing * c,
                     top: r * h + spacing * r,
-                    child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, source, track, showNames)),
+                    child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, publication, track, showNames)),
                   ),
                 );
               }
@@ -387,13 +378,17 @@ Widget cameraGridBuilder(
               for (var i = 0; i < tracks.length; i++) {
                 final track = tracks[i];
                 final participant = trackParticipants[i];
-                final source = trackSources[i];
+                final publication = trackPublications[i];
 
                 cams.add(
                   Positioned(
                     left: x,
                     top: y,
-                    child: SizedBox(width: itemSize, height: itemSize, child: frameBuilder(context, participant, source, track, showNames)),
+                    child: SizedBox(
+                      width: itemSize,
+                      height: itemSize,
+                      child: frameBuilder(context, participant, publication, track, showNames),
+                    ),
                   ),
                 );
 
@@ -418,13 +413,17 @@ Widget cameraGridBuilder(
               for (var i = 0; i < tracks.length; i++) {
                 final track = tracks[i];
                 final participant = trackParticipants[i];
-                final source = trackSources[i];
+                final publication = trackPublications[i];
 
                 cams.add(
                   Positioned(
                     left: x,
                     top: y,
-                    child: SizedBox(width: itemSize, height: itemSize, child: frameBuilder(context, participant, source, track, showNames)),
+                    child: SizedBox(
+                      width: itemSize,
+                      height: itemSize,
+                      child: frameBuilder(context, participant, publication, track, showNames),
+                    ),
                   ),
                 );
 
