@@ -197,22 +197,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     try {
       widget.onSelectedThreadPathChanged?.call(null);
-
-      final threadListPath = widget.threadListPath?.trim();
-      if (threadListPath != null && threadListPath.isNotEmpty) {
-        MeshDocument? threadListDocument;
-        try {
-          threadListDocument = await widget.client.sync.open(threadListPath);
-          final threadEntry = threadListDocument.root.getChildren().whereType<MeshElement>().firstWhereOrNull(
-            (node) => node.tagName == "thread" && node.getAttribute("path") == path,
-          );
-          threadEntry?.delete();
-        } finally {
-          try {
-            await widget.client.sync.close(threadListPath);
-          } catch (_) {}
-        }
-      }
     } catch (e) {
       if (mounted) {
         ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to remove empty thread: $e")));
