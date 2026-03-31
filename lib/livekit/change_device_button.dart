@@ -602,59 +602,71 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
       title: const Text("Device settings"),
       description: const Text("Choose your camera, microphone, and speakers."),
       constraints: widget.dialogConstraints,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (widget.kind == null || widget.kind == "camera") ...[
-            _DeviceSettingsRow(
-              boundaryContext: widget.boundaryContext,
-              label: "Camera",
-              devices: visibleVideoInputs,
-              selectedDevice: selectedVideoDevice,
-              onChange: (device) async {
-                await widget.onChangeVideoInput(device);
-                setState(() {});
-              },
-              icon: LucideIcons.video,
-              disabledIcon: LucideIcons.videoOff,
-              disabledLabel: "Camera disabled",
-              disabledDescription: _disabledDeviceDescription,
-            ),
-            if (widget.kind == null || widget.kind == "mic") rowSeparator(),
+      expandDesktopActions: true,
+      actions: [
+        ShadButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+          child: const Text("Done"),
+        ),
+      ],
+      child: Padding(
+        padding: powerboardsDialogScrollableListPadding,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.kind == null || widget.kind == "camera") ...[
+              _DeviceSettingsRow(
+                boundaryContext: widget.boundaryContext,
+                label: "Camera",
+                devices: visibleVideoInputs,
+                selectedDevice: selectedVideoDevice,
+                onChange: (device) async {
+                  await widget.onChangeVideoInput(device);
+                  setState(() {});
+                },
+                icon: LucideIcons.video,
+                disabledIcon: LucideIcons.videoOff,
+                disabledLabel: "Camera disabled",
+                disabledDescription: _disabledDeviceDescription,
+              ),
+              if (widget.kind == null || widget.kind == "mic") rowSeparator(),
+            ],
+            if (widget.kind == null || widget.kind == "mic") ...[
+              _DeviceSettingsRow(
+                boundaryContext: widget.boundaryContext,
+                label: "Microphone",
+                devices: visibleAudioInputs,
+                selectedDevice: selectedAudioInputDevice,
+                onChange: (device) async {
+                  await widget.onChangeAudioInput(device);
+                  setState(() {});
+                },
+                icon: LucideIcons.mic,
+                disabledIcon: LucideIcons.micOff,
+                disabledLabel: "Microphone disabled",
+                disabledDescription: _disabledDeviceDescription,
+              ),
+              if ((kIsWeb && widget.kind == null) || widget.kind == "mic") rowSeparator(),
+            ],
+            if ((kIsWeb && widget.kind == null) || widget.kind == "mic")
+              _DeviceSettingsRow(
+                boundaryContext: widget.boundaryContext,
+                label: "Speakers",
+                devices: visibleAudioOutputs,
+                selectedDevice: selectedAudioOutputDevice,
+                onChange: (device) async {
+                  await widget.onChangeAudioOutput(device);
+                  setState(() {});
+                },
+                icon: LucideIcons.volume2,
+                disabledIcon: LucideIcons.volumeOff,
+                disabledLabel: "Speakers disabled",
+                disabledDescription: _disabledDeviceDescription,
+              ),
           ],
-          if (widget.kind == null || widget.kind == "mic") ...[
-            _DeviceSettingsRow(
-              boundaryContext: widget.boundaryContext,
-              label: "Microphone",
-              devices: visibleAudioInputs,
-              selectedDevice: selectedAudioInputDevice,
-              onChange: (device) async {
-                await widget.onChangeAudioInput(device);
-                setState(() {});
-              },
-              icon: LucideIcons.mic,
-              disabledIcon: LucideIcons.micOff,
-              disabledLabel: "Microphone disabled",
-              disabledDescription: _disabledDeviceDescription,
-            ),
-            if ((kIsWeb && widget.kind == null) || widget.kind == "mic") rowSeparator(),
-          ],
-          if ((kIsWeb && widget.kind == null) || widget.kind == "mic")
-            _DeviceSettingsRow(
-              boundaryContext: widget.boundaryContext,
-              label: "Speakers",
-              devices: visibleAudioOutputs,
-              selectedDevice: selectedAudioOutputDevice,
-              onChange: (device) async {
-                await widget.onChangeAudioOutput(device);
-                setState(() {});
-              },
-              icon: LucideIcons.volume2,
-              disabledIcon: LucideIcons.volumeOff,
-              disabledLabel: "Speakers disabled",
-              disabledDescription: _disabledDeviceDescription,
-            ),
-        ],
+        ),
       ),
     );
   }

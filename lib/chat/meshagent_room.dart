@@ -872,6 +872,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (model?.room == null) {
       return [];
     }
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
     return [
       HangupButton(
@@ -882,7 +883,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       room.MicToggle(),
       room.CameraToggle(),
       room.ChangeSettings(),
-      room.ShareScreen(compact: compact),
+      if (!isMobile) room.ShareScreen(compact: compact),
       MeetingToolkits(room: widget.room, compact: compact),
     ];
   }
@@ -1473,7 +1474,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingSessionActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
-      color: isMobile ? cs.card : cs.background,
+      color: cs.background,
       child: Column(
         children: [
           if (isMobile) ActionsRow(actions: actions),
@@ -1504,7 +1505,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingIsActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
-      color: isMobile ? cs.card : cs.background,
+      color: cs.background,
       child: Column(
         children: [
           if (isMobile)
