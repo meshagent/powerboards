@@ -544,6 +544,8 @@ class _ResolvedAgentSelection {
 }
 
 class MeshagentRoomState extends State<MeshagentRoom> {
+  final ResizableSplitViewController _meetingSplitViewController = ResizableSplitViewController();
+
   final videoChatKey = GlobalKey();
   final meetingViewKey = GlobalKey();
 
@@ -557,6 +559,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   StreamSubscription<RoomStatusEvent>? _roomStatusSubscription;
 
   final List<RoomEvent> events = [];
+
+  void _handleMeetingSplitViewChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+  }
 
   late final isOwner = Resource(
     () => grant
@@ -577,6 +587,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   @override
   void initState() {
     super.initState();
+
+    _meetingSplitViewController.addListener(_handleMeetingSplitViewChanged);
 
     _roomStatusSubscription = widget.room.events.where((event) => event is RoomStatusEvent).cast<RoomStatusEvent>().listen((event) {
       final status = event.description.trim();
@@ -631,6 +643,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   @override
   void dispose() {
+    _meetingSplitViewController.removeListener(_handleMeetingSplitViewChanged);
+    _meetingSplitViewController.dispose();
     _roomStatusSubscription?.cancel();
     _roomStatusSubscription = null;
     super.dispose();
@@ -873,8 +887,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return [];
     }
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final meetingSessionActive = _isMeetingSessionActive(context);
+    final showExpandSplitButton = !isMobile && meetingSessionActive && _meetingSplitViewController.collapsed;
 
     return [
+      if (showExpandSplitButton)
+        Tooltip(
+          message: "Expand chat",
+          child: ShadIconButton.ghost(
+            icon: const Icon(LucideIcons.panelLeftOpen),
+            onPressed: () {
+              _meetingSplitViewController.expand();
+              setState(() {});
+            },
+          ),
+        ),
       HangupButton(
         onPressed: () {
           _leaveMeeting();
@@ -2055,12 +2082,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                         id: "top",
                                         defaultSize: 1 - defaultDebugSize,
                                         child: ResizableSplitView(
-                                          allowCollapse: room.VideoRoomModel.maybeOf(context)?.room != null,
-                                          minArea1Width: 360,
+                                          allowCollapse: meetingSessionActive,
+                                          minArea1Width: meetingSessionActive ? 58 : 360,
                                           minArea2Width: 440,
-                                          preferredArea2Fraction: meetingSessionActive ? 0.5 : null,
+                                          preferredArea2Fraction: meetingSessionActive ? 0.75 : null,
                                           minArea2Fraction: meetingSessionActive ? 0.5 : null,
-                                          maxArea2Fraction: meetingSessionActive ? (2 / 3) : null,
+                                          maxArea2Fraction: null,
+                                          collapseArea1Width: meetingSessionActive ? 300 : null,
+                                          controller: _meetingSplitViewController,
                                           split: split,
                                           area1: ColoredBox(
                                             color: cs.card,
