@@ -1210,6 +1210,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   Widget _buildMobileToolbar(Set<String> selected) {
     final showSelectionActions = selected.isNotEmpty && _openedFile == null;
     final showRouteActions = !showSelectionActions;
+    final leading = showSelectionActions ? _buildSelection(selected) : _buildBreadcrumb();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(0, 0, 0, _openedFile == null ? 0 : 8),
@@ -1218,7 +1219,9 @@ class _FileManagerViewState extends State<FileManagerView> {
         spacing: 6,
         children: [
           if (_openedFile != null) ..._buildFileCloseAction(),
-          Expanded(child: showSelectionActions ? _buildSelection(selected) : _buildBreadcrumb()),
+          Expanded(
+            child: Align(alignment: Alignment.centerLeft, child: leading),
+          ),
           if (showRouteActions) ..._buildRouteActions(),
           Tooltip(
             message: "Select items",
