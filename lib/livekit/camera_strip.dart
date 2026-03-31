@@ -85,26 +85,29 @@ class CameraStrip extends StatelessWidget {
             participants ??
             <lk.Participant>[...(room.remoteParticipants.values), if (room.localParticipant != null) room.localParticipant!];
 
-        return ListView(
-          scrollDirection: horizontal ? .horizontal : .vertical,
-          children: [
-            for (final participant in stripParticipants)
-              ...() {
-                final nonShareVideoTracks = participant.trackPublications.values.where(
-                  (track) =>
-                      track.kind == lk.TrackType.VIDEO &&
-                      track.source != lk.TrackSource.screenShareVideo &&
-                      !track.muted &&
-                      track.track != null,
-                );
+        return ListenableBuilder(
+          listenable: Listenable.merge(stripParticipants),
+          builder: (context, _) => ListView(
+            scrollDirection: horizontal ? .horizontal : .vertical,
+            children: [
+              for (final participant in stripParticipants)
+                ...() {
+                  final nonShareVideoTracks = participant.trackPublications.values.where(
+                    (track) =>
+                        track.kind == lk.TrackType.VIDEO &&
+                        track.source != lk.TrackSource.screenShareVideo &&
+                        !track.muted &&
+                        track.track != null,
+                  );
 
-                if (nonShareVideoTracks.isEmpty) {
-                  return [audioDisplay(context, participant)];
-                }
+                  if (nonShareVideoTracks.isEmpty) {
+                    return [audioDisplay(context, participant)];
+                  }
 
-                return nonShareVideoTracks.map((track) => videoDisplay(context, participant, track));
-              }(),
-          ],
+                  return nonShareVideoTracks.map((track) => videoDisplay(context, participant, track));
+                }(),
+            ],
+          ),
         );
       },
     );
