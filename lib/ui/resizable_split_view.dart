@@ -12,6 +12,43 @@ const String _area1Id = 'area1';
 const String _area2Id = 'area2';
 const double _panelFractionEpsilon = 0.0001;
 
+class ResizableSplitViewController extends ChangeNotifier {
+  bool _collapsed = false;
+  bool? _requestedCollapsed;
+
+  bool get collapsed => _collapsed;
+
+  void collapse() {
+    _requestedCollapsed = true;
+    notifyListeners();
+  }
+
+  void expand() {
+    _requestedCollapsed = false;
+    notifyListeners();
+  }
+
+  void toggle() {
+    _requestedCollapsed = !_collapsed;
+    notifyListeners();
+  }
+
+  bool? consumeRequestedCollapsed() {
+    final requestedCollapsed = _requestedCollapsed;
+    _requestedCollapsed = null;
+    return requestedCollapsed;
+  }
+
+  void syncCollapsed(bool value) {
+    if (_collapsed == value) {
+      return;
+    }
+
+    _collapsed = value;
+    notifyListeners();
+  }
+}
+
 class ResizableSplitView extends StatefulWidget {
   const ResizableSplitView({
     super.key,
@@ -27,6 +64,8 @@ class ResizableSplitView extends StatefulWidget {
     this.maxArea2Fraction,
     this.preferredArea1Fraction,
     this.preferredArea2Fraction,
+    this.collapseArea1Width,
+    this.controller,
     this.onArea2FractionChanged,
   });
 
@@ -42,6 +81,8 @@ class ResizableSplitView extends StatefulWidget {
   final double? maxArea2Fraction;
   final double? preferredArea1Fraction;
   final double? preferredArea2Fraction;
+  final double? collapseArea1Width;
+  final ResizableSplitViewController? controller;
   final ValueChanged<double>? onArea2FractionChanged;
 
   @override
@@ -56,6 +97,44 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   bool _collapsed = false;
   double? _area1Ratio;
   double? _lastReportedArea2Ratio;
+  int _panelGroupVersion = 0;
+
+  void _resetPanelGroupState() {
+    resizeDebounceTimer?.cancel();
+    lastConstraints = null;
+    resizeController.clear();
+    resizeController.totalAvailableWidth = 0;
+    _panelGroupVersion++;
+  }
+
+  void _syncControllerCollapsed() {
+    widget.controller?.syncCollapsed(_collapsed);
+  }
+
+  void _applyCollapsedState(bool collapsed) {
+    if (_collapsed == collapsed) {
+      return;
+    }
+
+    setState(() {
+      _resetPanelGroupState();
+      if (!collapsed) {
+        _area1Ratio = _preferredArea1Ratio;
+        _lastReportedArea2Ratio = null;
+      }
+      _collapsed = collapsed;
+    });
+    _syncControllerCollapsed();
+  }
+
+  void _handleControllerChanged() {
+    final requestedCollapsed = widget.controller?.consumeRequestedCollapsed();
+    if (requestedCollapsed == null) {
+      return;
+    }
+
+    _applyCollapsedState(requestedCollapsed);
+  }
 
   double? get _lockedArea1Fraction {
     final minFraction = widget.minArea1Fraction;
@@ -95,6 +174,15 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     }
 
     return null;
+  }
+
+  double _collapseThresholdFraction(double totalWidth) {
+    if (!totalWidth.isFinite || totalWidth <= 0) {
+      return 0;
+    }
+
+    final collapseWidth = widget.collapseArea1Width ?? _collapsedWidth;
+    return (collapseWidth / totalWidth).clamp(0.0, 1.0);
   }
 
   ({double area1, double area2}) _resolveMinimumWidths(double totalWidth) {
@@ -247,11 +335,14 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     super.initState();
 
     resizeController.addListener(_storeArea1Ratio);
+    widget.controller?.addListener(_handleControllerChanged);
+    _syncControllerCollapsed();
   }
 
   @override
   void dispose() {
     resizeDebounceTimer?.cancel();
+    widget.controller?.removeListener(_handleControllerChanged);
     resizeController.dispose();
 
     super.dispose();
@@ -261,12 +352,20 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   void didUpdateWidget(covariant ResizableSplitView oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.removeListener(_handleControllerChanged);
+      widget.controller?.addListener(_handleControllerChanged);
+      _syncControllerCollapsed();
+    }
+
     if (oldWidget.split && !widget.split) {
       _collapsed = false;
+      _syncControllerCollapsed();
     }
 
     if (!widget.allowCollapse && _collapsed) {
       _collapsed = false;
+      _syncControllerCollapsed();
     }
 
     final sizingChanged =
@@ -277,9 +376,12 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         oldWidget.maxArea1Fraction != widget.maxArea1Fraction ||
         oldWidget.maxArea2Fraction != widget.maxArea2Fraction ||
         oldWidget.preferredArea1Fraction != widget.preferredArea1Fraction ||
-        oldWidget.preferredArea2Fraction != widget.preferredArea2Fraction;
+        oldWidget.preferredArea2Fraction != widget.preferredArea2Fraction ||
+        oldWidget.collapseArea1Width != widget.collapseArea1Width;
 
     if (sizingChanged) {
+      _area1Ratio = null;
+      _lastReportedArea2Ratio = null;
       lastConstraints = null;
       resizeDebounceTimer?.cancel();
     }
@@ -290,6 +392,16 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     final area1Panel = resizeController.panelsInfo.first;
 
     if (area1Panel.id != _area1Id) return;
+    final totalWidth = resizeController.totalAvailableWidth;
+    final collapseThreshold = _collapseThresholdFraction(totalWidth);
+    final shouldCollapse =
+        widget.allowCollapse && widget.split && !_collapsed && totalWidth > 0 && area1Panel.size <= collapseThreshold + 0.0001;
+
+    if (shouldCollapse) {
+      _applyCollapsedState(true);
+      return;
+    }
+
     _area1Ratio = area1Panel.size;
 
     final area2Ratio = 1 - area1Panel.size;
@@ -304,17 +416,12 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
   void _toggleCollapsed() {
     if (widget.allowCollapse) {
-      setState(() {
-        _collapsed = !_collapsed;
-      });
+      _applyCollapsedState(!_collapsed);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final cs = theme.colorScheme;
-
     if (!widget.split) {
       lastConstraints = null;
       return widget.area1;
@@ -322,29 +429,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
     if (widget.allowCollapse && _collapsed) {
       lastConstraints = null;
-      return Row(
-        crossAxisAlignment: .start,
-        children: [
-          SizedBox(
-            width: _collapsedWidth,
-            child: Padding(
-              padding: const .all(10.0),
-              child: Tooltip(
-                message: 'Expand',
-                child: ShadIconButton.ghost(icon: const Icon(LucideIcons.chevronsRight), onPressed: _toggleCollapsed),
-              ),
-            ),
-          ),
-          Expanded(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border(left: BorderSide(color: cs.border)),
-              ),
-              child: widget.area2,
-            ),
-          ),
-        ],
-      );
+      return widget.area2;
     }
 
     return LayoutBuilder(
@@ -376,6 +461,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         debounceResize(constraints);
 
         return ShadResizablePanelGroup(
+          key: ValueKey('$_panelGroupVersion-${widget.split}-${widget.allowCollapse}'),
           axis: .horizontal,
           showHandle: true,
           dividerColor: Colors.transparent,
@@ -395,7 +481,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
                           right: 10,
                           child: Tooltip(
                             message: 'Collapse',
-                            child: ShadIconButton.ghost(icon: Icon(LucideIcons.chevronsLeft), onPressed: _toggleCollapsed),
+                            child: ShadIconButton.ghost(icon: Icon(LucideIcons.panelLeftClose), onPressed: _toggleCollapsed),
                           ),
                         ),
                       ],
