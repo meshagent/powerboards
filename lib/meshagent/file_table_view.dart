@@ -1336,14 +1336,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       childBuilder: (context, controller) {
         return Tooltip(
           message: "Upload file",
-          child: ShadIconButton.outline(
-            icon: const Icon(LucideIcons.upload),
-            onPressed: () {
-              if (!controller.isOpen) {
-                controller.show();
-              }
-            },
-          ),
+          child: ShadIconButton.outline(icon: const Icon(LucideIcons.upload), onPressed: controller.toggle),
         );
       },
     );
@@ -1459,16 +1452,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           .toList(growable: false),
       child: Tooltip(
         message: "Browse collapsed path",
-        child: ShadIconButton.outline(
-          icon: const Icon(LucideIcons.folderTree),
-          onPressed: () {
-            if (_collapsedBreadcrumbMenuController.isOpen) {
-              _collapsedBreadcrumbMenuController.hide();
-            } else {
-              _collapsedBreadcrumbMenuController.show();
-            }
-          },
-        ),
+        child: ShadIconButton.outline(icon: const Icon(LucideIcons.folderTree), onPressed: _collapsedBreadcrumbMenuController.toggle),
       ),
     );
   }
@@ -1841,11 +1825,7 @@ class _FileTableViewState extends State<FileTableView> {
           return ShadButton.outline(
             leading: const Icon(LucideIcons.plus),
             trailing: const Icon(LucideIcons.chevronDown),
-            onPressed: () {
-              if (!controller.isOpen) {
-                controller.show();
-              }
-            },
+            onPressed: controller.toggle,
             child: const Text("Create..."),
           );
         },
@@ -2280,7 +2260,7 @@ class _FileActionsMenuButtonState extends State<_FileActionsMenuButton> {
           opacity: showTrigger ? 1 : 0,
           child: ShadGestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: _controller.show,
+            onTap: _controller.toggle,
             child: const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsis, size: 20))),
           ),
         ),

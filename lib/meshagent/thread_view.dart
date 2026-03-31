@@ -1130,7 +1130,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                         ),
                       ],
                       child: ShadButton.ghost(
-                        onPressed: _menuController.show,
+                        onPressed: _menuController.toggle,
                         width: 40,
                         height: _trailingButtonHeight(isMobile),
                         hoverBackgroundColor: Colors.transparent,

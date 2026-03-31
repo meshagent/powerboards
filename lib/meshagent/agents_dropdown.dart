@@ -170,7 +170,7 @@ class AgentsDropdown extends StatelessWidget {
                   trailing: const Icon(LucideIcons.chevronDown, size: 18),
                   onPressed: () {
                     onOpen?.call();
-                    if (!controller.isOpen) controller.show();
+                    controller.toggle();
                   },
                   leading: selectedDevelopmentAgent == null
                       ? const Icon(LucideIcons.bot, size: 18)

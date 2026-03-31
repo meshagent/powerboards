@@ -10,6 +10,7 @@ import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:powerboards/meshagent/grant.dart';
 import 'package:powerboards/meshagent/user_builder.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 
 import 'package:powerboards/widgets/select_users.dart';
 
@@ -52,9 +53,11 @@ class _UserSettingsMenuButtonState extends State<_UserSettingsMenuButton> {
   Widget build(BuildContext context) {
     final cs = ShadTheme.of(context).colorScheme;
 
-    return ShadContextMenuRegion(
+    return AdaptiveShadContextMenu(
       controller: controller,
       constraints: const BoxConstraints(minWidth: 220),
+      estimatedMenuWidth: 220,
+      estimatedMenuHeight: (widget.role == GrantRole.owner || widget.role == GrantRole.nonOwner) ? 88 : 48,
       items: [
         if (widget.role == GrantRole.owner)
           ShadContextMenuItem(
@@ -81,7 +84,7 @@ class _UserSettingsMenuButtonState extends State<_UserSettingsMenuButton> {
         ),
       ],
       child: ShadButton.ghost(
-        onPressed: controller.show,
+        onPressed: controller.toggle,
         padding: EdgeInsets.zero,
         child: const SizedBox(width: 40, height: 30, child: Icon(LucideIcons.settings, size: 16)),
       ),

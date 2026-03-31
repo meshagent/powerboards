@@ -184,9 +184,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
                 hoverBackgroundColor: Colors.transparent,
                 padding: EdgeInsets.zero,
                 decoration: ShadDecoration.none,
-                onPressed: () {
-                  if (!controller.isOpen) controller.show();
-                },
+                onPressed: controller.toggle,
                 onHoverChange: (hovering) => setState(() => hovered = hovering),
                 child: UserAvatarCircle(initials: initials, hovered: hovered),
               ),
