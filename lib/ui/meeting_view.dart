@@ -9,6 +9,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 
 import 'package:powerboards/livekit/camera_grid.dart';
 import 'package:powerboards/livekit/camera_strip.dart';
@@ -18,6 +19,7 @@ import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
+import 'package:powerboards/ui/pane_empty_state.dart';
 
 const _railGap = 16.0;
 const _compactControlWidth = 48.0;
@@ -55,6 +57,10 @@ class MeetingView extends StatefulWidget {
 
 class _MeetingViewState extends State<MeetingView> {
   final expandParticipantController = ExpandParticipantController();
+
+  Widget _voiceSessionMeetingBlockedState() {
+    return const PaneEmptyState(title: "End voice session to meet", titleScaleOverride: 0.72, verticalOffset: -28);
+  }
 
   @override
   void dispose() {
@@ -99,68 +105,78 @@ class _MeetingViewState extends State<MeetingView> {
   @override
   Widget build(BuildContext context) {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    final voiceSessionController = MeetingController.maybeOf(context);
+
+    Widget buildMeetingContent() {
+      final videoRoom = VideoRoomModel.maybeOf(context)?.room;
+      final voiceSessionActive = voiceSessionController?.isConnected == true;
+      final inPreview =
+          meetingViewController.state == MeetingViewState.preview ||
+          (videoRoom == null && meetingViewController.state == MeetingViewState.joined);
+
+      if (inPreview) {
+        if (voiceSessionActive) {
+          return _voiceSessionMeetingBlockedState();
+        }
+
+        return Padding(
+          padding: const .symmetric(horizontal: 20.0),
+          child: DevicePreview(
+            onJoin: (enableVideo, enableAudio) {
+              final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
+              final navController = Controller.ofType<NavController>(context);
+
+              if (videoChatConnection != null) {
+                videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
+              }
+
+              meetingViewController.enterMeeting();
+              navController.hideNav();
+            },
+            onCancel: widget.onCancel,
+          ),
+        );
+      } else if (meetingViewController.state == MeetingViewState.joined) {
+        final room = VideoRoomModel.maybeOf(context)?.room;
+        if (room == null) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const .all(20),
+          child: VideoRoomParticipantsBuilder(
+            room: room,
+            builder: (context, participants) {
+              return ControllerBuilder<ExpandParticipantController>(
+                controller: expandParticipantController,
+                builder: (context) {
+                  final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+                  final hasShare = participants.any(_participantHasActiveShare);
+
+                  if (isMobile) {
+                    return _mobileLayout(room, participants, hasShare);
+                  }
+
+                  if (hasShare) {
+                    return _DesktopShareLayout(room: room, participants: participants);
+                  }
+
+                  return ExpandableCameraGrid(participants: participants);
+                },
+              );
+            },
+          ),
+        );
+      }
+
+      return const Text("Unknown state");
+    }
 
     return ControllerProvider<ExpandParticipantController>(
       controller: expandParticipantController,
       child: ControllerBuilder(
         controller: meetingViewController,
-        builder: (BuildContext context) {
-          final videoRoom = VideoRoomModel.maybeOf(context)?.room;
-          final inPreview =
-              meetingViewController.state == MeetingViewState.preview ||
-              (videoRoom == null && meetingViewController.state == MeetingViewState.joined);
-
-          if (inPreview) {
-            return Padding(
-              padding: const .symmetric(horizontal: 20.0),
-              child: DevicePreview(
-                onJoin: (enableVideo, enableAudio) {
-                  final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
-                  final navController = Controller.ofType<NavController>(context);
-
-                  if (videoChatConnection != null) {
-                    videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
-                  }
-
-                  meetingViewController.enterMeeting();
-                  navController.hideNav();
-                },
-                onCancel: widget.onCancel,
-              ),
-            );
-          } else if (meetingViewController.state == MeetingViewState.joined) {
-            final room = VideoRoomModel.maybeOf(context)?.room;
-            if (room == null) return const SizedBox.shrink();
-
-            return Padding(
-              padding: const .all(20),
-              child: VideoRoomParticipantsBuilder(
-                room: room,
-                builder: (context, participants) {
-                  return ControllerBuilder<ExpandParticipantController>(
-                    controller: expandParticipantController,
-                    builder: (context) {
-                      final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-                      final hasShare = participants.any(_participantHasActiveShare);
-
-                      if (isMobile) {
-                        return _mobileLayout(room, participants, hasShare);
-                      }
-
-                      if (hasShare) {
-                        return _DesktopShareLayout(room: room, participants: participants);
-                      }
-
-                      return ExpandableCameraGrid(participants: participants);
-                    },
-                  );
-                },
-              ),
-            );
-          }
-
-          return const Text("Unknown state");
-        },
+        builder: (BuildContext context) => voiceSessionController == null
+            ? buildMeetingContent()
+            : ListenableBuilder(listenable: voiceSessionController, builder: (context, _) => buildMeetingContent()),
       ),
     );
   }

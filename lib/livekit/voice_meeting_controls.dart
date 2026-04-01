@@ -5,6 +5,7 @@ import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/room.dart';
+import 'package:powerboards/ui/powerboards_menu_row.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 lk.LocalTrackPublication<lk.LocalVideoTrack>? _voiceCameraPublication(lk.LocalParticipant? participant) {
@@ -24,34 +25,61 @@ class VoiceMeetingControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: controller.livekitRoom,
-      builder: (context, _) {
-        if (controller.livekitRoom.localParticipant == null) {
-          return _VoiceConnectionButton(controller: controller);
-        }
+    return LayoutBuilder(
+      builder: (context, constraints) => ListenableBuilder(
+        listenable: controller.livekitRoom,
+        builder: (context, _) {
+          final isCompact = constraints.maxWidth < 420;
+          final horizontalPadding = isCompact ? 40.0 : 12.0;
+          final helperMaxWidth = isCompact ? 320.0 : 560.0;
+          final titleStyle = powerboardsMenuRowTitleStyle().copyWith(fontWeight: FontWeight.w700);
+          final descriptionStyle = powerboardsMenuRowDescriptionStyle().copyWith(fontWeight: FontWeight.w400, height: 1.45);
 
-        return Wrap(
-          alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            _VoiceConnectionButton(controller: controller),
-            _VoiceMicToggle(controller: controller),
-            _VoiceCameraToggle(controller: controller),
-            _VoiceChangeSettings(controller: controller),
-          ],
-        );
-      },
+          if (controller.livekitRoom.localParticipant == null) {
+            return _VoiceConnectionButton(controller: controller, compact: isCompact);
+          }
+
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    _VoiceConnectionButton(controller: controller, compact: isCompact),
+                    _VoiceMicToggle(controller: controller),
+                    _VoiceCameraToggle(controller: controller),
+                    _VoiceChangeSettings(controller: controller),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: helperMaxWidth),
+                  child: Text("Speak with this agent privately", style: titleStyle, textAlign: TextAlign.center),
+                ),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: helperMaxWidth),
+                  child: Text("Talk through ideas and get help hands-free.", style: descriptionStyle, textAlign: TextAlign.center),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
 
 class _VoiceConnectionButton extends StatelessWidget {
-  const _VoiceConnectionButton({required this.controller});
+  const _VoiceConnectionButton({required this.controller, this.compact = false});
 
   final MeetingController controller;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -61,15 +89,10 @@ class _VoiceConnectionButton extends StatelessWidget {
       listenable: room,
       builder: (context, _) {
         return switch (room.connectionState) {
-          lk.ConnectionState.connected => RoomToolbarButton(
-            text: "Hangup",
-            on: false,
-            onColor: ShadTheme.of(context).colorScheme.foreground,
-            onForeground: ShadTheme.of(context).colorScheme.background,
-            offColor: ShadTheme.of(context).colorScheme.destructive,
-            offForeground: Colors.white,
-            icon: LucideIcons.phone,
+          lk.ConnectionState.connected => ShadButton.destructive(
+            padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 20, vertical: 14),
             onPressed: () => unawaited(controller.disconnect()),
+            child: const Text("End session"),
           ),
           lk.ConnectionState.disconnected => RoomToolbarButton(
             text: "Connect",
@@ -93,126 +116,6 @@ class _VoiceConnectionButton extends StatelessWidget {
           ),
         };
       },
-    );
-  }
-}
-
-class _VoiceCameraToggle extends StatefulWidget {
-  const _VoiceCameraToggle({required this.controller});
-
-  final MeetingController controller;
-
-  @override
-  State<_VoiceCameraToggle> createState() => _VoiceCameraToggleState();
-}
-
-class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
-  bool _cameraEnabled = false;
-  bool _pending = false;
-  bool _processing = false;
-  VoidCallback? _unsubscribe;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _bindListeners();
-  }
-
-  @override
-  void didUpdateWidget(covariant _VoiceCameraToggle oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      _bindListeners();
-    }
-  }
-
-  @override
-  void dispose() {
-    _unsubscribe?.call();
-    super.dispose();
-  }
-
-  void _bindListeners() {
-    _unsubscribe?.call();
-
-    final room = widget.controller.livekitRoom;
-    final local = room.localParticipant;
-    void updateState() {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _cameraEnabled = local?.isCameraEnabled() ?? false;
-        _pending = widget.controller.pendingLocalMedia.cameraPending;
-      });
-    }
-
-    room.addListener(updateState);
-    local?.addListener(updateState);
-    widget.controller.pendingLocalMedia.addListener(updateState);
-    _unsubscribe = () {
-      room.removeListener(updateState);
-      local?.removeListener(updateState);
-      widget.controller.pendingLocalMedia.removeListener(updateState);
-    };
-    updateState();
-  }
-
-  String _describeCameraToggleError(Object error) {
-    final message = '$error';
-    if (message.contains('NotAllowedError')) {
-      return 'Camera access was blocked by the browser or system.';
-    }
-    if (message.contains('NotFoundError')) {
-      return 'The selected camera was not found.';
-    }
-    return 'Unable to change camera state: $message';
-  }
-
-  Future<void> _toggleCamera(lk.LocalParticipant local, bool enabled) async {
-    if (_processing) {
-      return;
-    }
-
-    final toaster = ShadToaster.maybeOf(context);
-    setState(() {
-      _processing = true;
-    });
-
-    try {
-      await local.setCameraEnabled(enabled);
-    } catch (error) {
-      toaster?.show(ShadToast.destructive(description: Text(_describeCameraToggleError(error))));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _processing = false;
-          _cameraEnabled = local.isCameraEnabled();
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final local = widget.controller.livekitRoom.localParticipant;
-    final showEnabled = _cameraEnabled || _pending;
-
-    return RoomToolbarButton(
-      text: _pending
-          ? "Starting camera"
-          : _cameraEnabled
-          ? "Turn off camera"
-          : "Turn on camera",
-      on: showEnabled,
-      onColor: ShadTheme.of(context).colorScheme.foreground,
-      onForeground: ShadTheme.of(context).colorScheme.background,
-      offColor: ShadTheme.of(context).colorScheme.destructive,
-      offForeground: Colors.white,
-      icon: showEnabled ? LucideIcons.video : LucideIcons.videoOff,
-      loading: _pending,
-      onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleCamera(local, !_cameraEnabled)),
     );
   }
 }
@@ -333,6 +236,126 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
       icon: showEnabled ? LucideIcons.mic : LucideIcons.micOff,
       loading: _pending,
       onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleMicrophone(local, !_microphoneEnabled)),
+    );
+  }
+}
+
+class _VoiceCameraToggle extends StatefulWidget {
+  const _VoiceCameraToggle({required this.controller});
+
+  final MeetingController controller;
+
+  @override
+  State<_VoiceCameraToggle> createState() => _VoiceCameraToggleState();
+}
+
+class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
+  bool _cameraEnabled = false;
+  bool _pending = false;
+  bool _processing = false;
+  VoidCallback? _unsubscribe;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _bindListeners();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VoiceCameraToggle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _bindListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _unsubscribe?.call();
+    super.dispose();
+  }
+
+  void _bindListeners() {
+    _unsubscribe?.call();
+
+    final room = widget.controller.livekitRoom;
+    final local = room.localParticipant;
+    void updateState() {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _cameraEnabled = local?.isCameraEnabled() ?? false;
+        _pending = widget.controller.pendingLocalMedia.cameraPending;
+      });
+    }
+
+    room.addListener(updateState);
+    local?.addListener(updateState);
+    widget.controller.pendingLocalMedia.addListener(updateState);
+    _unsubscribe = () {
+      room.removeListener(updateState);
+      local?.removeListener(updateState);
+      widget.controller.pendingLocalMedia.removeListener(updateState);
+    };
+    updateState();
+  }
+
+  String _describeCameraToggleError(Object error) {
+    final message = '$error';
+    if (message.contains('NotAllowedError')) {
+      return 'Camera access was blocked by the browser or system.';
+    }
+    if (message.contains('NotFoundError')) {
+      return 'The selected camera was not found.';
+    }
+    return 'Unable to change camera state: $message';
+  }
+
+  Future<void> _toggleCamera(lk.LocalParticipant local, bool enabled) async {
+    if (_processing) {
+      return;
+    }
+
+    final toaster = ShadToaster.maybeOf(context);
+    setState(() {
+      _processing = true;
+    });
+
+    try {
+      await local.setCameraEnabled(enabled);
+    } catch (error) {
+      toaster?.show(ShadToast.destructive(description: Text(_describeCameraToggleError(error))));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processing = false;
+          _cameraEnabled = local.isCameraEnabled();
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final local = widget.controller.livekitRoom.localParticipant;
+    final showEnabled = _cameraEnabled || _pending;
+
+    return RoomToolbarButton(
+      text: _pending
+          ? "Starting camera"
+          : _cameraEnabled
+          ? "Turn off camera"
+          : "Turn on camera",
+      on: showEnabled,
+      onColor: ShadTheme.of(context).colorScheme.foreground,
+      onForeground: ShadTheme.of(context).colorScheme.background,
+      offColor: ShadTheme.of(context).colorScheme.destructive,
+      offForeground: Colors.white,
+      icon: showEnabled ? LucideIcons.video : LucideIcons.videoOff,
+      loading: _pending,
+      onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleCamera(local, !_cameraEnabled)),
     );
   }
 }

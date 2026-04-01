@@ -1424,6 +1424,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildVoiceArea(BuildContext context, String agentName, List<Widget> actions) {
+    final meetingSessionActive = _isMeetingSessionActive(context);
+
     return Column(
       children: [
         ActionsRow(actions: actions),
@@ -1442,10 +1444,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       child: participant == null
                           ? ShadButton(child: Text("Start Voice Session"))
                           : ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 500),
+                              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
                               child: VoiceAgentCaller(
                                 meeting: MeetingController.of(context),
                                 participant: participant,
+                                showDisconnectedAction: !meetingSessionActive,
+                                allowToggleTranscribe: !meetingSessionActive,
+                                emptyStateTitle: meetingSessionActive ? "This voice agent is private" : "Start an audio session",
+                                emptyStateDescription: meetingSessionActive
+                                    ? "Start an audio session after this meeting to ask questions, or get hands free help."
+                                    : "Connect with this agent using your microphone.",
                                 emptyStateAvailableWidth: constraints.maxWidth,
                                 connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
                               ),
