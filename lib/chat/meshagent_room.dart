@@ -26,6 +26,7 @@ import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
 import 'package:powerboards/chat/hangup_button.dart';
 import 'package:powerboards/livekit/room.dart' as room;
+import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
@@ -1446,6 +1447,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                 meeting: MeetingController.of(context),
                                 participant: participant,
                                 emptyStateAvailableWidth: constraints.maxWidth,
+                                connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
                               ),
                             ),
                     ),

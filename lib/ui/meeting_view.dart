@@ -22,7 +22,7 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 const _railGap = 16.0;
 const _compactControlWidth = 48.0;
 
-enum MeetingViewState { preview, joined, ended }
+enum MeetingViewState { preview, joined }
 
 class MeetingViewController extends Controller {
   MeetingViewState _state = MeetingViewState.preview;
@@ -31,11 +31,6 @@ class MeetingViewController extends Controller {
 
   void enterMeeting() {
     _state = MeetingViewState.joined;
-    notifyListeners();
-  }
-
-  void endMeeting() {
-    _state = MeetingViewState.ended;
     notifyListeners();
   }
 
@@ -160,22 +155,6 @@ class _MeetingViewState extends State<MeetingView> {
                     },
                   );
                 },
-              ),
-            );
-          } else if (meetingViewController.state == MeetingViewState.ended) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 20,
-                children: [
-                  Text("Meeting ended", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  ShadButton(
-                    onPressed: () {
-                      meetingViewController.resetToLobby();
-                    },
-                    child: Text("Back to lobby"),
-                  ),
-                ],
               ),
             );
           }
