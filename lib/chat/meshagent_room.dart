@@ -26,6 +26,7 @@ import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
 import 'package:powerboards/chat/hangup_button.dart';
 import 'package:powerboards/livekit/room.dart' as room;
+import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
@@ -54,9 +55,9 @@ import 'package:powerboards/ui/sweep_status_text.dart';
 
 const defaultDebugSize = 0.4;
 final meetingHeaderTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600);
-const double _meetingToolbarCompactThreshold = 440;
-const double _meetingToolbarPreferredExpandedWidth = 400;
-const double _meetingToolbarPreferredCompactWidth = 320;
+const double _meetingToolbarCompactThreshold = 620;
+const double _meetingToolbarPreferredExpandedWidth = 640;
+const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
 
 EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
   if (compact) {
@@ -567,6 +568,8 @@ class _ResolvedAgentSelection {
 }
 
 class MeshagentRoomState extends State<MeshagentRoom> {
+  final ResizableSplitViewController _meetingSplitViewController = ResizableSplitViewController();
+
   final videoChatKey = GlobalKey();
   final meetingViewKey = GlobalKey();
 
@@ -654,6 +657,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   @override
   void dispose() {
+    _meetingSplitViewController.dispose();
     _roomStatusSubscription?.cancel();
     _roomStatusSubscription = null;
     super.dispose();
@@ -670,7 +674,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   String _serviceId(ServiceSpec s) => s.metadata.annotations["meshagent.service.id"] ?? "";
   String _serviceType(ServiceSpec s) => s.agents.firstOrNull?.annotations["meshagent.agent.type"] ?? "[Unspecified]";
-  bool _isChatBot(ServiceSpec s) => _serviceType(s).toLowerCase() == "chatbot";
   String? _serviceAgentName(ServiceSpec service) {
     final name = service.agents.firstOrNull?.name;
     if (name == null) {
@@ -754,7 +757,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return _ResolvedAgentSelection(routeId: requestedRouteId, service: null, developmentParticipant: null);
     }
 
-    final defaultService = supported.firstWhereOrNull(_isChatBot) ?? supported.firstOrNull;
+    final defaultService =
+        supported.firstWhereOrNull((candidate) => serviceConversationDescriptor(candidate)?.isChat == true) ?? supported.firstOrNull;
     if (defaultService != null) {
       return _ResolvedAgentSelection(routeId: _serviceId(defaultService), service: defaultService, developmentParticipant: null);
     }
@@ -895,17 +899,31 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (model?.room == null) {
       return [];
     }
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final meetingSessionActive = _isMeetingSessionActive(context);
+    final showExpandSplitButton = !isMobile && meetingSessionActive && _meetingSplitViewController.collapsed;
 
     return [
+      if (showExpandSplitButton)
+        Tooltip(
+          message: "Expand chat",
+          child: ShadIconButton.ghost(
+            icon: const Icon(LucideIcons.panelLeftOpen),
+            onPressed: () {
+              _meetingSplitViewController.expand();
+              setState(() {});
+            },
+          ),
+        ),
       HangupButton(
         onPressed: () {
-          _leaveMeeting();
+          _endMeeting();
         },
       ),
       room.MicToggle(),
       room.CameraToggle(),
       room.ChangeSettings(),
-      room.ShareScreen(compact: compact),
+      if (!isMobile) room.ShareScreen(compact: compact),
       MeetingToolkits(room: widget.room, compact: compact),
     ];
   }
@@ -944,24 +962,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildMeetingTranscriberLobbyEmptyState() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isMobileScreen = MediaQuery.sizeOf(context).width < 600;
-        final showDescription = constraints.maxWidth >= 480 || isMobileScreen;
-
-        return Center(
-          child: AudioAgentEmptyState(
-            title: "Transcribe your meeting",
-            description: "Meet with this agent and include your team.",
-            availableWidth: constraints.maxWidth,
-            verticalOffset: showDescription ? AudioAgentEmptyState.defaultVerticalOffset - 36 : -30,
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildMeetingSingleThreadChatEmptyState(String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
@@ -972,8 +972,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Widget _buildMeetingTranscriberTitleOnlyEmptyState(String title) {
     return LayoutBuilder(
       builder: (context, constraints) => Center(
-        child: AudioAgentEmptyState(title: title, description: "", availableWidth: constraints.maxWidth, verticalOffset: -30),
+        child: AudioAgentEmptyState(
+          title: title,
+          description: "",
+          availableWidth: constraints.maxWidth,
+          verticalOffset: AudioAgentEmptyState.defaultVerticalOffset - 20,
+        ),
       ),
+    );
+  }
+
+  Widget _buildMeetingTranscriberPreMeetingChatEmptyState() {
+    return _buildAudioAgentEmptyState(
+      title: "Transcribe your meeting",
+      description: "Meet with this agent and include your team.",
+      verticalOffset: AudioAgentEmptyState.defaultVerticalOffset - 20,
     );
   }
 
@@ -1260,6 +1273,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     String? selectedThreadPath,
     ValueChanged<String?>? onSelectedThreadPathChanged,
     Widget? emptyState,
+    bool hideChatInput = false,
   }) {
     final user = MeshagentAuth.current.getUser();
     final userEmail = user?["email"];
@@ -1305,6 +1319,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         newThreadEmptyStateVerticalOffset: newThreadEmptyStateVerticalOffset,
         joinMeeting: _joinMeeting,
         emptyState: meetingActiveSingleThreadEmptyState,
+        hideChatInput: hideChatInput,
         projectId: widget.projectId,
       ),
     );
@@ -1409,6 +1424,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildVoiceArea(BuildContext context, String agentName, List<Widget> actions) {
+    final meetingSessionActive = _isMeetingSessionActive(context);
+
     return Column(
       children: [
         ActionsRow(actions: actions),
@@ -1427,11 +1444,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       child: participant == null
                           ? ShadButton(child: Text("Start Voice Session"))
                           : ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 500),
+                              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
                               child: VoiceAgentCaller(
                                 meeting: MeetingController.of(context),
                                 participant: participant,
+                                showDisconnectedAction: !meetingSessionActive,
+                                allowToggleTranscribe: !meetingSessionActive,
+                                emptyStateTitle: meetingSessionActive ? "This voice agent is private" : "Start an audio session",
+                                emptyStateDescription: meetingSessionActive
+                                    ? "Start an audio session after this meeting to ask questions, or get hands free help."
+                                    : "Connect with this agent using your microphone.",
                                 emptyStateAvailableWidth: constraints.maxWidth,
+                                connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
                               ),
                             ),
                     ),
@@ -1447,6 +1471,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Widget _buildMeetingTranscriberArea(BuildContext context, String agentName, List<Widget> actions) {
     final meetingIsActive = _isMeetingSessionActive(context);
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
     Widget startMeetingAction() {
       return ShadButton(
@@ -1475,13 +1500,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     null,
                     [],
                     emptyState: !meetingIsActive
-                        ? _buildMeetingTranscriberLobbyEmptyState()
-                        : _buildMeetingTranscriberTitleOnlyEmptyState("Chat or share files"),
+                        ? _buildMeetingTranscriberPreMeetingChatEmptyState()
+                        : _buildMeetingTranscriberTitleOnlyEmptyState("Transcribe your meeting"),
+                    hideChatInput: true,
                   )
                 : _buildAudioAgentEmptyState(
                     title: "Transcribe your meeting",
                     description: "Meet with this agent and include your team.",
-                    action: startMeetingAction(),
+                    action: isMobile && meetingIsActive ? null : startMeetingAction(),
                     verticalOffset: AudioAgentEmptyState.defaultVerticalOffset - 20,
                   ),
           ),
@@ -1498,7 +1524,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingSessionActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
-      color: isMobile ? cs.card : cs.background,
+      color: cs.background,
       child: Column(
         children: [
           if (isMobile) ActionsRow(actions: actions),
@@ -1529,7 +1555,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingIsActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
-      color: isMobile ? cs.card : cs.background,
+      color: cs.background,
       child: Column(
         children: [
           if (isMobile)
@@ -1649,6 +1675,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     meetingViewController.resetToLobby();
     navController.showNav();
     controller.exitMeeting();
+  }
+
+  void _endMeeting() {
+    final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    final navController = Controller.ofType<NavController>(context);
+    meetingViewController.resetToLobby();
+    navController.showNav();
+    _meetingSplitViewController.expand();
   }
 
   void _joinMeeting() {
@@ -1879,10 +1913,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
                 onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
               );
+            } else if (descriptor?.isMeeting == true) {
+              return _buildMeetingTranscriberArea(context, service.agents[0].name, actions);
             } else if (descriptor?.isVoiceOnly == true) {
               return _buildVoiceArea(context, service.agents[0].name, actions);
-            } else if (type == "MeetingTranscriber") {
-              return _buildMeetingTranscriberArea(context, service.agents[0].name, actions);
             } else if (type == "Shell") {
               return _buildShellArea(context, service, actions);
             } else if (service.metadata.annotations["meshagent.service.readme"] != null) {
@@ -2079,12 +2113,22 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                         id: "top",
                                         defaultSize: 1 - defaultDebugSize,
                                         child: ResizableSplitView(
-                                          allowCollapse: room.VideoRoomModel.maybeOf(context)?.room != null,
-                                          minArea1Width: 360,
+                                          key: ValueKey('meeting-split-$meetingSessionActive-$split'),
+                                          allowCollapse: meetingSessionActive,
+                                          minArea1Width: meetingSessionActive ? 58 : 360,
                                           minArea2Width: 440,
-                                          preferredArea2Fraction: meetingSessionActive ? 0.5 : null,
+                                          preferredArea2Fraction: meetingSessionActive ? 0.75 : null,
                                           minArea2Fraction: meetingSessionActive ? 0.5 : null,
-                                          maxArea2Fraction: meetingSessionActive ? (2 / 3) : null,
+                                          maxArea2Fraction: null,
+                                          collapseArea1Width: meetingSessionActive ? 300 : null,
+                                          controller: _meetingSplitViewController,
+                                          onCollapsedChanged: (_) {
+                                            if (!mounted) {
+                                              return;
+                                            }
+
+                                            setState(() {});
+                                          },
                                           split: split,
                                           area1: ColoredBox(
                                             color: cs.card,
