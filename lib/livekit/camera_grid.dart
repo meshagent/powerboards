@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 
 import 'audio_stats.dart';
@@ -112,6 +113,7 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final participants = _expandedController.hasExpanded
         ? widget.participants.where((p) => _expandedController.isExpanded(p.identity)).toList(growable: false)
         : widget.participants;
@@ -126,10 +128,11 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
           child: HoverBuilder(
             cursor: SystemMouseCursors.basic,
             builder: (hovered) {
+              final alwaysShowName = isMobile && _expandedController.isExpanded(participant.identity);
               return ParticipantTrack(
                 participant: participant,
                 track: trackWidget,
-                showName: showName && hovered,
+                showName: (showName && hovered) || alwaysShowName,
                 interactive: publication?.source != TrackSource.screenShareVideo,
               );
             },
