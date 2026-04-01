@@ -137,9 +137,16 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
       participants,
       spacing: 12.0,
       frameBuilder: (context, participant, track, trackWidget, showName) {
+        final isScreenShare = track?.source == TrackSource.screenShareVideo;
+
         return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: ParticipantTrack(participant: participant, track: trackWidget, showName: showName),
+          borderRadius: .circular(8),
+          child: ParticipantTrack(
+            participant: participant,
+            track: trackWidget,
+            overlayAlignment: isScreenShare ? .topCenter : .topRight,
+            showName: showName,
+          ),
         );
       },
     );
@@ -269,8 +276,10 @@ Widget cameraGridBuilder(
         final rows = layout[0];
         final cols = layout[1];
 
-        double w = constraints.maxWidth / cols;
-        double h = constraints.maxHeight / rows;
+        final totalHorizontalSpacing = spacing * max(cols - 1, 0);
+        final totalVerticalSpacing = spacing * max(rows - 1, 0);
+        final w = max((constraints.maxWidth - totalHorizontalSpacing) / cols, 0.0);
+        final h = max((constraints.maxHeight - totalVerticalSpacing) / rows, 0.0);
         for (var r = 0; r < rows; r++) {
           for (var c = 0; c < cols; c++) {
             final i = r * cols + c;
