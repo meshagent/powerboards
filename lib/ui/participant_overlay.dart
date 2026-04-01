@@ -11,8 +11,8 @@ const audioIconSize = 16.0;
 const audioIconColor = Colors.white;
 const textStyle = TextStyle(color: audioIconColor, fontSize: 11, fontWeight: .w500);
 const _overlayPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
-const _overlayBorderRadius = BorderRadius.all(Radius.circular(12));
-const _unmutedOverlayColor = Color(0x99222222);
+const _overlayBorderRadius = BorderRadius.all(Radius.circular(6));
+const _unmutedOverlayColor = Color(0x80222222);
 const _mutedIconColor = Color(0xFFE84D5B);
 
 bool _isMicrophoneEnabled(lk.Participant participant) {
@@ -82,20 +82,14 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
         final microphonePending = isLocalParticipant && (pendingLocalMedia?.microphonePending ?? false);
         final muted = !_isMicrophoneEnabled(widget.participant);
         final name = widget.participant.name;
-        final theme = ShadTheme.of(context);
 
         final expandController = Controller.ofType<ExpandParticipantController>(context);
         final expanded = expandController.isExpanded(widget.participant.identity);
-        final overlayBorderColor = theme.colorScheme.border.withValues(alpha: 0.35);
         final expandIconColor = microphonePending || muted ? audioIconColor : shadMutedForeground;
         final iconColor = muted ? _mutedIconColor : audioIconColor;
 
         return Container(
-          decoration: BoxDecoration(
-            borderRadius: _overlayBorderRadius,
-            color: _unmutedOverlayColor,
-            border: Border.all(color: overlayBorderColor),
-          ),
+          decoration: BoxDecoration(borderRadius: _overlayBorderRadius, color: _unmutedOverlayColor),
           padding: _overlayPadding,
           child: Row(
             mainAxisSize: .min,
