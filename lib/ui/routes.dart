@@ -85,6 +85,12 @@ class _SingInScreen extends StatefulWidget {
 class _SingInScreenState extends State<_SingInScreen> {
   late final oauthProviders = Resource<List<AuthProvider>>(listMeshagentOAuthProviders);
 
+  @override
+  void dispose() {
+    oauthProviders.dispose();
+    super.dispose();
+  }
+
   Widget _inner(BuildContext context) {
     final theme = ShadTheme.of(context);
     final tt = theme.textTheme;
@@ -114,29 +120,29 @@ class _SingInScreenState extends State<_SingInScreen> {
 
         SignalBuilder(
           builder: (context, _) {
-            final isReady = oauthProviders.state.isReady;
-            final providers = oauthProviders.state.value ?? [];
-
-            if (!isReady) {
-              return Center(child: CircularProgressIndicator());
-            }
-
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              spacing: 16.0,
-              children: providers
-                  .map(
-                    (provider) => ProviderButton(
-                      key: ValueKey(provider.id),
-                      provider: provider,
-                      signIn: (providerId) {
-                        widget.signIn(providerId);
-                      },
-                    ),
-                  )
-                  .toList(),
+            return oauthProviders.state.when(
+              loading: () => Center(child: CircularProgressIndicator()),
+              error: (error, _) => ShadAlert.destructive(
+                title: Text("Unable to load sign in options"),
+                trailing: ShadButton.outline(onPressed: oauthProviders.refresh, child: Text("Retry")),
+              ),
+              ready: (providers) => Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                spacing: 16.0,
+                children: providers
+                    .map(
+                      (provider) => ProviderButton(
+                        key: ValueKey(provider.id),
+                        provider: provider,
+                        signIn: (providerId) {
+                          widget.signIn(providerId);
+                        },
+                      ),
+                    )
+                    .toList(),
+              ),
             );
           },
         ),
