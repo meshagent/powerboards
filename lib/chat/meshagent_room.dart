@@ -2112,6 +2112,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                         id: "top",
                                         defaultSize: 1 - defaultDebugSize,
                                         child: ResizableSplitView(
+                                          key: ValueKey('meeting-split-$meetingSessionActive-$split'),
                                           allowCollapse: meetingSessionActive,
                                           minArea1Width: meetingSessionActive ? 58 : 360,
                                           minArea2Width: 440,

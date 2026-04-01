@@ -330,6 +330,19 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     return (area1: boundedArea1, area2: boundedArea2);
   }
 
+  ({double minSize, double maxSize, double defaultSize}) _sanitizePanelConfig({
+    required double minSize,
+    required double maxSize,
+    required double defaultSize,
+    required double fallbackDefaultSize,
+  }) {
+    final safeMinSize = _sanitizePanelFraction(minSize, fallback: 0.0);
+    final safeMaxSize = _sanitizePanelFraction(math.max(safeMinSize, maxSize), fallback: safeMinSize);
+    final safeDefaultSize = _sanitizePanelFraction(defaultSize, fallback: fallbackDefaultSize).clamp(safeMinSize, safeMaxSize).toDouble();
+
+    return (minSize: safeMinSize, maxSize: safeMaxSize, defaultSize: safeDefaultSize);
+  }
+
   void debounceResize(BoxConstraints constraints) {
     if (lastConstraints == null || lastConstraints!.maxWidth != constraints.maxWidth) {
       resizeDebounceTimer?.cancel();
@@ -366,23 +379,45 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
             maxArea1Size: maxArea1Size,
             maxArea2Size: maxArea2Size,
           );
-          final defaultSize1 = defaultPanelSizes.area1;
-          final defaultSize2 = defaultPanelSizes.area2;
+          final panel1Config = _sanitizePanelConfig(
+            minSize: minArea1Size,
+            maxSize: maxArea1Size,
+            defaultSize: defaultPanelSizes.area1,
+            fallbackDefaultSize: 0.5,
+          );
+          final panel2Config = _sanitizePanelConfig(
+            minSize: minArea2Size,
+            maxSize: maxArea2Size,
+            defaultSize: defaultPanelSizes.area2,
+            fallbackDefaultSize: 0.5,
+          );
+          final defaultSize1 = panel1Config.defaultSize;
+          final defaultSize2 = panel2Config.defaultSize;
 
           final unchanged =
-              (pan1.minSize - minArea1Size).abs() < _panelFractionEpsilon &&
-              (pan1.maxSize - maxArea1Size).abs() < _panelFractionEpsilon &&
+              (pan1.minSize - panel1Config.minSize).abs() < _panelFractionEpsilon &&
+              (pan1.maxSize - panel1Config.maxSize).abs() < _panelFractionEpsilon &&
               (pan1.defaultSize - defaultSize1).abs() < _panelFractionEpsilon &&
-              (pan2.minSize - minArea2Size).abs() < _panelFractionEpsilon &&
-              (pan2.maxSize - maxArea2Size).abs() < _panelFractionEpsilon &&
+              (pan2.minSize - panel2Config.minSize).abs() < _panelFractionEpsilon &&
+              (pan2.maxSize - panel2Config.maxSize).abs() < _panelFractionEpsilon &&
               (pan2.defaultSize - defaultSize2).abs() < _panelFractionEpsilon;
           if (unchanged) {
             lastConstraints = constraints;
             return;
           }
 
-          final newPan1 = ShadPanelInfo(id: _area1Id, minSize: minArea1Size, maxSize: maxArea1Size, defaultSize: defaultSize1);
-          final newPan2 = ShadPanelInfo(id: _area2Id, minSize: minArea2Size, maxSize: maxArea2Size, defaultSize: defaultSize2);
+          final newPan1 = ShadPanelInfo(
+            id: _area1Id,
+            minSize: panel1Config.minSize,
+            maxSize: panel1Config.maxSize,
+            defaultSize: defaultSize1,
+          );
+          final newPan2 = ShadPanelInfo(
+            id: _area2Id,
+            minSize: panel2Config.minSize,
+            maxSize: panel2Config.maxSize,
+            defaultSize: defaultSize2,
+          );
 
           lastConstraints = constraints;
           resizeController.update([newPan1, newPan2]);
@@ -537,8 +572,20 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
           maxArea1Size: maxArea1Size,
           maxArea2Size: maxArea2Size,
         );
-        final defaultSize1 = defaultPanelSizes.area1;
-        final defaultSize2 = defaultPanelSizes.area2;
+        final panel1Config = _sanitizePanelConfig(
+          minSize: minArea1Size,
+          maxSize: maxArea1Size,
+          defaultSize: defaultPanelSizes.area1,
+          fallbackDefaultSize: 0.5,
+        );
+        final panel2Config = _sanitizePanelConfig(
+          minSize: minArea2Size,
+          maxSize: maxArea2Size,
+          defaultSize: defaultPanelSizes.area2,
+          fallbackDefaultSize: 0.5,
+        );
+        final defaultSize1 = panel1Config.defaultSize;
+        final defaultSize2 = panel2Config.defaultSize;
 
         _area1Ratio ??= defaultSize1;
 
@@ -555,8 +602,8 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
             ShadResizablePanel(
               id: _area1Id,
               defaultSize: defaultSize1,
-              minSize: minArea1Size,
-              maxSize: maxArea1Size,
+              minSize: panel1Config.minSize,
+              maxSize: panel1Config.maxSize,
               child: widget.allowCollapse
                   ? Stack(
                       children: [
@@ -573,7 +620,13 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
                     )
                   : widget.area1,
             ),
-            ShadResizablePanel(id: _area2Id, defaultSize: defaultSize2, minSize: minArea2Size, maxSize: maxArea2Size, child: widget.area2),
+            ShadResizablePanel(
+              id: _area2Id,
+              defaultSize: defaultSize2,
+              minSize: panel2Config.minSize,
+              maxSize: panel2Config.maxSize,
+              child: widget.area2,
+            ),
           ],
         );
       },
