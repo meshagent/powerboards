@@ -267,8 +267,10 @@ Widget cameraGridBuilder(
             final rows = layout[0];
             final cols = layout[1];
 
-            double w = constraints.maxWidth / cols;
-            double h = constraints.maxHeight / rows;
+            final availableWidth = constraints.maxWidth - spacing * (cols - 1);
+            final availableHeight = constraints.maxHeight - spacing * (rows - 1);
+            final w = availableWidth / cols;
+            final h = availableHeight / rows;
             for (var r = 0; r < rows; r++) {
               for (var c = 0; c < cols; c++) {
                 final i = r * cols + c;
@@ -282,8 +284,8 @@ Widget cameraGridBuilder(
 
                 cams.add(
                   Positioned(
-                    left: c * w + spacing * c,
-                    top: r * h + spacing * r,
+                    left: c * (w + spacing),
+                    top: r * (h + spacing),
                     child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, publication, track, showNames)),
                   ),
                 );
