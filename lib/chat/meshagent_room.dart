@@ -1471,6 +1471,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Widget _buildMeetingTranscriberArea(BuildContext context, String agentName, List<Widget> actions) {
     final meetingIsActive = _isMeetingSessionActive(context);
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
     Widget startMeetingAction() {
       return ShadButton(
@@ -1506,7 +1507,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 : _buildAudioAgentEmptyState(
                     title: "Transcribe your meeting",
                     description: "Meet with this agent and include your team.",
-                    action: startMeetingAction(),
+                    action: isMobile && meetingIsActive ? null : startMeetingAction(),
                     verticalOffset: AudioAgentEmptyState.defaultVerticalOffset - 20,
                   ),
           ),
