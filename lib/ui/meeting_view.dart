@@ -23,6 +23,12 @@ import 'package:powerboards/ui/pane_empty_state.dart';
 
 const _railGap = 16.0;
 const _compactControlWidth = 48.0;
+const _mobileMeetingToolbarHorizontalPadding = 40.0;
+const _mobileMeetingToolbarGap = 8.0;
+const _mobileMeetingToolbarFixedControlCount = 4;
+const _mobileTranscriptionButtonMaxWidth = 260.0;
+const _mobileTranscriptionCompactThreshold = 110.0;
+const _mobileTranscriptionShortLabelThreshold = 148.0;
 
 enum MeetingViewState { preview, joined }
 
@@ -315,6 +321,47 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
 
   late final toolkits = Resource<List<ToolkitDescription>>(() => widget.room.agents.listToolkits());
 
+  double _mobileTranscriptionButtonWidth(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final usedWidth =
+        (_mobileMeetingToolbarHorizontalPadding / 2) +
+        (_mobileMeetingToolbarFixedControlCount * _compactControlWidth) +
+        ((_mobileMeetingToolbarFixedControlCount - 1) * _mobileMeetingToolbarGap) +
+        _mobileMeetingToolbarGap;
+    final availableWidth = screenWidth - usedWidth;
+    return availableWidth.clamp(_compactControlWidth, _mobileTranscriptionButtonMaxWidth).toDouble();
+  }
+
+  void _showTranscriptionToast(String message) {
+    ShadToaster.maybeOf(context)?.show(ShadToast(description: Text(message), duration: const Duration(seconds: 3)));
+  }
+
+  String _transcriptionButtonLabel({required bool transcribing, required bool shortLabel}) {
+    if (!shortLabel) {
+      return transcribing ? "Stop Transcription" : "Start Transcription";
+    }
+
+    return transcribing ? "Stop..." : "Start...";
+  }
+
+  Future<void> _invokeTranscriptionTool({
+    required ToolkitDescription transcription,
+    required String toolName,
+    required Map<String, Object?> input,
+    required String successMessage,
+    required bool showToast,
+  }) async {
+    await widget.room.agents.invokeTool(
+      toolkit: transcription.name,
+      tool: toolName,
+      input: ToolContentInput(JsonContent(json: input)),
+    );
+
+    if (showToast) {
+      _showTranscriptionToast(successMessage);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -339,6 +386,8 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
     return SignalBuilder(
       builder: (context, _) {
         if (!toolkits.state.isReady) {
@@ -353,6 +402,10 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
               (p) => p.getAttribute("transcribing.${widget.breakoutRoom}") == true,
             ) !=
             null;
+        final mobileButtonWidth = isMobile ? _mobileTranscriptionButtonWidth(context) : _mobileTranscriptionButtonMaxWidth;
+        final useCompactPresentation = widget.compact || (isMobile && mobileButtonWidth <= _mobileTranscriptionCompactThreshold);
+        final useShortLabel = isMobile && !useCompactPresentation && mobileButtonWidth <= _mobileTranscriptionShortLabelThreshold;
+        final useCompressedPresentation = isMobile && (useCompactPresentation || useShortLabel);
 
         return Wrap(
           spacing: 8,
@@ -362,22 +415,31 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
               Tooltip(
                 message: "Start Transcription",
                 child: SizedBox(
-                  width: widget.compact ? _compactControlWidth : null,
+                  width: useCompactPresentation ? _compactControlWidth : (isMobile ? mobileButtonWidth : null),
                   child: ShadButton.outline(
-                    padding: widget.compact ? const EdgeInsets.symmetric(horizontal: 0) : null,
+                    padding: useCompactPresentation
+                        ? const EdgeInsets.symmetric(horizontal: 0)
+                        : isMobile
+                        ? const EdgeInsets.symmetric(horizontal: 12)
+                        : null,
                     leading: Icon(LucideIcons.captions),
                     onPressed: () async {
-                      widget.room.agents.invokeTool(
-                        toolkit: transcription!.name,
-                        tool: startRecording.name,
-                        input: ToolContentInput(
-                          JsonContent(
-                            json: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
-                          ),
-                        ),
+                      await _invokeTranscriptionTool(
+                        transcription: transcription!,
+                        toolName: startRecording.name,
+                        input: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                        successMessage: "Transcription started",
+                        showToast: useCompressedPresentation,
                       );
                     },
-                    child: widget.compact ? null : Text("Start Transcription"),
+                    child: useCompactPresentation
+                        ? null
+                        : Text(
+                            _transcriptionButtonLabel(transcribing: false, shortLabel: useShortLabel),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                          ),
                   ),
                 ),
               ),
@@ -386,18 +448,31 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
               Tooltip(
                 message: "Stop Transcription",
                 child: SizedBox(
-                  width: widget.compact ? _compactControlWidth : null,
+                  width: useCompactPresentation ? _compactControlWidth : (isMobile ? mobileButtonWidth : null),
                   child: ShadButton.outline(
-                    padding: widget.compact ? const EdgeInsets.symmetric(horizontal: 0) : null,
+                    padding: useCompactPresentation
+                        ? const EdgeInsets.symmetric(horizontal: 0)
+                        : isMobile
+                        ? const EdgeInsets.symmetric(horizontal: 12)
+                        : null,
                     leading: Icon(LucideIcons.captionsOff),
                     onPressed: () async {
-                      widget.room.agents.invokeTool(
-                        toolkit: transcription!.name,
-                        tool: stopRecording.name,
-                        input: ToolContentInput(JsonContent(json: {"breakout_room": ""})),
+                      await _invokeTranscriptionTool(
+                        transcription: transcription!,
+                        toolName: stopRecording.name,
+                        input: {"breakout_room": ""},
+                        successMessage: "Transcription stopped",
+                        showToast: useCompressedPresentation,
                       );
                     },
-                    child: widget.compact ? null : Text("Stop Transcription"),
+                    child: useCompactPresentation
+                        ? null
+                        : Text(
+                            _transcriptionButtonLabel(transcribing: true, shortLabel: useShortLabel),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                          ),
                   ),
                 ),
               ),
