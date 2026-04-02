@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
-import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/powerboards_menu_row.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class AppMenuEntry {
@@ -165,40 +164,16 @@ Widget _menuItem(AppMenuEntry e, {required int index, required int count, requir
       e.leading ??
       (e.icon != null ? SizedBox(width: 32, height: 32, child: Icon(e.icon, size: 20)) : const SizedBox(width: 32, height: 32));
 
-  return ShadContextMenuItem.inset(
+  return ShadContextMenuItem(
     padding: EdgeInsets.zero,
-    leadingPadding: const .only(right: 14),
-    insetPadding: const .symmetric(horizontal: 14, vertical: 0),
-    height: 80,
+    height: powerboardsMenuRowHeight,
     onPressed: e.onPressed,
     decoration: ShadDecoration(border: ShadBorder.all(radius: itemRadius)),
-    leading: leadingWidget,
-    trailing: e.selected ? const Icon(LucideIcons.check, size: 21) : null,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: e.description == null
-          ? [
-              Text(
-                e.title,
-                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600, color: shadForeground),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ]
-          : [
-              Text(
-                e.title,
-                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600, color: shadForeground),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                e.description!,
-                style: GoogleFonts.inter(fontSize: 14, height: 1.2, fontWeight: FontWeight.w500, color: shadSecondaryForeground),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-              ),
-            ],
+    child: PowerboardsMenuRow(
+      title: e.title,
+      description: e.description,
+      leading: leadingWidget,
+      trailing: e.selected ? const Icon(LucideIcons.check, size: 21) : null,
     ),
   );
 }
