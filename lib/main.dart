@@ -53,6 +53,20 @@ const breakpointsLandscape = [
   Breakpoint(start: 2561, end: double.infinity, name: '4K'),
 ];
 
+bool _isMobileToastLayout(BuildContext context) {
+  final mediaQuery = MediaQuery.maybeOf(context);
+  final screenWidth = mediaQuery?.size.width ?? 1024.0;
+  return screenWidth < 600;
+}
+
+ShadToastTheme? _powerboardsToastThemeForContext(BuildContext context) {
+  if (!_isMobileToastLayout(context)) {
+    return null;
+  }
+
+  return const ShadToastTheme(alignment: Alignment.topCenter);
+}
+
 ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
   final mediaQuery = MediaQuery.maybeOf(context);
   final screenWidth = mediaQuery?.size.width ?? 1024.0;
@@ -234,6 +248,8 @@ class MyApp extends StatelessWidget {
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
         textTheme: powerboardsShadTextTheme(),
+        primaryToastTheme: _powerboardsToastThemeForContext(context),
+        destructiveToastTheme: _powerboardsToastThemeForContext(context),
         selectTheme: ShadSelectTheme(
           decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
         ),
@@ -346,6 +362,8 @@ class _RootProvidersState extends State<_RootProviders> {
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
         textTheme: powerboardsShadTextTheme(),
+        primaryToastTheme: _powerboardsToastThemeForContext(context),
+        destructiveToastTheme: _powerboardsToastThemeForContext(context),
         selectTheme: ShadSelectTheme(
           decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
         ),

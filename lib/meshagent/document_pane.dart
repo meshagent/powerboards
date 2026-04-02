@@ -185,9 +185,7 @@ class _DocumentPane extends State<DocumentPane> {
           child: ShadButton.outline(
             leading: const Icon(LucideIcons.externalLink),
             trailing: const Icon(LucideIcons.chevronDown),
-            onPressed: () {
-              if (!controller.isOpen) controller.show();
-            },
+            onPressed: controller.toggle,
             child: const Text("Open with…"),
           ),
         );
