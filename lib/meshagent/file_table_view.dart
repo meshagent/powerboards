@@ -1746,6 +1746,7 @@ class FileTableView extends StatefulWidget {
 class _FileTableViewState extends State<FileTableView> {
   static TextStyle dataStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x22, 0x22, 0x22));
   static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x66, 0x66, 0x66));
+  static const List<String> _sizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
   final GlobalKey _tableCardKey = GlobalKey();
@@ -1885,6 +1886,35 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
+  String? _formatEntrySize(StorageEntry entry) {
+    if (entry.isFolder) {
+      return null;
+    }
+
+    final size = entry.size;
+    if (size == null) {
+      return null;
+    }
+
+    return _formatBytes(size);
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    }
+
+    var value = bytes.toDouble();
+    var unitIndex = 0;
+    while (value >= 1024 && unitIndex < _sizeUnits.length - 1) {
+      value /= 1024;
+      unitIndex++;
+    }
+
+    final decimals = value >= 10 || value == value.roundToDouble() ? 0 : 1;
+    return '${value.toStringAsFixed(decimals)} ${_sizeUnits[unitIndex]}';
+  }
+
   Widget _hoverRegion(String rowKey, Widget child) {
     return MouseRegion(opaque: true, onEnter: (_) => _setHovered(rowKey), onExit: (_) => _clearHoveredIf(rowKey), child: child);
   }
@@ -1958,7 +1988,7 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
-  Widget _buildMobileList(BuildContext context, bool showSelectColumn, bool alwaysShowMenu, bool? selectAllValue) {
+  Widget _buildMobileList(BuildContext context, bool showSelectColumn, bool alwaysShowMenu, bool? selectAllValue, bool showSize) {
     final colorScheme = ShadTheme.of(context).colorScheme;
 
     return _buildTableCard(
@@ -1976,8 +2006,10 @@ class _FileTableViewState extends State<FileTableView> {
                 final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
                 final isSelected = widget.selected.contains(key);
                 final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+                final sizeLabel = showSize ? _formatEntrySize(entry) : null;
                 final modifiedLabel = entry.updatedAt?.modified() ?? '';
-                final showModifiedLabel = modifiedLabel.isNotEmpty;
+                final metadataLabel = <String>[if (sizeLabel != null) sizeLabel, if (modifiedLabel.isNotEmpty) modifiedLabel].join(' • ');
+                final showMetadataLabel = metadataLabel.isNotEmpty;
 
                 return Material(
                   color: isSelected ? const Color(0xFFF2F1FF) : shadCard,
@@ -2008,9 +2040,9 @@ class _FileTableViewState extends State<FileTableView> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(entry.name, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                if (showModifiedLabel) ...[
+                                if (showMetadataLabel) ...[
                                   const SizedBox(height: 4),
-                                  Text(modifiedLabel, style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Text(metadataLabel, style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
                                 ],
                               ],
                             ),
@@ -2044,104 +2076,118 @@ class _FileTableViewState extends State<FileTableView> {
       return _buildEmptyState(context);
     }
 
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final colorScheme = ShadTheme.of(context).colorScheme;
-    final showSelectColumn = !isMobile || widget.forceShowSelect;
-    final alwaysShowMenu = isMobile;
-
-    final bool? selectAllValue = widget.selected.isEmpty ? false : (widget.selected.length == widget.entries.length ? true : null);
-
-    if (isMobile) {
-      return _buildMobileList(context, showSelectColumn, alwaysShowMenu, selectAllValue);
-    }
-
-    final sortColumnIndex = (widget.sort.field == FileSortField.name ? 0 : 1) + (showSelectColumn ? 1 : 0);
-    final sortAscending = widget.sort.ascending;
-
-    final rows = widget.entries.map((entry) {
-      final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
-      final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
-      final isSelected = widget.selected.contains(key);
-      final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
-
-      return DataRow(
-        onSelectChanged: (_) {
-          widget.onOpen(fullPath, entry.isFolder);
-        },
-        color: WidgetStateProperty.resolveWith((states) {
-          if (isSelected) {
-            return const Color(0xFFF2F1FF);
-          }
-          if (states.contains(WidgetState.hovered)) {
-            return const Color(0xFFF8F8FA);
-          }
-          return shadCard;
-        }),
-        cells: [
-          if (showSelectColumn)
-            DataCell(
-              Center(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => widget.onToggleSelected(key, !isSelected),
-                  child: _fileSelectionCheckbox(decoration: checkboxDecoration, value: isSelected),
-                ),
-              ),
-            ),
-          DataCell(
-            _hoverRegion(
-              key,
-              Row(
-                children: [
-                  _getIcon(entry),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text(entry.name, style: dataStyle, overflow: TextOverflow.ellipsis),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          DataCell(
-            _hoverRegion(
-              key,
-              Container(
-                width: double.infinity,
-                alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.only(left: 8),
-                child: Text(entry.updatedAt?.modified() ?? "", style: dataStyle, maxLines: 2, overflow: TextOverflow.ellipsis),
-              ),
-            ),
-          ),
-          DataCell(
-            _hoverRegion(
-              key,
-              ValueListenableBuilder<String?>(
-                valueListenable: _hoveredRowKey,
-                builder: (_, hoveredKey, _) => Center(
-                  child: widget.buildActionsMenu(
-                    _tableCardKey.currentContext,
-                    fullPath,
-                    entry.isFolder,
-                    alwaysShowMenu || isSelected || hoveredKey == key,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }).toList();
-
     return LayoutBuilder(
       builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final showSize = availableWidth > 500;
+        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+        final colorScheme = ShadTheme.of(context).colorScheme;
+        final showSelectColumn = !isMobile || widget.forceShowSelect;
+        final alwaysShowMenu = isMobile;
+        final bool? selectAllValue = widget.selected.isEmpty ? false : (widget.selected.length == widget.entries.length ? true : null);
+
+        if (isMobile) {
+          return _buildMobileList(context, showSelectColumn, alwaysShowMenu, selectAllValue, showSize);
+        }
+
+        final sortColumnIndex = (widget.sort.field == FileSortField.name ? 0 : (showSize ? 2 : 1)) + (showSelectColumn ? 1 : 0);
+        final sortAscending = widget.sort.ascending;
+        final rows = widget.entries.map((entry) {
+          final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
+          final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
+          final isSelected = widget.selected.contains(key);
+          final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+          final sizeLabel = showSize ? (_formatEntrySize(entry) ?? "") : "";
+
+          return DataRow(
+            onSelectChanged: (_) {
+              widget.onOpen(fullPath, entry.isFolder);
+            },
+            color: WidgetStateProperty.resolveWith((states) {
+              if (isSelected) {
+                return const Color(0xFFF2F1FF);
+              }
+              if (states.contains(WidgetState.hovered)) {
+                return const Color(0xFFF8F8FA);
+              }
+              return shadCard;
+            }),
+            cells: [
+              if (showSelectColumn)
+                DataCell(
+                  Center(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => widget.onToggleSelected(key, !isSelected),
+                      child: _fileSelectionCheckbox(decoration: checkboxDecoration, value: isSelected),
+                    ),
+                  ),
+                ),
+              DataCell(
+                _hoverRegion(
+                  key,
+                  Row(
+                    children: [
+                      _getIcon(entry),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text(entry.name, style: dataStyle, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (showSize)
+                DataCell(
+                  _hoverRegion(
+                    key,
+                    Container(
+                      width: double.infinity,
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text(sizeLabel, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                ),
+              DataCell(
+                _hoverRegion(
+                  key,
+                  Container(
+                    width: double.infinity,
+                    alignment: Alignment.centerLeft,
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Text(entry.updatedAt?.modified() ?? "", style: dataStyle, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ),
+              DataCell(
+                _hoverRegion(
+                  key,
+                  ValueListenableBuilder<String?>(
+                    valueListenable: _hoveredRowKey,
+                    builder: (_, hoveredKey, _) => Center(
+                      child: widget.buildActionsMenu(
+                        _tableCardKey.currentContext,
+                        fullPath,
+                        entry.isFolder,
+                        alwaysShowMenu || isSelected || hoveredKey == key,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }).toList();
+
+        final sizeWidth = showSize ? (availableWidth < 760 ? 100.0 : 120.0) : 0.0;
         final modifiedWidth = constraints.maxWidth < 640 ? 140.0 : 170.0;
         final actionWidth = constraints.maxWidth < 640 ? 48.0 : 56.0;
         final selectWidth = showSelectColumn ? (constraints.maxWidth < 640 ? 48.0 : 56.0) : 0.0;
-        final fixedWidthTotal = selectWidth + modifiedWidth + actionWidth;
+        final fixedWidthTotal = selectWidth + sizeWidth + modifiedWidth + actionWidth;
 
         if (constraints.maxWidth < fixedWidthTotal + 140) {
-          return _buildMobileList(context, widget.forceShowSelect, true, selectAllValue);
+          return _buildMobileList(context, widget.forceShowSelect, true, selectAllValue, showSize);
         }
 
         return _buildTableCard(
@@ -2169,6 +2215,7 @@ class _FileTableViewState extends State<FileTableView> {
                   size: ColumnSize.L,
                   onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.name, ascending)),
                 ),
+                if (showSize) DataColumn2(label: _getLabel("Size"), fixedWidth: sizeWidth),
                 DataColumn2(
                   label: _getLabel("Modified"),
                   fixedWidth: modifiedWidth,
