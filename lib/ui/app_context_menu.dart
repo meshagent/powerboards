@@ -64,24 +64,14 @@ class _AppContextMenuButtonState extends State<AppContextMenuButton> {
       boundaryContext: widget.boundaryContext,
       constraints: widget.constraints,
       estimatedMenuWidth: _estimatedMenuWidth(widget.constraints),
-      estimatedMenuHeight: _estimatedMenuHeight(
-        widget.entries,
-        compact: widget.compact,
-      ),
-      padding: widget.compact
-          ? const EdgeInsets.symmetric(vertical: 4)
-          : EdgeInsets.zero,
+      estimatedMenuHeight: _estimatedMenuHeight(widget.entries, compact: widget.compact),
+      padding: widget.compact ? const EdgeInsets.symmetric(vertical: 4) : EdgeInsets.zero,
       decoration: widget.compact
           ? null
           : ShadDecoration(
-              border: ShadBorder.all(
-                color: const Color(0xFFE3E3E3),
-                radius: BorderRadius.circular(widget.radius),
-              ),
+              border: ShadBorder.all(color: const Color(0xFFE3E3E3), radius: BorderRadius.circular(widget.radius)),
             ),
-      items: widget.compact
-          ? _buildCompactItems(widget.entries)
-          : _buildItems(widget.entries, radius: widget.radius),
+      items: widget.compact ? _buildCompactItems(widget.entries) : _buildItems(widget.entries, radius: widget.radius),
       child: widget.childBuilder(context, controller),
     );
   }
@@ -99,18 +89,13 @@ double _estimatedMenuWidth(BoxConstraints constraints) {
   return 128;
 }
 
-double _estimatedMenuHeight(
-  List<AppMenuEntry> entries, {
-  required bool compact,
-}) {
+double _estimatedMenuHeight(List<AppMenuEntry> entries, {required bool compact}) {
   final entryCount = entries.length;
   if (entryCount <= 0) {
     return 0;
   }
 
-  final extraSeparators = entries
-      .where((entry) => entry.separatorBefore)
-      .length;
+  final extraSeparators = entries.where((entry) => entry.separatorBefore).length;
 
   if (compact) {
     return entryCount * 40.0 + extraSeparators * 13.0;
@@ -155,9 +140,7 @@ List<Widget> _buildItems(List<AppMenuEntry> entries, {required double radius}) {
         ),
       );
     }
-    out.add(
-      _menuItem(entries[i], index: i, count: entries.length, radius: radius),
-    );
+    out.add(_menuItem(entries[i], index: i, count: entries.length, radius: radius));
     if (i != entries.length - 1) {
       out.add(ShadSeparator.horizontal(margin: EdgeInsets.zero));
     }
@@ -165,12 +148,7 @@ List<Widget> _buildItems(List<AppMenuEntry> entries, {required double radius}) {
   return out;
 }
 
-Widget _menuItem(
-  AppMenuEntry e, {
-  required int index,
-  required int count,
-  required double radius,
-}) {
+Widget _menuItem(AppMenuEntry e, {required int index, required int count, required double radius}) {
   final r = Radius.circular(radius);
   final isFirst = index == 0;
   final isLast = index == count - 1;
@@ -184,9 +162,7 @@ Widget _menuItem(
 
   final leadingWidget =
       e.leading ??
-      (e.icon != null
-          ? SizedBox(width: 32, height: 32, child: Icon(e.icon, size: 20))
-          : const SizedBox(width: 32, height: 32));
+      (e.icon != null ? SizedBox(width: 32, height: 32, child: Icon(e.icon, size: 20)) : const SizedBox(width: 32, height: 32));
 
   return ShadContextMenuItem(
     padding: EdgeInsets.zero,

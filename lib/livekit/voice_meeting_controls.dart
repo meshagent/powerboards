@@ -8,12 +8,8 @@ import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/ui/powerboards_menu_row.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
-lk.LocalTrackPublication<lk.LocalVideoTrack>? _voiceCameraPublication(
-  lk.LocalParticipant? participant,
-) {
-  final publication = participant?.getTrackPublicationBySource(
-    lk.TrackSource.camera,
-  );
+lk.LocalTrackPublication<lk.LocalVideoTrack>? _voiceCameraPublication(lk.LocalParticipant? participant) {
+  final publication = participant?.getTrackPublicationBySource(lk.TrackSource.camera);
   if (publication is! lk.LocalTrackPublication<lk.LocalVideoTrack>) {
     return null;
   }
@@ -22,11 +18,7 @@ lk.LocalTrackPublication<lk.LocalVideoTrack>? _voiceCameraPublication(
 }
 
 class VoiceMeetingControls extends StatelessWidget {
-  const VoiceMeetingControls({
-    super.key,
-    required this.controller,
-    this.spacing = 8,
-  });
+  const VoiceMeetingControls({super.key, required this.controller, this.spacing = 8});
 
   final MeetingController controller;
   final double spacing;
@@ -40,17 +32,11 @@ class VoiceMeetingControls extends StatelessWidget {
           final isCompact = constraints.maxWidth < 420;
           final horizontalPadding = isCompact ? 40.0 : 12.0;
           final helperMaxWidth = isCompact ? 320.0 : 560.0;
-          final titleStyle = powerboardsMenuRowTitleStyle().copyWith(
-            fontWeight: FontWeight.w700,
-          );
-          final descriptionStyle = powerboardsMenuRowDescriptionStyle()
-              .copyWith(fontWeight: FontWeight.w400, height: 1.45);
+          final titleStyle = powerboardsMenuRowTitleStyle().copyWith(fontWeight: FontWeight.w700);
+          final descriptionStyle = powerboardsMenuRowDescriptionStyle().copyWith(fontWeight: FontWeight.w400, height: 1.45);
 
           if (controller.livekitRoom.localParticipant == null) {
-            return _VoiceConnectionButton(
-              controller: controller,
-              compact: isCompact,
-            );
+            return _VoiceConnectionButton(controller: controller, compact: isCompact);
           }
 
           return Padding(
@@ -64,10 +50,7 @@ class VoiceMeetingControls extends StatelessWidget {
                   spacing: spacing,
                   runSpacing: spacing,
                   children: [
-                    _VoiceConnectionButton(
-                      controller: controller,
-                      compact: isCompact,
-                    ),
+                    _VoiceConnectionButton(controller: controller, compact: isCompact),
                     _VoiceMicToggle(controller: controller),
                     _VoiceCameraToggle(controller: controller),
                     _VoiceChangeSettings(controller: controller),
@@ -76,20 +59,12 @@ class VoiceMeetingControls extends StatelessWidget {
                 const SizedBox(height: 20),
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: helperMaxWidth),
-                  child: Text(
-                    "Speak with this agent privately",
-                    style: titleStyle,
-                    textAlign: TextAlign.center,
-                  ),
+                  child: Text("Speak with this agent privately", style: titleStyle, textAlign: TextAlign.center),
                 ),
                 const SizedBox(height: 8),
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: helperMaxWidth),
-                  child: Text(
-                    "Talk through ideas and get help hands-free.",
-                    style: descriptionStyle,
-                    textAlign: TextAlign.center,
-                  ),
+                  child: Text("Talk through ideas and get help hands-free.", style: descriptionStyle, textAlign: TextAlign.center),
                 ),
               ],
             ),
@@ -101,10 +76,7 @@ class VoiceMeetingControls extends StatelessWidget {
 }
 
 class _VoiceConnectionButton extends StatelessWidget {
-  const _VoiceConnectionButton({
-    required this.controller,
-    this.compact = false,
-  });
+  const _VoiceConnectionButton({required this.controller, this.compact = false});
 
   final MeetingController controller;
   final bool compact;
@@ -118,10 +90,7 @@ class _VoiceConnectionButton extends StatelessWidget {
       builder: (context, _) {
         return switch (room.connectionState) {
           lk.ConnectionState.connected => ShadButton.destructive(
-            padding: EdgeInsets.symmetric(
-              horizontal: compact ? 16 : 20,
-              vertical: 14,
-            ),
+            padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 20, vertical: 14),
             onPressed: () => unawaited(controller.disconnect()),
             child: const Text("End session"),
           ),
@@ -224,10 +193,7 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
     return 'Unable to change microphone state: $message';
   }
 
-  Future<void> _toggleMicrophone(
-    lk.LocalParticipant local,
-    bool enabled,
-  ) async {
+  Future<void> _toggleMicrophone(lk.LocalParticipant local, bool enabled) async {
     if (_processing) {
       return;
     }
@@ -240,11 +206,7 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
     try {
       await local.setMicrophoneEnabled(enabled);
     } catch (error) {
-      toaster?.show(
-        ShadToast.destructive(
-          description: Text(_describeMicrophoneToggleError(error)),
-        ),
-      );
+      toaster?.show(ShadToast.destructive(description: Text(_describeMicrophoneToggleError(error))));
     } finally {
       if (mounted) {
         setState(() {
@@ -273,9 +235,7 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
       offForeground: Colors.white,
       icon: showEnabled ? LucideIcons.mic : LucideIcons.micOff,
       loading: _pending,
-      onPressed: local == null || _processing || _pending
-          ? null
-          : () => unawaited(_toggleMicrophone(local, !_microphoneEnabled)),
+      onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleMicrophone(local, !_microphoneEnabled)),
     );
   }
 }
@@ -366,11 +326,7 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
     try {
       await local.setCameraEnabled(enabled);
     } catch (error) {
-      toaster?.show(
-        ShadToast.destructive(
-          description: Text(_describeCameraToggleError(error)),
-        ),
-      );
+      toaster?.show(ShadToast.destructive(description: Text(_describeCameraToggleError(error))));
     } finally {
       if (mounted) {
         setState(() {
@@ -399,9 +355,7 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
       offForeground: Colors.white,
       icon: showEnabled ? LucideIcons.video : LucideIcons.videoOff,
       loading: _pending,
-      onPressed: local == null || _processing || _pending
-          ? null
-          : () => unawaited(_toggleCamera(local, !_cameraEnabled)),
+      onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleCamera(local, !_cameraEnabled)),
     );
   }
 }
@@ -413,21 +367,17 @@ class _VoiceChangeSettings extends StatelessWidget {
 
   final MeetingController controller;
 
-  Future<void> _runWithMinimumPendingDuration(
-    Future<void> Function() action,
-  ) async {
+  Future<void> _runWithMinimumPendingDuration(Future<void> Function() action) async {
     final startedAt = DateTime.now();
     await action();
-    final remaining =
-        _minimumPendingDuration - DateTime.now().difference(startedAt);
+    final remaining = _minimumPendingDuration - DateTime.now().difference(startedAt);
     if (remaining > Duration.zero) {
       await Future<void>.delayed(remaining);
     }
   }
 
   Future<void> _runCameraDeviceSwitch(Future<void> Function() action) async {
-    final shouldShowPending =
-        controller.livekitRoom.localParticipant?.isCameraEnabled() ?? false;
+    final shouldShowPending = controller.livekitRoom.localParticipant?.isCameraEnabled() ?? false;
     if (shouldShowPending) {
       controller.pendingLocalMedia.setCameraPending(true);
     }
@@ -441,11 +391,8 @@ class _VoiceChangeSettings extends StatelessWidget {
     }
   }
 
-  Future<void> _runMicrophoneDeviceSwitch(
-    Future<void> Function() action,
-  ) async {
-    final shouldShowPending =
-        controller.livekitRoom.localParticipant?.isMicrophoneEnabled() ?? false;
+  Future<void> _runMicrophoneDeviceSwitch(Future<void> Function() action) async {
+    final shouldShowPending = controller.livekitRoom.localParticipant?.isMicrophoneEnabled() ?? false;
     if (shouldShowPending) {
       controller.pendingLocalMedia.setMicrophonePending(true);
     }
@@ -460,22 +407,16 @@ class _VoiceChangeSettings extends StatelessWidget {
   }
 
   Future<void> _selectVideoInput(lk.MediaDevice device) async {
-    final track = _voiceCameraPublication(
-      controller.livekitRoom.localParticipant,
-    )?.track;
+    final track = _voiceCameraPublication(controller.livekitRoom.localParticipant)?.track;
 
     await _runCameraDeviceSwitch(() async {
       await controller.livekitRoom.setVideoInputDevice(device);
-      await track?.restartTrack(
-        lk.CameraCaptureOptions(deviceId: device.deviceId),
-      );
+      await track?.restartTrack(lk.CameraCaptureOptions(deviceId: device.deviceId));
     });
   }
 
   Future<void> _selectAudioInput(lk.MediaDevice device) async {
-    await _runMicrophoneDeviceSwitch(
-      () => controller.livekitRoom.setAudioInputDevice(device),
-    );
+    await _runMicrophoneDeviceSwitch(() => controller.livekitRoom.setAudioInputDevice(device));
   }
 
   Future<void> _selectAudioOutput(lk.MediaDevice device) async {
@@ -489,18 +430,12 @@ class _VoiceChangeSettings extends StatelessWidget {
       onChangeVideoInput: _selectVideoInput,
       onChangeAudioInput: _selectAudioInput,
       onChangeAudioOutput: _selectAudioOutput,
-      selectedVideoInputDeviceId: () =>
-          controller.livekitRoom.selectedVideoInputDeviceId,
-      selectedAudioInputDeviceId: () =>
-          controller.livekitRoom.selectedAudioInputDeviceId,
-      selectedAudioOutputDeviceId: () =>
-          controller.livekitRoom.selectedAudioOutputDeviceId,
+      selectedVideoInputDeviceId: () => controller.livekitRoom.selectedVideoInputDeviceId,
+      selectedAudioInputDeviceId: () => controller.livekitRoom.selectedAudioInputDeviceId,
+      selectedAudioOutputDeviceId: () => controller.livekitRoom.selectedAudioOutputDeviceId,
       renderButton: (onPressed) => Tooltip(
         message: "Device settings",
-        child: ShadIconButton.outline(
-          onPressed: onPressed,
-          icon: const Icon(LucideIcons.settings),
-        ),
+        child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
       ),
     );
   }

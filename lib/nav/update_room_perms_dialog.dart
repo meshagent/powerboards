@@ -28,12 +28,7 @@ double _desktopTaskDialogHeight(BoxConstraints constraints) {
 }
 
 class _UserSettingsMenuButton extends StatefulWidget {
-  const _UserSettingsMenuButton({
-    required this.role,
-    required this.onSetOwner,
-    required this.onSetNonOwner,
-    required this.onRemove,
-  });
+  const _UserSettingsMenuButton({required this.role, required this.onSetOwner, required this.onSetNonOwner, required this.onRemove});
 
   final GrantRole role;
   final VoidCallback onSetOwner;
@@ -62,10 +57,7 @@ class _UserSettingsMenuButtonState extends State<_UserSettingsMenuButton> {
       controller: controller,
       constraints: const BoxConstraints(minWidth: 220),
       estimatedMenuWidth: 220,
-      estimatedMenuHeight:
-          (widget.role == GrantRole.owner || widget.role == GrantRole.nonOwner)
-          ? 88
-          : 48,
+      estimatedMenuHeight: (widget.role == GrantRole.owner || widget.role == GrantRole.nonOwner) ? 88 : 48,
       items: [
         if (widget.role == GrantRole.owner)
           ShadContextMenuItem(
@@ -94,11 +86,7 @@ class _UserSettingsMenuButtonState extends State<_UserSettingsMenuButton> {
       child: ShadButton.ghost(
         onPressed: controller.toggle,
         padding: EdgeInsets.zero,
-        child: const SizedBox(
-          width: 40,
-          height: 30,
-          child: Icon(LucideIcons.settings, size: 16),
-        ),
+        child: const SizedBox(width: 40, height: 30, child: Icon(LucideIcons.settings, size: 16)),
       ),
     );
   }
@@ -137,25 +125,13 @@ class _UserGrantRow extends StatelessWidget {
         const SizedBox(width: 8),
         SizedBox(
           width: 90,
-          child: Text(
-            grantSummary.role.displayName,
-            style: TextStyle(color: cs.foreground),
-          ),
+          child: Text(grantSummary.role.displayName, style: TextStyle(color: cs.foreground)),
         ),
 
         if (canEdit)
-          _UserSettingsMenuButton(
-            role: grantSummary.role,
-            onSetOwner: setAsOwner,
-            onSetNonOwner: setAsNonOwner,
-            onRemove: onRemove,
-          )
+          _UserSettingsMenuButton(role: grantSummary.role, onSetOwner: setAsOwner, onSetNonOwner: setAsNonOwner, onRemove: onRemove)
         else
-          SizedBox(
-            width: 40,
-            height: 30,
-            child: Icon(LucideIcons.lock, size: 16),
-          ),
+          SizedBox(width: 40, height: 30, child: Icon(LucideIcons.lock, size: 16)),
       ],
     );
   }
@@ -185,8 +161,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
   _LoadingState state = _LoadingState.loading;
   Map<String, User> userMap = {};
 
-  GrantSummary? get myGrant =>
-      grants.values.firstWhereOrNull((g) => isMe(g.userId));
+  GrantSummary? get myGrant => grants.values.firstWhereOrNull((g) => isMe(g.userId));
 
   bool get canEdit => myGrant?.role == GrantRole.owner;
 
@@ -197,9 +172,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
     return User.fromJson(profileJson);
   }
 
-  Future<Map<String, User>> _fetchAllUsers(
-    Iterable<GrantSummary> grants,
-  ) async {
+  Future<Map<String, User>> _fetchAllUsers(Iterable<GrantSummary> grants) async {
     final um = <String, User>{};
 
     final futures = grants.map(
@@ -214,10 +187,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
   }
 
   Future<void> _loadGrants() async {
-    final grantMap = await roomGrantSummaries(
-      projectId: widget.projectId,
-      roomName: widget.room.name,
-    );
+    final grantMap = await roomGrantSummaries(projectId: widget.projectId, roomName: widget.room.name);
 
     if (!mounted) return;
 
@@ -265,10 +235,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
           if (!mounted) return;
 
           setState(() {
-            grants[grant.userId] = GrantSummary(
-              userId: grant.userId,
-              role: GrantRole.owner,
-            );
+            grants[grant.userId] = GrantSummary(userId: grant.userId, role: GrantRole.owner);
           });
         },
         setAsNonOwner: () async {
@@ -283,19 +250,12 @@ class _PermissionDialogState extends State<_PermissionDialog> {
           if (!mounted) return;
 
           setState(() {
-            grants[grant.userId] = GrantSummary(
-              userId: grant.userId,
-              role: GrantRole.nonOwner,
-            );
+            grants[grant.userId] = GrantSummary(userId: grant.userId, role: GrantRole.nonOwner);
           });
         },
         onRemove: () async {
           final client = getMeshagentClient();
-          await client.deleteRoomGrant(
-            projectId: widget.projectId,
-            roomId: widget.room.id,
-            userId: grant.userId,
-          );
+          await client.deleteRoomGrant(projectId: widget.projectId, roomId: widget.room.id, userId: grant.userId);
 
           if (!mounted) return;
 
@@ -315,11 +275,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
   @override
   Widget build(BuildContext context) {
     final sortedGrants = grants.values.where((g) => !isMe(g.userId)).toList()
-      ..sort(
-        (a, b) => _grantToEmail(
-          a,
-        ).toLowerCase().compareTo(_grantToEmail(b).toLowerCase()),
-      );
+      ..sort((a, b) => _grantToEmail(a).toLowerCase().compareTo(_grantToEmail(b).toLowerCase()));
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -327,37 +283,21 @@ class _PermissionDialogState extends State<_PermissionDialog> {
 
         return PowerboardsShadDialog.task(
           scrollable: false,
-          constraints: BoxConstraints(
-            minWidth: 512.0,
-            maxWidth: 512.0,
-            minHeight: height,
-            maxHeight: height,
-          ),
+          constraints: BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height),
           title: Text(widget.title),
           description: Text(widget.description),
           actions: [
-            ShadButton.outline(
-              onPressed: () => Navigator.of(context).pop(null),
-              child: const Text('Close'),
-            ),
+            ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Close')),
             if (canEdit)
-              ShadButton(
-                onPressed: widget.onAddUser,
-                leading: const Icon(LucideIcons.userPlus, size: 16),
-                child: const Text('Add user'),
-              ),
+              ShadButton(onPressed: widget.onAddUser, leading: const Icon(LucideIcons.userPlus, size: 16), child: const Text('Add user')),
           ],
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(
-                height: powerboardsDialogScrollViewportVerticalInset,
-              ),
+              const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
               Expanded(
                 child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(
-                    context,
-                  ).copyWith(scrollbars: false),
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                   child: (state == _LoadingState.loading)
                       ? const Center(child: CircularProgressIndicator())
                       : SingleChildScrollView(
@@ -365,20 +305,15 @@ class _PermissionDialogState extends State<_PermissionDialog> {
                             mainAxisSize: .min,
                             crossAxisAlignment: .stretch,
                             children: [
-                              if (myGrant != null)
-                                _userRowBuilder(context, myGrant!),
+                              if (myGrant != null) _userRowBuilder(context, myGrant!),
 
-                              ...sortedGrants.map(
-                                (g) => _userRowBuilder(context, g),
-                              ),
+                              ...sortedGrants.map((g) => _userRowBuilder(context, g)),
                             ],
                           ),
                         ),
                 ),
               ),
-              const SizedBox(
-                height: powerboardsDialogScrollViewportVerticalInset,
-              ),
+              const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
             ],
           ),
         );
@@ -422,23 +357,17 @@ class _AddUserDialogState extends State<AddUserDialog> {
   final controller = SelectUsersController();
   final textController = TextEditingController();
 
-  late final projectUsersMap = Resource<Map<String, User>>(
-    lazy: false,
-    () async {
-      final client = getMeshagentClient();
+  late final projectUsersMap = Resource<Map<String, User>>(lazy: false, () async {
+    final client = getMeshagentClient();
 
-      final results = await client.getUsersInProject(widget.projectId);
-      final users = results.map((json) => User.fromJson(json)).toList();
+    final results = await client.getUsersInProject(widget.projectId);
+    final users = results.map((json) => User.fromJson(json)).toList();
 
-      return {for (final u in users) u.email.toLowerCase(): u};
-    },
-  );
+    return {for (final u in users) u.email.toLowerCase(): u};
+  });
 
   late final grants = Resource<Map<String, GrantSummary>>(lazy: false, () {
-    return roomGrantSummaries(
-      projectId: widget.projectId,
-      roomName: widget.room.name,
-    );
+    return roomGrantSummaries(projectId: widget.projectId, roomName: widget.room.name);
   });
 
   @override
@@ -476,9 +405,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       final selected = selectedUsers.value;
       final projUsersMap = projectUsersMap.state.value ?? {};
 
-      final usersToAddToProject = selected.where(
-        (u) => !projUsersMap.containsKey(u.email.toLowerCase()),
-      );
+      final usersToAddToProject = selected.where((u) => !projUsersMap.containsKey(u.email.toLowerCase()));
 
       final myUser = MeshagentAuth.current.getUser();
       final myUserId = (myUser?['id'] as String?) ?? '';
@@ -508,13 +435,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
         if (isMeAdmin) {
           // add users to project if needed
           await Future.wait(
-            usersToAddToProject.map(
-              (u) => client.addUserToProjectByEmail(
-                widget.projectId,
-                u.email,
-                canCreateRooms: true,
-              ),
-            ),
+            usersToAddToProject.map((u) => client.addUserToProjectByEmail(widget.projectId, u.email, canCreateRooms: true)),
           );
         } else {
           if (!mounted) return;
@@ -525,20 +446,14 @@ class _AddUserDialogState extends State<AddUserDialog> {
           final cont = await showShadDialog<bool>(
             context: context,
             builder: (context) => PowerboardsShadDialog.compactAlert(
-              title: plural
-                  ? Text('Users are not in project')
-                  : Text('User is not in project'),
+              title: plural ? Text('Users are not in project') : Text('User is not in project'),
               description: Padding(
                 padding: EdgeInsets.only(bottom: 8),
                 child: RichText(
                   text: TextSpan(
                     style: TextStyle(height: 1.4),
                     children: [
-                      TextSpan(
-                        text: plural
-                            ? 'The following users with emails '
-                            : 'The user with email ',
-                      ),
+                      TextSpan(text: plural ? 'The following users with emails ' : 'The user with email '),
                       TextSpan(
                         text: emails,
                         style: TextStyle(fontWeight: FontWeight.bold),
@@ -553,14 +468,8 @@ class _AddUserDialogState extends State<AddUserDialog> {
                 ),
               ),
               actions: [
-                ShadButton.outline(
-                  child: const Text('Cancel'),
-                  onPressed: () => Navigator.of(context).pop(false),
-                ),
-                ShadButton(
-                  child: const Text('Continue'),
-                  onPressed: () => Navigator.of(context).pop(true),
-                ),
+                ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
+                ShadButton(child: const Text('Continue'), onPressed: () => Navigator.of(context).pop(true)),
               ],
             ),
           );
@@ -573,9 +482,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
         }
       }
 
-      final Set<String> excludedUsers = isMeAdmin
-          ? <String>{}
-          : usersToAddToProject.map((u) => u.email.toLowerCase()).toSet();
+      final Set<String> excludedUsers = isMeAdmin ? <String>{} : usersToAddToProject.map((u) => u.email.toLowerCase()).toSet();
 
       // add grants for all selected users
       await Future.wait(
@@ -609,9 +516,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
         builder: (context) {
           return PowerboardsShadDialog.compactAlert(
             title: const Text("Something went wrong"),
-            description: const Text(
-              "An error occurred while adding users to the project. Please try again.",
-            ),
+            description: const Text("An error occurred while adding users to the project. Please try again."),
             actions: [
               ShadButton(
                 onPressed: () {
@@ -633,9 +538,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
-    final inputLabelStyle = theme.decoration.labelStyle?.copyWith(
-      fontWeight: .w700,
-    );
+    final inputLabelStyle = theme.decoration.labelStyle?.copyWith(fontWeight: .w700);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -643,36 +546,18 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
         return PowerboardsShadDialog.task(
           scrollable: false,
-          constraints: BoxConstraints(
-            minWidth: 512.0,
-            maxWidth: 512.0,
-            minHeight: height,
-            maxHeight: height,
-          ),
+          constraints: BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height),
           title: Text(widget.title),
-          description: Padding(
-            padding: .only(bottom: 15.0),
-            child: Text(widget.description),
-          ),
+          description: Padding(padding: .only(bottom: 15.0), child: Text(widget.description)),
           actions: [
             if (widget.onBack != null)
-              ShadButton.outline(
-                onPressed: widget.onBack,
-                leading: const Icon(LucideIcons.arrowLeft, size: 16),
-                child: const Text('Back'),
-              ),
+              ShadButton.outline(onPressed: widget.onBack, leading: const Icon(LucideIcons.arrowLeft, size: 16), child: const Text('Back')),
             ShadButton(
               onPressed: onAdded,
               enabled: !submitting,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: submitting
-                    ? [
-                        Icon(Icons.hourglass_top, size: 16),
-                        SizedBox(width: 6),
-                        Text('Saving...'),
-                      ]
-                    : [Text('Save')],
+                children: submitting ? [Icon(Icons.hourglass_top, size: 16), SizedBox(width: 6), Text('Saving...')] : [Text('Save')],
               ),
             ),
           ],
@@ -707,10 +592,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                                 for (final email in value) {
                                   final lcEmail = email.toLowerCase().trim();
 
-                                  final user = selectedUsers.value
-                                      .firstWhereOrNull(
-                                        (u) => u.email.toLowerCase() == lcEmail,
-                                      );
+                                  final user = selectedUsers.value.firstWhereOrNull((u) => u.email.toLowerCase() == lcEmail);
                                   if (user != null) {
                                     updated.add(user);
                                     continue;
@@ -721,20 +603,11 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
                                   if (inProject) {
                                     final grants = roomGrants[projectUser.id];
-                                    final role = grants != null
-                                        ? grants.role
-                                        : GrantRole.nonOwner;
+                                    final role = grants != null ? grants.role : GrantRole.nonOwner;
 
-                                    updated.add(
-                                      AddedUser(email: email, role: role),
-                                    );
+                                    updated.add(AddedUser(email: email, role: role));
                                   } else {
-                                    updated.add(
-                                      AddedUser(
-                                        email: email,
-                                        role: GrantRole.nonOwner,
-                                      ),
-                                    );
+                                    updated.add(AddedUser(email: email, role: GrantRole.nonOwner));
                                   }
                                 }
 
@@ -746,23 +619,10 @@ class _AddUserDialogState extends State<AddUserDialog> {
                               valueListenable: textController,
                               builder: (context, textEditingValue, _) {
                                 final text = textEditingValue.text.trim();
-                                final isEmail = SelectUsersController.emailRegex
-                                    .hasMatch(text);
-                                final items = isEmail
-                                    ? [
-                                        ...selected,
-                                        AddedUser(
-                                          email: text,
-                                          role: GrantRole.nonOwner,
-                                        ),
-                                      ]
-                                    : selected;
+                                final isEmail = SelectUsersController.emailRegex.hasMatch(text);
+                                final items = isEmail ? [...selected, AddedUser(email: text, role: GrantRole.nonOwner)] : selected;
                                 final usersNotInProject = items
-                                    .where(
-                                      (u) => !projUsersMap.containsKey(
-                                        u.email.toLowerCase(),
-                                      ),
-                                    )
+                                    .where((u) => !projUsersMap.containsKey(u.email.toLowerCase()))
                                     .map((u) => u.email)
                                     .join(', ');
 
@@ -786,28 +646,17 @@ class _AddUserDialogState extends State<AddUserDialog> {
                                           style: TextStyle(color: textColor),
                                           children: [
                                             TextSpan(
-                                              text:
-                                                  'The following email addresses',
-                                              style: TextStyle(
-                                                color: textColor,
-                                                height: 1.4,
-                                              ),
+                                              text: 'The following email addresses',
+                                              style: TextStyle(color: textColor, height: 1.4),
                                             ),
                                             TextSpan(
                                               text: ' ($usersNotInProject) ',
-                                              style: TextStyle(
-                                                fontWeight: .bold,
-                                                color: textColor,
-                                                height: 1.4,
-                                              ),
+                                              style: TextStyle(fontWeight: .bold, color: textColor, height: 1.4),
                                             ),
                                             TextSpan(
                                               text:
                                                   'are not project members. Adding them to the room will add them as members to the project.',
-                                              style: TextStyle(
-                                                color: textColor,
-                                                height: 1.4,
-                                              ),
+                                              style: TextStyle(color: textColor, height: 1.4),
                                             ),
                                           ],
                                         ),
@@ -837,11 +686,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
   }
 }
 
-Future<void> showUpdateRoomPermsDialog(
-  BuildContext context, {
-  required String projectId,
-  required Room room,
-}) async {
+Future<void> showUpdateRoomPermsDialog(BuildContext context, {required String projectId, required Room room}) async {
   if (context.mounted == false) return;
 
   return showShadDialog<void>(
@@ -859,8 +704,7 @@ Future<void> showUpdateRoomPermsDialog(
                 room: room,
                 projectId: projectId,
                 title: 'Update room permissions',
-                description:
-                    'Adjust who can manage settings and members for this room.',
+                description: 'Adjust who can manage settings and members for this room.',
                 onAddUser: () => mode.value = _View.addUser,
               );
             case _View.addUser:
@@ -878,11 +722,7 @@ Future<void> showUpdateRoomPermsDialog(
   );
 }
 
-Future<void> showAddUserToRoomDialog(
-  BuildContext context, {
-  required String projectId,
-  required Room room,
-}) async {
+Future<void> showAddUserToRoomDialog(BuildContext context, {required String projectId, required Room room}) async {
   if (context.mounted == false) return;
 
   return showShadDialog<void>(

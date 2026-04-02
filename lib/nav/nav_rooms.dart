@@ -16,8 +16,7 @@ import 'rename_room_dialog.dart';
 import 'delete_room_dialog.dart';
 import 'update_room_perms_dialog.dart';
 
-String roomDisplayName(Room room) =>
-    (room.metadata['displayName'] as String? ?? room.name).trim();
+String roomDisplayName(Room room) => (room.metadata['displayName'] as String? ?? room.name).trim();
 
 class NavRooms extends StatelessWidget {
   const NavRooms({
@@ -50,13 +49,7 @@ class NavRooms extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
-              children: [
-                if (onCreateRoom != null)
-                  ShadButton(
-                    onPressed: onCreateRoom,
-                    child: const Text('Create room'),
-                  ),
-              ],
+              children: [if (onCreateRoom != null) ShadButton(onPressed: onCreateRoom, child: const Text('Create room'))],
             ),
           )
         else
@@ -64,12 +57,7 @@ class NavRooms extends StatelessWidget {
             child: RefreshIndicator(
               onRefresh: onRefresh,
               child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(
-                  desktopPaneSideHorizontalInset,
-                  10,
-                  desktopPaneSideHorizontalInset,
-                  10,
-                ),
+                padding: const EdgeInsets.fromLTRB(desktopPaneSideHorizontalInset, 10, desktopPaneSideHorizontalInset, 10),
                 itemCount: rooms.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 6),
                 itemBuilder: (context, i) {
@@ -137,10 +125,7 @@ class _RoomTileState extends State<_RoomTile> {
         height: 40.0,
         leading: Icon(LucideIcons.pencil, size: 16),
         onPressed: () async {
-          final newName = await showRenameRoomDialog(
-            context,
-            initialValue: name,
-          );
+          final newName = await showRenameRoomDialog(context, initialValue: name);
 
           if (newName == null || newName == name) return;
 
@@ -166,8 +151,7 @@ class _RoomTileState extends State<_RoomTile> {
               await showDeleteRoomDialog(
                 context,
                 title: 'Delete room',
-                description:
-                    'Are you sure you want to delete the room "$name"? This action cannot be undone.',
+                description: 'Are you sure you want to delete the room "$name"? This action cannot be undone.',
                 confirmText: 'Delete',
                 destructive: true,
               ) ??
@@ -175,10 +159,7 @@ class _RoomTileState extends State<_RoomTile> {
 
           if (confirmed) {
             final client = getMeshagentClient();
-            await client.deleteRoom(
-              projectId: widget.projectId,
-              roomId: widget.room.id,
-            );
+            await client.deleteRoom(projectId: widget.projectId, roomId: widget.room.id);
 
             widget.onSave();
 
@@ -195,11 +176,7 @@ class _RoomTileState extends State<_RoomTile> {
         height: 40.0,
         leading: Icon(LucideIcons.lock, size: 16),
         onPressed: () {
-          showUpdateRoomPermsDialog(
-            context,
-            room: widget.room,
-            projectId: widget.projectId,
-          );
+          showUpdateRoomPermsDialog(context, room: widget.room, projectId: widget.projectId);
         },
         child: Text('Permissions'),
       ),
@@ -212,9 +189,7 @@ class _RoomTileState extends State<_RoomTile> {
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
 
-    final bg = widget.balanceLow
-        ? cs.background
-        : (widget.selected ? cs.secondaryForeground : Colors.transparent);
+    final bg = widget.balanceLow ? cs.background : (widget.selected ? cs.secondaryForeground : Colors.transparent);
 
     final textStyle = widget.balanceLow
         ? tt.p.copyWith(color: cs.mutedForeground)
@@ -226,36 +201,22 @@ class _RoomTileState extends State<_RoomTile> {
       builder: (context, hovered, focused) {
         final breakpoints = ResponsiveBreakpoints.of(context);
         final isMobile = breakpoints.isMobile;
-        final settingsColor = hovered || isMobile
-            ? textStyle.color
-            : Colors.transparent;
+        final settingsColor = hovered || isMobile ? textStyle.color : Colors.transparent;
         final menuItems = _buildContextMenuItems(context);
 
         return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            color: bg,
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: bg),
 
           child: ShadGestureDetector(
             behavior: HitTestBehavior.opaque,
-            cursor: widget.balanceLow
-                ? SystemMouseCursors.forbidden
-                : SystemMouseCursors.click,
+            cursor: widget.balanceLow ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
             onTap: widget.balanceLow ? null : widget.onTap,
             child: Padding(
-              padding: const EdgeInsets.only(
-                left: desktopPaneSideListItemLeadingInset,
-              ),
+              padding: const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      name,
-                      style: textStyle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: Text(name, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
 
                   if (!widget.balanceLow)
@@ -272,13 +233,7 @@ class _RoomTileState extends State<_RoomTile> {
                         child: SizedBox(
                           width: 40,
                           height: 40,
-                          child: Center(
-                            child: Icon(
-                              LucideIcons.ellipsis,
-                              size: 20,
-                              color: settingsColor,
-                            ),
-                          ),
+                          child: Center(child: Icon(LucideIcons.ellipsis, size: 20, color: settingsColor)),
                         ),
                       ),
                     ),

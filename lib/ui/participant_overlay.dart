@@ -9,11 +9,7 @@ import 'package:powerboards/livekit/room.dart';
 
 const audioIconSize = 16.0;
 const audioIconColor = Colors.white;
-const textStyle = TextStyle(
-  color: audioIconColor,
-  fontSize: 11,
-  fontWeight: .w500,
-);
+const textStyle = TextStyle(color: audioIconColor, fontSize: 11, fontWeight: .w500);
 const _overlayPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
 const _overlayBorderRadius = BorderRadius.all(Radius.circular(6));
 const _unmutedOverlayColor = Color(0x80222222);
@@ -24,11 +20,7 @@ bool _isMicrophoneEnabled(lk.Participant participant) {
 }
 
 class ParticipantOverlay extends StatefulWidget {
-  const ParticipantOverlay({
-    super.key,
-    required this.participant,
-    this.showName = true,
-  });
+  const ParticipantOverlay({super.key, required this.participant, this.showName = true});
 
   final lk.Participant participant;
   final bool showName;
@@ -37,8 +29,7 @@ class ParticipantOverlay extends StatefulWidget {
   State createState() => _ParticipantOverlayState();
 }
 
-class _ParticipantOverlayState extends State<ParticipantOverlay>
-    with SingleTickerProviderStateMixin {
+class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _animation;
 
@@ -55,10 +46,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay>
       vsync: this,
     );
 
-    _animation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-    );
+    _animation = CurvedAnimation(parent: _animationController, curve: Curves.easeOut);
   }
 
   @override
@@ -66,9 +54,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay>
     super.didUpdateWidget(oldWidget);
 
     if (widget.showName != oldWidget.showName) {
-      widget.showName
-          ? _animationController.forward()
-          : _animationController.reverse();
+      widget.showName ? _animationController.forward() : _animationController.reverse();
     }
   }
 
@@ -85,10 +71,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay>
     final pendingLocalMedia = roomModel?.pendingLocalMedia;
 
     return ListenableBuilder(
-      listenable: Listenable.merge([
-        widget.participant,
-        if (pendingLocalMedia != null) pendingLocalMedia,
-      ]),
+      listenable: Listenable.merge([widget.participant, if (pendingLocalMedia != null) pendingLocalMedia]),
       builder: (context, _) {
         final localParticipant = roomModel?.localParticipant;
         final isLocalParticipant =
@@ -96,28 +79,17 @@ class _ParticipantOverlayState extends State<ParticipantOverlay>
             (identical(localParticipant, widget.participant) ||
                 localParticipant.sid == widget.participant.sid ||
                 localParticipant.identity == widget.participant.identity);
-        final microphonePending =
-            isLocalParticipant &&
-            (pendingLocalMedia?.microphonePending ?? false);
+        final microphonePending = isLocalParticipant && (pendingLocalMedia?.microphonePending ?? false);
         final muted = !_isMicrophoneEnabled(widget.participant);
         final name = widget.participant.name;
 
-        final expandController = Controller.ofType<ExpandParticipantController>(
-          context,
-        );
-        final expanded = expandController.isExpanded(
-          widget.participant.identity,
-        );
-        final expandIconColor = microphonePending || muted
-            ? audioIconColor
-            : shadMutedForeground;
+        final expandController = Controller.ofType<ExpandParticipantController>(context);
+        final expanded = expandController.isExpanded(widget.participant.identity);
+        final expandIconColor = microphonePending || muted ? audioIconColor : shadMutedForeground;
         final iconColor = muted ? _mutedIconColor : audioIconColor;
 
         return Container(
-          decoration: BoxDecoration(
-            borderRadius: _overlayBorderRadius,
-            color: _unmutedOverlayColor,
-          ),
+          decoration: BoxDecoration(borderRadius: _overlayBorderRadius, color: _unmutedOverlayColor),
           padding: _overlayPadding,
           child: Row(
             mainAxisSize: .min,
@@ -128,17 +100,10 @@ class _ParticipantOverlayState extends State<ParticipantOverlay>
                 SizedBox(
                   width: audioIconSize,
                   height: audioIconSize,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(audioIconColor),
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(audioIconColor)),
                 )
               else
-                Icon(
-                  muted ? LucideIcons.micOff : LucideIcons.mic,
-                  color: iconColor,
-                  size: audioIconSize,
-                ),
+                Icon(muted ? LucideIcons.micOff : LucideIcons.mic, color: iconColor, size: audioIconSize),
 
               if (name.isNotEmpty)
                 AnimatedBuilder(
@@ -148,11 +113,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay>
                       child: SizedBox(
                         height: audioIconSize,
                         child: ClipRect(
-                          child: Align(
-                            alignment: .centerLeft,
-                            widthFactor: _animation.value,
-                            child: child,
-                          ),
+                          child: Align(alignment: .centerLeft, widthFactor: _animation.value, child: child),
                         ),
                       ),
                     );
@@ -169,11 +130,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay>
                   width: 20.0,
                   height: 20.0,
                   hoverBackgroundColor: Colors.transparent,
-                  icon: Icon(
-                    expanded ? LucideIcons.minimize2 : LucideIcons.expand,
-                    color: expandIconColor,
-                    size: 14,
-                  ),
+                  icon: Icon(expanded ? LucideIcons.minimize2 : LucideIcons.expand, color: expandIconColor, size: 14),
                   onPressed: () {
                     expandController.toggle(widget.participant.identity);
                   },

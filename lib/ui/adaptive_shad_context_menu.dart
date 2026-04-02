@@ -1,7 +1,6 @@
 import 'dart:ui';
 
-export 'package:meshagent_flutter_shadcn/ui/coordinated_context_menu.dart'
-    show ShadMenuHorizontalPosition, ShadMenuVerticalPosition;
+export 'package:meshagent_flutter_shadcn/ui/coordinated_context_menu.dart' show ShadMenuHorizontalPosition, ShadMenuVerticalPosition;
 
 import 'package:flutter/widgets.dart';
 import 'package:meshagent_flutter_shadcn/ui/coordinated_context_menu.dart';

@@ -43,175 +43,130 @@ Widget _buildTestApp({
 
 void main() {
   group('ResizableSplitView', () {
-    testWidgets(
-      'reports an automatic uncollapse when collapse becomes unavailable',
-      (tester) async {
-        final controller = ResizableSplitViewController();
-        final collapsedStates = <bool>[];
+    testWidgets('reports an automatic uncollapse when collapse becomes unavailable', (tester) async {
+      final controller = ResizableSplitViewController();
+      final collapsedStates = <bool>[];
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            width: 900,
-            split: true,
-            allowCollapse: true,
-            controller: controller,
-            onCollapsedChanged: collapsedStates.add,
-          ),
-        );
+      await tester.pumpWidget(
+        _buildTestApp(width: 900, split: true, allowCollapse: true, controller: controller, onCollapsedChanged: collapsedStates.add),
+      );
 
-        controller.collapse();
-        await tester.pump();
+      controller.collapse();
+      await tester.pump();
 
-        expect(controller.collapsed, isTrue);
-        expect(collapsedStates, [true]);
+      expect(controller.collapsed, isTrue);
+      expect(collapsedStates, [true]);
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            width: 520,
-            split: true,
-            allowCollapse: false,
-            controller: controller,
-            onCollapsedChanged: collapsedStates.add,
-            minArea1Width: 360,
-            preferredArea2Fraction: null,
-            minArea2Fraction: null,
-            collapseArea1Width: null,
-          ),
-        );
-        await tester.pump();
+      await tester.pumpWidget(
+        _buildTestApp(
+          width: 520,
+          split: true,
+          allowCollapse: false,
+          controller: controller,
+          onCollapsedChanged: collapsedStates.add,
+          minArea1Width: 360,
+          preferredArea2Fraction: null,
+          minArea2Fraction: null,
+          collapseArea1Width: null,
+        ),
+      );
+      await tester.pump();
 
-        expect(controller.collapsed, isFalse);
-        expect(collapsedStates, [true, false]);
-      },
-    );
+      expect(controller.collapsed, isFalse);
+      expect(collapsedStates, [true, false]);
+    });
 
-    testWidgets(
-      'keeps panel defaults in range across resize and meeting-end transitions',
-      (tester) async {
-        final controller = ResizableSplitViewController();
+    testWidgets('keeps panel defaults in range across resize and meeting-end transitions', (tester) async {
+      final controller = ResizableSplitViewController();
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            width: 960,
-            split: true,
-            allowCollapse: true,
-            controller: controller,
-          ),
-        );
-        await tester.pump(const Duration(milliseconds: 40));
+      await tester.pumpWidget(_buildTestApp(width: 960, split: true, allowCollapse: true, controller: controller));
+      await tester.pump(const Duration(milliseconds: 40));
 
-        controller.collapse();
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 40));
-        expect(controller.collapsed, isTrue);
+      controller.collapse();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(controller.collapsed, isTrue);
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            width: 620,
-            split: true,
-            allowCollapse: true,
-            controller: controller,
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 40));
+      await tester.pumpWidget(_buildTestApp(width: 620, split: true, allowCollapse: true, controller: controller));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            width: 380,
-            split: true,
-            allowCollapse: false,
-            controller: controller,
-            minArea1Width: 360,
-            preferredArea2Fraction: null,
-            minArea2Fraction: null,
-            collapseArea1Width: null,
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 40));
+      await tester.pumpWidget(
+        _buildTestApp(
+          width: 380,
+          split: true,
+          allowCollapse: false,
+          controller: controller,
+          minArea1Width: 360,
+          preferredArea2Fraction: null,
+          minArea2Fraction: null,
+          collapseArea1Width: null,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            width: 960,
-            split: true,
-            allowCollapse: false,
-            controller: controller,
-            minArea1Width: 360,
-            preferredArea2Fraction: null,
-            minArea2Fraction: null,
-            collapseArea1Width: null,
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 40));
+      await tester.pumpWidget(
+        _buildTestApp(
+          width: 960,
+          split: true,
+          allowCollapse: false,
+          controller: controller,
+          minArea1Width: 360,
+          preferredArea2Fraction: null,
+          minArea2Fraction: null,
+          collapseArea1Width: null,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
 
-        expect(controller.collapsed, isFalse);
-        expect(tester.takeException(), isNull);
-      },
-    );
+      expect(controller.collapsed, isFalse);
+      expect(tester.takeException(), isNull);
+    });
 
-    testWidgets(
-      'does not throw when resized while a divider drag is in progress',
-      (tester) async {
-        final controller = ResizableSplitViewController();
+    testWidgets('does not throw when resized while a divider drag is in progress', (tester) async {
+      final controller = ResizableSplitViewController();
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            width: 960,
-            split: true,
-            allowCollapse: true,
-            controller: controller,
-          ),
-        );
-        await tester.pump(const Duration(milliseconds: 40));
+      await tester.pumpWidget(_buildTestApp(width: 960, split: true, allowCollapse: true, controller: controller));
+      await tester.pump(const Duration(milliseconds: 40));
 
-        final splitRect = tester.getRect(
-          find.byKey(const ValueKey('split-view')),
-        );
-        final dragStart = splitRect.topLeft + Offset(240, splitRect.height / 2);
+      final splitRect = tester.getRect(find.byKey(const ValueKey('split-view')));
+      final dragStart = splitRect.topLeft + Offset(240, splitRect.height / 2);
 
-        final gesture = await tester.startGesture(dragStart);
-        await tester.pump();
-        await gesture.moveBy(const Offset(-32, 0));
-        await tester.pump();
+      final gesture = await tester.startGesture(dragStart);
+      await tester.pump();
+      await gesture.moveBy(const Offset(-32, 0));
+      await tester.pump();
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            width: 620,
-            split: true,
-            allowCollapse: true,
-            controller: controller,
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 40));
+      await tester.pumpWidget(_buildTestApp(width: 620, split: true, allowCollapse: true, controller: controller));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
 
-        await gesture.moveBy(const Offset(24, 0));
-        await tester.pump();
+      await gesture.moveBy(const Offset(24, 0));
+      await tester.pump();
 
-        await tester.pumpWidget(
-          _buildTestApp(
-            width: 380,
-            split: true,
-            allowCollapse: false,
-            controller: controller,
-            minArea1Width: 360,
-            preferredArea2Fraction: null,
-            minArea2Fraction: null,
-            collapseArea1Width: null,
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 40));
+      await tester.pumpWidget(
+        _buildTestApp(
+          width: 380,
+          split: true,
+          allowCollapse: false,
+          controller: controller,
+          minArea1Width: 360,
+          preferredArea2Fraction: null,
+          minArea2Fraction: null,
+          collapseArea1Width: null,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
 
-        await gesture.moveBy(const Offset(24, 0));
-        await tester.pump();
-        await gesture.up();
-        await tester.pump();
+      await gesture.moveBy(const Offset(24, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
 
-        expect(tester.takeException(), isNull);
-      },
-    );
+      expect(tester.takeException(), isNull);
+    });
   });
 }

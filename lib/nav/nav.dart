@@ -52,13 +52,7 @@ class NavController extends Controller {
 }
 
 class Nav extends StatefulWidget {
-  const Nav({
-    super.key,
-    this.selectedRoom,
-    required this.child,
-    this.projectId,
-    required this.projects,
-  });
+  const Nav({super.key, this.selectedRoom, required this.child, this.projectId, required this.projects});
 
   final String? projectId;
   final String? selectedRoom;
@@ -81,9 +75,7 @@ class _NavState extends State<Nav> {
     return widget.projects;
   }
 
-  late final isBalanceLowRes = Resource<bool>(
-    () => isBalanceLow(widget.projectId),
-  );
+  late final isBalanceLowRes = Resource<bool>(() => isBalanceLow(widget.projectId));
   late final role = Resource(() async {
     if (widget.projectId == null) {
       return null;
@@ -145,9 +137,7 @@ class _NavState extends State<Nav> {
     }
 
     final pid = fromUUID(widget.projectId!);
-    final redirectUrl = uri
-        .replace(path: "/p/$pid")
-        .replace(queryParameters: {"ref": "low_balance_warning"});
+    final redirectUrl = uri.replace(path: "/p/$pid").replace(queryParameters: {"ref": "low_balance_warning"});
 
     launchUrl(redirectUrl);
   }
@@ -182,18 +172,12 @@ class _NavState extends State<Nav> {
         }
 
         final previousWidth = lastConstraints?.maxWidth;
-        if (previousWidth == null ||
-            !previousWidth.isFinite ||
-            previousWidth <= 0) {
+        if (previousWidth == null || !previousWidth.isFinite || previousWidth <= 0) {
           return;
         }
 
-        final navPanel = resizeController.panelsInfo
-            .where((panel) => panel.id == "nav")
-            .firstOrNull;
-        final mainPanel = resizeController.panelsInfo
-            .where((panel) => panel.id == "main")
-            .firstOrNull;
+        final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
+        final mainPanel = resizeController.panelsInfo.where((panel) => panel.id == "main").firstOrNull;
         if (navPanel == null || mainPanel == null) {
           return;
         }
@@ -204,18 +188,11 @@ class _NavState extends State<Nav> {
         final maxSize = rawMaxSize.clamp(minSize, 1.0);
         final defaultSize = (navBarWidth / width).clamp(minSize, maxSize);
 
-        final newPanel = ShadPanelInfo(
-          id: "nav",
-          minSize: minSize,
-          maxSize: maxSize,
-          defaultSize: defaultSize,
-        );
+        final newPanel = ShadPanelInfo(id: "nav", minSize: minSize, maxSize: maxSize, defaultSize: defaultSize);
 
         // Don't change the size - prevent flickering
         final currentSize = (navPanel.size * previousWidth) / width;
-        if (currentSize.isFinite &&
-            currentSize > minSize &&
-            currentSize < maxSize) {
+        if (currentSize.isFinite && currentSize > minSize && currentSize < maxSize) {
           newPanel.size = currentSize;
         }
 
@@ -229,8 +206,7 @@ class _NavState extends State<Nav> {
   void didUpdateWidget(Nav oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.projectId != widget.projectId ||
-        oldWidget.selectedRoom != widget.selectedRoom) {
+    if (oldWidget.projectId != widget.projectId || oldWidget.selectedRoom != widget.selectedRoom) {
       rooms.refresh();
     }
 
@@ -311,12 +287,7 @@ class _NavState extends State<Nav> {
     super.dispose();
   }
 
-  Widget desktopBody(
-    BuildContext context,
-    ProjectRole? userRole,
-    bool balanceLow,
-    bool canCreateRooms,
-  ) {
+  Widget desktopBody(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
     if (userRole == ProjectRole.none) {
       return forbiddenView(context);
     }
@@ -332,12 +303,7 @@ class _NavState extends State<Nav> {
     return Container(key: childKey, child: widget.child);
   }
 
-  Widget desktopView(
-    BuildContext context,
-    ProjectRole? userRole,
-    bool balanceLow,
-    bool canCreateRooms,
-  ) {
+  Widget desktopView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
     final navController = Controller.ofType<NavController>(context);
@@ -363,9 +329,7 @@ class _NavState extends State<Nav> {
         final minRatio = rawMinRatio.clamp(0.0, 1.0);
         final maxRatio = rawMaxRatio.clamp(minRatio, 1.0);
         final defaultSize = (navBarWidth / width).clamp(minRatio, maxRatio);
-        final mainDefaultSize = hidden
-            ? 1.0
-            : (1.0 - defaultSize).clamp(0.0, 1.0);
+        final mainDefaultSize = hidden ? 1.0 : (1.0 - defaultSize).clamp(0.0, 1.0);
 
         // Debounce resize to avoid excessive rebuilds when resizing the window
         debounceResize(constraints);
@@ -389,11 +353,7 @@ class _NavState extends State<Nav> {
                   child: Column(
                     mainAxisSize: .min,
                     children: [
-                      _NavBarTop(
-                        projectId: widget.projectId,
-                        projects: projects,
-                        onCreateProject: onCreateProject,
-                      ),
+                      _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
 
                       SignalBuilder(
                         builder: (context, _) => Expanded(
@@ -415,23 +375,14 @@ class _NavState extends State<Nav> {
               ),
 
             // main content
-            ShadResizablePanel(
-              id: "main",
-              defaultSize: mainDefaultSize,
-              child: desktopBody(context, userRole, balanceLow, canCreateRooms),
-            ),
+            ShadResizablePanel(id: "main", defaultSize: mainDefaultSize, child: desktopBody(context, userRole, balanceLow, canCreateRooms)),
           ],
         );
       },
     );
   }
 
-  Widget mobileView(
-    BuildContext context,
-    ProjectRole? userRole,
-    bool balanceLow,
-    bool canCreateRooms,
-  ) {
+  Widget mobileView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
     _resetResizeState();
 
     if (userRole == ProjectRole.none) {
@@ -449,16 +400,9 @@ class _NavState extends State<Nav> {
 
       return Column(
         children: [
-          _NavBarTop(
-            projectId: widget.projectId,
-            projects: projects,
-            onCreateProject: onCreateProject,
-          ),
+          _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
           Expanded(
-            child: BalanceLowWarning(
-              onAddCredits: onAddCredits,
-              role: userRole,
-            ),
+            child: BalanceLowWarning(onAddCredits: onAddCredits, role: userRole),
           ),
           const SizedBox(height: 180.0),
         ],
@@ -471,11 +415,7 @@ class _NavState extends State<Nav> {
         child: SafeArea(
           child: Column(
             children: [
-              _NavBarTop(
-                projectId: widget.projectId,
-                projects: projects,
-                onCreateProject: onCreateProject,
-              ),
+              _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
 
               SignalBuilder(
                 builder: (context, _) => Expanded(
@@ -509,10 +449,7 @@ class _NavState extends State<Nav> {
     }
 
     return Container(
-      constraints: const BoxConstraints(
-        minWidth: double.infinity,
-        minHeight: 48,
-      ),
+      constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 48),
       color: statusError,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
@@ -521,24 +458,16 @@ class _NavState extends State<Nav> {
             children: [
               TextSpan(
                 text: "Out of Credit - ",
-                style: tt.small.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: cs.destructiveForeground,
-                ),
+                style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
               ),
 
               if (userRole == ProjectRole.admin)
                 TextSpan(text: "Add more credits to re-enable rooms.")
               else
-                TextSpan(
-                  text: "Contact your project admin to add more credits.",
-                ),
+                TextSpan(text: "Contact your project admin to add more credits."),
             ],
           ),
-          style: tt.small.copyWith(
-            color: cs.destructiveForeground,
-            height: 1.5,
-          ),
+          style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
           textAlign: TextAlign.center,
         ),
       ),
@@ -551,10 +480,7 @@ class _NavState extends State<Nav> {
     final cs = theme.colorScheme;
 
     return Container(
-      constraints: const BoxConstraints(
-        minWidth: double.infinity,
-        minHeight: 48,
-      ),
+      constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 48),
       color: statusError,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
@@ -567,28 +493,16 @@ class _NavState extends State<Nav> {
                 children: [
                   TextSpan(
                     text: "Low Balance - ",
-                    style: tt.small.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: cs.destructiveForeground,
-                    ),
+                    style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
                   ),
 
-                  TextSpan(
-                    text: "Add more credits to avoid service interruption.",
-                  ),
+                  TextSpan(text: "Add more credits to avoid service interruption."),
                 ],
               ),
-              style: tt.small.copyWith(
-                color: cs.destructiveForeground,
-                height: 1.5,
-              ),
+              style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
               textAlign: TextAlign.center,
             ),
-            ShadButton(
-              key: const Key('add-credits-button'),
-              onPressed: onAddCredits,
-              child: const Text("Add Credits"),
-            ),
+            ShadButton(key: const Key('add-credits-button'), onPressed: onAddCredits, child: const Text("Add Credits")),
           ],
         ),
       ),
@@ -596,19 +510,13 @@ class _NavState extends State<Nav> {
   }
 
   Widget forbiddenView(BuildContext context) {
-    final isSmallDisplay = ResponsiveBreakpoints.of(
-      context,
-    ).smallerOrEqualTo("chromebook");
+    final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
 
     if (isSmallDisplay) {
       return SafeArea(
         child: Column(
           children: [
-            _NavBarTop(
-              projectId: widget.projectId,
-              projects: projects,
-              onCreateProject: onCreateProject,
-            ),
+            _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
             const Expanded(child: UserForbiddenWarning()),
           ],
         ),
@@ -622,11 +530,7 @@ class _NavState extends State<Nav> {
           child: Row(
             children: [
               Spacer(),
-              UserAvatarMenuButton(
-                projectId: widget.projectId,
-                projects: widget.projects,
-                boundaryContext: context,
-              ),
+              UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
             ],
           ),
         ),
@@ -639,17 +543,12 @@ class _NavState extends State<Nav> {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
-    final isSmallDisplay = ResponsiveBreakpoints.of(
-      context,
-    ).smallerOrEqualTo("chromebook");
+    final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final navController = Controller.ofType<NavController>(context);
 
     return SignalBuilder(
       builder: (context, _) {
-        if (!projects.state.isReady ||
-            !role.state.isReady ||
-            !isBalanceLowRes.state.isReady ||
-            !balanceRes.state.isReady) {
+        if (!projects.state.isReady || !role.state.isReady || !isBalanceLowRes.state.isReady || !balanceRes.state.isReady) {
           return const Center(child: CircularProgressIndicator());
         }
 
@@ -661,8 +560,7 @@ class _NavState extends State<Nav> {
         final userRole = role.state.value;
         final canCreateRooms = this.canCreateRooms.state.value ?? false;
         final balance = balanceRes.state.value;
-        final balanceBelowThreshold =
-            balance != null && balance.balance < balanceLowThreshold;
+        final balanceBelowThreshold = balance != null && balance.balance < balanceLowThreshold;
 
         return ControllerBuilder(
           controller: navController,
@@ -677,18 +575,8 @@ class _NavState extends State<Nav> {
                 child: Container(
                   color: cs.background,
                   child: isSmallDisplay
-                      ? mobileView(
-                          context,
-                          userRole,
-                          balanceLow,
-                          canCreateRooms,
-                        )
-                      : desktopView(
-                          context,
-                          userRole,
-                          balanceLow,
-                          canCreateRooms,
-                        ),
+                      ? mobileView(context, userRole, balanceLow, canCreateRooms)
+                      : desktopView(context, userRole, balanceLow, canCreateRooms),
                 ),
               ),
             ],
@@ -745,15 +633,11 @@ class _NavBar extends StatelessWidget {
         children: [
           const SizedBox(height: desktopPaneSecondaryControlTopOffset),
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: desktopPaneSideHorizontalInset,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
             child: SizedBox(
               height: desktopPaneSecondaryControlHeight,
               child: ShadInput(
-                decoration: ShadDecoration(
-                  color: ShadTheme.of(context).colorScheme.input,
-                ),
+                decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.input),
                 key: const Key('room-list-search-field'),
                 onChanged: setFilter,
                 placeholder: Text("Filter rooms..."),
@@ -791,18 +675,10 @@ class _NavBar extends StatelessWidget {
                 desktopPaneBottomInset,
               ),
               child: ShadButton.outline(
-                decoration: ShadDecoration(
-                  border: ShadBorder.all(
-                    color: ShadTheme.of(context).colorScheme.border,
-                  ),
-                ),
+                decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
                 backgroundColor: ShadTheme.of(context).colorScheme.background,
-                hoverBackgroundColor: ShadTheme.of(
-                  context,
-                ).colorScheme.background,
-                hoverForegroundColor: ShadTheme.of(
-                  context,
-                ).colorScheme.foreground,
+                hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
+                hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
                 key: const Key('nav-create-room-button'),
                 leading: Icon(LucideIcons.packagePlus),
                 onPressed: () => addNewRoomDialog(context),
@@ -816,11 +692,7 @@ class _NavBar extends StatelessWidget {
 }
 
 class _NavBarTop extends StatefulWidget {
-  const _NavBarTop({
-    required this.projects,
-    required this.projectId,
-    required this.onCreateProject,
-  });
+  const _NavBarTop({required this.projects, required this.projectId, required this.onCreateProject});
 
   final String? projectId;
   final Resource<List<Project>> projects;
@@ -856,23 +728,13 @@ class _NavBarTopState extends State<_NavBarTop> {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final projectList = widget.projects.state.value ?? const <Project>[];
-    final selectedProject = projectList.firstWhereOrNull(
-      (p) => p.id == widget.projectId,
-    );
-    final isSmallDisplay = ResponsiveBreakpoints.of(
-      context,
-    ).smallerOrEqualTo("chromebook");
+    final selectedProject = projectList.firstWhereOrNull((p) => p.id == widget.projectId);
+    final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final displayName = selectedProject?.name ?? "Select project";
-    final projectTitleStyle = GoogleFonts.inter(
-      fontSize: 16,
-      fontWeight: FontWeight.w600,
-      color: theme.colorScheme.foreground,
-    );
+    final projectTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: theme.colorScheme.foreground);
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: desktopPaneSideHorizontalInset,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -883,33 +745,22 @@ class _NavBarTopState extends State<_NavBarTop> {
               height: headerHeight,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final maxLabelWidth = (constraints.maxWidth - 160).clamp(
-                    80.0,
-                    320.0,
-                  );
+                  final maxLabelWidth = (constraints.maxWidth - 160).clamp(80.0, 320.0);
 
                   return Stack(
                     children: [
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: NavMainLogo(),
-                      ),
+                      const Align(alignment: Alignment.centerLeft, child: NavMainLogo()),
                       Center(
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: _switchProject,
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    maxWidth: maxLabelWidth,
-                                  ),
+                                  constraints: BoxConstraints(maxWidth: maxLabelWidth),
                                   child: Text(
                                     displayName,
                                     style: projectTitleStyle,
@@ -919,11 +770,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Icon(
-                                  LucideIcons.chevronsUpDown,
-                                  size: 20,
-                                  color: theme.colorScheme.foreground,
-                                ),
+                                Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
                               ],
                             ),
                           ),
@@ -931,11 +778,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                       ),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: UserAvatarMenuButton(
-                          projectId: widget.projectId,
-                          projects: widget.projects,
-                          boundaryContext: context,
-                        ),
+                        child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
                       ),
                     ],
                   );
@@ -957,9 +800,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                         behavior: HitTestBehavior.opaque,
                         onTap: _switchProject,
                         child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
@@ -968,17 +809,11 @@ class _NavBarTopState extends State<_NavBarTop> {
                                 child: SizedBox(
                                   width: desktopPaneSideHeaderSlotSize,
                                   height: desktopPaneSideHeaderSlotSize,
-                                  child: Center(
-                                    child: NavMainLogo(
-                                      size: desktopPaneSideHeaderSlotSize,
-                                    ),
-                                  ),
+                                  child: Center(child: NavMainLogo(size: desktopPaneSideHeaderSlotSize)),
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: desktopPaneSideHeaderVisualInset,
-                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHeaderVisualInset),
                                 child: Text(
                                   displayName,
                                   style: projectTitleStyle,
@@ -993,11 +828,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                                   width: desktopPaneSideHeaderVisualInset,
                                   child: Align(
                                     alignment: Alignment.centerRight,
-                                    child: Icon(
-                                      LucideIcons.chevronsUpDown,
-                                      size: 20,
-                                      color: theme.colorScheme.foreground,
-                                    ),
+                                    child: Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
                                   ),
                                 ),
                               ),
@@ -1025,10 +856,7 @@ class NavMainLogo extends StatelessWidget {
     return SizedBox(
       width: size ?? (kIsWeb ? 42.0 : 46.0),
       height: size ?? (kIsWeb ? 42.0 : 46.0),
-      child: fs.SvgPicture.asset(
-        'lib/assets/powerboards-brand-symbol.svg',
-        fit: BoxFit.contain,
-      ),
+      child: fs.SvgPicture.asset('lib/assets/powerboards-brand-symbol.svg', fit: BoxFit.contain),
     );
   }
 }

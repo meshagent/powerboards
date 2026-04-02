@@ -4,22 +4,16 @@ import 'package:livekit_client/livekit_client.dart' as lk;
 import 'meeting_participants.dart';
 
 class VideoRoomParticipantsBuilder extends StatefulWidget {
-  const VideoRoomParticipantsBuilder({
-    super.key,
-    required this.room,
-    required this.builder,
-  });
+  const VideoRoomParticipantsBuilder({super.key, required this.room, required this.builder});
 
   final lk.Room room;
-  final Widget Function(BuildContext context, List<lk.Participant> participants)
-  builder;
+  final Widget Function(BuildContext context, List<lk.Participant> participants) builder;
 
   @override
   State createState() => _VideoRoomParticipantsBuilderState();
 }
 
-class _VideoRoomParticipantsBuilderState
-    extends State<VideoRoomParticipantsBuilder> {
+class _VideoRoomParticipantsBuilderState extends State<VideoRoomParticipantsBuilder> {
   List<lk.Participant> participants = [];
 
   @override

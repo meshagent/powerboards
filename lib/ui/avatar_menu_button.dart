@@ -15,12 +15,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class UserAvatarMenuButton extends StatefulWidget {
-  const UserAvatarMenuButton({
-    super.key,
-    required this.projectId,
-    required this.projects,
-    this.boundaryContext,
-  });
+  const UserAvatarMenuButton({super.key, required this.projectId, required this.projects, this.boundaryContext});
   final String? projectId;
   final Resource<List<Project>> projects;
   final BuildContext? boundaryContext;
@@ -72,10 +67,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
     final email = (user?["email"] as String?)?.trim() ?? "";
     if (email.isNotEmpty) {
       final local = email.split("@").first;
-      final parts = local
-          .split(RegExp(r"[._\- ]+"))
-          .where((p) => p.isNotEmpty)
-          .toList();
+      final parts = local.split(RegExp(r"[._\- ]+")).where((p) => p.isNotEmpty).toList();
 
       if (parts.length >= 2) {
         initials = "${parts[0].characters.first}${parts[1].characters.first}";
@@ -93,12 +85,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
     final returnUrl = MeshagentConfig.current!.appUrl;
     final signOutUrl = MeshagentConfig.current!.serverUrl
         .resolve("/signout")
-        .replace(
-          queryParameters: {
-            if (MeshagentConfig.current?.appUrl != null)
-              "return_url": returnUrl.toString(),
-          },
-        );
+        .replace(queryParameters: {if (MeshagentConfig.current?.appUrl != null) "return_url": returnUrl.toString()});
 
     if (kIsWeb) {
       launchUrl(signOutUrl, webOnlyWindowName: "_self");
@@ -154,21 +141,13 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
       builder: (context, _) {
         final user = MeshagentAuth.current.getUser();
         final initials = _initialsFromUser(user);
-        final displayName =
-            ((user?["name"] as String?) ??
-                    (user?["full_name"] as String?) ??
-                    "")
-                .trim();
+        final displayName = ((user?["name"] as String?) ?? (user?["full_name"] as String?) ?? "").trim();
         final email = ((user?["email"] as String?) ?? "").trim();
-        final title = displayName.isNotEmpty
-            ? displayName
-            : (email.isNotEmpty ? email : "Account");
+        final title = displayName.isNotEmpty ? displayName : (email.isNotEmpty ? email : "Account");
 
         final projectsState = widget.projects.state;
         final projectsList = projectsState.value ?? const <Project>[];
-        final currentProject = widget.projectId == null
-            ? null
-            : projectsList.firstWhereOrNull((p) => p.id == widget.projectId);
+        final currentProject = widget.projectId == null ? null : projectsList.firstWhereOrNull((p) => p.id == widget.projectId);
         final description = currentProject?.name ?? "Signed in";
 
         final entries = <AppMenuEntry>[
@@ -192,12 +171,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
               icon: LucideIcons.users,
               onPressed: _goToAccounts,
             ),
-          AppMenuEntry(
-            title: "Sign out",
-            description: "Sign out of your account.",
-            icon: LucideIcons.logOut,
-            onPressed: _signOut,
-          ),
+          AppMenuEntry(title: "Sign out", description: "Sign out of your account.", icon: LucideIcons.logOut, onPressed: _signOut),
         ];
 
         return AppContextMenuButton(
@@ -223,12 +197,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
 }
 
 class UserAvatarCircle extends StatelessWidget {
-  const UserAvatarCircle({
-    super.key,
-    required this.initials,
-    this.size = 40,
-    this.hovered = false,
-  });
+  const UserAvatarCircle({super.key, required this.initials, this.size = 40, this.hovered = false});
 
   final String initials;
   final double size;
@@ -241,8 +210,7 @@ class UserAvatarCircle extends StatelessWidget {
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final buttonTheme = theme.outlineButtonTheme;
-    final hoverBackgroundColor =
-        buttonTheme.hoverBackgroundColor ?? avatarAccent;
+    final hoverBackgroundColor = buttonTheme.hoverBackgroundColor ?? avatarAccent;
     final backgroundColor = avatarAccent;
 
     return Container(
@@ -252,10 +220,7 @@ class UserAvatarCircle extends StatelessWidget {
       decoration: BoxDecoration(
         shape: .circle,
         color: hovered ? hoverBackgroundColor : backgroundColor,
-        border: .all(
-          color: cs.border,
-          strokeAlign: BorderSide.strokeAlignOutside,
-        ),
+        border: .all(color: cs.border, strokeAlign: BorderSide.strokeAlignOutside),
       ),
       child: Text(
         initials,

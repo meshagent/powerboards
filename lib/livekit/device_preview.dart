@@ -37,9 +37,7 @@ class _DeviceSettings extends StatefulWidget {
 }
 
 class _DeviceSettingsState extends State<_DeviceSettings> {
-  static const Duration _minimumLobbySwitchPendingDuration = Duration(
-    milliseconds: 350,
-  );
+  static const Duration _minimumLobbySwitchPendingDuration = Duration(milliseconds: 350);
   bool _loaded = false;
   bool _audioOn = false;
   bool _videoOn = false;
@@ -57,8 +55,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
   bool _isExpectedMediaAccessError(Object error) {
     final message = '$error';
-    return message.contains('NotFoundError: Requested device not found') ||
-        message.contains('NotAllowedError: Permission denied');
+    return message.contains('NotFoundError: Requested device not found') || message.contains('NotAllowedError: Permission denied');
   }
 
   String _describeVideoToggleError(Object error) {
@@ -83,37 +80,25 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     return 'Unable to change microphone state: $message';
   }
 
-  Future<void> _runWithMinimumProcessingDuration(
-    Future<void> Function() action,
-  ) async {
+  Future<void> _runWithMinimumProcessingDuration(Future<void> Function() action) async {
     final startedAt = DateTime.now();
     await action();
-    final remaining =
-        _minimumLobbySwitchPendingDuration -
-        DateTime.now().difference(startedAt);
+    final remaining = _minimumLobbySwitchPendingDuration - DateTime.now().difference(startedAt);
     if (remaining > Duration.zero) {
       await Future<void>.delayed(remaining);
     }
   }
 
   void _showUnavailableCameraToast() {
-    ShadToaster.maybeOf(context)?.show(
-      ShadToast.destructive(
-        description: const Text(
-          'Camera is unavailable. Check your device settings.',
-        ),
-      ),
-    );
+    ShadToaster.maybeOf(
+      context,
+    )?.show(ShadToast.destructive(description: const Text('Camera is unavailable. Check your device settings.')));
   }
 
   void _showUnavailableMicrophoneToast() {
-    ShadToaster.maybeOf(context)?.show(
-      ShadToast.destructive(
-        description: const Text(
-          'Microphone is unavailable. Check your device settings.',
-        ),
-      ),
-    );
+    ShadToaster.maybeOf(
+      context,
+    )?.show(ShadToast.destructive(description: const Text('Microphone is unavailable. Check your device settings.')));
   }
 
   @override
@@ -160,9 +145,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     _audioDeviceId = device?.deviceId;
     await _runWithMinimumProcessingDuration(_enableAudio);
     if (_audioDeviceId == device?.deviceId && _audio == null) {
-      throw StateError(
-        'Unable to switch microphone to ${device?.deviceId ?? "default"}',
-      );
+      throw StateError('Unable to switch microphone to ${device?.deviceId ?? "default"}');
     }
   }
 
@@ -170,9 +153,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     _videoDeviceId = device?.deviceId;
     await _runWithMinimumProcessingDuration(_enableVideo);
     if (_videoDeviceId == device?.deviceId && _video == null) {
-      throw StateError(
-        'Unable to switch camera to ${device?.deviceId ?? "default"}',
-      );
+      throw StateError('Unable to switch camera to ${device?.deviceId ?? "default"}');
     }
   }
 
@@ -189,15 +170,12 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
   Future<void> _restoreAudioOutputSelection() async {
     final preferredAudioOutputDeviceId = _audioOutputDeviceId;
-    if (preferredAudioOutputDeviceId == null ||
-        preferredAudioOutputDeviceId.isEmpty) {
+    if (preferredAudioOutputDeviceId == null || preferredAudioOutputDeviceId.isEmpty) {
       return;
     }
 
     final audioOutputs = await Hardware.instance.audioOutputs();
-    final preferredAudioOutput = audioOutputs.firstWhereOrNull(
-      (device) => device.deviceId == preferredAudioOutputDeviceId,
-    );
+    final preferredAudioOutput = audioOutputs.firstWhereOrNull((device) => device.deviceId == preferredAudioOutputDeviceId);
     if (preferredAudioOutput == null) {
       return;
     }
@@ -253,9 +231,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
       }
       await existingTrack?.dispose();
       try {
-        final track = await LocalAudioTrack.create(
-          AudioCaptureOptions(deviceId: _audioDeviceId),
-        );
+        final track = await LocalAudioTrack.create(AudioCaptureOptions(deviceId: _audioDeviceId));
         if (mounted) {
           setState(() {
             _audio = track;
@@ -270,11 +246,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             _audio = null;
           });
           if (showErrors) {
-            ShadToaster.maybeOf(context)?.show(
-              ShadToast.destructive(
-                description: Text(_describeAudioToggleError(error)),
-              ),
-            );
+            ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeAudioToggleError(error))));
           }
         }
         if (!_isExpectedMediaAccessError(error)) {
@@ -298,9 +270,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
       }
       await existingTrack?.dispose();
       try {
-        final track = await LocalVideoTrack.createCameraTrack(
-          CameraCaptureOptions(deviceId: _videoDeviceId),
-        );
+        final track = await LocalVideoTrack.createCameraTrack(CameraCaptureOptions(deviceId: _videoDeviceId));
         if (mounted) {
           setState(() {
             _video = track;
@@ -315,11 +285,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             _video = null;
           });
           if (showErrors) {
-            ShadToaster.maybeOf(context)?.show(
-              ShadToast.destructive(
-                description: Text(_describeVideoToggleError(error)),
-              ),
-            );
+            ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeVideoToggleError(error))));
           }
         }
         if (!_isExpectedMediaAccessError(error)) {
@@ -403,24 +369,15 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         : audioOn
         ? "Turn off microphone"
         : "Turn on microphone";
-    final cameraTooltipText = deviceManager.canTurnOnCamera
-        ? cameraStatusText
-        : "Camera disabled";
-    final audioTooltipText = deviceManager.canTurnOnMicrophone
-        ? audioStatusText
-        : "Microphone disabled";
+    final cameraTooltipText = deviceManager.canTurnOnCamera ? cameraStatusText : "Camera disabled";
+    final audioTooltipText = deviceManager.canTurnOnMicrophone ? audioStatusText : "Microphone disabled";
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final isMobile = MediaQuery.sizeOf(context).width < 600;
-        final statusTextStyle = GoogleFonts.inter(
-          fontSize: isMobile ? 17.6 : 16,
-          fontWeight: FontWeight.w600,
-        );
+        final statusTextStyle = GoogleFonts.inter(fontSize: isMobile ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
-        final maxHeight = constraints.hasBoundedHeight
-            ? constraints.maxHeight - (isMobile ? 190 : 150)
-            : double.infinity;
+        final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - (isMobile ? 190 : 150) : double.infinity;
 
         // Cap the width to 800px - large monitors preview overwhelming
         double width = maxWidth > 800 ? 800 : maxWidth;
@@ -438,9 +395,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             onChangeAudioOutput: _selectAudioOutput,
             selectedVideoInputDeviceId: () => _videoDeviceId,
             selectedAudioInputDeviceId: () => _audioDeviceId,
-            selectedAudioOutputDeviceId: () =>
-                _audioOutputDeviceId ??
-                Hardware.instance.selectedAudioOutput?.deviceId,
+            selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
             presentation: ChangeDeviceButtonPresentation.dialog,
             renderButton: (onPressed) {
               if (showLabel) {
@@ -453,10 +408,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
               return Tooltip(
                 message: "Device settings",
-                child: ShadIconButton.outline(
-                  onPressed: onPressed,
-                  icon: const Icon(LucideIcons.settings),
-                ),
+                child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
               );
             },
           );
@@ -480,9 +432,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                     audioOn ? _disableAudio() : _enableAudio(showErrors: true);
                   }
                 : null,
-            icon: (audioOn || audioPending)
-                ? LucideIcons.mic
-                : LucideIcons.micOff,
+            icon: (audioOn || audioPending) ? LucideIcons.mic : LucideIcons.micOff,
           ),
           RoomToolbarButton(
             text: cameraTooltipText,
@@ -501,29 +451,18 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                     videoOn ? _disableVideo() : _enableVideo(showErrors: true);
                   }
                 : null,
-            icon: (videoOn || videoPending)
-                ? LucideIcons.video
-                : LucideIcons.videoOff,
+            icon: (videoOn || videoPending) ? LucideIcons.video : LucideIcons.videoOff,
           ),
         ];
 
-        final previewSectionControls = <Widget>[
-          ...previewControls,
-          if (isMobile) buildDeviceSettingsButton(showLabel: false),
-        ];
+        final previewSectionControls = <Widget>[...previewControls, if (isMobile) buildDeviceSettingsButton(showLabel: false)];
 
         final previewSection = Column(
           mainAxisSize: MainAxisSize.min,
           spacing: 20,
           children: [
             Container(
-              child: _loaded
-                  ? Text(
-                      title,
-                      style: statusTextStyle,
-                      textAlign: TextAlign.center,
-                    )
-                  : null,
+              child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
             ),
             SizedBox(
               height: height,
@@ -532,12 +471,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 borderRadius: BorderRadius.circular(5),
                 child: Container(
                   color: const Color(0xFF222222),
-                  foregroundDecoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: _video != null
-                      ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover)
-                      : null,
+                  foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+                  child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
                 ),
               ),
             ),
@@ -559,9 +494,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             children: [
               Expanded(child: Center(child: previewSection)),
               Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.viewPaddingOf(context).bottom + 12,
-                ),
+                padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   spacing: 12,
@@ -594,13 +527,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           spacing: 20,
           children: [
             Container(
-              child: _loaded
-                  ? Text(
-                      title,
-                      style: statusTextStyle,
-                      textAlign: TextAlign.center,
-                    )
-                  : null,
+              child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
             ),
             SizedBox(
               height: height,
@@ -609,12 +536,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 borderRadius: BorderRadius.circular(5),
                 child: Container(
                   color: const Color(0xFF222222),
-                  foregroundDecoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: _video != null
-                      ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover)
-                      : null,
+                  foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+                  child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
                 ),
               ),
             ),
@@ -625,18 +548,11 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                   final compactActionButtons = constraints.maxWidth < 560;
                   final actionButtonSpacing = compactActionButtons ? 6.0 : 8.0;
                   final showDesktopDeviceSettingsLabel = !compactActionButtons;
-                  final footerControls = [
-                    ...previewControls,
-                    buildDeviceSettingsButton(
-                      showLabel: showDesktopDeviceSettingsLabel,
-                    ),
-                  ];
+                  final footerControls = [...previewControls, buildDeviceSettingsButton(showLabel: showDesktopDeviceSettingsLabel)];
 
                   Widget buildCancelButton() {
                     final button = ShadButton.outline(
-                      padding: compactActionButtons
-                          ? const EdgeInsets.symmetric(horizontal: 12)
-                          : null,
+                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
                       onPressed: () {
                         widget.onCancel?.call();
                       },
@@ -652,9 +568,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
                   Widget buildJoinButton() {
                     final button = ShadButton.destructive(
-                      padding: compactActionButtons
-                          ? const EdgeInsets.symmetric(horizontal: 12)
-                          : null,
+                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
                       onPressed: audioPending || videoPending
                           ? null
                           : () {
@@ -680,23 +594,19 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                         runSpacing: 8,
                         children: footerControls,
                       ),
-                      if (widget.onCancel != null || widget.onJoin != null)
-                        SizedBox(width: compactActionButtons ? 8 : 12),
+                      if (widget.onCancel != null || widget.onJoin != null) SizedBox(width: compactActionButtons ? 8 : 12),
                       if (widget.onCancel != null || widget.onJoin != null)
                         Expanded(
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               if (widget.onCancel != null) buildCancelButton(),
-                              if (widget.onCancel != null &&
-                                  widget.onJoin != null)
-                                SizedBox(width: actionButtonSpacing),
+                              if (widget.onCancel != null && widget.onJoin != null) SizedBox(width: actionButtonSpacing),
                               if (widget.onJoin != null) buildJoinButton(),
                             ],
                           ),
                         ),
-                      if (widget.onCancel == null && widget.onJoin == null)
-                        const Spacer(),
+                      if (widget.onCancel == null && widget.onJoin == null) const Spacer(),
                     ],
                   );
                 },

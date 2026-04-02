@@ -18,8 +18,7 @@ class AgentConversationDescriptor {
   });
 
   const AgentConversationDescriptor.chat({
-    ChatThreadDisplayMode chatThreadDisplayMode =
-        ChatThreadDisplayMode.singleThread,
+    ChatThreadDisplayMode chatThreadDisplayMode = ChatThreadDisplayMode.singleThread,
     String? threadDir,
     String? threadListPath,
   }) : this._(
@@ -29,11 +28,9 @@ class AgentConversationDescriptor {
          threadListPath: threadListPath,
        );
 
-  const AgentConversationDescriptor.voiceOnly()
-    : this._(kind: AgentConversationKind.voiceOnly);
+  const AgentConversationDescriptor.voiceOnly() : this._(kind: AgentConversationKind.voiceOnly);
 
-  const AgentConversationDescriptor.meeting()
-    : this._(kind: AgentConversationKind.meeting);
+  const AgentConversationDescriptor.meeting() : this._(kind: AgentConversationKind.meeting);
 
   final AgentConversationKind kind;
   final ChatThreadDisplayMode chatThreadDisplayMode;
@@ -43,9 +40,7 @@ class AgentConversationDescriptor {
   bool get isChat => kind == AgentConversationKind.chat;
   bool get isVoiceOnly => kind == AgentConversationKind.voiceOnly;
   bool get isMeeting => kind == AgentConversationKind.meeting;
-  bool get isMultiThreadChat =>
-      isChat &&
-      chatThreadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
+  bool get isMultiThreadChat => isChat && chatThreadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
 }
 
 String developmentAgentRouteId(String participantName) {
@@ -82,9 +77,7 @@ String? legacyDevelopmentAgentParticipantIdFromRoute(String routeId) {
     return null;
   }
 
-  final participantId = routeId
-      .substring(_legacyDevelopmentAgentRoutePrefix.length)
-      .trim();
+  final participantId = routeId.substring(_legacyDevelopmentAgentRoutePrefix.length).trim();
   if (participantId.isEmpty) {
     return null;
   }
@@ -157,9 +150,7 @@ String? _normalizedThreadDir(String? threadDir) {
     return null;
   }
 
-  return trimmed.endsWith("/")
-      ? trimmed.substring(0, trimmed.length - 1)
-      : trimmed;
+  return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length - 1) : trimmed;
 }
 
 String? _threadListPathFromThreadDir(String? threadDir) {
@@ -181,9 +172,7 @@ String? participantThreadDir(RemoteParticipant participant) {
 }
 
 String? participantThreadListPath(RemoteParticipant participant) {
-  final threadListPath = _normalizedAnnotationString(
-    participant.getAttribute("meshagent.chatbot.thread-list"),
-  );
+  final threadListPath = _normalizedAnnotationString(participant.getAttribute("meshagent.chatbot.thread-list"));
   if (threadListPath != null) {
     return threadListPath;
   }
@@ -191,18 +180,13 @@ String? participantThreadListPath(RemoteParticipant participant) {
   return _threadListPathFromThreadDir(participantThreadDir(participant));
 }
 
-AgentConversationDescriptor? participantConversationDescriptor(
-  RemoteParticipant participant,
-) {
+AgentConversationDescriptor? participantConversationDescriptor(RemoteParticipant participant) {
   final supportsVoice = participantSupportsVoice(participant);
   final supportsChatOverride = participantSupportsChatOverride(participant);
   final threadDir = participantThreadDir(participant);
   final threadListPath = participantThreadListPath(participant);
   final hasThreadAnnotations =
-      _normalizedAnnotationString(
-            participant.getAttribute("meshagent.chatbot.threading"),
-          ) !=
-          null ||
+      _normalizedAnnotationString(participant.getAttribute("meshagent.chatbot.threading")) != null ||
       threadDir != null ||
       threadListPath != null;
 
@@ -216,9 +200,7 @@ AgentConversationDescriptor? participantConversationDescriptor(
 
   if (hasThreadAnnotations || participantSupportsChat(participant)) {
     return AgentConversationDescriptor.chat(
-      chatThreadDisplayMode: chatThreadDisplayModeFromAnnotation(
-        participant.getAttribute("meshagent.chatbot.threading"),
-      ),
+      chatThreadDisplayMode: chatThreadDisplayModeFromAnnotation(participant.getAttribute("meshagent.chatbot.threading")),
       threadDir: threadDir,
       threadListPath: threadListPath,
     );
@@ -232,18 +214,11 @@ AgentConversationDescriptor? participantConversationDescriptor(
 }
 
 String? serviceThreadDir(ServiceSpec service) {
-  return _normalizedThreadDir(
-    service.agents.firstOrNull?.annotations["meshagent.chatbot.thread-dir"],
-  );
+  return _normalizedThreadDir(service.agents.firstOrNull?.annotations["meshagent.chatbot.thread-dir"]);
 }
 
-String? serviceThreadListPath(
-  ServiceSpec service, {
-  Iterable<RemoteParticipant> remoteParticipants = const [],
-}) {
-  final annotationPath = _normalizedAnnotationString(
-    service.agents.firstOrNull?.annotations["meshagent.chatbot.thread-list"],
-  );
+String? serviceThreadListPath(ServiceSpec service, {Iterable<RemoteParticipant> remoteParticipants = const []}) {
+  final annotationPath = _normalizedAnnotationString(service.agents.firstOrNull?.annotations["meshagent.chatbot.thread-list"]);
   if (annotationPath != null) {
     return annotationPath;
   }
@@ -286,14 +261,9 @@ AgentConversationDescriptor? serviceConversationDescriptor(
   }
 
   return AgentConversationDescriptor.chat(
-    chatThreadDisplayMode: chatThreadDisplayModeFromAnnotation(
-      service.agents.firstOrNull?.annotations["meshagent.chatbot.threading"],
-    ),
+    chatThreadDisplayMode: chatThreadDisplayModeFromAnnotation(service.agents.firstOrNull?.annotations["meshagent.chatbot.threading"]),
     threadDir: serviceThreadDir(service),
-    threadListPath: serviceThreadListPath(
-      service,
-      remoteParticipants: remoteParticipants,
-    ),
+    threadListPath: serviceThreadListPath(service, remoteParticipants: remoteParticipants),
   );
 }
 
@@ -302,6 +272,5 @@ bool isChatOrVoiceBotParticipant(RemoteParticipant participant) {
     return false;
   }
 
-  return participantSupportsVoice(participant) ||
-      participantSupportsChat(participant);
+  return participantSupportsVoice(participant) || participantSupportsChat(participant);
 }

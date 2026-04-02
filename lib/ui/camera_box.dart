@@ -24,9 +24,7 @@ class CameraBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = ColoredBox(
       color: const Color(0xFF222222),
-      child: interactive
-          ? InteractiveViewer2(minScale: 1, maxScale: 5, child: camera)
-          : camera,
+      child: interactive ? InteractiveViewer2(minScale: 1, maxScale: 5, child: camera) : camera,
     );
 
     return Stack(
@@ -38,10 +36,7 @@ class CameraBox extends StatelessWidget {
           alignment: overlayAlignment,
           child: Padding(
             padding: const .all(5),
-            child: ParticipantOverlay(
-              participant: participant,
-              showName: showName,
-            ),
+            child: ParticipantOverlay(participant: participant, showName: showName),
           ),
         ),
       ],

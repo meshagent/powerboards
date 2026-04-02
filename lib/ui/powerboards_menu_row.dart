@@ -9,21 +9,11 @@ const double powerboardsMenuRowItemGap = 14;
 const double powerboardsMenuRowTrailingGap = 12;
 
 TextStyle powerboardsMenuRowTitleStyle() {
-  return GoogleFonts.inter(
-    fontSize: 16,
-    height: 1.2,
-    fontWeight: FontWeight.w600,
-    color: shadForeground,
-  );
+  return GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600, color: shadForeground);
 }
 
 TextStyle powerboardsMenuRowDescriptionStyle() {
-  return GoogleFonts.inter(
-    fontSize: 14,
-    height: 1.2,
-    fontWeight: FontWeight.w500,
-    color: shadSecondaryForeground,
-  );
+  return GoogleFonts.inter(fontSize: 14, height: 1.2, fontWeight: FontWeight.w500, color: shadSecondaryForeground);
 }
 
 class PowerboardsMenuRow extends StatelessWidget {
@@ -60,15 +50,10 @@ class PowerboardsMenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleStyle = powerboardsMenuRowTitleStyle().copyWith(
-      color: titleColor,
-    );
-    final descriptionStyle = powerboardsMenuRowDescriptionStyle().copyWith(
-      color: descriptionColor,
-    );
+    final titleStyle = powerboardsMenuRowTitleStyle().copyWith(color: titleColor);
+    final descriptionStyle = powerboardsMenuRowDescriptionStyle().copyWith(color: descriptionColor);
     final resolvedDescription = description?.trim();
-    final showDescription =
-        resolvedDescription != null && resolvedDescription.isNotEmpty;
+    final showDescription = resolvedDescription != null && resolvedDescription.isNotEmpty;
 
     Widget? leadingWidget = leading;
     if (leadingWidget != null || reserveLeadingSpace) {
@@ -93,19 +78,10 @@ class PowerboardsMenuRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    title,
-                    style: titleStyle,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(title, style: titleStyle, overflow: TextOverflow.ellipsis),
                   if (showDescription) ...[
                     const SizedBox(height: 6),
-                    Text(
-                      resolvedDescription,
-                      style: descriptionStyle,
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: descriptionMaxLines,
-                    ),
+                    Text(resolvedDescription, style: descriptionStyle, overflow: TextOverflow.ellipsis, maxLines: descriptionMaxLines),
                   ],
                 ],
               ),

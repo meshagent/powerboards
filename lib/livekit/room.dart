@@ -22,13 +22,7 @@ class ConnectionInfo {
   String accessToken = "";
 
   Map<String, dynamic> toJSON() {
-    return <String, dynamic>{
-      "provider": provider,
-      "device": device,
-      "room": room,
-      "username": username,
-      "accessToken": accessToken,
-    };
+    return <String, dynamic>{"provider": provider, "device": device, "room": room, "username": username, "accessToken": accessToken};
   }
 }
 
@@ -42,8 +36,7 @@ class PendingLocalMediaState extends ChangeNotifier {
   bool get microphonePending => _microphonePending;
 
   void setCameraPending(bool value, {bool awaitEnableConfirmation = false}) {
-    if (_cameraPending == value &&
-        _cameraAwaitingEnableConfirmation == awaitEnableConfirmation) {
+    if (_cameraPending == value && _cameraAwaitingEnableConfirmation == awaitEnableConfirmation) {
       return;
     }
 
@@ -52,12 +45,8 @@ class PendingLocalMediaState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setMicrophonePending(
-    bool value, {
-    bool awaitEnableConfirmation = false,
-  }) {
-    if (_microphonePending == value &&
-        _microphoneAwaitingEnableConfirmation == awaitEnableConfirmation) {
+  void setMicrophonePending(bool value, {bool awaitEnableConfirmation = false}) {
+    if (_microphonePending == value && _microphoneAwaitingEnableConfirmation == awaitEnableConfirmation) {
       return;
     }
 
@@ -74,19 +63,15 @@ class PendingLocalMediaState extends ChangeNotifier {
   }) {
     if (_cameraPending == cameraPending &&
         _microphonePending == microphonePending &&
-        _cameraAwaitingEnableConfirmation ==
-            (cameraPending && cameraAwaitEnableConfirmation) &&
-        _microphoneAwaitingEnableConfirmation ==
-            (microphonePending && microphoneAwaitEnableConfirmation)) {
+        _cameraAwaitingEnableConfirmation == (cameraPending && cameraAwaitEnableConfirmation) &&
+        _microphoneAwaitingEnableConfirmation == (microphonePending && microphoneAwaitEnableConfirmation)) {
       return;
     }
 
     _cameraPending = cameraPending;
     _microphonePending = microphonePending;
-    _cameraAwaitingEnableConfirmation =
-        cameraPending && cameraAwaitEnableConfirmation;
-    _microphoneAwaitingEnableConfirmation =
-        microphonePending && microphoneAwaitEnableConfirmation;
+    _cameraAwaitingEnableConfirmation = cameraPending && cameraAwaitEnableConfirmation;
+    _microphoneAwaitingEnableConfirmation = microphonePending && microphoneAwaitEnableConfirmation;
     notifyListeners();
   }
 
@@ -143,18 +128,12 @@ class VideoRoomModel extends InheritedWidget {
 
 extension PowerboardsParticipants on lk.Room {
   lk.RemoteParticipant? get agent {
-    return remoteParticipants.values
-        .where((x) => x.identity.endsWith(".agent"))
-        .firstOrNull;
+    return remoteParticipants.values.where((x) => x.identity.endsWith(".agent")).firstOrNull;
   }
 }
 
-lk.LocalTrackPublication<lk.LocalVideoTrack>? _cameraPublication(
-  lk.LocalParticipant? participant,
-) {
-  final publication = participant?.getTrackPublicationBySource(
-    lk.TrackSource.camera,
-  );
+lk.LocalTrackPublication<lk.LocalVideoTrack>? _cameraPublication(lk.LocalParticipant? participant) {
+  final publication = participant?.getTrackPublicationBySource(lk.TrackSource.camera);
   if (publication is! lk.LocalTrackPublication<lk.LocalVideoTrack>) {
     return null;
   }
@@ -163,13 +142,7 @@ lk.LocalTrackPublication<lk.LocalVideoTrack>? _cameraPublication(
 }
 
 class VideoRoomProvider extends StatefulWidget {
-  const VideoRoomProvider({
-    super.key,
-    required this.room,
-    required this.chatID,
-    required this.pendingLocalMedia,
-    required this.child,
-  });
+  const VideoRoomProvider({super.key, required this.room, required this.chatID, required this.pendingLocalMedia, required this.child});
 
   final lk.Room? room;
   final String chatID;
@@ -226,8 +199,7 @@ class VideoRoomProviderState extends State<VideoRoomProvider> {
     }
     activeSpeakers.insert(0, participant);
 
-    for (var participant
-        in activeSpeakers.where((x) => x.isDisposed).toList()) {
+    for (var participant in activeSpeakers.where((x) => x.isDisposed).toList()) {
       activeSpeakers.remove(participant);
     }
 
@@ -259,11 +231,7 @@ class VideoRoomProviderState extends State<VideoRoomProvider> {
 }
 
 class VideoChatConnectionConfiguration {
-  VideoChatConnectionConfiguration({
-    required this.chatID,
-    this.breakout,
-    this.agent,
-  });
+  VideoChatConnectionConfiguration({required this.chatID, this.breakout, this.agent});
 
   final String chatID;
   final String? breakout;
@@ -271,11 +239,7 @@ class VideoChatConnectionConfiguration {
 }
 
 class VideoChatConnection extends StatefulWidget {
-  const VideoChatConnection({
-    super.key,
-    required this.child,
-    this.configuration,
-  });
+  const VideoChatConnection({super.key, required this.child, this.configuration});
 
   final Widget child;
 
@@ -356,9 +320,7 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
           debugPrint("no local participant");
         }
 
-        await room.disconnect().whenComplete(() => room.dispose()).catchError((
-          err,
-        ) {
+        await room.disconnect().whenComplete(() => room.dispose()).catchError((err) {
           debugPrint("unable to disconnect $err");
         });
       });
@@ -415,12 +377,10 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
     }
 
     final localParticipant = _observedLocalParticipant;
-    if (pendingLocalMedia._cameraAwaitingEnableConfirmation &&
-        (localParticipant?.isCameraEnabled() ?? false)) {
+    if (pendingLocalMedia._cameraAwaitingEnableConfirmation && (localParticipant?.isCameraEnabled() ?? false)) {
       pendingLocalMedia.setCameraPending(false);
     }
-    if (pendingLocalMedia._microphoneAwaitingEnableConfirmation &&
-        (localParticipant?.isMicrophoneEnabled() ?? false)) {
+    if (pendingLocalMedia._microphoneAwaitingEnableConfirmation && (localParticipant?.isMicrophoneEnabled() ?? false)) {
       pendingLocalMedia.setMicrophonePending(false);
     }
   }
@@ -461,9 +421,7 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
     bool audio = true,
     required String? agentID,
   }) async {
-    final info = await roomClient.livekit.getConnectionInfo(
-      breakoutRoom: breakoutRoom,
-    );
+    final info = await roomClient.livekit.getConnectionInfo(breakoutRoom: breakoutRoom);
 
     return await _setRoom(
       info.url,
@@ -492,12 +450,9 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
 
       if (room != null) {
         pendingConnections = pendingConnections.whenComplete(
-          () async => await room
-              .disconnect()
-              .whenComplete(() => room.dispose())
-              .catchError((err) {
-                debugPrint("unable to disconnect $err");
-              }),
+          () async => await room.disconnect().whenComplete(() => room.dispose()).catchError((err) {
+            debugPrint("unable to disconnect $err");
+          }),
         );
       }
 
@@ -518,19 +473,10 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
       final roomOptions = lk.RoomOptions(
         adaptiveStream: true,
         dynacast: true,
-        defaultScreenShareCaptureOptions: const lk.ScreenShareCaptureOptions(
-          useiOSBroadcastExtension: true,
-          preferCurrentTab: false,
-        ),
-        defaultCameraCaptureOptions: lk.CameraCaptureOptions(
-          deviceId: preferedVideoDeviceId,
-        ),
-        defaultAudioCaptureOptions: lk.AudioCaptureOptions(
-          deviceId: preferedAudioInputDeviceId,
-        ),
-        defaultAudioOutputOptions: lk.AudioOutputOptions(
-          deviceId: preferedAudioOutputDeviceId,
-        ),
+        defaultScreenShareCaptureOptions: const lk.ScreenShareCaptureOptions(useiOSBroadcastExtension: true, preferCurrentTab: false),
+        defaultCameraCaptureOptions: lk.CameraCaptureOptions(deviceId: preferedVideoDeviceId),
+        defaultAudioCaptureOptions: lk.AudioCaptureOptions(deviceId: preferedAudioInputDeviceId),
+        defaultAudioOutputOptions: lk.AudioOutputOptions(deviceId: preferedAudioOutputDeviceId),
       );
 
       const connectOptions = lk.ConnectOptions(
@@ -590,11 +536,7 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
 
       pendingConnections = pendingConnections.whenComplete(() async {
         try {
-          await room.connect(
-            url,
-            token,
-            fastConnectOptions: fastConnectOptions,
-          );
+          await room.connect(url, token, fastConnectOptions: fastConnectOptions);
         } catch (error) {
           pendingLocalMedia.clear();
           if (!completer.isCompleted) {
@@ -615,9 +557,7 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
               if (!isVideoDisabled) {
                 try {
                   await room.localParticipant!.setCameraEnabled(true);
-                  final cameraPublication = _cameraPublication(
-                    room.localParticipant,
-                  );
+                  final cameraPublication = _cameraPublication(room.localParticipant);
                   if (cameraPublication?.muted == true) {
                     debugPrint("camera was not enabled, restarting");
                     await cameraPublication?.track?.restartTrack();
@@ -660,12 +600,7 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
   @override
   Widget build(BuildContext context) {
     return ShadToaster(
-      child: VideoRoomProvider(
-        room: room,
-        chatID: roomSID ?? '',
-        pendingLocalMedia: pendingLocalMedia,
-        child: widget.child,
-      ),
+      child: VideoRoomProvider(room: room, chatID: roomSID ?? '', pendingLocalMedia: pendingLocalMedia, child: widget.child),
     );
   }
 }
@@ -753,11 +688,7 @@ class _CameraToggleState extends State<CameraToggle> {
     try {
       await local.setCameraEnabled(value);
     } catch (error) {
-      toaster?.show(
-        ShadToast.destructive(
-          description: Text(_describeCameraToggleError(error)),
-        ),
-      );
+      toaster?.show(ShadToast.destructive(description: Text(_describeCameraToggleError(error))));
     } finally {
       if (mounted) {
         setState(() {
@@ -788,9 +719,7 @@ class _CameraToggleState extends State<CameraToggle> {
       offForeground: Colors.white,
       icon: showEnabled ? LucideIcons.video : LucideIcons.videoOff,
       loading: showPending,
-      onPressed: local == null || _processing || showPending
-          ? null
-          : () => unawaited(_toggleCamera(local, !state)),
+      onPressed: local == null || _processing || showPending ? null : () => unawaited(_toggleCamera(local, !state)),
     );
   }
 }
@@ -878,11 +807,7 @@ class _MicToggleState extends State<MicToggle> {
     try {
       await local.setMicrophoneEnabled(value);
     } catch (error) {
-      toaster?.show(
-        ShadToast.destructive(
-          description: Text(_describeMicrophoneToggleError(error)),
-        ),
-      );
+      toaster?.show(ShadToast.destructive(description: Text(_describeMicrophoneToggleError(error))));
     } finally {
       if (mounted) {
         setState(() {
@@ -913,9 +838,7 @@ class _MicToggleState extends State<MicToggle> {
       offForeground: Colors.white,
       icon: showEnabled ? LucideIcons.mic : LucideIcons.micOff,
       loading: showPending,
-      onPressed: local == null || _processing || showPending
-          ? null
-          : () => unawaited(_toggleMicrophone(local, !state)),
+      onPressed: local == null || _processing || showPending ? null : () => unawaited(_toggleMicrophone(local, !state)),
     );
   }
 }
@@ -927,25 +850,18 @@ class ChangeSettings extends StatelessWidget {
 
   final String? kind;
 
-  Future<void> _runWithMinimumPendingDuration(
-    Future<void> Function() action,
-  ) async {
+  Future<void> _runWithMinimumPendingDuration(Future<void> Function() action) async {
     final startedAt = DateTime.now();
     await action();
-    final remaining =
-        _minimumPendingDuration - DateTime.now().difference(startedAt);
+    final remaining = _minimumPendingDuration - DateTime.now().difference(startedAt);
     if (remaining > Duration.zero) {
       await Future<void>.delayed(remaining);
     }
   }
 
-  Future<void> _runCameraDeviceSwitch(
-    BuildContext context,
-    Future<void> Function() action,
-  ) async {
+  Future<void> _runCameraDeviceSwitch(BuildContext context, Future<void> Function() action) async {
     final model = VideoRoomModel.maybeOf(context);
-    final shouldShowPending =
-        model?.localParticipant?.isCameraEnabled() ?? false;
+    final shouldShowPending = model?.localParticipant?.isCameraEnabled() ?? false;
     if (shouldShowPending) {
       model?.pendingLocalMedia.setCameraPending(true);
     }
@@ -959,13 +875,9 @@ class ChangeSettings extends StatelessWidget {
     }
   }
 
-  Future<void> _runMicrophoneDeviceSwitch(
-    BuildContext context,
-    Future<void> Function() action,
-  ) async {
+  Future<void> _runMicrophoneDeviceSwitch(BuildContext context, Future<void> Function() action) async {
     final model = VideoRoomModel.maybeOf(context);
-    final shouldShowPending =
-        model?.localParticipant?.isMicrophoneEnabled() ?? false;
+    final shouldShowPending = model?.localParticipant?.isMicrophoneEnabled() ?? false;
     if (shouldShowPending) {
       model?.pendingLocalMedia.setMicrophonePending(true);
     }
@@ -979,10 +891,7 @@ class ChangeSettings extends StatelessWidget {
     }
   }
 
-  Future<void> _selectVideoInput(
-    BuildContext context,
-    lk.MediaDevice device,
-  ) async {
+  Future<void> _selectVideoInput(BuildContext context, lk.MediaDevice device) async {
     final room = VideoRoomModel.maybeOf(context)?.room;
     final track = _cameraPublication(room?.localParticipant)?.track;
 
@@ -991,27 +900,16 @@ class ChangeSettings extends StatelessWidget {
 
       // workaround for livekit client issue - switchCamera not called by room.setVideoInputDevice
       // https://github.com/livekit/client-sdk-flutter/issues/863
-      await track?.restartTrack(
-        lk.CameraCaptureOptions(deviceId: device.deviceId),
-      );
+      await track?.restartTrack(lk.CameraCaptureOptions(deviceId: device.deviceId));
     });
   }
 
-  Future<void> _selectAudioInput(
-    BuildContext context,
-    lk.MediaDevice device,
-  ) async {
+  Future<void> _selectAudioInput(BuildContext context, lk.MediaDevice device) async {
     final room = VideoRoomModel.maybeOf(context)?.room;
-    await _runMicrophoneDeviceSwitch(
-      context,
-      () => room?.setAudioInputDevice(device) ?? Future.value(),
-    );
+    await _runMicrophoneDeviceSwitch(context, () => room?.setAudioInputDevice(device) ?? Future.value());
   }
 
-  Future<void> _selectAudioOutput(
-    BuildContext context,
-    lk.MediaDevice device,
-  ) async {
+  Future<void> _selectAudioOutput(BuildContext context, lk.MediaDevice device) async {
     final room = VideoRoomModel.maybeOf(context)?.room;
 
     await room?.setAudioOutputDevice(device);
@@ -1025,19 +923,13 @@ class ChangeSettings extends StatelessWidget {
       onChangeVideoInput: (device) => _selectVideoInput(context, device),
       onChangeAudioInput: (device) => _selectAudioInput(context, device),
       onChangeAudioOutput: (device) => _selectAudioOutput(context, device),
-      selectedVideoInputDeviceId: () =>
-          VideoRoomModel.maybeOf(context)?.room?.selectedVideoInputDeviceId,
-      selectedAudioInputDeviceId: () =>
-          VideoRoomModel.maybeOf(context)?.room?.selectedAudioInputDeviceId,
-      selectedAudioOutputDeviceId: () =>
-          VideoRoomModel.maybeOf(context)?.room?.selectedAudioOutputDeviceId,
+      selectedVideoInputDeviceId: () => VideoRoomModel.maybeOf(context)?.room?.selectedVideoInputDeviceId,
+      selectedAudioInputDeviceId: () => VideoRoomModel.maybeOf(context)?.room?.selectedAudioInputDeviceId,
+      selectedAudioOutputDeviceId: () => VideoRoomModel.maybeOf(context)?.room?.selectedAudioOutputDeviceId,
       renderButton: (onPressed) {
         return Tooltip(
           message: "Device settings",
-          child: ShadIconButton.outline(
-            onPressed: onPressed,
-            icon: const Icon(LucideIcons.settings),
-          ),
+          child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
         );
       },
     );
@@ -1073,26 +965,19 @@ class RoomToolbarButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final disabled = !on && onPressed == null;
-    final foregroundColor = on
-        ? onForeground
-        : (disabled ? Colors.white : offForeground);
+    final foregroundColor = on ? onForeground : (disabled ? Colors.white : offForeground);
 
     return Tooltip(
       message: text,
       child: ShadIconButton(
         onPressed: onPressed,
-        backgroundColor: on
-            ? onColor
-            : (disabled ? theme.colorScheme.destructive : offColor),
+        backgroundColor: on ? onColor : (disabled ? theme.colorScheme.destructive : offColor),
         foregroundColor: foregroundColor,
         icon: loading
             ? SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
-                ),
+                child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(foregroundColor)),
               )
             : Icon(icon, size: 22),
       ),
@@ -1120,10 +1005,7 @@ class _ShareScreenState extends State<ShareScreen> {
     if (local == null) return false;
 
     return local.videoTrackPublications.any(
-      (publication) =>
-          publication.source == lk.TrackSource.screenShareVideo &&
-          !publication.muted &&
-          publication.track != null,
+      (publication) => publication.source == lk.TrackSource.screenShareVideo && !publication.muted && publication.track != null,
     );
   }
 
@@ -1162,11 +1044,7 @@ class _ShareScreenState extends State<ShareScreen> {
       await local.setScreenShareEnabled(!on);
     } catch (error) {
       if (!mounted) return;
-      toaster?.show(
-        ShadToast.destructive(
-          description: Text(_describeScreenShareError(error)),
-        ),
-      );
+      toaster?.show(ShadToast.destructive(description: Text(_describeScreenShareError(error))));
       debugPrint('Unable to toggle screen sharing $error');
     }
 
@@ -1190,11 +1068,7 @@ class _ShareScreenState extends State<ShareScreen> {
       listenable: room,
       builder: (context, _) {
         final on = _hasActiveScreenShare(room.localParticipant);
-        return PresentButton(
-          onPressed: _processing ? null : () => _onPressed(context),
-          on: on,
-          compact: widget.compact,
-        );
+        return PresentButton(onPressed: _processing ? null : () => _onPressed(context), on: on, compact: widget.compact);
       },
     );
   }

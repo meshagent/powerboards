@@ -16,29 +16,20 @@ enum ChangeDeviceButtonPresentation { contextMenu, dialog }
 const String _defaultDeviceLabelPrefix = 'Default - ';
 const String _builtInDeviceLabelSuffix = ' (Built-in)';
 const String _disabledDeviceDescription = 'Check your device settings';
-const List<String> _builtInDeviceLabelPrefixes = [
-  'macbook ',
-  'built-in ',
-  'internal ',
-];
+const List<String> _builtInDeviceLabelPrefixes = ['macbook ', 'built-in ', 'internal '];
 
 bool _isDefaultAliasDevice(MediaDevice device) {
-  return device.deviceId == 'default' ||
-      device.label.trim().startsWith(_defaultDeviceLabelPrefix);
+  return device.deviceId == 'default' || device.label.trim().startsWith(_defaultDeviceLabelPrefix);
 }
 
 String _normalizedDeviceLabel(String label) {
   var trimmedLabel = label.trim();
   if (trimmedLabel.startsWith(_defaultDeviceLabelPrefix)) {
-    trimmedLabel = trimmedLabel
-        .substring(_defaultDeviceLabelPrefix.length)
-        .trim();
+    trimmedLabel = trimmedLabel.substring(_defaultDeviceLabelPrefix.length).trim();
   }
 
   if (_shouldStripBuiltInSuffix(trimmedLabel)) {
-    return trimmedLabel
-        .substring(0, trimmedLabel.length - _builtInDeviceLabelSuffix.length)
-        .trim();
+    return trimmedLabel.substring(0, trimmedLabel.length - _builtInDeviceLabelSuffix.length).trim();
   }
 
   return trimmedLabel;
@@ -50,9 +41,7 @@ bool _shouldStripBuiltInSuffix(String label) {
   }
 
   final normalizedLabel = label.toLowerCase();
-  return !_builtInDeviceLabelPrefixes.any(
-    (prefix) => normalizedLabel.startsWith(prefix),
-  );
+  return !_builtInDeviceLabelPrefixes.any((prefix) => normalizedLabel.startsWith(prefix));
 }
 
 String _deviceLabel(MediaDevice? device, String fallbackPrefix) {
@@ -64,17 +53,12 @@ String _deviceLabel(MediaDevice? device, String fallbackPrefix) {
   return 'Default $fallbackPrefix';
 }
 
-MediaDevice? _matchingPhysicalDevice(
-  MediaDevice device,
-  List<MediaDevice> devices,
-) {
+MediaDevice? _matchingPhysicalDevice(MediaDevice device, List<MediaDevice> devices) {
   final normalizedLabel = _normalizedDeviceLabel(device.label);
   final groupId = device.groupId?.trim();
 
   return devices.firstWhereOrNull((candidate) {
-    if (candidate.kind != device.kind ||
-        candidate.deviceId == device.deviceId ||
-        _isDefaultAliasDevice(candidate)) {
+    if (candidate.kind != device.kind || candidate.deviceId == device.deviceId || _isDefaultAliasDevice(candidate)) {
       return false;
     }
 
@@ -99,10 +83,7 @@ List<MediaDevice> _menuDevices(List<MediaDevice> devices) {
       .toList(growable: false);
 }
 
-MediaDevice? _selectedMenuDevice(
-  List<MediaDevice> devices,
-  String? selectedDeviceId,
-) {
+MediaDevice? _selectedMenuDevice(List<MediaDevice> devices, String? selectedDeviceId) {
   final visibleDevices = _menuDevices(devices);
   if (visibleDevices.isEmpty) {
     return null;
@@ -112,17 +93,13 @@ MediaDevice? _selectedMenuDevice(
     return visibleDevices.first;
   }
 
-  final exactDevice = devices.firstWhereOrNull(
-    (device) => device.deviceId == selectedDeviceId,
-  );
+  final exactDevice = devices.firstWhereOrNull((device) => device.deviceId == selectedDeviceId);
   if (exactDevice == null) {
     return visibleDevices.first;
   }
 
   return _matchingPhysicalDevice(exactDevice, visibleDevices) ??
-      visibleDevices.firstWhereOrNull(
-        (device) => device.deviceId == exactDevice.deviceId,
-      ) ??
+      visibleDevices.firstWhereOrNull((device) => device.deviceId == exactDevice.deviceId) ??
       visibleDevices.first;
 }
 
@@ -167,13 +144,8 @@ class ChangeDeviceButton extends StatefulWidget {
 }
 
 class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
-  static const BoxConstraints _desktopDialogConstraints = BoxConstraints(
-    maxWidth: 540,
-  );
-  static const BoxConstraints _menuConstraints = BoxConstraints(
-    minWidth: 220,
-    maxWidth: 320,
-  );
+  static const BoxConstraints _desktopDialogConstraints = BoxConstraints(maxWidth: 540);
+  static const BoxConstraints _menuConstraints = BoxConstraints(minWidth: 220, maxWidth: 320);
   static const double _topLevelItemHeight = 52;
 
   bool _loaded = false;
@@ -188,9 +160,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     super.initState();
     _load();
 
-    _subscription = Hardware.instance.onDeviceChange.stream.listen((
-      List<MediaDevice> devices,
-    ) {
+    _subscription = Hardware.instance.onDeviceChange.stream.listen((List<MediaDevice> devices) {
       _devices = _sanitizeDevices(devices);
       if (mounted) {
         setState(() {});
@@ -239,15 +209,9 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
 
   String? _selectedDeviceIdForPreferenceKey(String key) {
     return switch (key) {
-      "videoInput" =>
-        widget.selectedVideoInputDeviceId?.call() ??
-            _preferences.getString(key),
-      "audioInput" =>
-        widget.selectedAudioInputDeviceId?.call() ??
-            _preferences.getString(key),
-      "audioOutput" =>
-        widget.selectedAudioOutputDeviceId?.call() ??
-            _preferences.getString(key),
+      "videoInput" => widget.selectedVideoInputDeviceId?.call() ?? _preferences.getString(key),
+      "audioInput" => widget.selectedAudioInputDeviceId?.call() ?? _preferences.getString(key),
+      "audioOutput" => widget.selectedAudioOutputDeviceId?.call() ?? _preferences.getString(key),
       _ => _preferences.getString(key),
     };
   }
@@ -261,15 +225,10 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     };
   }
 
-  Future<void> _updateDevice(
-    String key,
-    MediaDevice device,
-    Future<void> Function(MediaDevice) onChange,
-  ) async {
+  Future<void> _updateDevice(String key, MediaDevice device, Future<void> Function(MediaDevice) onChange) async {
     await onChange(device);
     final selectedDeviceIdGetter = _selectedDeviceIdGetterForPreferenceKey(key);
-    if (selectedDeviceIdGetter != null &&
-        selectedDeviceIdGetter() != device.deviceId) {
+    if (selectedDeviceIdGetter != null && selectedDeviceIdGetter() != device.deviceId) {
       throw StateError('Unable to switch $key to ${device.deviceId}');
     }
     await _preferences.setString(key, device.deviceId);
@@ -285,11 +244,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
   }) async {
     final visibleDevices = _menuDevices(devices);
     final selectedDeviceId = _selectedDeviceIdForPreferenceKey(preferenceKey);
-    final selectedDevice = selectedDeviceId == null
-        ? null
-        : devices.firstWhereOrNull(
-            (device) => device.deviceId == selectedDeviceId,
-          );
+    final selectedDevice = selectedDeviceId == null ? null : devices.firstWhereOrNull((device) => device.deviceId == selectedDeviceId);
 
     if (visibleDevices.isEmpty) {
       if (_preferences.containsKey(preferenceKey)) {
@@ -298,9 +253,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
       return;
     }
 
-    if (selectedDeviceId == null ||
-        selectedDeviceId.isEmpty ||
-        selectedDevice != null) {
+    if (selectedDeviceId == null || selectedDeviceId.isEmpty || selectedDevice != null) {
       return;
     }
 
@@ -318,23 +271,17 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     try {
       await _syncUnavailableSelection(
         preferenceKey: "videoInput",
-        devices: _devices
-            .where((device) => device.kind == "videoinput")
-            .toList(growable: false),
+        devices: _devices.where((device) => device.kind == "videoinput").toList(growable: false),
         onChange: widget.onChangeVideoInput,
       );
       await _syncUnavailableSelection(
         preferenceKey: "audioInput",
-        devices: _devices
-            .where((device) => device.kind == "audioinput")
-            .toList(growable: false),
+        devices: _devices.where((device) => device.kind == "audioinput").toList(growable: false),
         onChange: widget.onChangeAudioInput,
       );
       await _syncUnavailableSelection(
         preferenceKey: "audioOutput",
-        devices: _devices
-            .where((device) => device.kind == "audiooutput")
-            .toList(growable: false),
+        devices: _devices.where((device) => device.kind == "audiooutput").toList(growable: false),
         onChange: widget.onChangeAudioOutput,
       );
     } finally {
@@ -345,12 +292,9 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     }
   }
 
-  Future<void> onChangeVideoInput(MediaDevice device) =>
-      _updateDevice("videoInput", device, widget.onChangeVideoInput);
-  Future<void> onChangeAudioInput(MediaDevice device) =>
-      _updateDevice("audioInput", device, widget.onChangeAudioInput);
-  Future<void> onChangeAudioOutput(MediaDevice device) =>
-      _updateDevice("audioOutput", device, widget.onChangeAudioOutput);
+  Future<void> onChangeVideoInput(MediaDevice device) => _updateDevice("videoInput", device, widget.onChangeVideoInput);
+  Future<void> onChangeAudioInput(MediaDevice device) => _updateDevice("audioInput", device, widget.onChangeAudioInput);
+  Future<void> onChangeAudioOutput(MediaDevice device) => _updateDevice("audioOutput", device, widget.onChangeAudioOutput);
 
   Future<void> _showDialog() async {
     await _loadDevices();
@@ -405,23 +349,15 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
 
     final videoInputs = _devices.where((d) => d.kind == "videoinput").toList();
     final audioInputs = _devices.where((d) => d.kind == "audioinput").toList();
-    final audioOutputs = _devices
-        .where((d) => d.kind == "audiooutput")
-        .toList();
+    final audioOutputs = _devices.where((d) => d.kind == "audiooutput").toList();
 
     final visibleVideoInputs = _menuDevices(videoInputs);
     final visibleAudioInputs = _menuDevices(audioInputs);
     final visibleAudioOutputs = _menuDevices(audioOutputs);
 
     final selectedVideoDevice = _selectedMenuDevice(videoInputs, videoInput);
-    final selectedAudioInputDevice = _selectedMenuDevice(
-      audioInputs,
-      audioInput,
-    );
-    final selectedAudioOutputDevice = _selectedMenuDevice(
-      audioOutputs,
-      audioOutput,
-    );
+    final selectedAudioInputDevice = _selectedMenuDevice(audioInputs, audioInput);
+    final selectedAudioOutputDevice = _selectedMenuDevice(audioOutputs, audioOutput);
 
     return AdaptiveShadContextMenu(
       controller: _controller,
@@ -431,8 +367,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
       estimatedMenuHeight: _estimatedTopLevelMenuHeight(
         includeCamera: widget.kind == null || widget.kind == "camera",
         includeMicrophone: widget.kind == null || widget.kind == "mic",
-        includeSpeakers:
-            (kIsWeb && widget.kind == null) || widget.kind == "mic",
+        includeSpeakers: (kIsWeb && widget.kind == null) || widget.kind == "mic",
       ),
       onHoverArea: (hovering) {
         if (hovering) {
@@ -481,16 +416,8 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     );
   }
 
-  double _estimatedTopLevelMenuHeight({
-    required bool includeCamera,
-    required bool includeMicrophone,
-    required bool includeSpeakers,
-  }) {
-    final itemCount = [
-      includeCamera,
-      includeMicrophone,
-      includeSpeakers,
-    ].where((include) => include).length;
+  double _estimatedTopLevelMenuHeight({required bool includeCamera, required bool includeMicrophone, required bool includeSpeakers}) {
+    final itemCount = [includeCamera, includeMicrophone, includeSpeakers].where((include) => include).length;
     return itemCount * _topLevelItemHeight + 8.0;
   }
 
@@ -511,15 +438,9 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
         .map(
           (device) => ShadContextMenuItem(
             height: 40,
-            onPressed: () =>
-                unawaited(_runDeviceChange(label, onChange, device)),
-            trailing: device.deviceId == selectedDevice?.deviceId
-                ? const Icon(LucideIcons.check, size: 16)
-                : null,
-            child: Text(
-              _deviceLabel(device, label),
-              overflow: TextOverflow.ellipsis,
-            ),
+            onPressed: () => unawaited(_runDeviceChange(label, onChange, device)),
+            trailing: device.deviceId == selectedDevice?.deviceId ? const Icon(LucideIcons.check, size: 16) : null,
+            child: Text(_deviceLabel(device, label), overflow: TextOverflow.ellipsis),
           ),
         )
         .toList(growable: false);
@@ -529,11 +450,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
         enabled: true,
         closeOnTap: false,
         height: _topLevelItemHeight,
-        leading: Icon(
-          disabledIcon,
-          size: 18,
-          color: theme.colorScheme.destructive,
-        ),
+        leading: Icon(disabledIcon, size: 18, color: theme.colorScheme.destructive),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,10 +465,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 disabledDescription,
-                style: theme.textTheme.muted.copyWith(
-                  fontSize: 13,
-                  color: theme.colorScheme.destructive,
-                ),
+                style: theme.textTheme.muted.copyWith(fontSize: 13, color: theme.colorScheme.destructive),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
@@ -575,34 +489,21 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
           if (selectedLabel.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                selectedLabel,
-                style: theme.textTheme.muted.copyWith(fontSize: 13),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
+              child: Text(selectedLabel, style: theme.textTheme.muted.copyWith(fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 1),
             ),
         ],
       ),
     );
   }
 
-  Future<void> _runDeviceChange(
-    String label,
-    Future<void> Function(MediaDevice) onChange,
-    MediaDevice device,
-  ) async {
+  Future<void> _runDeviceChange(String label, Future<void> Function(MediaDevice) onChange, MediaDevice device) async {
     try {
       await onChange(device);
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ShadToaster.maybeOf(context)?.show(
-        ShadToast.destructive(
-          description: Text(_describeDeviceSwitchError(label, error)),
-        ),
-      );
+      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeDeviceSwitchError(label, error))));
       debugPrint('Unable to switch device ${device.deviceId}: $error');
     }
   }
@@ -679,42 +580,23 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final videoInput =
-        widget.selectedVideoInputDeviceId?.call() ??
-        widget.preferences.getString("videoInput");
-    final audioInput =
-        widget.selectedAudioInputDeviceId?.call() ??
-        widget.preferences.getString("audioInput");
-    final audioOutput =
-        widget.selectedAudioOutputDeviceId?.call() ??
-        widget.preferences.getString("audioOutput");
+    final videoInput = widget.selectedVideoInputDeviceId?.call() ?? widget.preferences.getString("videoInput");
+    final audioInput = widget.selectedAudioInputDeviceId?.call() ?? widget.preferences.getString("audioInput");
+    final audioOutput = widget.selectedAudioOutputDeviceId?.call() ?? widget.preferences.getString("audioOutput");
 
-    final videoInputs = _devices
-        .where((device) => device.kind == "videoinput")
-        .toList();
-    final audioInputs = _devices
-        .where((device) => device.kind == "audioinput")
-        .toList();
-    final audioOutputs = _devices
-        .where((device) => device.kind == "audiooutput")
-        .toList();
+    final videoInputs = _devices.where((device) => device.kind == "videoinput").toList();
+    final audioInputs = _devices.where((device) => device.kind == "audioinput").toList();
+    final audioOutputs = _devices.where((device) => device.kind == "audiooutput").toList();
 
     final visibleVideoInputs = _menuDevices(videoInputs);
     final visibleAudioInputs = _menuDevices(audioInputs);
     final visibleAudioOutputs = _menuDevices(audioOutputs);
 
     final selectedVideoDevice = _selectedMenuDevice(videoInputs, videoInput);
-    final selectedAudioInputDevice = _selectedMenuDevice(
-      audioInputs,
-      audioInput,
-    );
-    final selectedAudioOutputDevice = _selectedMenuDevice(
-      audioOutputs,
-      audioOutput,
-    );
+    final selectedAudioInputDevice = _selectedMenuDevice(audioInputs, audioInput);
+    final selectedAudioOutputDevice = _selectedMenuDevice(audioOutputs, audioOutput);
 
-    Widget rowSeparator() =>
-        Divider(height: 1, color: ShadTheme.of(context).colorScheme.border);
+    Widget rowSeparator() => Divider(height: 1, color: ShadTheme.of(context).colorScheme.border);
 
     return PowerboardsShadDialog.listPicker(
       title: const Text("Device settings"),
@@ -766,8 +648,7 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
                 disabledLabel: "Microphone disabled",
                 disabledDescription: _disabledDeviceDescription,
               ),
-              if ((kIsWeb && widget.kind == null) || widget.kind == "mic")
-                rowSeparator(),
+              if ((kIsWeb && widget.kind == null) || widget.kind == "mic") rowSeparator(),
             ],
             if ((kIsWeb && widget.kind == null) || widget.kind == "mic")
               _DeviceSettingsRow(
@@ -819,10 +700,7 @@ class _DeviceSettingsRow extends StatefulWidget {
 }
 
 class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
-  static const BoxConstraints _menuConstraints = BoxConstraints(
-    minWidth: 260,
-    maxWidth: 420,
-  );
+  static const BoxConstraints _menuConstraints = BoxConstraints(minWidth: 260, maxWidth: 420);
   static const double _rowIconSize = 20;
   final ShadContextMenuController _controller = ShadContextMenuController();
 
@@ -835,8 +713,7 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
   @override
   Widget build(BuildContext context) {
     final selectedLabel = _deviceLabel(widget.selectedDevice, widget.label);
-    final hasOptions =
-        widget.selectedDevice != null && widget.devices.isNotEmpty;
+    final hasOptions = widget.selectedDevice != null && widget.devices.isNotEmpty;
     final theme = ShadTheme.of(context);
     final isDisabled = widget.selectedDevice == null;
     final disabledColor = theme.colorScheme.destructive;
@@ -853,13 +730,8 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
           ShadContextMenuItem(
             height: 44,
             onPressed: () => unawaited(_runDeviceChange(device)),
-            trailing: device.deviceId == widget.selectedDevice?.deviceId
-                ? const Icon(LucideIcons.check, size: 18)
-                : null,
-            child: Text(
-              _deviceLabel(device, widget.label),
-              overflow: TextOverflow.ellipsis,
-            ),
+            trailing: device.deviceId == widget.selectedDevice?.deviceId ? const Icon(LucideIcons.check, size: 18) : null,
+            child: Text(_deviceLabel(device, widget.label), overflow: TextOverflow.ellipsis),
           ),
       ],
       child: InkWell(
@@ -883,13 +755,7 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
             size: _rowIconSize,
             color: isDisabled ? disabledColor : shadForeground,
           ),
-          trailing: hasOptions
-              ? Icon(
-                  LucideIcons.chevronsUpDown,
-                  size: 21,
-                  color: shadSecondaryForeground,
-                )
-              : null,
+          trailing: hasOptions ? Icon(LucideIcons.chevronsUpDown, size: 21, color: shadSecondaryForeground) : null,
         ),
       ),
     );
@@ -902,11 +768,7 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
       if (!mounted) {
         return;
       }
-      ShadToaster.maybeOf(context)?.show(
-        ShadToast.destructive(
-          description: Text(_describeDeviceSwitchError(widget.label, error)),
-        ),
-      );
+      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeDeviceSwitchError(widget.label, error))));
       debugPrint('Unable to switch device ${device.deviceId}: $error');
     }
   }

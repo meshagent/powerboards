@@ -14,10 +14,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class _DevelopmentAgentMenuItem {
-  const _DevelopmentAgentMenuItem({
-    required this.participant,
-    required this.name,
-  });
+  const _DevelopmentAgentMenuItem({required this.participant, required this.name});
 
   final RemoteParticipant participant;
   final String name;
@@ -45,8 +42,7 @@ class AgentsDropdown extends StatelessWidget {
     this.onManageAgents,
   });
 
-  String _serviceId(ServiceSpec service) =>
-      service.metadata.annotations["meshagent.service.id"] ?? "";
+  String _serviceId(ServiceSpec service) => service.metadata.annotations["meshagent.service.id"] ?? "";
   String? _serviceAgentName(ServiceSpec service) {
     final name = service.agents.firstOrNull?.name;
     if (name == null) {
@@ -66,9 +62,7 @@ class AgentsDropdown extends StatelessWidget {
   void _navigateToRoute(BuildContext context, String routeId) {
     final pid = fromUUID(projectId);
     final currentUri = PathRouteMatch.of(context).uri;
-    final nextPath = _isBaseRouteId(routeId)
-        ? '/p/$pid/r/${room.roomName}'
-        : '/p/$pid/r/${room.roomName}/a/$routeId';
+    final nextPath = _isBaseRouteId(routeId) ? '/p/$pid/r/${room.roomName}' : '/p/$pid/r/${room.roomName}/a/$routeId';
     final nextUri = currentUri.replace(path: nextPath);
 
     context.go(nextUri.toString());
@@ -91,20 +85,14 @@ class AgentsDropdown extends StatelessWidget {
       }
 
       final name = participantDisplayName(participant);
-      if (name == null ||
-          serviceAgentNames.contains(name) ||
-          !seenNames.add(name)) {
+      if (name == null || serviceAgentNames.contains(name) || !seenNames.add(name)) {
         continue;
       }
 
-      participants.add(
-        _DevelopmentAgentMenuItem(participant: participant, name: name),
-      );
+      participants.add(_DevelopmentAgentMenuItem(participant: participant, name: name));
     }
 
-    participants.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
+    participants.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return participants;
   }
 
@@ -122,12 +110,7 @@ class AgentsDropdown extends StatelessWidget {
     return SizedBox(
       width: 32,
       height: 32,
-      child: Center(
-        child: Opacity(
-          opacity: 0.25,
-          child: Icon(_developmentAgentIcon(participant), size: 20),
-        ),
-      ),
+      child: Center(child: Opacity(opacity: 0.25, child: Icon(_developmentAgentIcon(participant), size: 20))),
     );
   }
 
@@ -137,31 +120,21 @@ class AgentsDropdown extends StatelessWidget {
       source: room.messaging,
       builder: (context) {
         final developmentAgents = _developmentAgents();
-        final selectedRouteId =
-            selectedAgentRouteId ??
-            (selectedService == null ? null : _serviceId(selectedService!));
+        final selectedRouteId = selectedAgentRouteId ?? (selectedService == null ? null : _serviceId(selectedService!));
         final selectedDevelopmentAgent = selectedRouteId == null
             ? null
-            : developmentAgents.firstWhereOrNull(
-                (item) => item.routeId == selectedRouteId,
-              );
+            : developmentAgents.firstWhereOrNull((item) => item.routeId == selectedRouteId);
 
         final hasAgents = services.isNotEmpty || developmentAgents.isNotEmpty;
-        final label =
-            selectedService?.metadata.name ??
-            selectedDevelopmentAgent?.name ??
-            (hasAgents ? "Select agent" : "No agents");
-        final readme =
-            selectedService?.metadata.annotations["meshagent.service.readme"];
+        final label = selectedService?.metadata.name ?? selectedDevelopmentAgent?.name ?? (hasAgents ? "Select agent" : "No agents");
+        final readme = selectedService?.metadata.annotations["meshagent.service.readme"];
 
         final entries = <AppMenuEntry>[
           for (final service in services)
             AppMenuEntry(
               title: service.metadata.name,
               description: service.metadata.description ?? "",
-              selected:
-                  selectedRouteId != null &&
-                  selectedRouteId == _serviceId(service),
+              selected: selectedRouteId != null && selectedRouteId == _serviceId(service),
               icon: LucideIcons.bot,
               onPressed: () => _navigateToRoute(context, _serviceId(service)),
             ),
@@ -169,9 +142,7 @@ class AgentsDropdown extends StatelessWidget {
             AppMenuEntry(
               title: participant.name,
               description: "Development mode agent",
-              selected:
-                  selectedRouteId != null &&
-                  selectedRouteId == participant.routeId,
+              selected: selectedRouteId != null && selectedRouteId == participant.routeId,
               leading: _developmentAgentLeading(participant.participant),
               onPressed: () => _navigateToRoute(context, participant.routeId),
             ),
@@ -203,22 +174,8 @@ class AgentsDropdown extends StatelessWidget {
                   },
                   leading: selectedDevelopmentAgent == null
                       ? const Icon(LucideIcons.bot, size: 18)
-                      : Opacity(
-                          opacity: 0.25,
-                          child: Icon(
-                            _developmentAgentIcon(
-                              selectedDevelopmentAgent.participant,
-                            ),
-                            size: 18,
-                          ),
-                        ),
-                  child: Text(
-                    label,
-                    style: GoogleFonts.inter(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                      : Opacity(opacity: 0.25, child: Icon(_developmentAgentIcon(selectedDevelopmentAgent.participant), size: 18)),
+                  child: Text(label, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600)),
                 );
               },
             ),
@@ -229,14 +186,8 @@ class AgentsDropdown extends StatelessWidget {
                     context: context,
                     builder: (context) => PowerboardsShadDialog(
                       constraints: BoxConstraints(
-                        maxWidth: min(
-                          MediaQuery.of(context).size.width - 60,
-                          800,
-                        ),
-                        maxHeight: min(
-                          MediaQuery.of(context).size.height - 60,
-                          800,
-                        ),
+                        maxWidth: min(MediaQuery.of(context).size.width - 60, 800),
+                        maxHeight: min(MediaQuery.of(context).size.height - 60, 800),
                       ),
                       child: MarkdownViewer(markdown: readme),
                     ),

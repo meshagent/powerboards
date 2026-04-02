@@ -87,8 +87,7 @@ class ResizableSplitView extends StatefulWidget {
 }
 
 class _ResizableSplitViewState extends State<ResizableSplitView> {
-  final List<ShadResizableController> _retiredResizeControllers =
-      <ShadResizableController>[];
+  final List<ShadResizableController> _retiredResizeControllers = <ShadResizableController>[];
   late ShadResizableController resizeController;
   BoxConstraints? lastConstraints;
   Timer? resizeDebounceTimer;
@@ -178,9 +177,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   double? get _lockedArea1Fraction {
     final minFraction = widget.minArea1Fraction;
     final maxFraction = widget.maxArea1Fraction;
-    if (minFraction != null &&
-        maxFraction != null &&
-        (minFraction - maxFraction).abs() < 0.0001) {
+    if (minFraction != null && maxFraction != null && (minFraction - maxFraction).abs() < 0.0001) {
       return minFraction;
     }
     return null;
@@ -189,9 +186,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
   double? get _lockedArea2Fraction {
     final minFraction = widget.minArea2Fraction;
     final maxFraction = widget.maxArea2Fraction;
-    if (minFraction != null &&
-        maxFraction != null &&
-        (minFraction - maxFraction).abs() < 0.0001) {
+    if (minFraction != null && maxFraction != null && (minFraction - maxFraction).abs() < 0.0001) {
       return minFraction;
     }
     return null;
@@ -274,22 +269,10 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     return (area1: area1, area2: area2);
   }
 
-  ({
-    double minArea1Size,
-    double minArea2Size,
-    double maxArea1Size,
-    double maxArea2Size,
-  })
-  _resolvePanelFractions(double size) {
+  ({double minArea1Size, double minArea2Size, double maxArea1Size, double maxArea2Size}) _resolvePanelFractions(double size) {
     final minimums = _resolveMinimumWidths(size);
-    var minArea1Size = _sanitizePanelFraction(
-      minimums.area1 / size,
-      fallback: 0.5,
-    );
-    var minArea2Size = _sanitizePanelFraction(
-      minimums.area2 / size,
-      fallback: 0.5,
-    );
+    var minArea1Size = _sanitizePanelFraction(minimums.area1 / size, fallback: 0.5);
+    var minArea2Size = _sanitizePanelFraction(minimums.area2 / size, fallback: 0.5);
 
     final minimumTotal = minArea1Size + minArea2Size;
     if (minimumTotal.isFinite && minimumTotal > 1) {
@@ -298,30 +281,17 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     }
 
     final rawMaxArea1Size = _sanitizePanelFraction(
-      _lockedArea1Fraction ??
-          math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0),
+      _lockedArea1Fraction ?? math.min(1 - minArea2Size, widget.maxArea1Fraction ?? 1.0),
       fallback: 1.0,
     );
     final rawMaxArea2Size = _sanitizePanelFraction(
-      _lockedArea2Fraction ??
-          math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0),
+      _lockedArea2Fraction ?? math.min(1 - minArea1Size, widget.maxArea2Fraction ?? 1.0),
       fallback: 1.0,
     );
-    final maxArea1Size = _sanitizePanelFraction(
-      math.max(minArea1Size, rawMaxArea1Size),
-      fallback: minArea1Size,
-    );
-    final maxArea2Size = _sanitizePanelFraction(
-      math.max(minArea2Size, rawMaxArea2Size),
-      fallback: minArea2Size,
-    );
+    final maxArea1Size = _sanitizePanelFraction(math.max(minArea1Size, rawMaxArea1Size), fallback: minArea1Size);
+    final maxArea2Size = _sanitizePanelFraction(math.max(minArea2Size, rawMaxArea2Size), fallback: minArea2Size);
 
-    return (
-      minArea1Size: minArea1Size,
-      minArea2Size: minArea2Size,
-      maxArea1Size: maxArea1Size,
-      maxArea2Size: maxArea2Size,
-    );
+    return (minArea1Size: minArea1Size, minArea2Size: minArea2Size, maxArea1Size: maxArea1Size, maxArea2Size: maxArea2Size);
   }
 
   ({double area1, double area2}) _resolveDefaultPanelSizes({
@@ -331,37 +301,18 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     required double maxArea1Size,
     required double maxArea2Size,
   }) {
-    final preferredArea1 = _sanitizePanelFraction(
-      _area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size),
-      fallback: 0.5,
-    );
-    final safeMinArea1 = _sanitizePanelFraction(
-      math.max(minArea1Size, 1 - maxArea2Size),
-      fallback: minArea1Size,
-    );
-    final safeMaxArea1 = _sanitizePanelFraction(
-      math.min(maxArea1Size, 1 - minArea2Size),
-      fallback: maxArea1Size,
-    );
+    final preferredArea1 = _sanitizePanelFraction(_area1Ratio ?? _preferredArea1Ratio ?? (_defaultWidth / size), fallback: 0.5);
+    final safeMinArea1 = _sanitizePanelFraction(math.max(minArea1Size, 1 - maxArea2Size), fallback: minArea1Size);
+    final safeMaxArea1 = _sanitizePanelFraction(math.min(maxArea1Size, 1 - minArea2Size), fallback: maxArea1Size);
 
-    final clampedMinArea1 = _sanitizePanelFraction(
-      safeMinArea1.clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon),
-      fallback: 0.5,
-    );
+    final clampedMinArea1 = _sanitizePanelFraction(safeMinArea1.clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon), fallback: 0.5);
     final clampedMaxArea1 = _sanitizePanelFraction(
       safeMaxArea1.clamp(clampedMinArea1, 1 - _panelFractionEpsilon),
       fallback: clampedMinArea1,
     );
-    final resolvedArea1 = _sanitizePanelFraction(
-      preferredArea1.clamp(clampedMinArea1, clampedMaxArea1),
-      fallback: clampedMinArea1,
-    );
+    final resolvedArea1 = _sanitizePanelFraction(preferredArea1.clamp(clampedMinArea1, clampedMaxArea1), fallback: clampedMinArea1);
 
-    return _normalizeDefaultPanelSizes(
-      area1: resolvedArea1,
-      minArea1Size: clampedMinArea1,
-      maxArea1Size: clampedMaxArea1,
-    );
+    return _normalizeDefaultPanelSizes(area1: resolvedArea1, minArea1Size: clampedMinArea1, maxArea1Size: clampedMaxArea1);
   }
 
   ({double area1, double area2}) _normalizeDefaultPanelSizes({
@@ -369,19 +320,10 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     required double minArea1Size,
     required double maxArea1Size,
   }) {
-    final resolvedArea1 = _sanitizePanelFraction(
-      area1,
-      fallback: 0.5,
-    ).clamp(minArea1Size, maxArea1Size).toDouble();
-    final boundedArea1 = _sanitizePanelFraction(
-      resolvedArea1.clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon),
-      fallback: 0.5,
-    );
+    final resolvedArea1 = _sanitizePanelFraction(area1, fallback: 0.5).clamp(minArea1Size, maxArea1Size).toDouble();
+    final boundedArea1 = _sanitizePanelFraction(resolvedArea1.clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon), fallback: 0.5);
     final boundedArea2 = _sanitizePanelFraction(
-      (1 - boundedArea1).clamp(
-        _panelFractionEpsilon,
-        1 - _panelFractionEpsilon,
-      ),
+      (1 - boundedArea1).clamp(_panelFractionEpsilon, 1 - _panelFractionEpsilon),
       fallback: 1 - boundedArea1,
     );
 
@@ -395,25 +337,14 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     required double fallbackDefaultSize,
   }) {
     final safeMinSize = _sanitizePanelFraction(minSize, fallback: 0.0);
-    final safeMaxSize = _sanitizePanelFraction(
-      math.max(safeMinSize, maxSize),
-      fallback: safeMinSize,
-    );
-    final safeDefaultSize = _sanitizePanelFraction(
-      defaultSize,
-      fallback: fallbackDefaultSize,
-    ).clamp(safeMinSize, safeMaxSize).toDouble();
+    final safeMaxSize = _sanitizePanelFraction(math.max(safeMinSize, maxSize), fallback: safeMinSize);
+    final safeDefaultSize = _sanitizePanelFraction(defaultSize, fallback: fallbackDefaultSize).clamp(safeMinSize, safeMaxSize).toDouble();
 
-    return (
-      minSize: safeMinSize,
-      maxSize: safeMaxSize,
-      defaultSize: safeDefaultSize,
-    );
+    return (minSize: safeMinSize, maxSize: safeMaxSize, defaultSize: safeDefaultSize);
   }
 
   void debounceResize(BoxConstraints constraints) {
-    if (lastConstraints == null ||
-        lastConstraints!.maxWidth != constraints.maxWidth) {
+    if (lastConstraints == null || lastConstraints!.maxWidth != constraints.maxWidth) {
       resizeDebounceTimer?.cancel();
       resizeDebounceTimer = Timer(const Duration(milliseconds: 30), () {
         if (!mounted) {
@@ -424,12 +355,8 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
             return;
           }
 
-          final pan1 = resizeController.panelsInfo
-              .where((panel) => panel.id == _area1Id)
-              .firstOrNull;
-          final pan2 = resizeController.panelsInfo
-              .where((panel) => panel.id == _area2Id)
-              .firstOrNull;
+          final pan1 = resizeController.panelsInfo.where((panel) => panel.id == _area1Id).firstOrNull;
+          final pan2 = resizeController.panelsInfo.where((panel) => panel.id == _area2Id).firstOrNull;
 
           if (pan1 == null || pan2 == null) {
             return;
@@ -468,15 +395,11 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
           final defaultSize2 = panel2Config.defaultSize;
 
           final unchanged =
-              (pan1.minSize - panel1Config.minSize).abs() <
-                  _panelFractionEpsilon &&
-              (pan1.maxSize - panel1Config.maxSize).abs() <
-                  _panelFractionEpsilon &&
+              (pan1.minSize - panel1Config.minSize).abs() < _panelFractionEpsilon &&
+              (pan1.maxSize - panel1Config.maxSize).abs() < _panelFractionEpsilon &&
               (pan1.defaultSize - defaultSize1).abs() < _panelFractionEpsilon &&
-              (pan2.minSize - panel2Config.minSize).abs() <
-                  _panelFractionEpsilon &&
-              (pan2.maxSize - panel2Config.maxSize).abs() <
-                  _panelFractionEpsilon &&
+              (pan2.minSize - panel2Config.minSize).abs() < _panelFractionEpsilon &&
+              (pan2.maxSize - panel2Config.maxSize).abs() < _panelFractionEpsilon &&
               (pan2.defaultSize - defaultSize2).abs() < _panelFractionEpsilon;
           if (unchanged) {
             lastConstraints = constraints;
@@ -558,8 +481,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
       _notifyCollapsedChangedDeferred();
     }
 
-    if (oldWidget.split != widget.split ||
-        oldWidget.allowCollapse != widget.allowCollapse) {
+    if (oldWidget.split != widget.split || oldWidget.allowCollapse != widget.allowCollapse) {
       shouldResetPanelGroup = true;
     }
 
@@ -593,11 +515,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
     final totalWidth = resizeController.totalAvailableWidth;
     final collapseThreshold = _collapseThresholdFraction(totalWidth);
     final shouldCollapse =
-        widget.allowCollapse &&
-        widget.split &&
-        !_collapsed &&
-        totalWidth > 0 &&
-        area1Panel.size <= collapseThreshold + 0.0001;
+        widget.allowCollapse && widget.split && !_collapsed && totalWidth > 0 && area1Panel.size <= collapseThreshold + 0.0001;
 
     if (shouldCollapse) {
       _applyCollapsedState(true);
@@ -608,8 +526,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
 
     final area2Ratio = 1 - area1Panel.size;
     final lastReportedArea2Ratio = _lastReportedArea2Ratio;
-    if (lastReportedArea2Ratio != null &&
-        (lastReportedArea2Ratio - area2Ratio).abs() < 0.0001) {
+    if (lastReportedArea2Ratio != null && (lastReportedArea2Ratio - area2Ratio).abs() < 0.0001) {
       return;
     }
 
@@ -676,9 +593,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
         debounceResize(constraints);
 
         return ShadResizablePanelGroup(
-          key: ValueKey(
-            '$_panelGroupVersion-${widget.split}-${widget.allowCollapse}',
-          ),
+          key: ValueKey('$_panelGroupVersion-${widget.split}-${widget.allowCollapse}'),
           axis: .horizontal,
           showHandle: true,
           dividerColor: Colors.transparent,
@@ -698,10 +613,7 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
                           right: 10,
                           child: Tooltip(
                             message: 'Collapse',
-                            child: ShadIconButton.ghost(
-                              icon: Icon(LucideIcons.panelLeftClose),
-                              onPressed: _toggleCollapsed,
-                            ),
+                            child: ShadIconButton.ghost(icon: Icon(LucideIcons.panelLeftClose), onPressed: _toggleCollapsed),
                           ),
                         ),
                       ],

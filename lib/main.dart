@@ -73,14 +73,8 @@ ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
   final screenHeight = mediaQuery?.size.height ?? 768.0;
   final isMobile = screenWidth < 600;
   final mobileInset = powerboardsMobileDialogEdgeInset * 2;
-  final maxWidth = isMobile
-      ? ((screenWidth - mobileInset) > 0
-            ? screenWidth - mobileInset
-            : screenWidth)
-      : 512.0;
-  final maxHeight = (screenHeight - mobileInset) > 0
-      ? screenHeight - mobileInset
-      : screenHeight;
+  final maxWidth = isMobile ? ((screenWidth - mobileInset) > 0 ? screenWidth - mobileInset : screenWidth) : 512.0;
+  final maxHeight = (screenHeight - mobileInset) > 0 ? screenHeight - mobileInset : screenHeight;
   final closeTop = isMobile ? 24.0 : 20.0;
   final closeEnd = 24.0;
 
@@ -106,10 +100,7 @@ void _configureDebugPrintFilter() {
   };
 }
 
-bool _isExpectedWebHotRestartViewDispose(
-  Object error, [
-  StackTrace? stackTrace,
-]) {
+bool _isExpectedWebHotRestartViewDispose(Object error, [StackTrace? stackTrace]) {
   if (!(kDebugMode && kIsWeb)) {
     return false;
   }
@@ -117,9 +108,7 @@ bool _isExpectedWebHotRestartViewDispose(
   final errorText = '$error';
   final stackText = stackTrace?.toString() ?? '';
   return errorText.contains('Trying to render a disposed EngineFlutterView') ||
-      (errorText.contains(
-            'org-dartlang-sdk:///lib/_engine/engine/window.dart:99:12',
-          ) &&
+      (errorText.contains('org-dartlang-sdk:///lib/_engine/engine/window.dart:99:12') &&
           stackText.contains('Trying to render a disposed EngineFlutterView'));
 }
 
@@ -134,10 +123,7 @@ bool _isExpectedRoomClientDisposed(Object error, [StackTrace? stackTrace]) {
 void main() async {
   SolidartConfig.assertSignalBuilderWithoutDependencies = false;
 
-  const sentryEnabled = bool.fromEnvironment(
-    'SENTRY_ENABLED',
-    defaultValue: false,
-  );
+  const sentryEnabled = bool.fromEnvironment('SENTRY_ENABLED', defaultValue: false);
   const sentryRelease = String.fromEnvironment('SENTRY_RELEASE');
   const sentryEnvironment = String.fromEnvironment('SENTRY_ENVIRONMENT');
 
@@ -196,10 +182,8 @@ Future<void> startApp() async {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent, // keep status bar transparent
-      statusBarIconBrightness:
-          Brightness.dark, // ANDROID: dark icons on light bg
-      statusBarBrightness:
-          Brightness.light, // iOS: status bar text dark on light bg
+      statusBarIconBrightness: Brightness.dark, // ANDROID: dark icons on light bg
+      statusBarBrightness: Brightness.light, // iOS: status bar text dark on light bg
     ),
   );
 
@@ -229,9 +213,7 @@ Future<void> initializeApp() async {
 
   if (!kIsWeb) {
     if (kReleaseMode || const bool.fromEnvironment("FIREBASE_INITIALIZE")) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     }
   }
   LogicalKeyboardMonitor.start();
@@ -269,9 +251,7 @@ class MyApp extends StatelessWidget {
         primaryToastTheme: _powerboardsToastThemeForContext(context),
         destructiveToastTheme: _powerboardsToastThemeForContext(context),
         selectTheme: ShadSelectTheme(
-          decoration: ShadDecoration(
-            border: ShadBorder.all(color: shadBorder, width: 1),
-          ),
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
         ),
         tabsTheme: ShadTabsTheme(
           tabBackgroundColor: shadCard,
@@ -305,9 +285,7 @@ class MyApp extends StatelessWidget {
         ),
         outlineButtonTheme: ShadButtonTheme(
           backgroundColor: shadCard,
-          decoration: ShadDecoration(
-            border: ShadBorder.all(color: shadBorder, width: 1),
-          ),
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
         ),
       ),
 
@@ -317,9 +295,7 @@ class MyApp extends StatelessWidget {
         return Directionality(
           textDirection: TextDirection.rtl,
           child: MediaQuery(
-            data: media.copyWith(
-              textScaler: const TextScaler.linear(textScale),
-            ),
+            data: media.copyWith(textScaler: const TextScaler.linear(textScale)),
             child: DefaultTextStyle(
               style: GoogleFonts.inter(fontSize: 14),
               child: _RootProviders(
@@ -376,14 +352,8 @@ class _RootProvidersState extends State<_RootProviders> {
         style: MenuStyle(
           backgroundColor: const WidgetStatePropertyAll(shadCard),
           surfaceTintColor: const WidgetStatePropertyAll(shadCard),
-          side: const WidgetStatePropertyAll(
-            BorderSide(color: shadBorder, width: 1),
-          ),
-          shape: WidgetStateProperty.all<OutlinedBorder>(
-            const RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(10)),
-            ),
-          ),
+          side: const WidgetStatePropertyAll(BorderSide(color: shadBorder, width: 1)),
+          shape: WidgetStateProperty.all<OutlinedBorder>(const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(10)))),
         ),
       ),
     );
@@ -395,9 +365,7 @@ class _RootProvidersState extends State<_RootProviders> {
         primaryToastTheme: _powerboardsToastThemeForContext(context),
         destructiveToastTheme: _powerboardsToastThemeForContext(context),
         selectTheme: ShadSelectTheme(
-          decoration: ShadDecoration(
-            border: ShadBorder.all(color: shadBorder, width: 1),
-          ),
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
         ),
         tabsTheme: ShadTabsTheme(
           tabBackgroundColor: shadCard,
@@ -431,9 +399,7 @@ class _RootProvidersState extends State<_RootProviders> {
         ),
         outlineButtonTheme: ShadButtonTheme(
           backgroundColor: shadCard,
-          decoration: ShadDecoration(
-            border: ShadBorder.all(color: shadBorder, width: 1),
-          ),
+          decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
         ),
       ),
       child: ChromeVisibility(

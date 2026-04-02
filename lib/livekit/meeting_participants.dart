@@ -1,15 +1,10 @@
 import 'package:livekit_client/livekit_client.dart' as lk;
 
 bool isActiveVideoPublication(lk.TrackPublication publication) {
-  return publication.kind == lk.TrackType.VIDEO &&
-      !publication.muted &&
-      publication.track is lk.VideoTrack;
+  return publication.kind == lk.TrackType.VIDEO && !publication.muted && publication.track is lk.VideoTrack;
 }
 
-lk.TrackPublication? activeVideoPublicationForSource(
-  lk.Participant participant,
-  lk.TrackSource source,
-) {
+lk.TrackPublication? activeVideoPublicationForSource(lk.Participant participant, lk.TrackSource source) {
   for (final publication in participant.trackPublications.values) {
     if (publication.source != source) {
       continue;
@@ -23,10 +18,7 @@ lk.TrackPublication? activeVideoPublicationForSource(
   return null;
 }
 
-Iterable<lk.TrackPublication> activeVideoPublications(
-  lk.Participant participant, {
-  lk.TrackSource? source,
-}) sync* {
+Iterable<lk.TrackPublication> activeVideoPublications(lk.Participant participant, {lk.TrackSource? source}) sync* {
   if (source != null) {
     final publication = activeVideoPublicationForSource(participant, source);
     if (publication != null) {
@@ -60,23 +52,17 @@ List<lk.Participant> uniqueMeetingParticipants(lk.Room room) {
       continue;
     }
 
-    participantsByIdentity.putIfAbsent(
-      _participantKey(participant),
-      () => participant,
-    );
+    participantsByIdentity.putIfAbsent(_participantKey(participant), () => participant);
   }
 
   final localParticipant = room.localParticipant;
   if (localParticipant != null) {
-    participantsByIdentity[_participantKey(localParticipant)] =
-        localParticipant;
+    participantsByIdentity[_participantKey(localParticipant)] = localParticipant;
   }
 
   return participantsByIdentity.values.toList(growable: false);
 }
 
 String _participantKey(lk.Participant participant) {
-  return participant.identity.isNotEmpty
-      ? participant.identity
-      : participant.sid;
+  return participant.identity.isNotEmpty ? participant.identity : participant.sid;
 }

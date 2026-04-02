@@ -34,9 +34,7 @@ class HangupButton extends StatelessWidget {
               offForeground: Colors.white,
               icon: LucideIcons.phone,
               onPressed: () {
-                context
-                    .findAncestorStateOfType<VideoChatConnectionState>()!
-                    .hangup();
+                context.findAncestorStateOfType<VideoChatConnectionState>()!.hangup();
                 final navController = Controller.ofType<NavController>(context);
                 navController.showNav();
                 if (onPressed != null) {
