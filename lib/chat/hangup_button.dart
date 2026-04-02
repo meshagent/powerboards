@@ -30,11 +30,13 @@ class HangupButton extends StatelessWidget {
               on: false,
               onColor: ShadTheme.of(context).colorScheme.foreground,
               onForeground: ShadTheme.of(context).colorScheme.background,
-              offColor: Colors.red,
+              offColor: ShadTheme.of(context).colorScheme.destructive,
               offForeground: Colors.white,
               icon: LucideIcons.phone,
               onPressed: () {
-                context.findAncestorStateOfType<VideoChatConnectionState>()!.hangup();
+                context
+                    .findAncestorStateOfType<VideoChatConnectionState>()!
+                    .hangup();
                 final navController = Controller.ofType<NavController>(context);
                 navController.showNav();
                 if (onPressed != null) {
@@ -49,7 +51,7 @@ class HangupButton extends StatelessWidget {
             onColor: ShadTheme.of(context).colorScheme.foreground,
             onForeground: ShadTheme.of(context).colorScheme.background,
 
-            offColor: Colors.red,
+            offColor: ShadTheme.of(context).colorScheme.destructive,
             offForeground: Colors.white,
             icon: LucideIcons.phone,
             onPressed: onPressed,

@@ -2,30 +2,15 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 
 import 'audio_stats.dart';
+import 'meeting_participants.dart';
 import 'participant_track.dart';
 import 'expand_participant_controller.dart';
+import 'hover_builder.dart';
 import 'room.dart';
-
-bool _isActiveVideoPublication(TrackPublication publication) {
-  return publication.kind == TrackType.VIDEO && !publication.muted && publication.track is VideoTrack;
-}
-
-Iterable<TrackPublication> _activeVideoPublications(Participant participant, {TrackSource? source}) sync* {
-  for (final publication in participant.trackPublications.values) {
-    if (!_isActiveVideoPublication(publication)) {
-      continue;
-    }
-
-    if (source != null && publication.source != source) {
-      continue;
-    }
-
-    yield publication;
-  }
-}
 
 class ExpandableCameraGrid extends StatefulWidget {
   const ExpandableCameraGrid({super.key, required this.participants});
@@ -42,7 +27,11 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   bool _collapseScheduled = false;
 
   bool _participantHasShare(Participant participant) {
-    return _activeVideoPublications(participant, source: TrackSource.screenShareVideo).isNotEmpty;
+    return activeVideoPublicationForSource(
+          participant,
+          TrackSource.screenShareVideo,
+        ) !=
+        null;
   }
 
   int _getNumberOfShares(List<Participant> participants) {
@@ -50,7 +39,8 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 
   bool _participantHasCamera(Participant participant) {
-    return _activeVideoPublications(participant).isNotEmpty;
+    return activeVideoPublicationForSource(participant, TrackSource.camera) !=
+        null;
   }
 
   int _getNumberOfVideos(List<Participant> participants) {
@@ -58,11 +48,19 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 
   bool _expandedCameraStillAvailable(List<Participant> participants) {
-    return participants.any((p) => _expandedController.isExpanded(p.identity) && _participantHasCamera(p));
+    return participants.any(
+      (p) =>
+          _expandedController.isExpanded(p.identity) &&
+          _participantHasCamera(p),
+    );
   }
 
   bool _expandedVideoStillAvailable(List<Participant> participants) {
-    return participants.any((p) => _expandedController.isExpanded(p.identity) && (_participantHasShare(p) || _participantHasCamera(p)));
+    return participants.any(
+      (p) =>
+          _expandedController.isExpanded(p.identity) &&
+          (_participantHasShare(p) || _participantHasCamera(p)),
+    );
   }
 
   bool _shouldCollapseExpandedParticipant(List<Participant> participants) {
@@ -116,7 +114,9 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    _expandedController = Controller.ofType<ExpandParticipantController>(context);
+    _expandedController = Controller.ofType<ExpandParticipantController>(
+      context,
+    );
   }
 
   @override
@@ -128,24 +128,37 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final participants = _expandedController.hasExpanded
-        ? widget.participants.where((p) => _expandedController.isExpanded(p.identity)).toList(growable: false)
+        ? widget.participants
+              .where((p) => _expandedController.isExpanded(p.identity))
+              .toList(growable: false)
         : widget.participants;
 
     return cameraGridBuilder(
       context,
       participants,
       spacing: 12.0,
-      frameBuilder: (context, participant, track, trackWidget, showName) {
-        final isScreenShare = track?.source == TrackSource.screenShareVideo;
+      frameBuilder: (context, participant, publication, trackWidget, showName) {
+        final isScreenShare =
+            publication?.source == TrackSource.screenShareVideo;
 
         return ClipRRect(
-          borderRadius: .circular(8),
-          child: ParticipantTrack(
-            participant: participant,
-            track: trackWidget,
-            overlayAlignment: isScreenShare ? .topCenter : .topRight,
-            showName: showName,
+          borderRadius: BorderRadius.circular(8),
+          child: HoverBuilder(
+            cursor: SystemMouseCursors.basic,
+            builder: (hovered) {
+              final alwaysShowName =
+                  isMobile &&
+                  _expandedController.isExpanded(participant.identity);
+              return ParticipantTrack(
+                participant: participant,
+                track: trackWidget,
+                overlayAlignment: isScreenShare ? .topCenter : .topRight,
+                showName: (showName && hovered) || alwaysShowName,
+                interactive: !isScreenShare,
+              );
+            },
           ),
         );
       },
@@ -153,7 +166,11 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 }
 
-List<int> _layoutCameras(List<TrackPublication?> cameras, double width, double height) {
+List<int> _layoutCameras(
+  List<TrackPublication?> cameras,
+  double width,
+  double height,
+) {
   int N = cameras.length;
   List<int> bestLayout = [];
   double minWaste = double.infinity;
@@ -170,11 +187,14 @@ List<int> _layoutCameras(List<TrackPublication?> cameras, double width, double h
     for (int i = 0; i < N; i++) {
       final cam = cameras[i];
 
-      final dims = cam == null ? const VideoDimensions(640, 480) : cam.dimensions;
+      final dims = cam == null
+          ? const VideoDimensions(640, 480)
+          : cam.dimensions;
 
       if (dims == null) {
       } else {
-        double cameraAspectRatio = dims.width.toDouble() / dims.height.toDouble();
+        double cameraAspectRatio =
+            dims.width.toDouble() / dims.height.toDouble();
 
         // Calculate the ideal aspect ratio for the grid layout
         double gridAspectRatio = (width / cols) / (height / rows);
@@ -206,258 +226,333 @@ Widget cameraGridBuilder(
   int rowsDesired = 0,
   int columnsDesired = 0,
   bool tryFill = true,
-  required Widget Function(BuildContext context, Participant participant, VideoTrack? track, Widget trackWidget, bool showName)
+  required Widget Function(
+    BuildContext context,
+    Participant participant,
+    TrackPublication? publication,
+    Widget trackWidget,
+    bool showName,
+  )
   frameBuilder,
 }) {
-  final tracks = <Widget>[];
-  final trackParticipants = <Participant>[];
-  final trackSources = <VideoTrack?>[];
-  final trackPublications = <TrackPublication?>[];
   final room = VideoRoomModel.maybeOf(context)?.room;
 
   if (room == null) {
     return const SizedBox.shrink();
   }
 
-  final hasShare = participants.any((p) => _activeVideoPublications(p, source: TrackSource.screenShareVideo).isNotEmpty);
+  return ListenableBuilder(
+    listenable: Listenable.merge(participants),
+    builder: (context, _) {
+      final tracks = <Widget>[];
+      final trackParticipants = <Participant>[];
+      final trackPublications = <TrackPublication?>[];
 
-  for (var p in participants) {
-    bool added = false;
-
-    final publications = showAllVideos
-        ? _activeVideoPublications(p)
-        : _activeVideoPublications(p, source: hasShare ? TrackSource.screenShareVideo : TrackSource.camera);
-
-    for (final publication in publications) {
-      final track = publication.track;
-      if (track is! VideoTrack) {
-        continue;
-      }
-
-      added = true;
-      trackParticipants.add(p);
-      trackSources.add(track);
-      trackPublications.add(publication);
-      tracks.add(
-        IgnorePointer(
-          child: VideoTrackRenderer(
-            track,
-            fit: publication.source == TrackSource.screenShareVideo ? VideoViewFit.contain : VideoViewFit.cover,
-          ),
-        ),
+      final hasShare = participants.any(
+        (p) =>
+            activeVideoPublicationForSource(p, TrackSource.screenShareVideo) !=
+            null,
       );
-    }
 
-    if (!hasShare && !added) {
-      trackParticipants.add(p);
-      trackSources.add(null);
-      trackPublications.add(null);
-      tracks.add(
-        Container(
-          color: const Color(0xFF222222),
-          alignment: .center,
-          child: p.identity.contains(".agent") ? AudioStats(room: room, participant: p) : const SizedBox.shrink(),
-        ),
-      );
-    }
-  }
+      for (var p in participants) {
+        bool added = false;
 
-  final slots = tracks.length;
-  if (slots == 0) {
-    return const SizedBox.shrink();
-  }
+        final publications = showAllVideos
+            ? activeVideoPublications(p)
+            : activeVideoPublications(
+                p,
+                source: hasShare
+                    ? TrackSource.screenShareVideo
+                    : TrackSource.camera,
+              );
 
-  return LayoutBuilder(
-    builder: (context, constraints) {
-      if (rowsDesired == 0 && columnsDesired == 0) {
-        final layout = _layoutCameras(trackPublications, constraints.maxWidth, constraints.maxHeight);
-        List<Widget> cams = [];
-
-        final rows = layout[0];
-        final cols = layout[1];
-
-        final totalHorizontalSpacing = spacing * max(cols - 1, 0);
-        final totalVerticalSpacing = spacing * max(rows - 1, 0);
-        final w = max((constraints.maxWidth - totalHorizontalSpacing) / cols, 0.0);
-        final h = max((constraints.maxHeight - totalVerticalSpacing) / rows, 0.0);
-        for (var r = 0; r < rows; r++) {
-          for (var c = 0; c < cols; c++) {
-            final i = r * cols + c;
-
-            if (i >= trackParticipants.length) {
-              break;
-            }
-            final participant = trackParticipants[i];
-            final source = trackSources[i];
-            final track = tracks[i];
-
-            cams.add(
-              Positioned(
-                left: c * w + spacing * c,
-                top: r * h + spacing * r,
-                child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, source, track, showNames)),
-              ),
-            );
+        for (final publication in publications) {
+          final track = publication.track;
+          if (track is! VideoTrack) {
+            continue;
           }
+
+          added = true;
+          trackParticipants.add(p);
+          trackPublications.add(publication);
+          tracks.add(
+            IgnorePointer(
+              child: VideoTrackRenderer(
+                track,
+                fit: publication.source == TrackSource.screenShareVideo
+                    ? VideoViewFit.contain
+                    : VideoViewFit.cover,
+              ),
+            ),
+          );
         }
-        return Stack(children: cams);
+
+        if (!hasShare && !added) {
+          trackParticipants.add(p);
+          trackPublications.add(null);
+          tracks.add(
+            Container(
+              color: const Color(0xFF222222),
+              alignment: .center,
+              child: p.identity.contains(".agent")
+                  ? AudioStats(room: room, participant: p)
+                  : const SizedBox.shrink(),
+            ),
+          );
+        }
       }
 
-      var cams = <Widget>[];
-      var x = 0.0;
-      var y = 0.0;
-
-      var slots = tracks.length;
+      final slots = tracks.length;
       if (slots == 0) {
         return const SizedBox.shrink();
       }
 
-      final objectWidth = constraints.biggest.width;
-      final objectHeight = constraints.biggest.height;
-
-      if (rowsDesired > 0 ||
-          columnsDesired > 0 ||
-          min(objectWidth / objectHeight, objectHeight / objectWidth) > .5 ||
-          slots < 4 && tryFill) {
-        int rows;
-        int cols;
-
-        if (objectWidth < objectHeight) {
-          rows = (rowsDesired > 0 ? rowsDesired : (columnsDesired > 0 ? slots / columnsDesired : (sqrt(slots)).ceil())).toInt();
-          cols = columnsDesired > 0 ? columnsDesired : (slots / (rows)).ceil();
-        } else {
-          cols = (columnsDesired > 0 ? columnsDesired : (rowsDesired > 0 ? slots / rowsDesired : (sqrt(slots)).ceil())).toInt();
-          rows = rowsDesired > 0 ? rowsDesired : (slots / (cols)).ceil();
-        }
-
-        final w = objectWidth / cols + 1 - spacing * (cols - 1) / (cols);
-        final h = objectHeight / rows - spacing * (rows - 1) / rows;
-
-        for (int r = 0; r < rows; r++) {
-          for (int c = 0; c < cols; c++) {
-            int i = c + r * cols;
-            if (i >= tracks.length) {
-              continue;
-            }
-            final participant = trackParticipants[i];
-            final track = tracks[i];
-            final source = trackSources[i];
-
-            cams.add(
-              Positioned(
-                left: c * w + spacing * c,
-                top: r * h + spacing * r,
-                child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, source, track, showNames)),
-              ),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          if (rowsDesired == 0 && columnsDesired == 0) {
+            final layout = _layoutCameras(
+              trackPublications,
+              constraints.maxWidth,
+              constraints.maxHeight,
             );
-          }
-        }
-      } else {
-        final totalSpace = objectWidth * objectHeight;
-        var rowUsedSpace = totalSpace;
-        var rows = 1.0;
-        var vertRows = false;
+            List<Widget> cams = [];
 
-        for (var i = 1.0; i < 10; i += 0.1) {
-          final itemSize = objectHeight / i;
+            final rows = layout[0];
+            final cols = layout[1];
 
-          final usedSpace = itemSize * itemSize * max(slots, 1);
+            final availableWidth = constraints.maxWidth - spacing * (cols - 1);
+            final availableHeight =
+                constraints.maxHeight - spacing * (rows - 1);
+            final w = availableWidth / cols;
+            final h = availableHeight / rows;
+            for (var r = 0; r < rows; r++) {
+              for (var c = 0; c < cols; c++) {
+                final i = r * cols + c;
 
-          final localSpace = usedSpace; //itemSize * itemSize * Math.ceil(slots/i) * i;
+                if (i >= trackParticipants.length) {
+                  break;
+                }
+                final participant = trackParticipants[i];
+                final publication = trackPublications[i];
+                final track = tracks[i];
 
-          // How much space is wasted? Use the layout that wastes the least.
-          if (itemSize * (slots / (i).floor()).ceil() <= objectWidth &&
-              itemSize * (i).floor() <= objectHeight &&
-              localSpace <= totalSpace &&
-              totalSpace - localSpace < rowUsedSpace) {
-            rows = i;
-            rowUsedSpace = totalSpace - localSpace;
-            vertRows = true;
-          }
-        }
-
-        for (var i = 1.0; i < 10; i += 0.1) {
-          final itemSize = objectWidth / i;
-
-          var usedSpace = itemSize * itemSize * max(slots, 1);
-          var localSpace = usedSpace; //itemSize * itemSize * Math.ceil(slots/i) * i;
-
-          // How much space is wasted? Use the layout that wastes the least.
-          if (itemSize * (slots / (i).floor()).ceil() <= objectHeight &&
-              itemSize * (i).floor() <= objectWidth &&
-              localSpace <= totalSpace &&
-              totalSpace - localSpace < rowUsedSpace) {
-            rows = i;
-            rowUsedSpace = totalSpace - localSpace;
-            vertRows = false;
-          }
-        }
-
-        if (vertRows) {
-          final itemSize = (objectHeight - (spacing * rows * 1)) / rows;
-
-          for (var i = 0; i < tracks.length; i++) {
-            final track = tracks[i];
-            final participant = trackParticipants[i];
-            final source = trackSources[i];
-
-            cams.add(
-              Positioned(
-                left: x,
-                top: y,
-                child: SizedBox(width: itemSize, height: itemSize, child: frameBuilder(context, participant, source, track, showNames)),
-              ),
-            );
-
-            x += itemSize + spacing;
-
-            if (x + itemSize > objectWidth) {
-              x = spacing;
-              y += itemSize + spacing;
+                cams.add(
+                  Positioned(
+                    left: c * (w + spacing),
+                    top: r * (h + spacing),
+                    child: SizedBox(
+                      width: w,
+                      height: h,
+                      child: frameBuilder(
+                        context,
+                        participant,
+                        publication,
+                        track,
+                        showNames,
+                      ),
+                    ),
+                  ),
+                );
+              }
             }
-          } //);
+            return Stack(children: cams);
+          }
 
-          while (y < objectHeight) {
-            x += itemSize + spacing;
-            if (x + itemSize > objectWidth) {
-              x = spacing;
-              y += itemSize + spacing;
+          var cams = <Widget>[];
+          var x = 0.0;
+          var y = 0.0;
+
+          final objectWidth = constraints.biggest.width;
+          final objectHeight = constraints.biggest.height;
+
+          if (rowsDesired > 0 ||
+              columnsDesired > 0 ||
+              min(objectWidth / objectHeight, objectHeight / objectWidth) >
+                  .5 ||
+              slots < 4 && tryFill) {
+            int rows;
+            int cols;
+
+            if (objectWidth < objectHeight) {
+              rows =
+                  (rowsDesired > 0
+                          ? rowsDesired
+                          : (columnsDesired > 0
+                                ? slots / columnsDesired
+                                : (sqrt(slots)).ceil()))
+                      .toInt();
+              cols = columnsDesired > 0
+                  ? columnsDesired
+                  : (slots / (rows)).ceil();
+            } else {
+              cols =
+                  (columnsDesired > 0
+                          ? columnsDesired
+                          : (rowsDesired > 0
+                                ? slots / rowsDesired
+                                : (sqrt(slots)).ceil()))
+                      .toInt();
+              rows = rowsDesired > 0 ? rowsDesired : (slots / (cols)).ceil();
+            }
+
+            final w = objectWidth / cols + 1 - spacing * (cols - 1) / (cols);
+            final h = objectHeight / rows - spacing * (rows - 1) / rows;
+
+            for (int r = 0; r < rows; r++) {
+              for (int c = 0; c < cols; c++) {
+                int i = c + r * cols;
+                if (i >= tracks.length) {
+                  continue;
+                }
+                final participant = trackParticipants[i];
+                final track = tracks[i];
+                final publication = trackPublications[i];
+
+                cams.add(
+                  Positioned(
+                    left: c * w + spacing * c,
+                    top: r * h + spacing * r,
+                    child: SizedBox(
+                      width: w,
+                      height: h,
+                      child: frameBuilder(
+                        context,
+                        participant,
+                        publication,
+                        track,
+                        showNames,
+                      ),
+                    ),
+                  ),
+                );
+              }
+            }
+          } else {
+            final totalSpace = objectWidth * objectHeight;
+            var rowUsedSpace = totalSpace;
+            var rows = 1.0;
+            var vertRows = false;
+
+            for (var i = 1.0; i < 10; i += 0.1) {
+              final itemSize = objectHeight / i;
+
+              final usedSpace = itemSize * itemSize * max(slots, 1);
+
+              final localSpace = usedSpace;
+
+              if (itemSize * (slots / (i).floor()).ceil() <= objectWidth &&
+                  itemSize * (i).floor() <= objectHeight &&
+                  localSpace <= totalSpace &&
+                  totalSpace - localSpace < rowUsedSpace) {
+                rows = i;
+                rowUsedSpace = totalSpace - localSpace;
+                vertRows = true;
+              }
+            }
+
+            for (var i = 1.0; i < 10; i += 0.1) {
+              final itemSize = objectWidth / i;
+
+              var usedSpace = itemSize * itemSize * max(slots, 1);
+              var localSpace = usedSpace;
+
+              if (itemSize * (slots / (i).floor()).ceil() <= objectHeight &&
+                  itemSize * (i).floor() <= objectWidth &&
+                  localSpace <= totalSpace &&
+                  totalSpace - localSpace < rowUsedSpace) {
+                rows = i;
+                rowUsedSpace = totalSpace - localSpace;
+                vertRows = false;
+              }
+            }
+
+            if (vertRows) {
+              final itemSize = (objectHeight - (spacing * rows * 1)) / rows;
+
+              for (var i = 0; i < tracks.length; i++) {
+                final track = tracks[i];
+                final participant = trackParticipants[i];
+                final publication = trackPublications[i];
+
+                cams.add(
+                  Positioned(
+                    left: x,
+                    top: y,
+                    child: SizedBox(
+                      width: itemSize,
+                      height: itemSize,
+                      child: frameBuilder(
+                        context,
+                        participant,
+                        publication,
+                        track,
+                        showNames,
+                      ),
+                    ),
+                  ),
+                );
+
+                x += itemSize + spacing;
+
+                if (x + itemSize > objectWidth) {
+                  x = spacing;
+                  y += itemSize + spacing;
+                }
+              }
+
+              while (y < objectHeight) {
+                x += itemSize + spacing;
+                if (x + itemSize > objectWidth) {
+                  x = spacing;
+                  y += itemSize + spacing;
+                }
+              }
+            } else {
+              final itemSize = (objectWidth - (spacing * rows * 1)) / rows;
+
+              for (var i = 0; i < tracks.length; i++) {
+                final track = tracks[i];
+                final participant = trackParticipants[i];
+                final publication = trackPublications[i];
+
+                cams.add(
+                  Positioned(
+                    left: x,
+                    top: y,
+                    child: SizedBox(
+                      width: itemSize,
+                      height: itemSize,
+                      child: frameBuilder(
+                        context,
+                        participant,
+                        publication,
+                        track,
+                        showNames,
+                      ),
+                    ),
+                  ),
+                );
+
+                y += itemSize + spacing;
+
+                if (y + itemSize > objectHeight) {
+                  y = spacing;
+                  x += itemSize + spacing;
+                }
+              }
+
+              while (x < objectWidth) {
+                y += itemSize + spacing;
+                if (y + itemSize > objectHeight) {
+                  y = spacing;
+                  x += itemSize + spacing;
+                }
+              }
             }
           }
-        } else {
-          final itemSize = (objectWidth - (spacing * rows * 1)) / rows;
-
-          for (var i = 0; i < tracks.length; i++) {
-            final track = tracks[i];
-            final participant = trackParticipants[i];
-            final source = trackSources[i];
-
-            cams.add(
-              Positioned(
-                left: x,
-                top: y,
-                child: SizedBox(width: itemSize, height: itemSize, child: frameBuilder(context, participant, source, track, showNames)),
-              ),
-            );
-
-            y += itemSize + spacing;
-
-            if (y + itemSize > objectHeight) {
-              y = spacing;
-              x += itemSize + spacing;
-            }
-          } //);
-
-          while (x < objectWidth) {
-            y += itemSize + spacing;
-            if (y + itemSize > objectHeight) {
-              y = spacing;
-              x += itemSize + spacing;
-            }
-          }
-        }
-      }
-      return Stack(children: cams);
+          return Stack(children: cams);
+        },
+      );
     },
   );
 }

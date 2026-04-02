@@ -9,6 +9,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 
 import 'package:powerboards/livekit/camera_grid.dart';
 import 'package:powerboards/livekit/camera_strip.dart';
@@ -18,11 +19,18 @@ import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
+import 'package:powerboards/ui/pane_empty_state.dart';
 
 const _railGap = 16.0;
 const _compactControlWidth = 48.0;
+const _mobileMeetingToolbarHorizontalPadding = 40.0;
+const _mobileMeetingToolbarGap = 8.0;
+const _mobileMeetingToolbarFixedControlCount = 4;
+const _mobileTranscriptionButtonMaxWidth = 260.0;
+const _mobileTranscriptionCompactThreshold = 110.0;
+const _mobileTranscriptionShortLabelThreshold = 148.0;
 
-enum MeetingViewState { preview, joined, ended }
+enum MeetingViewState { preview, joined }
 
 class MeetingViewController extends Controller {
   MeetingViewState _state = MeetingViewState.preview;
@@ -34,11 +42,6 @@ class MeetingViewController extends Controller {
     notifyListeners();
   }
 
-  void endMeeting() {
-    _state = MeetingViewState.ended;
-    notifyListeners();
-  }
-
   void resetToLobby() {
     _state = MeetingViewState.preview;
     notifyListeners();
@@ -46,7 +49,13 @@ class MeetingViewController extends Controller {
 }
 
 class MeetingView extends StatefulWidget {
-  const MeetingView({super.key, required this.room, required this.onCancel, required this.joinMeeting, this.agentName});
+  const MeetingView({
+    super.key,
+    required this.room,
+    required this.onCancel,
+    required this.joinMeeting,
+    this.agentName,
+  });
 
   final String? agentName;
 
@@ -61,6 +70,14 @@ class MeetingView extends StatefulWidget {
 class _MeetingViewState extends State<MeetingView> {
   final expandParticipantController = ExpandParticipantController();
 
+  Widget _voiceSessionMeetingBlockedState() {
+    return const PaneEmptyState(
+      title: "End voice session to meet",
+      titleScaleOverride: 0.72,
+      verticalOffset: -28,
+    );
+  }
+
   @override
   void dispose() {
     super.dispose();
@@ -69,7 +86,9 @@ class _MeetingViewState extends State<MeetingView> {
   }
 
   lk.VideoTrack? _screenShareTrackFor(lk.Participant participant) {
-    final publication = participant.getTrackPublicationBySource(lk.TrackSource.screenShareVideo);
+    final publication = participant.getTrackPublicationBySource(
+      lk.TrackSource.screenShareVideo,
+    );
     final track = publication?.track;
 
     if (publication == null || publication.muted || track is! lk.VideoTrack) {
@@ -83,7 +102,11 @@ class _MeetingViewState extends State<MeetingView> {
     return _screenShareTrackFor(participant) != null;
   }
 
-  Widget _mobileLayout(lk.Room room, List<lk.Participant> participants, bool hasShare) {
+  Widget _mobileLayout(
+    lk.Room room,
+    List<lk.Participant> participants,
+    bool hasShare,
+  ) {
     return Column(
       crossAxisAlignment: .stretch,
       children: [
@@ -103,85 +126,96 @@ class _MeetingViewState extends State<MeetingView> {
 
   @override
   Widget build(BuildContext context) {
-    final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    final meetingViewController = Controller.ofType<MeetingViewController>(
+      context,
+    );
+    final voiceSessionController = MeetingController.maybeOf(context);
+
+    Widget buildMeetingContent() {
+      final videoRoom = VideoRoomModel.maybeOf(context)?.room;
+      final voiceSessionActive = voiceSessionController?.isConnected == true;
+      final inPreview =
+          meetingViewController.state == MeetingViewState.preview ||
+          (videoRoom == null &&
+              meetingViewController.state == MeetingViewState.joined);
+
+      if (inPreview) {
+        if (voiceSessionActive) {
+          return _voiceSessionMeetingBlockedState();
+        }
+
+        return Padding(
+          padding: const .symmetric(horizontal: 20.0),
+          child: DevicePreview(
+            onJoin: (enableVideo, enableAudio) {
+              final videoChatConnection = context
+                  .findAncestorStateOfType<VideoChatConnectionState>();
+              final navController = Controller.ofType<NavController>(context);
+
+              if (videoChatConnection != null) {
+                videoChatConnection.setRoomFromDoc(
+                  "",
+                  widget.room,
+                  "",
+                  video: enableVideo,
+                  audio: enableAudio,
+                  agentID: null,
+                );
+              }
+
+              meetingViewController.enterMeeting();
+              navController.hideNav();
+            },
+            onCancel: widget.onCancel,
+          ),
+        );
+      } else if (meetingViewController.state == MeetingViewState.joined) {
+        final room = VideoRoomModel.maybeOf(context)?.room;
+        if (room == null) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const .all(20),
+          child: VideoRoomParticipantsBuilder(
+            room: room,
+            builder: (context, participants) {
+              return ControllerBuilder<ExpandParticipantController>(
+                controller: expandParticipantController,
+                builder: (context) {
+                  final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+                  final hasShare = participants.any(_participantHasActiveShare);
+
+                  if (isMobile) {
+                    return _mobileLayout(room, participants, hasShare);
+                  }
+
+                  if (hasShare) {
+                    return _DesktopShareLayout(
+                      room: room,
+                      participants: participants,
+                    );
+                  }
+
+                  return ExpandableCameraGrid(participants: participants);
+                },
+              );
+            },
+          ),
+        );
+      }
+
+      return const Text("Unknown state");
+    }
 
     return ControllerProvider<ExpandParticipantController>(
       controller: expandParticipantController,
       child: ControllerBuilder(
         controller: meetingViewController,
-        builder: (BuildContext context) {
-          final videoRoom = VideoRoomModel.maybeOf(context)?.room;
-          final inPreview =
-              meetingViewController.state == MeetingViewState.preview ||
-              (videoRoom == null && meetingViewController.state == MeetingViewState.joined);
-
-          if (inPreview) {
-            return Padding(
-              padding: const .symmetric(horizontal: 20.0),
-              child: DevicePreview(
-                onJoin: (enableVideo, enableAudio) {
-                  final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
-                  final navController = Controller.ofType<NavController>(context);
-
-                  if (videoChatConnection != null) {
-                    videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
-                  }
-
-                  meetingViewController.enterMeeting();
-                  navController.hideNav();
-                },
-                onCancel: widget.onCancel,
+        builder: (BuildContext context) => voiceSessionController == null
+            ? buildMeetingContent()
+            : ListenableBuilder(
+                listenable: voiceSessionController,
+                builder: (context, _) => buildMeetingContent(),
               ),
-            );
-          } else if (meetingViewController.state == MeetingViewState.joined) {
-            final room = VideoRoomModel.maybeOf(context)?.room;
-            if (room == null) return const SizedBox.shrink();
-
-            return Padding(
-              padding: const .all(20),
-              child: VideoRoomParticipantsBuilder(
-                room: room,
-                builder: (context, participants) {
-                  return ControllerBuilder<ExpandParticipantController>(
-                    controller: expandParticipantController,
-                    builder: (context) {
-                      final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-                      final hasShare = participants.any(_participantHasActiveShare);
-
-                      if (isMobile) {
-                        return _mobileLayout(room, participants, hasShare);
-                      }
-
-                      if (hasShare) {
-                        return _DesktopShareLayout(room: room, participants: participants);
-                      }
-
-                      return ExpandableCameraGrid(participants: participants);
-                    },
-                  );
-                },
-              ),
-            );
-          } else if (meetingViewController.state == MeetingViewState.ended) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 20,
-                children: [
-                  Text("Meeting ended", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  ShadButton(
-                    onPressed: () {
-                      meetingViewController.resetToLobby();
-                    },
-                    child: Text("Back to lobby"),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return const Text("Unknown state");
-        },
       ),
     );
   }
@@ -196,17 +230,27 @@ class _DesktopShareLayout extends StatelessWidget {
   static const double _leftStripWidth = 250.0;
   static const double _topStripHeight = 100.0;
 
-  Iterable<lk.TrackPublication> getSharePublications(List<lk.Participant> participants) sync* {
+  Iterable<lk.TrackPublication> getSharePublications(
+    List<lk.Participant> participants,
+  ) sync* {
     for (final participant in participants) {
-      final publication = participant.getTrackPublicationBySource(lk.TrackSource.screenShareVideo);
+      final publication = participant.getTrackPublicationBySource(
+        lk.TrackSource.screenShareVideo,
+      );
 
-      if (publication != null && !publication.muted && publication.track is lk.VideoTrack) {
+      if (publication != null &&
+          !publication.muted &&
+          publication.track is lk.VideoTrack) {
         yield publication;
       }
     }
   }
 
-  Size _fitAspect({required double aspectRatio, required double maxWidth, required double maxHeight}) {
+  Size _fitAspect({
+    required double aspectRatio,
+    required double maxWidth,
+    required double maxHeight,
+  }) {
     if (maxWidth <= 0 || maxHeight <= 0 || aspectRatio <= 0) {
       return Size.zero;
     }
@@ -222,7 +266,11 @@ class _DesktopShareLayout extends StatelessWidget {
     return Size(width, height);
   }
 
-  bool _shouldPutStripOnLeft({required BoxConstraints constraints, required double aspectRatio, required bool hasExpanded}) {
+  bool _shouldPutStripOnLeft({
+    required BoxConstraints constraints,
+    required double aspectRatio,
+    required bool hasExpanded,
+  }) {
     if (hasExpanded) {
       return false;
     }
@@ -230,15 +278,29 @@ class _DesktopShareLayout extends StatelessWidget {
     final maxWidth = constraints.maxWidth;
     final maxHeight = constraints.maxHeight;
 
-    final leftAvailableWidth = math.max(0.0, maxWidth - _leftStripWidth - _railGap);
+    final leftAvailableWidth = math.max(
+      0.0,
+      maxWidth - _leftStripWidth - _railGap,
+    );
     final leftAvailableHeight = maxHeight;
 
     final topAvailableWidth = maxWidth;
-    final topAvailableHeight = math.max(0.0, maxHeight - _topStripHeight - _railGap);
+    final topAvailableHeight = math.max(
+      0.0,
+      maxHeight - _topStripHeight - _railGap,
+    );
 
-    final leftFit = _fitAspect(aspectRatio: aspectRatio, maxWidth: leftAvailableWidth, maxHeight: leftAvailableHeight);
+    final leftFit = _fitAspect(
+      aspectRatio: aspectRatio,
+      maxWidth: leftAvailableWidth,
+      maxHeight: leftAvailableHeight,
+    );
 
-    final topFit = _fitAspect(aspectRatio: aspectRatio, maxWidth: topAvailableWidth, maxHeight: topAvailableHeight);
+    final topFit = _fitAspect(
+      aspectRatio: aspectRatio,
+      maxWidth: topAvailableWidth,
+      maxHeight: topAvailableHeight,
+    );
 
     final leftArea = leftFit.width * leftFit.height;
     final topArea = topFit.width * topFit.height;
@@ -248,8 +310,12 @@ class _DesktopShareLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final expandController = Controller.ofType<ExpandParticipantController>(context);
-    final sharePublications = getSharePublications(participants).toList(growable: false);
+    final expandController = Controller.ofType<ExpandParticipantController>(
+      context,
+    );
+    final sharePublications = getSharePublications(
+      participants,
+    ).toList(growable: false);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -259,7 +325,9 @@ class _DesktopShareLayout extends StatelessWidget {
           final track = sharePublications.first;
           final dimensions = track.dimensions;
 
-          if (dimensions != null && dimensions.width > 0 && dimensions.height > 0) {
+          if (dimensions != null &&
+              dimensions.width > 0 &&
+              dimensions.height > 0) {
             final aspectRatio = dimensions.width / dimensions.height;
 
             stripOnLeft = _shouldPutStripOnLeft(
@@ -279,7 +347,11 @@ class _DesktopShareLayout extends StatelessWidget {
                 const SizedBox(width: _railGap),
                 SizedBox(
                   width: _leftStripWidth,
-                  child: CameraStrip(room: room, horizontal: false, participants: participants),
+                  child: CameraStrip(
+                    room: room,
+                    horizontal: false,
+                    participants: participants,
+                  ),
                 ),
               ],
             ],
@@ -292,7 +364,11 @@ class _DesktopShareLayout extends StatelessWidget {
             if (!expandController.hasExpanded) ...[
               SizedBox(
                 height: _topStripHeight,
-                child: CameraStrip(room: room, horizontal: true, participants: participants),
+                child: CameraStrip(
+                  room: room,
+                  horizontal: true,
+                  participants: participants,
+                ),
               ),
               const SizedBox(height: _railGap),
             ],
@@ -305,7 +381,12 @@ class _DesktopShareLayout extends StatelessWidget {
 }
 
 class MeetingToolkits extends StatefulWidget {
-  const MeetingToolkits({super.key, required this.room, this.breakoutRoom = "", this.compact = false});
+  const MeetingToolkits({
+    super.key,
+    required this.room,
+    this.breakoutRoom = "",
+    this.compact = false,
+  });
 
   final RoomClient room;
   final String breakoutRoom;
@@ -318,7 +399,61 @@ class MeetingToolkits extends StatefulWidget {
 class _MeetingToolkitsState extends State<MeetingToolkits> {
   Timer? timer;
 
-  late final toolkits = Resource<List<ToolkitDescription>>(() => widget.room.agents.listToolkits());
+  late final toolkits = Resource<List<ToolkitDescription>>(
+    () => widget.room.agents.listToolkits(),
+  );
+
+  double _mobileTranscriptionButtonWidth(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final usedWidth =
+        (_mobileMeetingToolbarHorizontalPadding / 2) +
+        (_mobileMeetingToolbarFixedControlCount * _compactControlWidth) +
+        ((_mobileMeetingToolbarFixedControlCount - 1) *
+            _mobileMeetingToolbarGap) +
+        _mobileMeetingToolbarGap;
+    final availableWidth = screenWidth - usedWidth;
+    return availableWidth
+        .clamp(_compactControlWidth, _mobileTranscriptionButtonMaxWidth)
+        .toDouble();
+  }
+
+  void _showTranscriptionToast(String message) {
+    ShadToaster.maybeOf(context)?.show(
+      ShadToast(
+        description: Text(message),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  String _transcriptionButtonLabel({
+    required bool transcribing,
+    required bool shortLabel,
+  }) {
+    if (!shortLabel) {
+      return transcribing ? "Stop Transcription" : "Start Transcription";
+    }
+
+    return transcribing ? "Stop..." : "Start...";
+  }
+
+  Future<void> _invokeTranscriptionTool({
+    required ToolkitDescription transcription,
+    required String toolName,
+    required Map<String, Object?> input,
+    required String successMessage,
+    required bool showToast,
+  }) async {
+    await widget.room.agents.invokeTool(
+      toolkit: transcription.name,
+      tool: toolName,
+      input: ToolContentInput(JsonContent(json: input)),
+    );
+
+    if (showToast) {
+      _showTranscriptionToast(successMessage);
+    }
+  }
 
   @override
   void initState() {
@@ -344,20 +479,42 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
     return SignalBuilder(
       builder: (context, _) {
         if (!toolkits.state.isReady) {
           return SizedBox();
         }
-        final transcription = toolkits.state.value!.firstWhereOrNull((x) => x.name == "transcription");
-        final startRecording = transcription?.tools.firstWhereOrNull((x) => x.name == "start_transcription");
-        final stopRecording = transcription?.tools.firstWhereOrNull((x) => x.name == "stop_transcription");
+        final transcription = toolkits.state.value!.firstWhereOrNull(
+          (x) => x.name == "transcription",
+        );
+        final startRecording = transcription?.tools.firstWhereOrNull(
+          (x) => x.name == "start_transcription",
+        );
+        final stopRecording = transcription?.tools.firstWhereOrNull(
+          (x) => x.name == "stop_transcription",
+        );
 
         final transcribing =
             widget.room.messaging.remoteParticipants.firstWhereOrNull(
-              (p) => p.getAttribute("transcribing.${widget.breakoutRoom}") == true,
+              (p) =>
+                  p.getAttribute("transcribing.${widget.breakoutRoom}") == true,
             ) !=
             null;
+        final mobileButtonWidth = isMobile
+            ? _mobileTranscriptionButtonWidth(context)
+            : _mobileTranscriptionButtonMaxWidth;
+        final useCompactPresentation =
+            widget.compact ||
+            (isMobile &&
+                mobileButtonWidth <= _mobileTranscriptionCompactThreshold);
+        final useShortLabel =
+            isMobile &&
+            !useCompactPresentation &&
+            mobileButtonWidth <= _mobileTranscriptionShortLabelThreshold;
+        final useCompressedPresentation =
+            isMobile && (useCompactPresentation || useShortLabel);
 
         return Wrap(
           spacing: 8,
@@ -367,22 +524,40 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
               Tooltip(
                 message: "Start Transcription",
                 child: SizedBox(
-                  width: widget.compact ? _compactControlWidth : null,
+                  width: useCompactPresentation
+                      ? _compactControlWidth
+                      : (isMobile ? mobileButtonWidth : null),
                   child: ShadButton.outline(
-                    padding: widget.compact ? const EdgeInsets.symmetric(horizontal: 0) : null,
+                    padding: useCompactPresentation
+                        ? const EdgeInsets.symmetric(horizontal: 0)
+                        : isMobile
+                        ? const EdgeInsets.symmetric(horizontal: 12)
+                        : null,
                     leading: Icon(LucideIcons.captions),
                     onPressed: () async {
-                      widget.room.agents.invokeTool(
-                        toolkit: transcription!.name,
-                        tool: startRecording.name,
-                        input: ToolContentInput(
-                          JsonContent(
-                            json: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
-                          ),
-                        ),
+                      await _invokeTranscriptionTool(
+                        transcription: transcription!,
+                        toolName: startRecording.name,
+                        input: {
+                          "breakout_room": "",
+                          "path":
+                              "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript",
+                        },
+                        successMessage: "Transcription started",
+                        showToast: useCompressedPresentation,
                       );
                     },
-                    child: widget.compact ? null : Text("Start Transcription"),
+                    child: useCompactPresentation
+                        ? null
+                        : Text(
+                            _transcriptionButtonLabel(
+                              transcribing: false,
+                              shortLabel: useShortLabel,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                          ),
                   ),
                 ),
               ),
@@ -391,18 +566,36 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
               Tooltip(
                 message: "Stop Transcription",
                 child: SizedBox(
-                  width: widget.compact ? _compactControlWidth : null,
+                  width: useCompactPresentation
+                      ? _compactControlWidth
+                      : (isMobile ? mobileButtonWidth : null),
                   child: ShadButton.outline(
-                    padding: widget.compact ? const EdgeInsets.symmetric(horizontal: 0) : null,
+                    padding: useCompactPresentation
+                        ? const EdgeInsets.symmetric(horizontal: 0)
+                        : isMobile
+                        ? const EdgeInsets.symmetric(horizontal: 12)
+                        : null,
                     leading: Icon(LucideIcons.captionsOff),
                     onPressed: () async {
-                      widget.room.agents.invokeTool(
-                        toolkit: transcription!.name,
-                        tool: stopRecording.name,
-                        input: ToolContentInput(JsonContent(json: {"breakout_room": ""})),
+                      await _invokeTranscriptionTool(
+                        transcription: transcription!,
+                        toolName: stopRecording.name,
+                        input: {"breakout_room": ""},
+                        successMessage: "Transcription stopped",
+                        showToast: useCompressedPresentation,
                       );
                     },
-                    child: widget.compact ? null : Text("Stop Transcription"),
+                    child: useCompactPresentation
+                        ? null
+                        : Text(
+                            _transcriptionButtonLabel(
+                              transcribing: true,
+                              shortLabel: useShortLabel,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                          ),
                   ),
                 ),
               ),

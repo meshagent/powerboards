@@ -16,8 +16,12 @@ Future<void> showSwitchProjectDialog({
 
   return showShadDialog<void>(
     context: context,
-    builder: (context) =>
-        SwitchProjectDialog(currentProjectId: currentProjectId, projects: projects, onSwitch: onSwitch, onNewProject: onNewProject),
+    builder: (context) => SwitchProjectDialog(
+      currentProjectId: currentProjectId,
+      projects: projects,
+      onSwitch: onSwitch,
+      onNewProject: onNewProject,
+    ),
   );
 }
 
@@ -68,9 +72,12 @@ class SwitchProjectDialog extends StatelessWidget {
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
       actions: [
-        ShadButton.outline(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        ShadButton.outline(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
         ShadButton(
-          leading: const Icon(LucideIcons.packagePlus),
+          leading: const Icon(LucideIcons.clipboardPlus),
           onPressed: () {
             Navigator.of(context).pop();
             onNewProject();
@@ -91,7 +98,9 @@ class SwitchProjectDialog extends StatelessWidget {
               }
 
               return ScrollConfiguration(
-                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                behavior: ScrollConfiguration.of(
+                  context,
+                ).copyWith(scrollbars: false),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.start,
@@ -109,7 +118,12 @@ class SwitchProjectDialog extends StatelessWidget {
 }
 
 class _ProjectListItem extends StatefulWidget {
-  const _ProjectListItem({super.key, required this.name, required this.selected, required this.onTap});
+  const _ProjectListItem({
+    super.key,
+    required this.name,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String name;
   final bool selected;
@@ -125,7 +139,9 @@ class _ProjectListItemState extends State<_ProjectListItem> {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
-    final fontWeight = widget.selected || _hovered ? FontWeight.w700 : FontWeight.w400;
+    final fontWeight = widget.selected || _hovered
+        ? FontWeight.w700
+        : FontWeight.w400;
 
     return Material(
       color: Colors.transparent,
@@ -146,7 +162,11 @@ class _ProjectListItemState extends State<_ProjectListItem> {
                 Expanded(
                   child: Text(
                     widget.name,
-                    style: TextStyle(inherit: true, fontWeight: fontWeight, color: theme.colorScheme.foreground),
+                    style: TextStyle(
+                      inherit: true,
+                      fontWeight: fontWeight,
+                      color: theme.colorScheme.foreground,
+                    ),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),
@@ -156,7 +176,13 @@ class _ProjectListItemState extends State<_ProjectListItem> {
                   width: 24,
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: widget.selected ? Icon(LucideIcons.check, size: 18, color: theme.colorScheme.foreground) : null,
+                    child: widget.selected
+                        ? Icon(
+                            LucideIcons.check,
+                            size: 18,
+                            color: theme.colorScheme.foreground,
+                          )
+                        : null,
                   ),
                 ),
               ],

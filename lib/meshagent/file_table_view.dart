@@ -51,7 +51,10 @@ class _FileLocation {
   const _FileLocation({required this.folder, required this.openedFile});
 
   @override
-  bool operator ==(Object other) => other is _FileLocation && other.folder == folder && other.openedFile == openedFile;
+  bool operator ==(Object other) =>
+      other is _FileLocation &&
+      other.folder == folder &&
+      other.openedFile == openedFile;
 
   @override
   int get hashCode => Object.hash(folder, openedFile);
@@ -70,7 +73,10 @@ class _FileLocation {
       return _FileLocation(folder: normalizedPath, openedFile: null);
     }
 
-    return _FileLocation(folder: parentPath(normalizedPath), openedFile: normalizedPath);
+    return _FileLocation(
+      folder: parentPath(normalizedPath),
+      openedFile: normalizedPath,
+    );
   }
 }
 
@@ -132,7 +138,8 @@ class _FilePathKey {
 
   static String displayNameFromKey(String key) {
     final trimmed = pathFromKey(key);
-    final last = trimmed.split('/').where((s) => s.isNotEmpty).lastOrNull ?? trimmed;
+    final last =
+        trimmed.split('/').where((s) => s.isNotEmpty).lastOrNull ?? trimmed;
     return isFolderKey(key) ? '$last/' : last;
   }
 }
@@ -169,7 +176,10 @@ class FileManagerView extends StatefulWidget {
 }
 
 class _FileManagerViewState extends State<FileManagerView> {
-  static TextStyle breadcrumbLinkStyle = GoogleFonts.inter(fontSize: 16, fontWeight: .w600);
+  static TextStyle breadcrumbLinkStyle = GoogleFonts.inter(
+    fontSize: 16,
+    fontWeight: .w600,
+  );
 
   _FileLocation _location = const _FileLocation(folder: "", openedFile: null);
   String? get _openedFile => _location.openedFile;
@@ -177,9 +187,12 @@ class _FileManagerViewState extends State<FileManagerView> {
   bool _forceShowSelect = false;
   String _tab = 'preview';
   final popoverController = ShadPopoverController();
-  final ShadContextMenuController _collapsedBreadcrumbMenuController = ShadContextMenuController();
+  final ShadContextMenuController _collapsedBreadcrumbMenuController =
+      ShadContextMenuController();
   final CodePreviewController _codePreviewController = CodePreviewController();
-  late final uploadNotifications = UploadProgressNotifications(popoverController: popoverController);
+  late final uploadNotifications = UploadProgressNotifications(
+    popoverController: popoverController,
+  );
 
   late StreamSubscription<RoomEvent> roomSub;
 
@@ -187,7 +200,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   final _sortSig = Signal<FileSort>(const FileSort(FileSortField.name, true));
   final _selectedSig = Signal<Set<String>>(<String>{});
 
-  late final storageEntries = Resource<List<StorageEntry>>(() => _getChildren(_folderSig.value), source: _folderSig);
+  late final storageEntries = Resource<List<StorageEntry>>(
+    () => _getChildren(_folderSig.value),
+    source: _folderSig,
+  );
 
   late final _visibleSortedEntries = Computed<List<StorageEntry>>(() {
     final entries = storageEntries.state.value ?? const <StorageEntry>[];
@@ -219,7 +235,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   late final _visibleSortedFiles = Computed<List<String>>(() {
     final sorted = _visibleSortedEntries.value;
     final folder = _folderSig.value;
-    return sorted.where((e) => !e.isFolder).map((e) => joinPaths(folder, e.name)).toList(growable: false);
+    return sorted
+        .where((e) => !e.isFolder)
+        .map((e) => joinPaths(folder, e.name))
+        .toList(growable: false);
   });
 
   @override
@@ -271,7 +290,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (openedFileChanged) {
-      widget.client.localParticipant?.setAttribute("current_file", next.openedFile);
+      widget.client.localParticipant?.setAttribute(
+        "current_file",
+        next.openedFile,
+      );
     }
 
     setState(() => _location = next);
@@ -298,7 +320,15 @@ class _FileManagerViewState extends State<FileManagerView> {
         final parentName = p.split('/').where((s) => s.isNotEmpty).last;
         final idx = next.indexWhere((e) => e.name == parentName);
         if (idx == -1) {
-          next.add(StorageEntry(name: parentName, isFolder: true, size: null, createdAt: now, updatedAt: null));
+          next.add(
+            StorageEntry(
+              name: parentName,
+              isFolder: true,
+              size: null,
+              createdAt: now,
+              updatedAt: null,
+            ),
+          );
           _setEntries(next);
         }
       }
@@ -308,10 +338,24 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (event is FileUpdatedEvent) {
       final idx = next.indexWhere((e) => e.name == name);
       if (idx == -1) {
-        next.add(StorageEntry(name: name, isFolder: false, size: null, createdAt: now, updatedAt: now));
+        next.add(
+          StorageEntry(
+            name: name,
+            isFolder: false,
+            size: null,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
       } else {
         final old = next[idx];
-        next[idx] = StorageEntry(name: name, isFolder: false, size: old.size, createdAt: old.createdAt, updatedAt: now);
+        next[idx] = StorageEntry(
+          name: name,
+          isFolder: false,
+          size: old.size,
+          createdAt: old.createdAt,
+          updatedAt: now,
+        );
       }
     } else if (event is FileDeletedEvent) {
       next.removeWhere((e) => e.name == name);
@@ -390,8 +434,12 @@ class _FileManagerViewState extends State<FileManagerView> {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
 
-    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
-    updatedQueryParameters['p'] = path.isEmpty ? '' : (isFolder ? '$path/' : path);
+    final updatedQueryParameters = Map<String, String>.from(
+      currentUri.queryParameters,
+    );
+    updatedQueryParameters['p'] = path.isEmpty
+        ? ''
+        : (isFolder ? '$path/' : path);
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
     context.go(newUri.toString());
@@ -418,8 +466,16 @@ class _FileManagerViewState extends State<FileManagerView> {
     return await widget.client.storage.list(folderPath);
   }
 
-  Future<void> _uploadFile(Stream<Uint8List> stream, String path, int totalBytes) async {
-    final upload = MeshagentFileUpload(room: widget.client, path: path, dataStream: stream);
+  Future<void> _uploadFile(
+    Stream<Uint8List> stream,
+    String path,
+    int totalBytes,
+  ) async {
+    final upload = MeshagentFileUpload(
+      room: widget.client,
+      path: path,
+      dataStream: stream,
+    );
     uploadNotifications.addUpload(upload, totalBytes);
   }
 
@@ -471,7 +527,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     final zipFileName = "$folderName.zip";
 
     toaster.show(
-      ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 5)),
+      ShadToast(
+        title: const Text("Compressing folder"),
+        description: Text("Creating $zipFileName"),
+        duration: const Duration(seconds: 5),
+      ),
     );
 
     String? containerId;
@@ -479,13 +539,16 @@ class _FileManagerViewState extends State<FileManagerView> {
     try {
       containerId = await widget.client.containers.run(
         image: "docker.io/joshkeegan/zip:latest",
-        command: "/usr/bin/zip -r ${_shellQuote(zipFileName)} ${_shellQuote(folderName)}",
+        command:
+            "/usr/bin/zip -r ${_shellQuote(zipFileName)} ${_shellQuote(folderName)}",
         mountPath: "/data",
         workingDir: "/data/$parentFolder",
         private: true,
       );
 
-      final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
+      final returnCode = await widget.client.containers.waitForExit(
+        containerId: containerId,
+      );
 
       if (!mounted) {
         return;
@@ -504,7 +567,9 @@ class _FileManagerViewState extends State<FileManagerView> {
         toaster.show(
           ShadToast.destructive(
             title: const Text("Compression failed"),
-            description: Text("Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)"),
+            description: Text(
+              "Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)",
+            ),
             duration: const Duration(seconds: 8),
           ),
         );
@@ -512,7 +577,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     } finally {
       try {
         if (containerId != null) {
-          await widget.client.containers.deleteContainer(containerId: containerId);
+          await widget.client.containers.deleteContainer(
+            containerId: containerId,
+          );
         }
       } catch (e) {
         debugPrint("Failed to clean up compression container: $e");
@@ -520,17 +587,27 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
   }
 
-  Future<void> _onFileDrop(String name, Stream<Uint8List> stream, int? fileSize) async {
+  Future<void> _onFileDrop(
+    String name,
+    Stream<Uint8List> stream,
+    int? fileSize,
+  ) async {
     final fileName = joinPaths(_folderSig.value, name);
     await _uploadFile(stream, fileName, fileSize ?? 0);
   }
 
   Future<void> _addPhotos(String path) async {
-    await FileUploadHelper.pickAndUploadPhotos(path: path, onUpload: _uploadFile);
+    await FileUploadHelper.pickAndUploadPhotos(
+      path: path,
+      onUpload: _uploadFile,
+    );
   }
 
   Future<void> _addFiles(String path) async {
-    await FileUploadHelper.pickAndUploadFiles(path: path, onUpload: _uploadFile);
+    await FileUploadHelper.pickAndUploadFiles(
+      path: path,
+      onUpload: _uploadFile,
+    );
   }
 
   Future<void> _addFolder(String path) async {
@@ -602,11 +679,19 @@ class _FileManagerViewState extends State<FileManagerView> {
         title: const Text("Confirm Delete"),
         description: Padding(
           padding: EdgeInsets.only(bottom: 8),
-          child: Text("Are you sure you want to delete ${isFolder ? 'folder $name and all its contents' : name}?"),
+          child: Text(
+            "Are you sure you want to delete ${isFolder ? 'folder $name and all its contents' : name}?",
+          ),
         ),
         actions: [
-          ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
-          ShadButton.destructive(child: const Text('Delete'), onPressed: () => Navigator.of(context).pop(true)),
+          ShadButton.outline(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          ShadButton.destructive(
+            child: const Text('Delete'),
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
         ],
       ),
     );
@@ -629,7 +714,10 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final toaster = ShadToaster.of(context);
     final count = selected.length;
-    final names = selected.take(6).map(_FilePathKey.displayNameFromKey).toList();
+    final names = selected
+        .take(6)
+        .map(_FilePathKey.displayNameFromKey)
+        .toList();
 
     final confirmDelete = await showShadDialog<bool>(
       context: context,
@@ -644,13 +732,20 @@ class _FileManagerViewState extends State<FileManagerView> {
               Text("Delete $count item${count == 1 ? '' : 's'}?"),
               const SizedBox(height: 8),
               for (final n in names) Text("• $n"),
-              if (count > names.length) Text("• …and ${count - names.length} more"),
+              if (count > names.length)
+                Text("• …and ${count - names.length} more"),
             ],
           ),
         ),
         actions: [
-          ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
-          ShadButton.destructive(child: const Text('Delete'), onPressed: () => Navigator.of(context).pop(true)),
+          ShadButton.outline(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          ShadButton.destructive(
+            child: const Text('Delete'),
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
         ],
       ),
     );
@@ -678,10 +773,18 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (failures.isEmpty) {
-      toaster.show(ShadToast(description: Text("Deleted $success item${success == 1 ? '' : 's'}"), duration: const Duration(seconds: 4)));
+      toaster.show(
+        ShadToast(
+          description: Text("Deleted $success item${success == 1 ? '' : 's'}"),
+          duration: const Duration(seconds: 4),
+        ),
+      );
     } else {
       toaster.show(
-        ShadToast.destructive(description: Text("Deleted $success, failed ${failures.length}"), duration: const Duration(seconds: 6)),
+        ShadToast.destructive(
+          description: Text("Deleted $success, failed ${failures.length}"),
+          duration: const Duration(seconds: 6),
+        ),
       );
     }
   }
@@ -710,8 +813,16 @@ class _FileManagerViewState extends State<FileManagerView> {
                       title: const Text("Add .txt extension?"),
                       description: Text("`$trimmedName` has no extension."),
                       actions: [
-                        ShadButton.outline(onPressed: () => Navigator.of(context).pop(trimmedName), child: const Text("No extension")),
-                        ShadButton(onPressed: () => Navigator.of(context).pop("$trimmedName.txt"), child: const Text("Add .txt")),
+                        ShadButton.outline(
+                          onPressed: () =>
+                              Navigator.of(context).pop(trimmedName),
+                          child: const Text("No extension"),
+                        ),
+                        ShadButton(
+                          onPressed: () =>
+                              Navigator.of(context).pop("$trimmedName.txt"),
+                          child: const Text("Add .txt"),
+                        ),
                       ],
                     );
                   },
@@ -733,8 +844,14 @@ class _FileManagerViewState extends State<FileManagerView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               title: Text("New Text File"),
               actions: [
-                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
-                ShadButton(onPressed: () => submit(null), child: const Text("OK")),
+                ShadButton.outline(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  child: const Text('Cancel'),
+                ),
+                ShadButton(
+                  onPressed: () => submit(null),
+                  child: const Text("OK"),
+                ),
               ],
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -746,7 +863,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                     ShadInputFormField(
                       id: "name",
                       initialValue: "",
-                      validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,
+                      validator: (value) => value.trim().isEmpty
+                          ? "File name cannot be empty"
+                          : null,
                       label: Text("Name"),
                       autofocus: true,
                       onSubmitted: submit,
@@ -771,7 +890,9 @@ class _FileManagerViewState extends State<FileManagerView> {
       return "";
     }
 
-    final isFolder = uploads.length == 1 && uploads.first.upload.filename == placeholderFileName;
+    final isFolder =
+        uploads.length == 1 &&
+        uploads.first.upload.filename == placeholderFileName;
     if (isFolder) {
       return isCompleted ? "Folder created" : "Creating folder";
     }
@@ -803,8 +924,16 @@ class _FileManagerViewState extends State<FileManagerView> {
                 spacing: 12,
                 children: [
                   Padding(
-                    padding: const .only(top: 20, left: 16, right: 16, bottom: 12),
-                    child: Text(_uploadTitle(uploads, isCompleted), style: tt.small.copyWith(fontWeight: .w700)),
+                    padding: const .only(
+                      top: 20,
+                      left: 16,
+                      right: 16,
+                      bottom: 12,
+                    ),
+                    child: Text(
+                      _uploadTitle(uploads, isCompleted),
+                      style: tt.small.copyWith(fontWeight: .w700),
+                    ),
                   ),
                   ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: 200),
@@ -822,15 +951,26 @@ class _FileManagerViewState extends State<FileManagerView> {
                             return AnimatedBuilder(
                               animation: upload,
                               builder: (context, _) {
-                                final double percent = totalBytes > 0 ? (upload.bytesUploaded / totalBytes).clamp(0.0, 1.0) : 1.0;
-                                final name = upload.filename == placeholderFileName ? parentPath(upload.path) : upload.path.split('/').last;
+                                final double percent = totalBytes > 0
+                                    ? (upload.bytesUploaded / totalBytes).clamp(
+                                        0.0,
+                                        1.0,
+                                      )
+                                    : 1.0;
+                                final name =
+                                    upload.filename == placeholderFileName
+                                    ? parentPath(upload.path)
+                                    : upload.path.split('/').last;
 
                                 return Padding(
                                   padding: const .only(bottom: 8),
                                   child: Column(
                                     crossAxisAlignment: .start,
                                     children: [
-                                      Text(name, style: TextStyle(fontSize: 12)),
+                                      Text(
+                                        name,
+                                        style: TextStyle(fontSize: 12),
+                                      ),
                                       const SizedBox(height: 4),
                                       LinearProgressIndicator(value: percent),
                                     ],
@@ -844,10 +984,20 @@ class _FileManagerViewState extends State<FileManagerView> {
                     ),
                   ),
                   Padding(
-                    padding: const .only(top: 0, left: 16, right: 16, bottom: 20),
+                    padding: const .only(
+                      top: 0,
+                      left: 16,
+                      right: 16,
+                      bottom: 20,
+                    ),
                     child: Row(
                       mainAxisAlignment: .end,
-                      children: [ShadButton.outline(onPressed: uploadNotifications.hide, child: const Text("Close"))],
+                      children: [
+                        ShadButton.outline(
+                          onPressed: uploadNotifications.hide,
+                          child: const Text("Close"),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -859,7 +1009,12 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Widget _buildActionsMenu(BuildContext? boundaryContext, String fullPath, bool isFolder, bool showTrigger) {
+  Widget _buildActionsMenu(
+    BuildContext? boundaryContext,
+    String fullPath,
+    bool isFolder,
+    bool showTrigger,
+  ) {
     Future<void> onAction(_FileAction action) async {
       switch (action) {
         case _FileAction.open:
@@ -882,7 +1037,11 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     Future<void> onStartFilePrompt(ChatFilePromptAction action) async {
       try {
-        final threadPath = await startChatFilePromptThread(room: widget.client, action: action, filePath: fullPath);
+        final threadPath = await startChatFilePromptThread(
+          room: widget.client,
+          action: action,
+          filePath: fullPath,
+        );
         if (!mounted) {
           return;
         }
@@ -893,7 +1052,12 @@ class _FileManagerViewState extends State<FileManagerView> {
           return;
         }
 
-        ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to start chat"), description: Text("$error")));
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            title: const Text("Unable to start chat"),
+            description: Text("$error"),
+          ),
+        );
       }
     }
 
@@ -902,7 +1066,10 @@ class _FileManagerViewState extends State<FileManagerView> {
         return const <ChatFilePromptAction>[];
       }
 
-      return resolveChatFilePromptActions(services: widget.services!.state.value!, filePath: fullPath);
+      return resolveChatFilePromptActions(
+        services: widget.services!.state.value!,
+        filePath: fullPath,
+      );
     }
 
     List<Widget> items() {
@@ -994,18 +1161,27 @@ class _FileManagerViewState extends State<FileManagerView> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final leadingWidth = math.max(
-                _estimateDesktopHeaderLeadingWidth(context, constraints.maxWidth),
+                _estimateDesktopHeaderLeadingWidth(
+                  context,
+                  constraints.maxWidth,
+                ),
                 widget.desktopHeaderActionLeadingWidthFloor,
               );
               final localActionState = resolvePaneHeaderActionState(
                 constraints,
                 leadingWidth: leadingWidth,
-                minimumLeadingWidth: math.max(_minimumDesktopHeaderLeadingWidth(), widget.desktopHeaderActionMinimumLeadingWidth),
+                minimumLeadingWidth: math.max(
+                  _minimumDesktopHeaderLeadingWidth(),
+                  widget.desktopHeaderActionMinimumLeadingWidth,
+                ),
                 reserve: widget.desktopHeaderActionReserve,
                 actions: desktopActions,
               );
               final actionState = localActionState;
-              final visibleDesktopActions = visiblePaneHeaderActions(desktopActions, overflowCollapsed: actionState.overflowCollapsed);
+              final visibleDesktopActions = visiblePaneHeaderActions(
+                desktopActions,
+                overflowCollapsed: actionState.overflowCollapsed,
+              );
 
               return Center(
                 child: SizedBox(
@@ -1057,7 +1233,12 @@ class _FileManagerViewState extends State<FileManagerView> {
       children: [
         ..._buildFileCloseAction(),
         Expanded(
-          child: Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: .ellipsis),
+          child: Text(
+            fileName,
+            style: breadcrumbLinkStyle,
+            maxLines: 1,
+            overflow: .ellipsis,
+          ),
         ),
       ],
     );
@@ -1086,7 +1267,8 @@ class _FileManagerViewState extends State<FileManagerView> {
           final children = <Widget>[
             ..._buildFileCycleActions(),
             if (_openedFileSupportsEditTabs) _buildOpenFileTabs(),
-            if (_openedFileSupportsExternalSave) _buildExternalSaveButton(compact: compactToolbar),
+            if (_openedFileSupportsExternalSave)
+              _buildExternalSaveButton(compact: compactToolbar),
             ..._buildRouteActions(),
           ];
 
@@ -1098,13 +1280,21 @@ class _FileManagerViewState extends State<FileManagerView> {
     return _buildDesktopContextToolbarRow(children: _buildRouteActions());
   }
 
-  Widget _buildDesktopContextToolbarRow({required List<Widget> children, double gap = desktopPaneHeaderButtonGap}) {
+  Widget _buildDesktopContextToolbarRow({
+    required List<Widget> children,
+    double gap = desktopPaneHeaderButtonGap,
+  }) {
     return SizedBox(
       height: desktopPaneSecondaryControlHeight,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         clipBehavior: Clip.none,
-        child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, spacing: gap, children: children),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          spacing: gap,
+          children: children,
+        ),
       ),
     );
   }
@@ -1147,14 +1337,20 @@ class _FileManagerViewState extends State<FileManagerView> {
             value: 'preview',
             tooltip: 'Preview',
             icon: LucideIcons.eye,
-            borderRadius: BorderRadius.only(topLeft: radius.topLeft, bottomLeft: radius.bottomLeft),
+            borderRadius: BorderRadius.only(
+              topLeft: radius.topLeft,
+              bottomLeft: radius.bottomLeft,
+            ),
           ),
           Container(width: 1, height: double.infinity, color: borderColor),
           _buildOpenFileToggleButton(
             value: 'edit',
             tooltip: 'Edit',
             icon: LucideIcons.pencil,
-            borderRadius: BorderRadius.only(topRight: radius.topRight, bottomRight: radius.bottomRight),
+            borderRadius: BorderRadius.only(
+              topRight: radius.topRight,
+              bottomRight: radius.bottomRight,
+            ),
           ),
         ],
       ),
@@ -1181,7 +1377,13 @@ class _FileManagerViewState extends State<FileManagerView> {
           child: SizedBox(
             width: 48,
             height: 38,
-            child: Icon(icon, size: 18, color: selected ? theme.colorScheme.background : theme.colorScheme.foreground),
+            child: Icon(
+              icon,
+              size: 18,
+              color: selected
+                  ? theme.colorScheme.background
+                  : theme.colorScheme.foreground,
+            ),
           ),
         ),
       ),
@@ -1195,12 +1397,20 @@ class _FileManagerViewState extends State<FileManagerView> {
         final saving = _codePreviewController.saving;
         final needsSaveAttention = _codePreviewController.dirty || saving;
 
-        return (needsSaveAttention ? ShadButton.destructive : ShadButton.outline)(
+        return (needsSaveAttention
+            ? ShadButton.destructive
+            : ShadButton.outline)(
           enabled: _codePreviewController.canSave,
           onPressed: () async {
             await _codePreviewController.save();
           },
-          leading: saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator()) : const Icon(LucideIcons.save),
+          leading: saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(),
+                )
+              : const Icon(LucideIcons.save),
           child: compact ? null : const Text("Save"),
         );
       },
@@ -1210,6 +1420,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   Widget _buildMobileToolbar(Set<String> selected) {
     final showSelectionActions = selected.isNotEmpty && _openedFile == null;
     final showRouteActions = !showSelectionActions;
+    final leading = showSelectionActions
+        ? _buildSelection(selected)
+        : _buildBreadcrumb();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(0, 0, 0, _openedFile == null ? 0 : 8),
@@ -1218,14 +1431,19 @@ class _FileManagerViewState extends State<FileManagerView> {
         spacing: 6,
         children: [
           if (_openedFile != null) ..._buildFileCloseAction(),
-          Expanded(child: showSelectionActions ? _buildSelection(selected) : _buildBreadcrumb()),
+          Expanded(
+            child: Align(alignment: Alignment.centerLeft, child: leading),
+          ),
           if (showRouteActions) ..._buildRouteActions(),
           Tooltip(
             message: "Select items",
-            child: (_forceShowSelect ? ShadIconButton.new : ShadIconButton.outline)(
-              icon: const Icon(LucideIcons.squareCheckBig),
-              onPressed: _toggleForceShowSelect,
-            ),
+            child:
+                (_forceShowSelect
+                ? ShadIconButton.new
+                : ShadIconButton.outline)(
+                  icon: const Icon(LucideIcons.squareCheckBig),
+                  onPressed: _toggleForceShowSelect,
+                ),
           ),
         ],
       ),
@@ -1236,7 +1454,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     return [
       Tooltip(
         message: "Close file",
-        child: ShadIconButton.ghost(icon: const Icon(LucideIcons.x), onPressed: _closeFile),
+        child: ShadIconButton.ghost(
+          icon: const Icon(LucideIcons.x),
+          onPressed: _closeFile,
+        ),
       ),
     ];
   }
@@ -1248,12 +1469,18 @@ class _FileManagerViewState extends State<FileManagerView> {
       if (canCycleFiles)
         Tooltip(
           message: "Previous file",
-          child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronLeft), onPressed: _previousFile),
+          child: ShadIconButton.outline(
+            icon: const Icon(LucideIcons.chevronLeft),
+            onPressed: _previousFile,
+          ),
         ),
       if (canCycleFiles)
         Tooltip(
           message: "Next file",
-          child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronRight), onPressed: _nextFile),
+          child: ShadIconButton.outline(
+            icon: const Icon(LucideIcons.chevronRight),
+            onPressed: _nextFile,
+          ),
         ),
     ];
   }
@@ -1275,7 +1502,10 @@ class _FileManagerViewState extends State<FileManagerView> {
           child: ShadIconButton.outline(
             icon: const Icon(LucideIcons.trash),
             onPressed: () async {
-              final confirmDelete = await _confirmAndDelete(_openedFile!, false);
+              final confirmDelete = await _confirmAndDelete(
+                _openedFile!,
+                false,
+              );
               if (confirmDelete == true) {
                 _openEntry(_folderSig.value, true);
               }
@@ -1335,11 +1565,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           message: "Upload file",
           child: ShadIconButton.outline(
             icon: const Icon(LucideIcons.upload),
-            onPressed: () {
-              if (!controller.isOpen) {
-                controller.show();
-              }
-            },
+            onPressed: controller.toggle,
           ),
         );
       },
@@ -1350,8 +1576,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final countPadding = isMobile ? 4.0 : 6.0;
     final children = <Widget>[
-      ShadButton.outline(onPressed: _clearSelected, child: Text(isMobile ? "Clear" : "Clear selection")),
-      ShadButton.destructive(onPressed: () => _confirmAndDeleteSelected(), child: const Text("Delete")),
+      ShadButton.outline(
+        onPressed: _clearSelected,
+        child: Text(isMobile ? "Clear" : "Clear selection"),
+      ),
+      ShadButton.destructive(
+        onPressed: () => _confirmAndDeleteSelected(),
+        child: const Text("Delete"),
+      ),
       Padding(
         padding: EdgeInsets.symmetric(horizontal: countPadding),
         child: Text('${selected.length} selected', style: breadcrumbLinkStyle),
@@ -1375,13 +1607,20 @@ class _FileManagerViewState extends State<FileManagerView> {
     return painter.width;
   }
 
-  double _estimateDesktopHeaderLeadingWidth(BuildContext context, double maxWidth) {
+  double _estimateDesktopHeaderLeadingWidth(
+    BuildContext context,
+    double maxWidth,
+  ) {
     final openedFile = _openedFile;
     if (openedFile != null) {
       final fileName = openedFile.split('/').last;
       final closeActionWidth = 40.0 + desktopPaneHeaderButtonGap;
-      final fileNameWidth = _measureBreadcrumbLabelWidth(context, fileName) + 24.0;
-      return math.min(closeActionWidth + fileNameWidth, math.min(180.0, maxWidth * 0.24));
+      final fileNameWidth =
+          _measureBreadcrumbLabelWidth(context, fileName) + 24.0;
+      return math.min(
+        closeActionWidth + fileNameWidth,
+        math.min(180.0, maxWidth * 0.24),
+      );
     }
 
     final segments = _folderBreadcrumbSegments();
@@ -1397,8 +1636,13 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   List<_BreadcrumbSegment> _folderBreadcrumbSegments() {
-    final segments = <_BreadcrumbSegment>[const _BreadcrumbSegment(label: "Files", path: "")];
-    final folderSegments = _folderSig.value.split('/').where((s) => s.isNotEmpty).toList();
+    final segments = <_BreadcrumbSegment>[
+      const _BreadcrumbSegment(label: "Files", path: ""),
+    ];
+    final folderSegments = _folderSig.value
+        .split('/')
+        .where((s) => s.isNotEmpty)
+        .toList();
 
     var accumulated = "";
     for (final segment in folderSegments) {
@@ -1412,14 +1656,25 @@ class _FileManagerViewState extends State<FileManagerView> {
   Widget _breadcrumbSeparator() {
     return const SizedBox(
       width: 20,
-      child: Center(child: Icon(LucideIcons.chevronRight, size: 16, color: Color(0xffa5a5a5))),
+      child: Center(
+        child: Icon(
+          LucideIcons.chevronRight,
+          size: 16,
+          color: Color(0xffa5a5a5),
+        ),
+      ),
     );
   }
 
   Widget _buildBreadcrumbCrumb(_BreadcrumbSegment segment) {
     return ShadButton.ghost(
       onPressed: () => _openEntry(segment.path, true),
-      child: Text(segment.label, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      child: Text(
+        segment.label,
+        style: breadcrumbLinkStyle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 
@@ -1431,13 +1686,20 @@ class _FileManagerViewState extends State<FileManagerView> {
         onTap: () => _openEntry(segment.path, true),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Text(segment.label, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+          child: Text(
+            segment.label,
+            style: breadcrumbLinkStyle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildCollapsedBreadcrumbMenu(List<_BreadcrumbSegment> hiddenSegments) {
+  Widget _buildCollapsedBreadcrumbMenu(
+    List<_BreadcrumbSegment> hiddenSegments,
+  ) {
     return AdaptiveShadContextMenu(
       controller: _collapsedBreadcrumbMenuController,
       boundaryContext: context,
@@ -1458,13 +1720,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         message: "Browse collapsed path",
         child: ShadIconButton.outline(
           icon: const Icon(LucideIcons.folderTree),
-          onPressed: () {
-            if (_collapsedBreadcrumbMenuController.isOpen) {
-              _collapsedBreadcrumbMenuController.hide();
-            } else {
-              _collapsedBreadcrumbMenuController.show();
-            }
-          },
+          onPressed: _collapsedBreadcrumbMenuController.toggle,
         ),
       ),
     );
@@ -1473,7 +1729,12 @@ class _FileManagerViewState extends State<FileManagerView> {
   Widget _buildFileNameOnly() {
     final fileName = _openedFile!.split('/').last;
 
-    return Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+    return Text(
+      fileName,
+      style: breadcrumbLinkStyle,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 
   Widget _buildBreadcrumb() {
@@ -1495,14 +1756,19 @@ class _FileManagerViewState extends State<FileManagerView> {
         const collapseButtonWidth = 48.0;
 
         final segmentWidths = segments
-            .map((segment) => _measureBreadcrumbLabelWidth(context, segment.label) + crumbChromeWidth)
+            .map(
+              (segment) =>
+                  _measureBreadcrumbLabelWidth(context, segment.label) +
+                  crumbChromeWidth,
+            )
             .toList(growable: false);
 
         var startIndex = segments.length - 1;
         var usedWidth = segmentWidths.last;
 
         while (startIndex > 0) {
-          final nextWidth = usedWidth + separatorWidth + segmentWidths[startIndex - 1];
+          final nextWidth =
+              usedWidth + separatorWidth + segmentWidths[startIndex - 1];
           if (nextWidth > constraints.maxWidth) {
             break;
           }
@@ -1512,7 +1778,8 @@ class _FileManagerViewState extends State<FileManagerView> {
 
         var hiddenCount = startIndex;
         while (hiddenCount > 0 &&
-            usedWidth + separatorWidth + collapseButtonWidth > constraints.maxWidth &&
+            usedWidth + separatorWidth + collapseButtonWidth >
+                constraints.maxWidth &&
             startIndex < segments.length - 1) {
           usedWidth -= separatorWidth + segmentWidths[startIndex];
           startIndex++;
@@ -1523,10 +1790,15 @@ class _FileManagerViewState extends State<FileManagerView> {
         if (hiddenCount > 0) {
           return Row(
             children: [
-              _buildCollapsedBreadcrumbMenu(segments.take(hiddenCount).toList(growable: false)),
+              _buildCollapsedBreadcrumbMenu(
+                segments.take(hiddenCount).toList(growable: false),
+              ),
               _breadcrumbSeparator(),
               Expanded(
-                child: Align(alignment: Alignment.centerLeft, child: _buildCollapsedBreadcrumbCurrent(segments.last)),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildCollapsedBreadcrumbCurrent(segments.last),
+                ),
               ),
             ],
           );
@@ -1555,8 +1827,12 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     if (!showExternalSave) {
       return _buildOpenedFileSurface(
-        fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client),
-        insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: false),
+        fileViewer(widget.client, path) ??
+            DocumentPane(path: path, room: widget.client),
+        insetContent: _shouldInsetOpenedFileSurface(
+          fileKind: fileKind,
+          editing: false,
+        ),
       );
     }
 
@@ -1568,7 +1844,10 @@ class _FileManagerViewState extends State<FileManagerView> {
         codePreviewController: _codePreviewController,
         showCodeToolbar: false,
       ),
-      insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: true),
+      insetContent: _shouldInsetOpenedFileSurface(
+        fileKind: fileKind,
+        editing: true,
+      ),
     );
 
     if (!showEditTabs) {
@@ -1576,8 +1855,12 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     final view = _buildOpenedFileSurface(
-      fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client),
-      insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: false),
+      fileViewer(widget.client, path) ??
+          DocumentPane(path: path, room: widget.client),
+      insetContent: _shouldInsetOpenedFileSurface(
+        fileKind: fileKind,
+        editing: false,
+      ),
     );
 
     return Column(
@@ -1597,7 +1880,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  bool _shouldInsetOpenedFileSurface({required FileKind fileKind, required bool editing}) {
+  bool _shouldInsetOpenedFileSurface({
+    required FileKind fileKind,
+    required bool editing,
+  }) {
     if (editing) {
       return false;
     }
@@ -1609,14 +1895,20 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildOpenedFileSurface(Widget child, {required bool insetContent}) {
-    final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
+    final radius = ShadTheme.of(
+      context,
+    ).radius.resolve(Directionality.of(context));
     const borderWidth = 1.0;
     const previewPadding = 16.0;
     final innerRadius = BorderRadius.only(
       topLeft: Radius.circular(math.max(0, radius.topLeft.x - borderWidth)),
       topRight: Radius.circular(math.max(0, radius.topRight.x - borderWidth)),
-      bottomLeft: Radius.circular(math.max(0, radius.bottomLeft.x - borderWidth)),
-      bottomRight: Radius.circular(math.max(0, radius.bottomRight.x - borderWidth)),
+      bottomLeft: Radius.circular(
+        math.max(0, radius.bottomLeft.x - borderWidth),
+      ),
+      bottomRight: Radius.circular(
+        math.max(0, radius.bottomRight.x - borderWidth),
+      ),
     );
 
     return DecoratedBox(
@@ -1626,7 +1918,9 @@ class _FileManagerViewState extends State<FileManagerView> {
         borderRadius: radius,
       ),
       child: Padding(
-        padding: EdgeInsets.all(borderWidth + (insetContent ? previewPadding : 0)),
+        padding: EdgeInsets.all(
+          borderWidth + (insetContent ? previewPadding : 0),
+        ),
         child: ClipRRect(
           borderRadius: innerRadius,
           child: ColoredBox(color: shadCard, child: child),
@@ -1641,7 +1935,9 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): _openedFile == null ? _clearSelected : _closeFile,
+        const SingleActivator(LogicalKeyboardKey.escape): _openedFile == null
+            ? _clearSelected
+            : _closeFile,
         const SingleActivator(LogicalKeyboardKey.arrowLeft): _previousFile,
         const SingleActivator(LogicalKeyboardKey.arrowRight): _nextFile,
       },
@@ -1675,8 +1971,12 @@ class _FileManagerViewState extends State<FileManagerView> {
                             child: SignalBuilder(
                               builder: (context, _) {
                                 return storageEntries.state.when(
-                                  loading: () => const Center(child: CircularProgressIndicator()),
-                                  error: (e, st) => Center(child: Text("Error loading files: $e")),
+                                  loading: () => const Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                  error: (e, st) => Center(
+                                    child: Text("Error loading files: $e"),
+                                  ),
                                   ready: (_) {
                                     final entries = _visibleSortedEntries.value;
                                     final sort = _sortSig.value;
@@ -1687,7 +1987,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                                       entries: entries,
                                       selected: selected,
                                       sort: sort,
-                                      isRefreshing: storageEntries.state.isRefreshing,
+                                      isRefreshing:
+                                          storageEntries.state.isRefreshing,
                                       forceShowSelect: _forceShowSelect,
                                       onOpen: _openEntry,
                                       onToggleSelected: _toggleSelected,
@@ -1732,7 +2033,13 @@ class FileTableView extends StatefulWidget {
   final VoidCallback onUploadFiles;
   final VoidCallback onCreateFolder;
   final VoidCallback onCreateTextFile;
-  final Widget Function(BuildContext? boundaryContext, String fullPath, bool isFolder, bool showTrigger) buildActionsMenu;
+  final Widget Function(
+    BuildContext? boundaryContext,
+    String fullPath,
+    bool isFolder,
+    bool showTrigger,
+  )
+  buildActionsMenu;
 
   const FileTableView({
     super.key,
@@ -1757,8 +2064,16 @@ class FileTableView extends StatefulWidget {
 }
 
 class _FileTableViewState extends State<FileTableView> {
-  static TextStyle dataStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x22, 0x22, 0x22));
-  static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x66, 0x66, 0x66));
+  static TextStyle dataStyle = GoogleFonts.inter(
+    fontSize: 14,
+    fontWeight: .w500,
+    color: .fromARGB(255, 0x22, 0x22, 0x22),
+  );
+  static TextStyle headerStyle = GoogleFonts.inter(
+    fontSize: 14,
+    fontWeight: .w500,
+    color: .fromARGB(255, 0x66, 0x66, 0x66),
+  );
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
   final GlobalKey _tableCardKey = GlobalKey();
@@ -1792,13 +2107,19 @@ class _FileTableViewState extends State<FileTableView> {
   }
 
   Widget _buildTableCard(Widget child) {
-    final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
+    final radius = ShadTheme.of(
+      context,
+    ).radius.resolve(Directionality.of(context));
     const borderWidth = 1.0;
     final innerRadius = BorderRadius.only(
       topLeft: Radius.circular(math.max(0, radius.topLeft.x - borderWidth)),
       topRight: Radius.circular(math.max(0, radius.topRight.x - borderWidth)),
-      bottomLeft: Radius.circular(math.max(0, radius.bottomLeft.x - borderWidth)),
-      bottomRight: Radius.circular(math.max(0, radius.bottomRight.x - borderWidth)),
+      bottomLeft: Radius.circular(
+        math.max(0, radius.bottomLeft.x - borderWidth),
+      ),
+      bottomRight: Radius.circular(
+        math.max(0, radius.bottomRight.x - borderWidth),
+      ),
     );
 
     return DecoratedBox(
@@ -1838,11 +2159,7 @@ class _FileTableViewState extends State<FileTableView> {
           return ShadButton.outline(
             leading: const Icon(LucideIcons.plus),
             trailing: const Icon(LucideIcons.chevronDown),
-            onPressed: () {
-              if (!controller.isOpen) {
-                controller.show();
-              }
-            },
+            onPressed: controller.toggle,
             child: const Text("Create..."),
           );
         },
@@ -1857,7 +2174,11 @@ class _FileTableViewState extends State<FileTableView> {
         action: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ShadButton.outline(leading: const Icon(LucideIcons.upload), onPressed: widget.onUploadFiles, child: const Text("Upload files")),
+            ShadButton.outline(
+              leading: const Icon(LucideIcons.upload),
+              onPressed: widget.onUploadFiles,
+              child: const Text("Upload files"),
+            ),
             const SizedBox(width: 8),
             createMenuButton(),
           ],
@@ -1888,7 +2209,9 @@ class _FileTableViewState extends State<FileTableView> {
               child: Icon(
                 iconData,
                 size: paddedIconSize,
-                color: entry.isFolder ? ShadTheme.of(context).colorScheme.secondaryForeground : null,
+                color: entry.isFolder
+                    ? ShadTheme.of(context).colorScheme.secondaryForeground
+                    : null,
               ),
             )
           : FileIcon(entry.name, size: iconSize),
@@ -1903,31 +2226,63 @@ class _FileTableViewState extends State<FileTableView> {
   }
 
   Widget _hoverRegion(String rowKey, Widget child) {
-    return MouseRegion(opaque: true, onEnter: (_) => _setHovered(rowKey), onExit: (_) => _clearHoveredIf(rowKey), child: child);
+    return MouseRegion(
+      opaque: true,
+      onEnter: (_) => _setHovered(rowKey),
+      onExit: (_) => _clearHoveredIf(rowKey),
+      child: child,
+    );
   }
 
   Icon _sortIcon(bool ascending) {
-    return Icon(ascending ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 16, color: shadMutedForeground);
+    return Icon(
+      ascending ? LucideIcons.arrowUp : LucideIcons.arrowDown,
+      size: 16,
+      color: shadMutedForeground,
+    );
   }
 
-  Widget _fileSelectionCheckbox({required bool value, required ShadDecoration decoration, ValueChanged<bool?>? onChanged}) {
-    final checkboxForeground = ShadTheme.of(context).colorScheme.primaryForeground;
+  Widget _fileSelectionCheckbox({
+    required bool value,
+    required ShadDecoration decoration,
+    ValueChanged<bool?>? onChanged,
+  }) {
+    final checkboxForeground = ShadTheme.of(
+      context,
+    ).colorScheme.primaryForeground;
 
     return ShadCheckbox(
       decoration: decoration,
       value: value,
-      icon: value ? Icon(LucideIcons.check, size: 14, weight: 3, color: checkboxForeground) : null,
+      icon: value
+          ? Icon(
+              LucideIcons.check,
+              size: 14,
+              weight: 3,
+              color: checkboxForeground,
+            )
+          : null,
       onChanged: onChanged,
     );
   }
 
-  Widget _buildSortButton({required String label, required bool active, required bool ascending, required VoidCallback onPressed}) {
+  Widget _buildSortButton({
+    required String label,
+    required bool active,
+    required bool ascending,
+    required VoidCallback onPressed,
+  }) {
     return ShadButton.ghost(
       onPressed: onPressed,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: headerStyle.copyWith(color: active ? shadForeground : shadMutedForeground)),
+          Text(
+            label,
+            style: headerStyle.copyWith(
+              color: active ? shadForeground : shadMutedForeground,
+            ),
+          ),
           if (active) ...[const SizedBox(width: 6), _sortIcon(ascending)],
         ],
       ),
@@ -1946,7 +2301,10 @@ class _FileTableViewState extends State<FileTableView> {
             SizedBox(
               width: 36,
               child: Center(
-                child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+                child: ShadTriCheckbox(
+                  value: selectAllValue,
+                  onChanged: (v) => widget.onToggleAllSelected(v == true),
+                ),
               ),
             ),
             const SizedBox(width: 4),
@@ -1955,19 +2313,35 @@ class _FileTableViewState extends State<FileTableView> {
             label: 'Name',
             active: isNameSort,
             ascending: widget.sort.ascending,
-            onPressed: () => widget.onSortChanged(FileSort(FileSortField.name, isNameSort ? !widget.sort.ascending : true)),
+            onPressed: () => widget.onSortChanged(
+              FileSort(
+                FileSortField.name,
+                isNameSort ? !widget.sort.ascending : true,
+              ),
+            ),
           ),
           const Spacer(),
           _buildSortButton(
             label: 'Modified',
             active: isModifiedSort,
             ascending: widget.sort.ascending,
-            onPressed: () => widget.onSortChanged(FileSort(FileSortField.modified, isModifiedSort ? !widget.sort.ascending : false)),
+            onPressed: () => widget.onSortChanged(
+              FileSort(
+                FileSortField.modified,
+                isModifiedSort ? !widget.sort.ascending : false,
+              ),
+            ),
           ),
           SizedBox(
             width: 36,
             child: widget.isRefreshing
-                ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                ? const Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
                 : const SizedBox.shrink(),
           ),
         ],
@@ -1975,7 +2349,12 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
-  Widget _buildMobileList(BuildContext context, bool showSelectColumn, bool alwaysShowMenu, bool? selectAllValue) {
+  Widget _buildMobileList(
+    BuildContext context,
+    bool showSelectColumn,
+    bool alwaysShowMenu,
+    bool? selectAllValue,
+  ) {
     final colorScheme = ShadTheme.of(context).colorScheme;
 
     return _buildTableCard(
@@ -1986,13 +2365,19 @@ class _FileTableViewState extends State<FileTableView> {
           Expanded(
             child: ListView.separated(
               itemCount: widget.entries.length,
-              separatorBuilder: (_, _) => const Divider(height: 1, color: shadBorder),
+              separatorBuilder: (_, _) =>
+                  const Divider(height: 1, color: shadBorder),
               itemBuilder: (context, index) {
                 final entry = widget.entries[index];
-                final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
+                final fullPath = _FilePathKey.pathForEntry(
+                  widget.currentPath,
+                  entry,
+                );
                 final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
                 final isSelected = widget.selected.contains(key);
-                final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+                final checkboxDecoration = ShadDecoration(
+                  border: ShadBorder.all(color: colorScheme.border),
+                );
                 final modifiedLabel = entry.updatedAt?.modified() ?? '';
                 final showModifiedLabel = modifiedLabel.isNotEmpty;
 
@@ -2001,7 +2386,10 @@ class _FileTableViewState extends State<FileTableView> {
                   child: InkWell(
                     onTap: () => widget.onOpen(fullPath, entry.isFolder),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -2011,8 +2399,12 @@ class _FileTableViewState extends State<FileTableView> {
                               child: Center(
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
-                                  onTap: () => widget.onToggleSelected(key, !isSelected),
-                                  child: _fileSelectionCheckbox(decoration: checkboxDecoration, value: isSelected),
+                                  onTap: () =>
+                                      widget.onToggleSelected(key, !isSelected),
+                                  child: _fileSelectionCheckbox(
+                                    decoration: checkboxDecoration,
+                                    value: isSelected,
+                                  ),
                                 ),
                               ),
                             ),
@@ -2024,10 +2416,20 @@ class _FileTableViewState extends State<FileTableView> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(entry.name, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                Text(
+                                  entry.name,
+                                  style: dataStyle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                 if (showModifiedLabel) ...[
                                   const SizedBox(height: 4),
-                                  Text(modifiedLabel, style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Text(
+                                    modifiedLabel,
+                                    style: headerStyle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ],
                               ],
                             ),
@@ -2035,12 +2437,15 @@ class _FileTableViewState extends State<FileTableView> {
                           const SizedBox(width: 8),
                           ValueListenableBuilder<String?>(
                             valueListenable: _hoveredRowKey,
-                            builder: (_, hoveredKey, _) => widget.buildActionsMenu(
-                              _tableCardKey.currentContext,
-                              fullPath,
-                              entry.isFolder,
-                              alwaysShowMenu || isSelected || hoveredKey == key,
-                            ),
+                            builder: (_, hoveredKey, _) =>
+                                widget.buildActionsMenu(
+                                  _tableCardKey.currentContext,
+                                  fullPath,
+                                  entry.isFolder,
+                                  alwaysShowMenu ||
+                                      isSelected ||
+                                      hoveredKey == key,
+                                ),
                           ),
                         ],
                       ),
@@ -2066,20 +2471,31 @@ class _FileTableViewState extends State<FileTableView> {
     final showSelectColumn = !isMobile || widget.forceShowSelect;
     final alwaysShowMenu = isMobile;
 
-    final bool? selectAllValue = widget.selected.isEmpty ? false : (widget.selected.length == widget.entries.length ? true : null);
+    final bool? selectAllValue = widget.selected.isEmpty
+        ? false
+        : (widget.selected.length == widget.entries.length ? true : null);
 
     if (isMobile) {
-      return _buildMobileList(context, showSelectColumn, alwaysShowMenu, selectAllValue);
+      return _buildMobileList(
+        context,
+        showSelectColumn,
+        alwaysShowMenu,
+        selectAllValue,
+      );
     }
 
-    final sortColumnIndex = (widget.sort.field == FileSortField.name ? 0 : 1) + (showSelectColumn ? 1 : 0);
+    final sortColumnIndex =
+        (widget.sort.field == FileSortField.name ? 0 : 1) +
+        (showSelectColumn ? 1 : 0);
     final sortAscending = widget.sort.ascending;
 
     final rows = widget.entries.map((entry) {
       final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
       final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
       final isSelected = widget.selected.contains(key);
-      final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+      final checkboxDecoration = ShadDecoration(
+        border: ShadBorder.all(color: colorScheme.border),
+      );
 
       return DataRow(
         onSelectChanged: (_) {
@@ -2101,7 +2517,10 @@ class _FileTableViewState extends State<FileTableView> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => widget.onToggleSelected(key, !isSelected),
-                  child: _fileSelectionCheckbox(decoration: checkboxDecoration, value: isSelected),
+                  child: _fileSelectionCheckbox(
+                    decoration: checkboxDecoration,
+                    value: isSelected,
+                  ),
                 ),
               ),
             ),
@@ -2113,7 +2532,11 @@ class _FileTableViewState extends State<FileTableView> {
                   _getIcon(entry),
                   const SizedBox(width: 10),
                   Flexible(
-                    child: Text(entry.name, style: dataStyle, overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      entry.name,
+                      style: dataStyle,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -2126,7 +2549,12 @@ class _FileTableViewState extends State<FileTableView> {
                 width: double.infinity,
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.only(left: 8),
-                child: Text(entry.updatedAt?.modified() ?? "", style: dataStyle, maxLines: 2, overflow: TextOverflow.ellipsis),
+                child: Text(
+                  entry.updatedAt?.modified() ?? "",
+                  style: dataStyle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ),
@@ -2154,11 +2582,18 @@ class _FileTableViewState extends State<FileTableView> {
       builder: (context, constraints) {
         final modifiedWidth = constraints.maxWidth < 640 ? 140.0 : 170.0;
         final actionWidth = constraints.maxWidth < 640 ? 48.0 : 56.0;
-        final selectWidth = showSelectColumn ? (constraints.maxWidth < 640 ? 48.0 : 56.0) : 0.0;
+        final selectWidth = showSelectColumn
+            ? (constraints.maxWidth < 640 ? 48.0 : 56.0)
+            : 0.0;
         final fixedWidthTotal = selectWidth + modifiedWidth + actionWidth;
 
         if (constraints.maxWidth < fixedWidthTotal + 140) {
-          return _buildMobileList(context, widget.forceShowSelect, true, selectAllValue);
+          return _buildMobileList(
+            context,
+            widget.forceShowSelect,
+            true,
+            selectAllValue,
+          );
         }
 
         return _buildTableCard(
@@ -2178,22 +2613,35 @@ class _FileTableViewState extends State<FileTableView> {
                   DataColumn2(
                     fixedWidth: selectWidth,
                     label: Center(
-                      child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+                      child: ShadTriCheckbox(
+                        value: selectAllValue,
+                        onChanged: (v) => widget.onToggleAllSelected(v == true),
+                      ),
                     ),
                   ),
                 DataColumn2(
                   label: _getLabel("Name"),
                   size: ColumnSize.L,
-                  onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.name, ascending)),
+                  onSort: (_, ascending) => widget.onSortChanged(
+                    FileSort(FileSortField.name, ascending),
+                  ),
                 ),
                 DataColumn2(
                   label: _getLabel("Modified"),
                   fixedWidth: modifiedWidth,
-                  onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.modified, ascending)),
+                  onSort: (_, ascending) => widget.onSortChanged(
+                    FileSort(FileSortField.modified, ascending),
+                  ),
                 ),
                 DataColumn2(
                   label: widget.isRefreshing
-                      ? const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))
+                      ? const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
                       : const SizedBox.shrink(),
                   fixedWidth: actionWidth,
                 ),
@@ -2230,7 +2678,8 @@ class _FileActionsMenuButton extends StatefulWidget {
 }
 
 class _FileActionsMenuButtonState extends State<_FileActionsMenuButton> {
-  late final ShadContextMenuController _controller = ShadContextMenuController();
+  late final ShadContextMenuController _controller =
+      ShadContextMenuController();
   bool _menuOpen = false;
 
   @override
@@ -2277,8 +2726,12 @@ class _FileActionsMenuButtonState extends State<_FileActionsMenuButton> {
           opacity: showTrigger ? 1 : 0,
           child: ShadGestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: _controller.show,
-            child: const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsis, size: 20))),
+            onTap: _controller.toggle,
+            child: const SizedBox(
+              width: 40,
+              height: 40,
+              child: Center(child: Icon(LucideIcons.ellipsis, size: 20)),
+            ),
           ),
         ),
       ),
@@ -2359,7 +2812,11 @@ class UploadProgressNotifications {
 }
 
 class ShadTriCheckbox extends StatelessWidget {
-  const ShadTriCheckbox({super.key, required this.value, required this.onChanged});
+  const ShadTriCheckbox({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
 
   final bool? value;
   final ValueChanged<bool?> onChanged;
@@ -2372,8 +2829,12 @@ class ShadTriCheckbox extends StatelessWidget {
     final effectiveSize = theme.checkboxTheme.size;
     final iconColor = theme.colorScheme.primaryForeground;
 
-    final Widget? effectiveIcon = value == null ? Icon(LucideIcons.minus, size: effectiveSize, color: iconColor) : null;
-    final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border));
+    final Widget? effectiveIcon = value == null
+        ? Icon(LucideIcons.minus, size: effectiveSize, color: iconColor)
+        : null;
+    final checkboxDecoration = ShadDecoration(
+      border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border),
+    );
     return Semantics(
       checked: value == true,
       mixed: value == null,

@@ -17,7 +17,15 @@ import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const Set<String> meshagentExtensions = {"thread", "transcript", "widget", "document", "gallery", "presentation", "form"};
+const Set<String> meshagentExtensions = {
+  "thread",
+  "transcript",
+  "widget",
+  "document",
+  "gallery",
+  "presentation",
+  "form",
+};
 
 enum _ViewerOverride { none, text, meshagent }
 
@@ -65,7 +73,9 @@ class _DocumentPane extends State<DocumentPane> {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
 
-    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    final updatedQueryParameters = Map<String, String>.from(
+      currentUri.queryParameters,
+    );
     updatedQueryParameters['p'] = path;
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
@@ -117,36 +127,60 @@ class _DocumentPane extends State<DocumentPane> {
       builder: (context, document, error) => document == null
           ? error == null
                 ? _loading()
-                : _noPreview(subtitle: "Failed to connect with Meshagent. Retrying document connection…")
+                : _noPreview(
+                    subtitle:
+                        "Failed to connect with Meshagent. Retrying document connection…",
+                  )
           : ChangeNotifierBuilder(
               source: document,
               builder: (context) => Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  (document.root.getChildren().isNotEmpty || allowEmptyDocumentViewer)
+                  (document.root.getChildren().isNotEmpty ||
+                          allowEmptyDocumentViewer)
                       ? Expanded(
                           child: switch (ext) {
                             "document" => SingleChildScrollView(
-                              child: DocumentViewer(client: widget.room, document: document),
+                              child: DocumentViewer(
+                                client: widget.room,
+                                document: document,
+                              ),
                             ),
                             "thread" => ChatThread(
                               path: widget.path,
                               document: document,
                               room: widget.room,
-                              toolsBuilder: (context, controller, _) => ChatThreadAttachButton(controller: controller),
+                              toolsBuilder: (context, controller, _) =>
+                                  ChatThreadAttachButton(
+                                    controller: controller,
+                                  ),
                               inputPlaceholder: Text("Type a message…"),
                               openFile: _open,
                             ),
-                            "gallery" => GalleryViewer(client: widget.room, document: document),
-                            "presentation" => SingleChildScrollView(
-                              child: PresentationViewer(client: widget.room, document: document),
+                            "gallery" => GalleryViewer(
+                              client: widget.room,
+                              document: document,
                             ),
-                            "transcript" => TranscriptViewer(document: document),
+                            "presentation" => SingleChildScrollView(
+                              child: PresentationViewer(
+                                client: widget.room,
+                                document: document,
+                              ),
+                            ),
+                            "transcript" => TranscriptViewer(
+                              document: document,
+                            ),
 
                             "form" => SingleChildScrollView(
-                              child: FormDocumentViewer(client: widget.room, document: document),
+                              child: FormDocumentViewer(
+                                client: widget.room,
+                                document: document,
+                              ),
                             ),
-                            _ => _noPreview(subtitle: "Connected with Meshagent, but no renderer for .$ext."),
+                            _ => _noPreview(
+                              subtitle:
+                                  "Connected with Meshagent, but no renderer for .$ext.",
+                            ),
                           },
                         )
                       : const SizedBox.shrink(),
@@ -167,7 +201,11 @@ class _DocumentPane extends State<DocumentPane> {
         children: [
           Tooltip(
             message: "Download",
-            child: ShadButton.outline(leading: const Icon(LucideIcons.download), onPressed: _download, child: const Text("Download")),
+            child: ShadButton.outline(
+              leading: const Icon(LucideIcons.download),
+              onPressed: _download,
+              child: const Text("Download"),
+            ),
           ),
           const SizedBox(width: 8),
           _openWithMenuButton(),
@@ -185,9 +223,7 @@ class _DocumentPane extends State<DocumentPane> {
           child: ShadButton.outline(
             leading: const Icon(LucideIcons.externalLink),
             trailing: const Icon(LucideIcons.chevronDown),
-            onPressed: () {
-              if (!controller.isOpen) controller.show();
-            },
+            onPressed: controller.toggle,
             child: const Text("Open with…"),
           ),
         );
@@ -224,10 +260,14 @@ class _DocumentPane extends State<DocumentPane> {
       await Clipboard.setData(ClipboardData(text: url));
 
       if (!mounted) return;
-      ShadToaster.of(context).show(const ShadToast(title: Text("Download link copied to clipboard")));
+      ShadToaster.of(
+        context,
+      ).show(const ShadToast(title: Text("Download link copied to clipboard")));
     } catch (e) {
       if (!mounted) return;
-      ShadToaster.of(context).show(const ShadToast(title: Text("Failed to copy download link")));
+      ShadToaster.of(
+        context,
+      ).show(const ShadToast(title: Text("Failed to copy download link")));
     }
   }
 

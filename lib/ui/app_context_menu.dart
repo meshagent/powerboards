@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
-import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/powerboards_menu_row.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class AppMenuEntry {
@@ -65,14 +64,24 @@ class _AppContextMenuButtonState extends State<AppContextMenuButton> {
       boundaryContext: widget.boundaryContext,
       constraints: widget.constraints,
       estimatedMenuWidth: _estimatedMenuWidth(widget.constraints),
-      estimatedMenuHeight: _estimatedMenuHeight(widget.entries, compact: widget.compact),
-      padding: widget.compact ? const EdgeInsets.symmetric(vertical: 4) : EdgeInsets.zero,
+      estimatedMenuHeight: _estimatedMenuHeight(
+        widget.entries,
+        compact: widget.compact,
+      ),
+      padding: widget.compact
+          ? const EdgeInsets.symmetric(vertical: 4)
+          : EdgeInsets.zero,
       decoration: widget.compact
           ? null
           : ShadDecoration(
-              border: ShadBorder.all(color: const Color(0xFFE3E3E3), radius: BorderRadius.circular(widget.radius)),
+              border: ShadBorder.all(
+                color: const Color(0xFFE3E3E3),
+                radius: BorderRadius.circular(widget.radius),
+              ),
             ),
-      items: widget.compact ? _buildCompactItems(widget.entries) : _buildItems(widget.entries, radius: widget.radius),
+      items: widget.compact
+          ? _buildCompactItems(widget.entries)
+          : _buildItems(widget.entries, radius: widget.radius),
       child: widget.childBuilder(context, controller),
     );
   }
@@ -90,13 +99,18 @@ double _estimatedMenuWidth(BoxConstraints constraints) {
   return 128;
 }
 
-double _estimatedMenuHeight(List<AppMenuEntry> entries, {required bool compact}) {
+double _estimatedMenuHeight(
+  List<AppMenuEntry> entries, {
+  required bool compact,
+}) {
   final entryCount = entries.length;
   if (entryCount <= 0) {
     return 0;
   }
 
-  final extraSeparators = entries.where((entry) => entry.separatorBefore).length;
+  final extraSeparators = entries
+      .where((entry) => entry.separatorBefore)
+      .length;
 
   if (compact) {
     return entryCount * 40.0 + extraSeparators * 13.0;
@@ -141,7 +155,9 @@ List<Widget> _buildItems(List<AppMenuEntry> entries, {required double radius}) {
         ),
       );
     }
-    out.add(_menuItem(entries[i], index: i, count: entries.length, radius: radius));
+    out.add(
+      _menuItem(entries[i], index: i, count: entries.length, radius: radius),
+    );
     if (i != entries.length - 1) {
       out.add(ShadSeparator.horizontal(margin: EdgeInsets.zero));
     }
@@ -149,7 +165,12 @@ List<Widget> _buildItems(List<AppMenuEntry> entries, {required double radius}) {
   return out;
 }
 
-Widget _menuItem(AppMenuEntry e, {required int index, required int count, required double radius}) {
+Widget _menuItem(
+  AppMenuEntry e, {
+  required int index,
+  required int count,
+  required double radius,
+}) {
   final r = Radius.circular(radius);
   final isFirst = index == 0;
   final isLast = index == count - 1;
@@ -163,42 +184,20 @@ Widget _menuItem(AppMenuEntry e, {required int index, required int count, requir
 
   final leadingWidget =
       e.leading ??
-      (e.icon != null ? SizedBox(width: 32, height: 32, child: Icon(e.icon, size: 20)) : const SizedBox(width: 32, height: 32));
+      (e.icon != null
+          ? SizedBox(width: 32, height: 32, child: Icon(e.icon, size: 20))
+          : const SizedBox(width: 32, height: 32));
 
-  return ShadContextMenuItem.inset(
+  return ShadContextMenuItem(
     padding: EdgeInsets.zero,
-    leadingPadding: const .only(right: 14),
-    insetPadding: const .symmetric(horizontal: 14, vertical: 0),
-    height: 80,
+    height: powerboardsMenuRowHeight,
     onPressed: e.onPressed,
     decoration: ShadDecoration(border: ShadBorder.all(radius: itemRadius)),
-    leading: leadingWidget,
-    trailing: e.selected ? const Icon(LucideIcons.check, size: 21) : null,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: e.description == null
-          ? [
-              Text(
-                e.title,
-                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600, color: shadForeground),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ]
-          : [
-              Text(
-                e.title,
-                style: GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600, color: shadForeground),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                e.description!,
-                style: GoogleFonts.inter(fontSize: 14, height: 1.2, fontWeight: FontWeight.w500, color: shadSecondaryForeground),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 2,
-              ),
-            ],
+    child: PowerboardsMenuRow(
+      title: e.title,
+      description: e.description,
+      leading: leadingWidget,
+      trailing: e.selected ? const Icon(LucideIcons.check, size: 21) : null,
     ),
   );
 }

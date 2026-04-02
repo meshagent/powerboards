@@ -33,8 +33,14 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
   final folderNameService = MeshagentUploadFoldernameService();
 
   @override
-  Future<FileAttachment> uploadFile(String path, Stream<Uint8List> dataStream, int size) async {
-    final uploader = (await super.uploadFileDeferred(path, dataStream, size)) as MeshagentFileUpload;
+  Future<FileAttachment> uploadFile(
+    String path,
+    Stream<Uint8List> dataStream,
+    int size,
+  ) async {
+    final uploader =
+        (await super.uploadFileDeferred(path, dataStream, size))
+            as MeshagentFileUpload;
 
     // Josef: Removing folder name suggestion for now
     // final folder = await folderNameService.generateFoldername(room, path);
@@ -68,6 +74,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.onSelectedThreadPathChanged,
     this.emptyState,
     this.newThreadEmptyStateVerticalOffset = 0,
+    this.hideChatInput = false,
   });
 
   final String projectId;
@@ -87,13 +94,15 @@ class MeshagentThreadView extends StatefulWidget {
   final ValueChanged<String?>? onSelectedThreadPathChanged;
   final Widget? emptyState;
   final double newThreadEmptyStateVerticalOffset;
+  final bool hideChatInput;
 
   @override
   State createState() => _MeshagentThreadViewState();
 }
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
-  static const String _threadEmptyDescription = "Connect with this agent and your team";
+  static const String _threadEmptyDescription =
+      "Connect with this agent and your team";
 
   String _chatPlaceholderText(String? agentName) {
     final normalizedAgentName = agentName?.trim();
@@ -104,10 +113,17 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     return "Type a message or @$normalizedAgentName";
   }
 
-  Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description}) {
+  Widget _buildThreadEmptyState(
+    BuildContext context, {
+    required String title,
+    required String description,
+  }) {
     final content = Padding(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-      child: ChatThreadEmptyStateContent(title: title, description: description),
+      child: ChatThreadEmptyStateContent(
+        title: title,
+        description: description,
+      ),
     );
 
     final verticalOffset = widget.newThreadEmptyStateVerticalOffset;
@@ -115,7 +131,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return content;
     }
 
-    return Transform.translate(offset: Offset(0, verticalOffset), child: content);
+    return Transform.translate(
+      offset: Offset(0, verticalOffset),
+      child: content,
+    );
   }
 
   late final ChatThreadController _chatController;
@@ -171,7 +190,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
 
-    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    final updatedQueryParameters = Map<String, String>.from(
+      currentUri.queryParameters,
+    );
     updatedQueryParameters['p'] = path;
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
@@ -187,12 +208,17 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   Future<void> _onVisibleMessagesEmpty(String path) async {
-    if (widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer || widget.selectedThreadPath != path) {
+    if (widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer ||
+        widget.selectedThreadPath != path) {
       return;
     }
   }
 
-  Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
+  Widget _buildThread({
+    required String path,
+    required String? initialMessageText,
+    Widget Function(BuildContext)? loadingBuilder,
+  }) {
     return IconTheme(
       data: const IconThemeData(size: 14),
       child: ChatThreadLoader(
@@ -211,45 +237,82 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
               : ma.ChatMessage(
                   id: widget.initialMessageID ?? const Uuid().v4(),
                   text: initialMessageText,
-                  attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
+                  attachments:
+                      widget.initialMessageAttachments
+                          ?.map((attachment) => attachment.path)
+                          .toList() ??
+                      const [],
                 ),
           onMessageSent: _onMessageSent,
           fileInThreadBuilder: _fileInThreadBuilder,
           openFile: _open,
-          toolsBuilder: (context, controller, snapshot) =>
-              buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
+          toolsBuilder: (context, controller, snapshot) => buildTools(
+            context,
+            widget.projectId,
+            widget.client,
+            widget.agentName,
+            controller,
+            snapshot,
+          ),
           agentName: widget.agentName,
           emptyStateTitle: "Chat to get started",
           emptyStateDescription: _threadEmptyDescription,
           emptyState: widget.emptyState,
-          onVisibleMessagesEmpty: widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
+          onVisibleMessagesEmpty:
+              widget.threadDisplayMode ==
+                  ChatThreadDisplayMode.multiThreadComposer
               ? () => _onVisibleMessagesEmpty(path)
               : null,
-          chatInputBoxBuilder: (context, inputBox) => EnableWebContextMenu(child: inputBox),
+          chatInputBoxBuilder: (context, inputBox) {
+            if (widget.hideChatInput) {
+              return const SizedBox.shrink();
+            }
+
+            return EnableWebContextMenu(child: inputBox);
+          },
         ),
         participantNames: widget.participantNames,
       ),
     );
   }
 
-  Widget _buildDefaultNewThreadContent(BuildContext context, {required String agentName}) {
+  Widget _buildDefaultNewThreadContent(
+    BuildContext context, {
+    required String agentName,
+  }) {
     final threadPath = widget.selectedThreadPath;
     final threadContent = threadPath == null
         ? ma.NewChatThread(
-            key: ValueKey("new-thread-$agentName-${widget.newThreadResetVersion}"),
+            key: ValueKey(
+              "new-thread-$agentName-${widget.newThreadResetVersion}",
+            ),
             room: widget.client,
             agentName: agentName,
             centerComposer: false,
             emptyState:
                 widget.emptyState ??
                 Builder(
-                  builder: (context) => _buildThreadEmptyState(context, title: "Start a new thread", description: _threadEmptyDescription),
+                  builder: (context) => _buildThreadEmptyState(
+                    context,
+                    title: "Start a new thread",
+                    description: _threadEmptyDescription,
+                  ),
                 ),
             controller: _chatController,
             onThreadPathChanged: _onThreadPathChanged,
-            toolsBuilder: (context, controller, snapshot) =>
-                buildTools(context, widget.projectId, widget.client, agentName, controller, snapshot),
-            builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
+            toolsBuilder: (context, controller, snapshot) => buildTools(
+              context,
+              widget.projectId,
+              widget.client,
+              agentName,
+              controller,
+              snapshot,
+            ),
+            builder: (context, path, loadingBuilder) => _buildThread(
+              path: path,
+              initialMessageText: null,
+              loadingBuilder: loadingBuilder,
+            ),
           )
         : _buildThread(path: threadPath, initialMessageText: null);
 
@@ -262,14 +325,20 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       final agentName = widget.agentName;
       if (agentName == null) {
         return Center(
-          child: ShadAlert.destructive(title: Text("Unable to start a new thread"), description: Text("No chat agent is selected.")),
+          child: ShadAlert.destructive(
+            title: Text("Unable to start a new thread"),
+            description: Text("No chat agent is selected."),
+          ),
         );
       }
 
       return _buildDefaultNewThreadContent(context, agentName: agentName);
     }
 
-    return _buildThread(path: _documentPath, initialMessageText: _initialMessageText);
+    return _buildThread(
+      path: _documentPath,
+      initialMessageText: _initialMessageText,
+    );
   }
 }
 
@@ -304,7 +373,8 @@ class MeshagentThreadListPane extends StatefulWidget {
   final ValueChanged<String?> onSelectedThreadPathChanged;
 
   @override
-  State<MeshagentThreadListPane> createState() => _MeshagentThreadListPaneState();
+  State<MeshagentThreadListPane> createState() =>
+      _MeshagentThreadListPaneState();
 }
 
 class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
@@ -368,7 +438,9 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
                     "New thread",
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _MeshagentThreadListPaneState.createActionStyle(context),
+                    style: _MeshagentThreadListPaneState.createActionStyle(
+                      context,
+                    ),
                   ),
                 ),
                 const SizedBox(width: desktopPaneHeaderButtonGap),
@@ -379,7 +451,9 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
                     "View all threads",
                     maxLines: 1,
                     softWrap: false,
-                    style: _MeshagentThreadListPaneState.threadNameStyle(context),
+                    style: _MeshagentThreadListPaneState.threadNameStyle(
+                      context,
+                    ),
                   ),
                 ),
               ],
@@ -392,12 +466,23 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
 }
 
 class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
-  static TextStyle threadNameStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w400, Color? color}) {
+  static TextStyle threadNameStyle(
+    BuildContext context, {
+    FontWeight fontWeight = FontWeight.w400,
+    Color? color,
+  }) {
     final theme = ShadTheme.of(context);
-    return GoogleFonts.inter(fontSize: 13, fontWeight: fontWeight, color: color ?? theme.colorScheme.mutedForeground);
+    return GoogleFonts.inter(
+      fontSize: 13,
+      fontWeight: fontWeight,
+      color: color ?? theme.colorScheme.mutedForeground,
+    );
   }
 
-  static TextStyle createActionStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w700}) {
+  static TextStyle createActionStyle(
+    BuildContext context, {
+    FontWeight fontWeight = FontWeight.w700,
+  }) {
     final theme = ShadTheme.of(context);
     return GoogleFonts.inter(
       fontSize: chatBubbleMarkdownBaseFontSize(context),
@@ -470,7 +555,9 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       final path = rawPath.trim();
 
       final rawName = node.getAttribute("name");
-      final name = rawName is String && rawName.trim().isNotEmpty ? rawName.trim() : _threadNameFromPath(path);
+      final name = rawName is String && rawName.trim().isNotEmpty
+          ? rawName.trim()
+          : _threadNameFromPath(path);
       final createdAt = node.getAttribute("created_at");
       final modifiedAt = node.getAttribute("modified_at");
 
@@ -577,7 +664,8 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
 
     try {
       final document = await widget.client.sync.open(nextPath);
-      if (!mounted || _normalizedThreadListPath(widget.threadListPath) != nextPath) {
+      if (!mounted ||
+          _normalizedThreadListPath(widget.threadListPath) != nextPath) {
         try {
           await widget.client.sync.close(nextPath);
         } catch (_) {}
@@ -632,7 +720,8 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
         await showDeleteRoomDialog(
           context,
           title: "Delete thread",
-          description: "Are you sure you want to delete \"${entry.name}\"? This cannot be undone.",
+          description:
+              "Are you sure you want to delete \"${entry.name}\"? This cannot be undone.",
           confirmText: "Delete",
           destructive: true,
         ) ??
@@ -653,7 +742,9 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       if (!mounted) {
         return;
       }
-      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to delete thread: $e")));
+      ShadToaster.of(context).show(
+        ShadToast.destructive(description: Text("Unable to delete thread: $e")),
+      );
     }
   }
 
@@ -673,11 +764,13 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       widget.client.messaging.addListener(_onThreadStatusChanged);
     }
 
-    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath) {
+    if (oldWidget.client != widget.client ||
+        oldWidget.threadListPath != widget.threadListPath) {
       unawaited(_rebindThreadListDocument());
     }
 
-    if (oldWidget.newThreadResetVersion != widget.newThreadResetVersion && widget.selectedThreadPath != null) {
+    if (oldWidget.newThreadResetVersion != widget.newThreadResetVersion &&
+        widget.selectedThreadPath != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         widget.onSelectedThreadPathChanged(null);
       });
@@ -711,7 +804,8 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   Widget _buildThreadListBody(List<_ThreadListEntry> entries) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final showCreateItem = widget.showCreateItem;
-    final showDraftThreadEntry = isMobile && widget.selectedThreadPath == null && entries.isNotEmpty;
+    final showDraftThreadEntry =
+        isMobile && widget.selectedThreadPath == null && entries.isNotEmpty;
 
     if (_threadListLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -730,13 +824,19 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     }
 
     final createItemCount = showCreateItem ? 1 : 0;
-    final contentItemCount = entries.isEmpty ? 1 : entries.length + (showDraftThreadEntry ? 1 : 0);
+    final contentItemCount = entries.isEmpty
+        ? 1
+        : entries.length + (showDraftThreadEntry ? 1 : 0);
 
     return ListView.separated(
       shrinkWrap: isMobile && widget.mobileUseDialogListStyle,
-      padding: EdgeInsets.only(top: isMobile ? widget.mobileListTopPadding : 0, bottom: isMobile ? widget.mobileListBottomPadding : 8),
+      padding: EdgeInsets.only(
+        top: isMobile ? widget.mobileListTopPadding : 0,
+        bottom: isMobile ? widget.mobileListBottomPadding : 8,
+      ),
       itemCount: createItemCount + contentItemCount,
-      separatorBuilder: (_, _) => SizedBox(height: isMobile && widget.mobileUseDialogListStyle ? 0 : 4),
+      separatorBuilder: (_, _) =>
+          SizedBox(height: isMobile && widget.mobileUseDialogListStyle ? 0 : 4),
       itemBuilder: (context, index) {
         if (showCreateItem && index == 0) {
           return _ThreadListCreateItem(
@@ -764,7 +864,11 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
         final entry = entries[contentIndex - (showDraftThreadEntry ? 1 : 0)];
         return _ThreadListItem(
           entry: entry,
-          threadStatus: ma.resolveChatThreadStatus(room: widget.client, path: entry.path, agentName: widget.agentName),
+          threadStatus: ma.resolveChatThreadStatus(
+            room: widget.client,
+            path: entry.path,
+            agentName: widget.agentName,
+          ),
           showUnderline: contentIndex != contentItemCount - 1,
           selected: entry.path == widget.selectedThreadPath,
           mobileRowVerticalPadding: widget.mobileRowVerticalPadding,
@@ -777,24 +881,39 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     );
   }
 
-  Widget _buildCenteredState({IconData? icon, required String title, String? description}) {
+  Widget _buildCenteredState({
+    IconData? icon,
+    required String title,
+    String? description,
+  }) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (icon != null) ...[Icon(icon, size: 44, color: shadMutedForeground), const SizedBox(height: 16)],
+            if (icon != null) ...[
+              Icon(icon, size: 44, color: shadMutedForeground),
+              const SizedBox(height: 16),
+            ],
             Text(
               title,
-              style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: shadForeground,
+              ),
             ),
             if (description != null) ...[
               const SizedBox(height: 8),
               Text(
                 description,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: shadMutedForeground),
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: shadMutedForeground,
+                ),
               ),
             ],
           ],
@@ -848,7 +967,11 @@ class _ThreadListItem extends StatefulWidget {
 }
 
 class _ThreadListCreateItem extends StatelessWidget {
-  const _ThreadListCreateItem({required this.onOpen, this.topPadding = 0, this.selected = false});
+  const _ThreadListCreateItem({
+    required this.onOpen,
+    this.topPadding = 0,
+    this.selected = false,
+  });
 
   final VoidCallback onOpen;
   final double topPadding;
@@ -895,14 +1018,25 @@ class _ThreadListCreateItem extends StatelessWidget {
           splashColor: Colors.transparent,
           onTap: onOpen,
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: isMobile ? 0 : desktopPaneSecondaryControlHeight),
+            constraints: BoxConstraints(
+              minHeight: isMobile ? 0 : desktopPaneSecondaryControlHeight,
+            ),
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 0, vertical: isMobile ? 14 : 0),
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 12 : 0,
+                vertical: isMobile ? 14 : 0,
+              ),
               child: Row(
                 children: [
                   SizedBox(
                     width: isMobile ? 36 : 20,
-                    child: Center(child: Icon(LucideIcons.messageSquarePlus, size: 16, color: foreground)),
+                    child: Center(
+                      child: Icon(
+                        LucideIcons.messageSquarePlus,
+                        size: 16,
+                        color: foreground,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -910,7 +1044,9 @@ class _ThreadListCreateItem extends StatelessWidget {
                       "New thread",
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: _MeshagentThreadListPaneState.createActionStyle(context),
+                      style: _MeshagentThreadListPaneState.createActionStyle(
+                        context,
+                      ),
                     ),
                   ),
                 ],
@@ -930,13 +1066,20 @@ class _ThreadListEmptyHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final leadingInset =
-        (isMobile ? 12.0 : _desktopThreadListHorizontalPadding) + _threadListLeadingWidth(isMobile) + _threadListGap(isMobile);
+        (isMobile ? 12.0 : _desktopThreadListHorizontalPadding) +
+        _threadListLeadingWidth(isMobile) +
+        _threadListGap(isMobile);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(leadingInset, isMobile ? 4 : 8, 0, 0),
       child: Text(
         "Add and manage multiple threads.",
-        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: shadMutedForeground, height: 1.4),
+        style: GoogleFonts.inter(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: shadMutedForeground,
+          height: 1.4,
+        ),
       ),
     );
   }
@@ -949,18 +1092,30 @@ Widget _newThreadActionIcon(bool selected, {required Color color}) {
     switchOutCurve: Curves.easeInCubic,
     transitionBuilder: (child, animation) => FadeTransition(
       opacity: animation,
-      child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.92, end: 1).animate(animation),
+        child: child,
+      ),
     ),
-    child: Icon(selected ? LucideIcons.check : LucideIcons.messageSquarePlus, key: ValueKey(selected), size: 16, color: color),
+    child: Icon(
+      selected ? LucideIcons.check : LucideIcons.messageSquarePlus,
+      key: ValueKey(selected),
+      size: 16,
+      color: color,
+    ),
   );
 }
 
 class _ThreadListItemState extends State<_ThreadListItem> {
-  late final ShadContextMenuController _menuController = ShadContextMenuController();
+  late final ShadContextMenuController _menuController =
+      ShadContextMenuController();
 
   EdgeInsets _rowPadding(bool isMobile) {
     if (isMobile && widget.mobileUseDialogListStyle) {
-      return EdgeInsets.symmetric(horizontal: 12, vertical: widget.mobileRowVerticalPadding);
+      return EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: widget.mobileRowVerticalPadding,
+      );
     }
 
     if (isMobile) {
@@ -1005,19 +1160,36 @@ class _ThreadListItemState extends State<_ThreadListItem> {
     return HoverBuilder(
       builder: (context, hovered, focused) {
         final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-        final showMenuIcon = widget.selected || hovered || focused || isMobile || _menuController.isOpen;
+        final showMenuIcon =
+            widget.selected ||
+            hovered ||
+            focused ||
+            isMobile ||
+            _menuController.isOpen;
         final selected = widget.selected;
         final textStyle = isMobile && widget.mobileUseDialogListStyle
-            ? TextStyle(inherit: true, fontWeight: selected ? FontWeight.w700 : FontWeight.w400, color: shadForeground)
+            ? TextStyle(
+                inherit: true,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                color: shadForeground,
+              )
             : _MeshagentThreadListPaneState.threadNameStyle(
                 context,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                color: selected || widget.threadStatus.hasStatus ? shadForeground : shadMutedForeground,
+                color: selected || widget.threadStatus.hasStatus
+                    ? shadForeground
+                    : shadMutedForeground,
               );
 
         return DecoratedBox(
           decoration: BoxDecoration(
-            border: widget.showUnderline ? Border(bottom: BorderSide(color: shadBorder.withValues(alpha: 0.5))) : null,
+            border: widget.showUnderline
+                ? Border(
+                    bottom: BorderSide(
+                      color: shadBorder.withValues(alpha: 0.5),
+                    ),
+                  )
+                : null,
           ),
           child: Material(
             color: Colors.transparent,
@@ -1030,7 +1202,9 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                     Expanded(
                       child: InkWell(
                         splashFactory: NoSplash.splashFactory,
-                        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                        overlayColor: const WidgetStatePropertyAll(
+                          Colors.transparent,
+                        ),
                         hoverColor: Colors.transparent,
                         highlightColor: Colors.transparent,
                         splashColor: Colors.transparent,
@@ -1042,11 +1216,17 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                               SizedBox(
                                 width: _leadingWidth(isMobile),
                                 child: Center(
-                                  child: selected && !widget.threadStatus.hasStatus
-                                      ? const Icon(LucideIcons.check, size: 16, color: shadForeground)
+                                  child:
+                                      selected && !widget.threadStatus.hasStatus
+                                      ? const Icon(
+                                          LucideIcons.check,
+                                          size: 16,
+                                          color: shadForeground,
+                                        )
                                       : ma.ChatThreadStatusIndicator(
                                           statusText: widget.threadStatus.text,
-                                          startedAt: widget.threadStatus.startedAt,
+                                          startedAt:
+                                              widget.threadStatus.startedAt,
                                           reserveSpace: true,
                                           size: 14,
                                           strokeWidth: 2,
@@ -1055,7 +1235,8 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                               ),
                               SizedBox(width: _threadListGap(isMobile)),
                               Expanded(
-                                child: isMobile && widget.mobileUseDialogListStyle
+                                child:
+                                    isMobile && widget.mobileUseDialogListStyle
                                     ? Text(
                                         widget.entry.name,
                                         style: textStyle,
@@ -1100,7 +1281,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                         ),
                       ],
                       child: ShadButton.ghost(
-                        onPressed: _menuController.show,
+                        onPressed: _menuController.toggle,
                         width: 40,
                         height: _trailingButtonHeight(isMobile),
                         hoverBackgroundColor: Colors.transparent,
@@ -1111,7 +1292,13 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                           width: 40,
                           height: _trailingButtonHeight(isMobile),
                           child: Center(
-                            child: Icon(LucideIcons.ellipsis, size: 20, color: showMenuIcon ? shadForeground : Colors.transparent),
+                            child: Icon(
+                              LucideIcons.ellipsis,
+                              size: 20,
+                              color: showMenuIcon
+                                  ? shadForeground
+                                  : Colors.transparent,
+                            ),
                           ),
                         ),
                       ),
@@ -1148,7 +1335,10 @@ class _DraftThreadListItem extends StatelessWidget {
 
   EdgeInsets _rowPadding(bool isMobile) {
     if (isMobile && mobileUseDialogListStyle) {
-      return EdgeInsets.symmetric(horizontal: 12, vertical: mobileRowVerticalPadding);
+      return EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: mobileRowVerticalPadding,
+      );
     }
 
     if (isMobile) {
@@ -1170,12 +1360,24 @@ class _DraftThreadListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final textStyle = mobileUseDialogListStyle
-        ? TextStyle(inherit: true, fontWeight: FontWeight.w700, color: shadForeground)
-        : _MeshagentThreadListPaneState.threadNameStyle(context, fontWeight: FontWeight.w700, color: shadForeground);
+        ? TextStyle(
+            inherit: true,
+            fontWeight: FontWeight.w700,
+            color: shadForeground,
+          )
+        : _MeshagentThreadListPaneState.threadNameStyle(
+            context,
+            fontWeight: FontWeight.w700,
+            color: shadForeground,
+          );
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        border: showUnderline ? Border(bottom: BorderSide(color: shadBorder.withValues(alpha: 0.5))) : null,
+        border: showUnderline
+            ? Border(
+                bottom: BorderSide(color: shadBorder.withValues(alpha: 0.5)),
+              )
+            : null,
       ),
       child: Material(
         color: Colors.transparent,
@@ -1194,11 +1396,23 @@ class _DraftThreadListItem extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: _leadingWidth(isMobile),
-                    child: const Center(child: Icon(LucideIcons.check, size: 16, color: shadForeground)),
+                    child: const Center(
+                      child: Icon(
+                        LucideIcons.check,
+                        size: 16,
+                        color: shadForeground,
+                      ),
+                    ),
                   ),
                   SizedBox(width: _threadListGap(isMobile)),
                   Expanded(
-                    child: Text("My new thread", maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: textStyle),
+                    child: Text(
+                      "My new thread",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      style: textStyle,
+                    ),
                   ),
                   const SizedBox(width: 52),
                 ],
@@ -1220,7 +1434,11 @@ class MeetingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onJoin,
-      child: ShadAlert(icon: Icon(LucideIcons.video), title: Text('Meeting'), description: Text('Join meeting to start')),
+      child: ShadAlert(
+        icon: Icon(LucideIcons.video),
+        title: Text('Meeting'),
+        description: Text('Join meeting to start'),
+      ),
     );
   }
 }
@@ -1232,7 +1450,12 @@ final webSearch = StaticToolkitBuilderOption(
   selectedText: "Search",
 );
 
-final shell = StaticToolkitBuilderOption(icon: LucideIcons.terminal, config: ShellConfig(), text: "Shell", selectedText: "Shell");
+final shell = StaticToolkitBuilderOption(
+  icon: LucideIcons.terminal,
+  config: ShellConfig(),
+  text: "Shell",
+  selectedText: "Shell",
+);
 
 final imageGen = StaticToolkitBuilderOption(
   icon: LucideIcons.image,
@@ -1240,7 +1463,12 @@ final imageGen = StaticToolkitBuilderOption(
   text: "Image generation",
   selectedText: "Images",
 );
-final mcp = ConnectorToolkitBuilderOption(icon: LucideIcons.plug, connectors: [], text: "MCP", selectedText: "MCP");
+final mcp = ConnectorToolkitBuilderOption(
+  icon: LucideIcons.plug,
+  connectors: [],
+  text: "MCP",
+  selectedText: "MCP",
+);
 final storage = StaticToolkitBuilderOption(
   icon: LucideIcons.file,
   config: StorageConfig(),
@@ -1250,14 +1478,25 @@ final storage = StaticToolkitBuilderOption(
 
 String? getBaseUrl(ServiceSpec s, PortSpec p, EndpointSpec e) {
   final rawPath = e.path.trim();
-  final endpointPath = rawPath.isEmpty ? "" : (rawPath.startsWith('/') ? rawPath : '/$rawPath');
+  final endpointPath = rawPath.isEmpty
+      ? ""
+      : (rawPath.startsWith('/') ? rawPath : '/$rawPath');
   final port = p.num.value;
 
   if (s.external == null) {
     if (port == null) {
-      return Uri(scheme: 'http', host: 'localhost', path: endpointPath).toString();
+      return Uri(
+        scheme: 'http',
+        host: 'localhost',
+        path: endpointPath,
+      ).toString();
     }
-    return Uri(scheme: 'http', host: 'localhost', port: port, path: endpointPath).toString();
+    return Uri(
+      scheme: 'http',
+      host: 'localhost',
+      port: port,
+      path: endpointPath,
+    ).toString();
   }
 
   final externalUrl = s.external?.url;
@@ -1280,8 +1519,12 @@ String? getBaseUrl(ServiceSpec s, PortSpec p, EndpointSpec e) {
     return null;
   }
 
-  final normalizedBasePath = baseUri.path.endsWith('/') ? baseUri.path.substring(0, baseUri.path.length - 1) : baseUri.path;
-  final joinedPath = normalizedBasePath.isEmpty || normalizedBasePath == '/' ? endpointPath : '$normalizedBasePath$endpointPath';
+  final normalizedBasePath = baseUri.path.endsWith('/')
+      ? baseUri.path.substring(0, baseUri.path.length - 1)
+      : baseUri.path;
+  final joinedPath = normalizedBasePath.isEmpty || normalizedBasePath == '/'
+      ? endpointPath
+      : '$normalizedBasePath$endpointPath';
 
   final baseWithPath = baseUri.replace(path: joinedPath);
   if (port == null) {
@@ -1301,7 +1544,10 @@ Widget buildTools(
 ) {
   Future<RoomClient> connectRoomClient(String roomName) async {
     final client = getMeshagentClient();
-    final conn = await client.connectRoom(projectId: projectId, roomName: roomName);
+    final conn = await client.connectRoom(
+      projectId: projectId,
+      roomName: roomName,
+    );
     final roomClient = RoomClient(
       protocol: WebSocketClientProtocol(url: conn.roomUrl, token: conn.jwt),
     );
@@ -1330,8 +1576,10 @@ Widget buildTools(
       final services = await room.services.list();
       return [
         for (final s in services)
-          if (s.metadata.annotations["meshagent.service.filter.agent"] == null ||
-              s.metadata.annotations["meshagent.service.filter.agent"] == agentName)
+          if (s.metadata.annotations["meshagent.service.filter.agent"] ==
+                  null ||
+              s.metadata.annotations["meshagent.service.filter.agent"] ==
+                  agentName)
             for (final p in s.ports)
               for (final e in p.endpoints)
                 if (e.mcp != null)
@@ -1342,7 +1590,13 @@ Widget buildTools(
                       serverUrl: getBaseUrl(s, p, e),
                       headers: e.mcp!.headers == null
                           ? null
-                          : [for (final header in e.mcp!.headers!.entries) MCPHeader(name: header.key, value: header.value)],
+                          : [
+                              for (final header in e.mcp!.headers!.entries)
+                                MCPHeader(
+                                  name: header.key,
+                                  value: header.value,
+                                ),
+                            ],
                       openaiConnectorId: e.mcp!.openaiConnectorId,
                     ),
                     oauth: e.mcp!.oauth,
