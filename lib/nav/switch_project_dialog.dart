@@ -70,7 +70,7 @@ class SwitchProjectDialog extends StatelessWidget {
       actions: [
         ShadButton.outline(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
         ShadButton(
-          leading: const Icon(LucideIcons.packagePlus),
+          leading: const Icon(LucideIcons.clipboardPlus),
           onPressed: () {
             Navigator.of(context).pop();
             onNewProject();

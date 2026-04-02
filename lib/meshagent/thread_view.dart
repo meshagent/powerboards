@@ -68,6 +68,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.onSelectedThreadPathChanged,
     this.emptyState,
     this.newThreadEmptyStateVerticalOffset = 0,
+    this.hideChatInput = false,
   });
 
   final String projectId;
@@ -87,6 +88,7 @@ class MeshagentThreadView extends StatefulWidget {
   final ValueChanged<String?>? onSelectedThreadPathChanged;
   final Widget? emptyState;
   final double newThreadEmptyStateVerticalOffset;
+  final bool hideChatInput;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -225,7 +227,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           onVisibleMessagesEmpty: widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
               ? () => _onVisibleMessagesEmpty(path)
               : null,
-          chatInputBoxBuilder: (context, inputBox) => EnableWebContextMenu(child: inputBox),
+          chatInputBoxBuilder: (context, inputBox) {
+            if (widget.hideChatInput) {
+              return const SizedBox.shrink();
+            }
+
+            return EnableWebContextMenu(child: inputBox);
+          },
         ),
         participantNames: widget.participantNames,
       ),
@@ -1100,7 +1108,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                         ),
                       ],
                       child: ShadButton.ghost(
-                        onPressed: _menuController.show,
+                        onPressed: _menuController.toggle,
                         width: 40,
                         height: _trailingButtonHeight(isMobile),
                         hoverBackgroundColor: Colors.transparent,

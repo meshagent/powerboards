@@ -9,6 +9,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 
 import 'package:powerboards/livekit/camera_grid.dart';
 import 'package:powerboards/livekit/camera_strip.dart';
@@ -18,11 +19,18 @@ import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
+import 'package:powerboards/ui/pane_empty_state.dart';
 
 const _railGap = 16.0;
 const _compactControlWidth = 48.0;
+const _mobileMeetingToolbarHorizontalPadding = 40.0;
+const _mobileMeetingToolbarGap = 8.0;
+const _mobileMeetingToolbarFixedControlCount = 4;
+const _mobileTranscriptionButtonMaxWidth = 260.0;
+const _mobileTranscriptionCompactThreshold = 110.0;
+const _mobileTranscriptionShortLabelThreshold = 148.0;
 
-enum MeetingViewState { preview, joined, ended }
+enum MeetingViewState { preview, joined }
 
 class MeetingViewController extends Controller {
   MeetingViewState _state = MeetingViewState.preview;
@@ -31,11 +39,6 @@ class MeetingViewController extends Controller {
 
   void enterMeeting() {
     _state = MeetingViewState.joined;
-    notifyListeners();
-  }
-
-  void endMeeting() {
-    _state = MeetingViewState.ended;
     notifyListeners();
   }
 
@@ -60,6 +63,10 @@ class MeetingView extends StatefulWidget {
 
 class _MeetingViewState extends State<MeetingView> {
   final expandParticipantController = ExpandParticipantController();
+
+  Widget _voiceSessionMeetingBlockedState() {
+    return const PaneEmptyState(title: "End voice session to meet", titleScaleOverride: 0.72, verticalOffset: -28);
+  }
 
   @override
   void dispose() {
@@ -104,84 +111,78 @@ class _MeetingViewState extends State<MeetingView> {
   @override
   Widget build(BuildContext context) {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    final voiceSessionController = MeetingController.maybeOf(context);
+
+    Widget buildMeetingContent() {
+      final videoRoom = VideoRoomModel.maybeOf(context)?.room;
+      final voiceSessionActive = voiceSessionController?.isConnected == true;
+      final inPreview =
+          meetingViewController.state == MeetingViewState.preview ||
+          (videoRoom == null && meetingViewController.state == MeetingViewState.joined);
+
+      if (inPreview) {
+        if (voiceSessionActive) {
+          return _voiceSessionMeetingBlockedState();
+        }
+
+        return Padding(
+          padding: const .symmetric(horizontal: 20.0),
+          child: DevicePreview(
+            onJoin: (enableVideo, enableAudio) {
+              final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
+              final navController = Controller.ofType<NavController>(context);
+
+              if (videoChatConnection != null) {
+                videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
+              }
+
+              meetingViewController.enterMeeting();
+              navController.hideNav();
+            },
+            onCancel: widget.onCancel,
+          ),
+        );
+      } else if (meetingViewController.state == MeetingViewState.joined) {
+        final room = VideoRoomModel.maybeOf(context)?.room;
+        if (room == null) return const SizedBox.shrink();
+
+        return Padding(
+          padding: const .all(20),
+          child: VideoRoomParticipantsBuilder(
+            room: room,
+            builder: (context, participants) {
+              return ControllerBuilder<ExpandParticipantController>(
+                controller: expandParticipantController,
+                builder: (context) {
+                  final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+                  final hasShare = participants.any(_participantHasActiveShare);
+
+                  if (isMobile) {
+                    return _mobileLayout(room, participants, hasShare);
+                  }
+
+                  if (hasShare) {
+                    return _DesktopShareLayout(room: room, participants: participants);
+                  }
+
+                  return ExpandableCameraGrid(participants: participants);
+                },
+              );
+            },
+          ),
+        );
+      }
+
+      return const Text("Unknown state");
+    }
 
     return ControllerProvider<ExpandParticipantController>(
       controller: expandParticipantController,
       child: ControllerBuilder(
         controller: meetingViewController,
-        builder: (BuildContext context) {
-          final videoRoom = VideoRoomModel.maybeOf(context)?.room;
-          final inPreview =
-              meetingViewController.state == MeetingViewState.preview ||
-              (videoRoom == null && meetingViewController.state == MeetingViewState.joined);
-
-          if (inPreview) {
-            return Padding(
-              padding: const .symmetric(horizontal: 20.0),
-              child: DevicePreview(
-                onJoin: (enableVideo, enableAudio) {
-                  final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
-                  final navController = Controller.ofType<NavController>(context);
-
-                  if (videoChatConnection != null) {
-                    videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
-                  }
-
-                  meetingViewController.enterMeeting();
-                  navController.hideNav();
-                },
-                onCancel: widget.onCancel,
-              ),
-            );
-          } else if (meetingViewController.state == MeetingViewState.joined) {
-            final room = VideoRoomModel.maybeOf(context)?.room;
-            if (room == null) return const SizedBox.shrink();
-
-            return Padding(
-              padding: const .all(20),
-              child: VideoRoomParticipantsBuilder(
-                room: room,
-                builder: (context, participants) {
-                  return ControllerBuilder<ExpandParticipantController>(
-                    controller: expandParticipantController,
-                    builder: (context) {
-                      final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-                      final hasShare = participants.any(_participantHasActiveShare);
-
-                      if (isMobile) {
-                        return _mobileLayout(room, participants, hasShare);
-                      }
-
-                      if (hasShare) {
-                        return _DesktopShareLayout(room: room, participants: participants);
-                      }
-
-                      return ExpandableCameraGrid(participants: participants);
-                    },
-                  );
-                },
-              ),
-            );
-          } else if (meetingViewController.state == MeetingViewState.ended) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 20,
-                children: [
-                  Text("Meeting ended", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  ShadButton(
-                    onPressed: () {
-                      meetingViewController.resetToLobby();
-                    },
-                    child: Text("Back to lobby"),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return const Text("Unknown state");
-        },
+        builder: (BuildContext context) => voiceSessionController == null
+            ? buildMeetingContent()
+            : ListenableBuilder(listenable: voiceSessionController, builder: (context, _) => buildMeetingContent()),
       ),
     );
   }
@@ -320,6 +321,47 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
 
   late final toolkits = Resource<List<ToolkitDescription>>(() => widget.room.agents.listToolkits());
 
+  double _mobileTranscriptionButtonWidth(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final usedWidth =
+        (_mobileMeetingToolbarHorizontalPadding / 2) +
+        (_mobileMeetingToolbarFixedControlCount * _compactControlWidth) +
+        ((_mobileMeetingToolbarFixedControlCount - 1) * _mobileMeetingToolbarGap) +
+        _mobileMeetingToolbarGap;
+    final availableWidth = screenWidth - usedWidth;
+    return availableWidth.clamp(_compactControlWidth, _mobileTranscriptionButtonMaxWidth).toDouble();
+  }
+
+  void _showTranscriptionToast(String message) {
+    ShadToaster.maybeOf(context)?.show(ShadToast(description: Text(message), duration: const Duration(seconds: 3)));
+  }
+
+  String _transcriptionButtonLabel({required bool transcribing, required bool shortLabel}) {
+    if (!shortLabel) {
+      return transcribing ? "Stop Transcription" : "Start Transcription";
+    }
+
+    return transcribing ? "Stop..." : "Start...";
+  }
+
+  Future<void> _invokeTranscriptionTool({
+    required ToolkitDescription transcription,
+    required String toolName,
+    required Map<String, Object?> input,
+    required String successMessage,
+    required bool showToast,
+  }) async {
+    await widget.room.agents.invokeTool(
+      toolkit: transcription.name,
+      tool: toolName,
+      input: ToolContentInput(JsonContent(json: input)),
+    );
+
+    if (showToast) {
+      _showTranscriptionToast(successMessage);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -344,6 +386,8 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
     return SignalBuilder(
       builder: (context, _) {
         if (!toolkits.state.isReady) {
@@ -358,6 +402,10 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
               (p) => p.getAttribute("transcribing.${widget.breakoutRoom}") == true,
             ) !=
             null;
+        final mobileButtonWidth = isMobile ? _mobileTranscriptionButtonWidth(context) : _mobileTranscriptionButtonMaxWidth;
+        final useCompactPresentation = widget.compact || (isMobile && mobileButtonWidth <= _mobileTranscriptionCompactThreshold);
+        final useShortLabel = isMobile && !useCompactPresentation && mobileButtonWidth <= _mobileTranscriptionShortLabelThreshold;
+        final useCompressedPresentation = isMobile && (useCompactPresentation || useShortLabel);
 
         return Wrap(
           spacing: 8,
@@ -367,22 +415,31 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
               Tooltip(
                 message: "Start Transcription",
                 child: SizedBox(
-                  width: widget.compact ? _compactControlWidth : null,
+                  width: useCompactPresentation ? _compactControlWidth : (isMobile ? mobileButtonWidth : null),
                   child: ShadButton.outline(
-                    padding: widget.compact ? const EdgeInsets.symmetric(horizontal: 0) : null,
+                    padding: useCompactPresentation
+                        ? const EdgeInsets.symmetric(horizontal: 0)
+                        : isMobile
+                        ? const EdgeInsets.symmetric(horizontal: 12)
+                        : null,
                     leading: Icon(LucideIcons.captions),
                     onPressed: () async {
-                      widget.room.agents.invokeTool(
-                        toolkit: transcription!.name,
-                        tool: startRecording.name,
-                        input: ToolContentInput(
-                          JsonContent(
-                            json: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
-                          ),
-                        ),
+                      await _invokeTranscriptionTool(
+                        transcription: transcription!,
+                        toolName: startRecording.name,
+                        input: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                        successMessage: "Transcription started",
+                        showToast: useCompressedPresentation,
                       );
                     },
-                    child: widget.compact ? null : Text("Start Transcription"),
+                    child: useCompactPresentation
+                        ? null
+                        : Text(
+                            _transcriptionButtonLabel(transcribing: false, shortLabel: useShortLabel),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                          ),
                   ),
                 ),
               ),
@@ -391,18 +448,31 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
               Tooltip(
                 message: "Stop Transcription",
                 child: SizedBox(
-                  width: widget.compact ? _compactControlWidth : null,
+                  width: useCompactPresentation ? _compactControlWidth : (isMobile ? mobileButtonWidth : null),
                   child: ShadButton.outline(
-                    padding: widget.compact ? const EdgeInsets.symmetric(horizontal: 0) : null,
+                    padding: useCompactPresentation
+                        ? const EdgeInsets.symmetric(horizontal: 0)
+                        : isMobile
+                        ? const EdgeInsets.symmetric(horizontal: 12)
+                        : null,
                     leading: Icon(LucideIcons.captionsOff),
                     onPressed: () async {
-                      widget.room.agents.invokeTool(
-                        toolkit: transcription!.name,
-                        tool: stopRecording.name,
-                        input: ToolContentInput(JsonContent(json: {"breakout_room": ""})),
+                      await _invokeTranscriptionTool(
+                        transcription: transcription!,
+                        toolName: stopRecording.name,
+                        input: {"breakout_room": ""},
+                        successMessage: "Transcription stopped",
+                        showToast: useCompressedPresentation,
                       );
                     },
-                    child: widget.compact ? null : Text("Stop Transcription"),
+                    child: useCompactPresentation
+                        ? null
+                        : Text(
+                            _transcriptionButtonLabel(transcribing: true, shortLabel: useShortLabel),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            softWrap: false,
+                          ),
                   ),
                 ),
               ),

@@ -10,12 +10,14 @@ class ParticipantTrack extends StatelessWidget {
     required this.track,
     this.overlayAlignment = .topRight,
     this.showName = true,
+    this.interactive = true,
   });
 
   final lk.Participant participant;
   final Widget track;
   final Alignment overlayAlignment;
   final bool showName;
+  final bool interactive;
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +26,7 @@ class ParticipantTrack extends StatelessWidget {
       participant: participant,
       overlayAlignment: overlayAlignment,
       showName: showName,
+      interactive: interactive,
     );
   }
 }

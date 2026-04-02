@@ -30,7 +30,7 @@ class HangupButton extends StatelessWidget {
               on: false,
               onColor: ShadTheme.of(context).colorScheme.foreground,
               onForeground: ShadTheme.of(context).colorScheme.background,
-              offColor: Colors.red,
+              offColor: ShadTheme.of(context).colorScheme.destructive,
               offForeground: Colors.white,
               icon: LucideIcons.phone,
               onPressed: () {
@@ -49,7 +49,7 @@ class HangupButton extends StatelessWidget {
             onColor: ShadTheme.of(context).colorScheme.foreground,
             onForeground: ShadTheme.of(context).colorScheme.background,
 
-            offColor: Colors.red,
+            offColor: ShadTheme.of(context).colorScheme.destructive,
             offForeground: Colors.white,
             icon: LucideIcons.phone,
             onPressed: onPressed,

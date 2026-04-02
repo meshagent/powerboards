@@ -1,6 +1,8 @@
 import 'dart:core';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -35,20 +37,68 @@ class _DeviceSettings extends StatefulWidget {
 }
 
 class _DeviceSettingsState extends State<_DeviceSettings> {
+  static const Duration _minimumLobbySwitchPendingDuration = Duration(milliseconds: 350);
   bool _loaded = false;
   bool _audioOn = false;
   bool _videoOn = false;
   bool _audioProcessing = false;
   bool _videoProcessing = false;
   String? _audioDeviceId;
+  String? _audioOutputDeviceId;
   String? _videoDeviceId;
   LocalAudioTrack? _audio;
   LocalVideoTrack? _video;
   late SharedPreferences _preferences;
 
+  bool get _audioPending => _audioOn && _audio == null;
+  bool get _videoPending => _videoOn && _video == null;
+
   bool _isExpectedMediaAccessError(Object error) {
     final message = '$error';
     return message.contains('NotFoundError: Requested device not found') || message.contains('NotAllowedError: Permission denied');
+  }
+
+  String _describeVideoToggleError(Object error) {
+    final message = '$error';
+    if (message.contains('NotAllowedError')) {
+      return 'Camera access was blocked by the browser or system.';
+    }
+    if (message.contains('NotFoundError')) {
+      return 'The selected camera was not found.';
+    }
+    return 'Unable to change camera state: $message';
+  }
+
+  String _describeAudioToggleError(Object error) {
+    final message = '$error';
+    if (message.contains('NotAllowedError')) {
+      return 'Microphone access was blocked by the browser or system.';
+    }
+    if (message.contains('NotFoundError')) {
+      return 'The selected microphone was not found.';
+    }
+    return 'Unable to change microphone state: $message';
+  }
+
+  Future<void> _runWithMinimumProcessingDuration(Future<void> Function() action) async {
+    final startedAt = DateTime.now();
+    await action();
+    final remaining = _minimumLobbySwitchPendingDuration - DateTime.now().difference(startedAt);
+    if (remaining > Duration.zero) {
+      await Future<void>.delayed(remaining);
+    }
+  }
+
+  void _showUnavailableCameraToast() {
+    ShadToaster.maybeOf(
+      context,
+    )?.show(ShadToast.destructive(description: const Text('Camera is unavailable. Check your device settings.')));
+  }
+
+  void _showUnavailableMicrophoneToast() {
+    ShadToaster.maybeOf(
+      context,
+    )?.show(ShadToast.destructive(description: const Text('Microphone is unavailable. Check your device settings.')));
   }
 
   @override
@@ -69,6 +119,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     _preferences = await SharedPreferences.getInstance();
 
     _audioDeviceId = _preferences.getString("audioInput");
+    _audioOutputDeviceId = _preferences.getString("audioOutput");
     _videoDeviceId = _preferences.getString("videoInput");
 
     if (!mounted) return;
@@ -76,6 +127,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
     if (!mounted) return;
     await _enableAudio();
+
+    if (!mounted) return;
+    await _restoreAudioOutputSelection();
 
     if (mounted) {
       final deviceManager = DeviceManagerProvider.of(context);
@@ -89,12 +143,44 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
   Future<void> _selectAudioInput(MediaDevice? device) async {
     _audioDeviceId = device?.deviceId;
-    await _enableAudio();
+    await _runWithMinimumProcessingDuration(_enableAudio);
+    if (_audioDeviceId == device?.deviceId && _audio == null) {
+      throw StateError('Unable to switch microphone to ${device?.deviceId ?? "default"}');
+    }
   }
 
   Future<void> _selectVideoInput(MediaDevice? device) async {
     _videoDeviceId = device?.deviceId;
-    await _enableVideo();
+    await _runWithMinimumProcessingDuration(_enableVideo);
+    if (_videoDeviceId == device?.deviceId && _video == null) {
+      throw StateError('Unable to switch camera to ${device?.deviceId ?? "default"}');
+    }
+  }
+
+  Future<void> _selectAudioOutput(MediaDevice device) async {
+    _audioOutputDeviceId = device.deviceId;
+
+    if (lkPlatformIs(PlatformType.web)) {
+      Hardware.instance.selectedAudioOutput = device;
+      return;
+    }
+
+    await Hardware.instance.selectAudioOutput(device);
+  }
+
+  Future<void> _restoreAudioOutputSelection() async {
+    final preferredAudioOutputDeviceId = _audioOutputDeviceId;
+    if (preferredAudioOutputDeviceId == null || preferredAudioOutputDeviceId.isEmpty) {
+      return;
+    }
+
+    final audioOutputs = await Hardware.instance.audioOutputs();
+    final preferredAudioOutput = audioOutputs.firstWhereOrNull((device) => device.deviceId == preferredAudioOutputDeviceId);
+    if (preferredAudioOutput == null) {
+      return;
+    }
+
+    await _selectAudioOutput(preferredAudioOutput);
   }
 
   Future<void> _guardAudioProcessing(Future<void> Function() action) async {
@@ -131,13 +217,19 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     }
   }
 
-  Future<void> _enableAudio() async {
+  Future<void> _enableAudio({bool showErrors = false}) async {
     setState(() {
       _audioOn = true;
     });
 
     await _guardAudioProcessing(() async {
-      await _audio?.dispose();
+      final existingTrack = _audio;
+      if (mounted && existingTrack != null) {
+        setState(() {
+          _audio = null;
+        });
+      }
+      await existingTrack?.dispose();
       try {
         final track = await LocalAudioTrack.create(AudioCaptureOptions(deviceId: _audioDeviceId));
         if (mounted) {
@@ -153,6 +245,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             _audioOn = false;
             _audio = null;
           });
+          if (showErrors) {
+            ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeAudioToggleError(error))));
+          }
         }
         if (!_isExpectedMediaAccessError(error)) {
           debugPrint('_enableAudio error $error');
@@ -161,13 +256,19 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     });
   }
 
-  Future<void> _enableVideo() async {
+  Future<void> _enableVideo({bool showErrors = false}) async {
     setState(() {
       _videoOn = true;
     });
 
     await _guardVideoProcessing(() async {
-      await _video?.dispose();
+      final existingTrack = _video;
+      if (mounted && existingTrack != null) {
+        setState(() {
+          _video = null;
+        });
+      }
+      await existingTrack?.dispose();
       try {
         final track = await LocalVideoTrack.createCameraTrack(CameraCaptureOptions(deviceId: _videoDeviceId));
         if (mounted) {
@@ -183,6 +284,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             _videoOn = false;
             _video = null;
           });
+          if (showErrors) {
+            ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeVideoToggleError(error))));
+          }
         }
         if (!_isExpectedMediaAccessError(error)) {
           debugPrint('_enableVideo error $error');
@@ -224,12 +328,16 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   String get title {
     final deviceManager = DeviceManagerProvider.of(context);
     final cameraState = deviceManager.canTurnOnCamera
-        ? _videoOn
+        ? _videoPending
+              ? "starting"
+              : _video != null
               ? "on"
               : "off"
         : "disabled";
     final microphoneState = deviceManager.canTurnOnMicrophone
-        ? _audioOn
+        ? _audioPending
+              ? "starting"
+              : _audio != null
               ? "on"
               : "off"
         : "disabled";
@@ -243,24 +351,33 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final tt = theme.textTheme;
-
     final deviceManager = DeviceManagerProvider.of(context);
-    final videoOn = _videoOn && deviceManager.canTurnOnCamera;
-    final audioOn = _audioOn && deviceManager.canTurnOnMicrophone;
+    final videoOn = _video != null && deviceManager.canTurnOnCamera;
+    final audioOn = _audio != null && deviceManager.canTurnOnMicrophone;
+    final videoPending = _videoPending && deviceManager.canTurnOnCamera;
+    final audioPending = _audioPending && deviceManager.canTurnOnMicrophone;
 
     final aspectRatio = 3 / 2;
 
-    final cameraStatusText = videoOn ? "Turn off camera" : "Turn on camera";
-    final audioStatusText = audioOn ? "Turn off microphone" : "Turn on microphone";
+    final cameraStatusText = videoPending
+        ? "Starting camera"
+        : videoOn
+        ? "Turn off camera"
+        : "Turn on camera";
+    final audioStatusText = audioPending
+        ? "Starting microphone"
+        : audioOn
+        ? "Turn off microphone"
+        : "Turn on microphone";
     final cameraTooltipText = deviceManager.canTurnOnCamera ? cameraStatusText : "Camera disabled";
     final audioTooltipText = deviceManager.canTurnOnMicrophone ? audioStatusText : "Microphone disabled";
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
+        final isMobile = MediaQuery.sizeOf(context).width < 600;
+        final statusTextStyle = GoogleFonts.inter(fontSize: isMobile ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
-        final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - 150 : double.infinity;
+        final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - (isMobile ? 190 : 150) : double.infinity;
 
         // Cap the width to 800px - large monitors preview overwhelming
         double width = maxWidth > 800 ? 800 : maxWidth;
@@ -271,11 +388,82 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           height = maxHeight;
         }
 
-        return Column(
-          mainAxisAlignment: .center,
+        Widget buildDeviceSettingsButton({required bool showLabel}) {
+          return ChangeDeviceButton(
+            onChangeVideoInput: _selectVideoInput,
+            onChangeAudioInput: _selectAudioInput,
+            onChangeAudioOutput: _selectAudioOutput,
+            selectedVideoInputDeviceId: () => _videoDeviceId,
+            selectedAudioInputDeviceId: () => _audioDeviceId,
+            selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
+            presentation: ChangeDeviceButtonPresentation.dialog,
+            renderButton: (onPressed) {
+              if (showLabel) {
+                return ShadButton.outline(
+                  onPressed: onPressed,
+                  leading: const Icon(LucideIcons.settings),
+                  child: const Text("Device settings"),
+                );
+              }
+
+              return Tooltip(
+                message: "Device settings",
+                child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
+              );
+            },
+          );
+        }
+
+        final previewControls = <Widget>[
+          RoomToolbarButton(
+            text: audioTooltipText,
+            on: audioOn || audioPending,
+            onColor: ShadTheme.of(context).colorScheme.foreground,
+            onForeground: ShadTheme.of(context).colorScheme.background,
+            offColor: ShadTheme.of(context).colorScheme.destructive,
+            offForeground: Colors.white,
+            loading: audioPending,
+            onPressed: !audioPending
+                ? () {
+                    if (!deviceManager.canTurnOnMicrophone) {
+                      _showUnavailableMicrophoneToast();
+                      return;
+                    }
+                    audioOn ? _disableAudio() : _enableAudio(showErrors: true);
+                  }
+                : null,
+            icon: (audioOn || audioPending) ? LucideIcons.mic : LucideIcons.micOff,
+          ),
+          RoomToolbarButton(
+            text: cameraTooltipText,
+            on: videoOn || videoPending,
+            onColor: ShadTheme.of(context).colorScheme.foreground,
+            onForeground: ShadTheme.of(context).colorScheme.background,
+            offColor: ShadTheme.of(context).colorScheme.destructive,
+            offForeground: Colors.white,
+            loading: videoPending,
+            onPressed: !videoPending
+                ? () {
+                    if (!deviceManager.canTurnOnCamera) {
+                      _showUnavailableCameraToast();
+                      return;
+                    }
+                    videoOn ? _disableVideo() : _enableVideo(showErrors: true);
+                  }
+                : null,
+            icon: (videoOn || videoPending) ? LucideIcons.video : LucideIcons.videoOff,
+          ),
+        ];
+
+        final previewSectionControls = <Widget>[...previewControls, if (isMobile) buildDeviceSettingsButton(showLabel: false)];
+
+        final previewSection = Column(
+          mainAxisSize: MainAxisSize.min,
           spacing: 20,
           children: [
-            Container(child: _loaded ? Text(title, style: tt.large) : null),
+            Container(
+              child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
+            ),
             SizedBox(
               height: height,
               width: width,
@@ -294,71 +482,134 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 8,
                 runSpacing: 8,
-                children: [
-                  RoomToolbarButton(
-                    text: cameraTooltipText,
-                    on: videoOn,
-                    onColor: ShadTheme.of(context).colorScheme.foreground,
-                    onForeground: ShadTheme.of(context).colorScheme.background,
-                    offColor: Colors.red,
-                    offForeground: Colors.white,
-                    onPressed: deviceManager.canTurnOnCamera
-                        ? () {
-                            videoOn ? _disableVideo() : _enableVideo();
-                          }
-                        : null,
-                    icon: videoOn ? LucideIcons.video : LucideIcons.videoOff,
-                  ),
-                  RoomToolbarButton(
-                    text: audioTooltipText,
-                    on: audioOn,
-                    onColor: ShadTheme.of(context).colorScheme.foreground,
-                    onForeground: ShadTheme.of(context).colorScheme.background,
-                    offColor: Colors.red,
-                    offForeground: Colors.white,
-                    onPressed: deviceManager.canTurnOnMicrophone
-                        ? () {
-                            audioOn ? _disableAudio() : _enableAudio();
-                          }
-                        : null,
-                    icon: audioOn ? LucideIcons.mic : LucideIcons.micOff,
-                  ),
-                  ChangeDeviceButton(
-                    onChangeVideoInput: _selectVideoInput,
-                    onChangeAudioInput: _selectAudioInput,
-                    onChangeAudioOutput: (_) {},
-                    renderButton: (ShadContextMenuController controller) {
-                      return Tooltip(
-                        message: "Change device",
-                        child: ShadIconButton.outline(
-                          onPressed: () {
-                            if (controller.isOpen) {
-                              controller.hide();
-                            } else {
-                              deviceManager.refreshDevices();
-                              controller.show();
-                            }
-                          },
-                          icon: const Icon(LucideIcons.settings),
-                        ),
-                      );
-                    },
-                  ),
-                  if (widget.onJoin != null)
-                    ShadButton(
-                      onPressed: () {
-                        widget.onJoin?.call(videoOn, audioOn);
-                      },
-                      child: const Text("Meet Now"),
-                    ),
-                  if (widget.onCancel != null)
-                    ShadButton.outline(
+                children: previewSectionControls,
+              ),
+            ),
+          ],
+        );
+
+        if (isMobile) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: Center(child: previewSection)),
+              Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 12,
+                  children: [
+                    if (widget.onJoin != null)
+                      ShadButton.destructive(
+                        onPressed: audioPending || videoPending
+                            ? null
+                            : () {
+                                widget.onJoin?.call(videoOn, audioOn);
+                              },
+                        child: const Text("Meet Now"),
+                      ),
+                    if (widget.onCancel != null)
+                      ShadButton.outline(
+                        onPressed: () {
+                          widget.onCancel?.call();
+                        },
+                        child: const Text("Cancel"),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          spacing: 20,
+          children: [
+            Container(
+              child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
+            ),
+            SizedBox(
+              height: height,
+              width: width,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: Container(
+                  color: const Color(0xFF222222),
+                  foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+                  child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
+                ),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compactActionButtons = constraints.maxWidth < 560;
+                  final actionButtonSpacing = compactActionButtons ? 6.0 : 8.0;
+                  final showDesktopDeviceSettingsLabel = !compactActionButtons;
+                  final footerControls = [...previewControls, buildDeviceSettingsButton(showLabel: showDesktopDeviceSettingsLabel)];
+
+                  Widget buildCancelButton() {
+                    final button = ShadButton.outline(
+                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
                       onPressed: () {
                         widget.onCancel?.call();
                       },
                       child: const Text("Cancel"),
-                    ),
-                ],
+                    );
+
+                    if (compactActionButtons) {
+                      return Expanded(child: button);
+                    }
+
+                    return SizedBox(width: 120, child: button);
+                  }
+
+                  Widget buildJoinButton() {
+                    final button = ShadButton.destructive(
+                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                      onPressed: audioPending || videoPending
+                          ? null
+                          : () {
+                              widget.onJoin?.call(videoOn, audioOn);
+                            },
+                      child: const Text("Meet Now"),
+                    );
+
+                    if (compactActionButtons) {
+                      return Expanded(child: button);
+                    }
+
+                    return SizedBox(width: 120, child: button);
+                  }
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Wrap(
+                        alignment: WrapAlignment.start,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: footerControls,
+                      ),
+                      if (widget.onCancel != null || widget.onJoin != null) SizedBox(width: compactActionButtons ? 8 : 12),
+                      if (widget.onCancel != null || widget.onJoin != null)
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (widget.onCancel != null) buildCancelButton(),
+                              if (widget.onCancel != null && widget.onJoin != null) SizedBox(width: actionButtonSpacing),
+                              if (widget.onJoin != null) buildJoinButton(),
+                            ],
+                          ),
+                        ),
+                      if (widget.onCancel == null && widget.onJoin == null) const Spacer(),
+                    ],
+                  );
+                },
               ),
             ),
           ],

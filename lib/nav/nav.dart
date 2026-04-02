@@ -67,6 +67,8 @@ class _NavState extends State<Nav> {
   final resizeController = ShadResizableController();
   BoxConstraints? lastConstraints;
   Timer? resizeDebounceTimer;
+  bool? _lastDesktopHidden;
+  int _panelGroupVersion = 0;
 
   final childKey = GlobalKey();
   Resource<List<Project>> get projects {
@@ -144,6 +146,12 @@ class _NavState extends State<Nav> {
     resizeDebounceTimer?.cancel();
     resizeDebounceTimer = null;
     lastConstraints = null;
+  }
+
+  void _resetResizableLayoutState() {
+    _resetResizeState();
+    resizeController.clear();
+    _panelGroupVersion++;
   }
 
   void debounceResize(BoxConstraints constraints) {
@@ -311,17 +319,23 @@ class _NavState extends State<Nav> {
           return const SizedBox.shrink();
         }
 
+        if (_lastDesktopHidden != hidden) {
+          _lastDesktopHidden = hidden;
+          _resetResizableLayoutState();
+        }
+
         final rawMinRatio = _navBarMinWidth / width;
         final rawMaxRatio = _navBarMaxWidth / width;
         final minRatio = rawMinRatio.clamp(0.0, 1.0);
         final maxRatio = rawMaxRatio.clamp(minRatio, 1.0);
         final defaultSize = (navBarWidth / width).clamp(minRatio, maxRatio);
-        final mainDefaultSize = (1.0 - defaultSize).clamp(0.0, 1.0);
+        final mainDefaultSize = hidden ? 1.0 : (1.0 - defaultSize).clamp(0.0, 1.0);
 
         // Debounce resize to avoid excessive rebuilds when resizing the window
         debounceResize(constraints);
 
         return ShadResizablePanelGroup(
+          key: ValueKey('nav-panels-$_panelGroupVersion-$hidden'),
           axis: .horizontal,
           showHandle: true,
           dividerColor: Colors.transparent,
@@ -717,6 +731,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     final selectedProject = projectList.firstWhereOrNull((p) => p.id == widget.projectId);
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final displayName = selectedProject?.name ?? "Select project";
+    final projectTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: theme.colorScheme.foreground);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
@@ -748,11 +763,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                                   constraints: BoxConstraints(maxWidth: maxLabelWidth),
                                   child: Text(
                                     displayName,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      color: theme.colorScheme.foreground,
-                                    ),
+                                    style: projectTitleStyle,
                                     overflow: TextOverflow.ellipsis,
                                     textAlign: TextAlign.center,
                                     maxLines: 1,
@@ -805,7 +816,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                                 padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHeaderVisualInset),
                                 child: Text(
                                   displayName,
-                                  style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: theme.colorScheme.foreground),
+                                  style: projectTitleStyle,
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.center,
                                   maxLines: 1,

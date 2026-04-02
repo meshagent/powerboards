@@ -5,7 +5,7 @@ import 'package:meshagent/meshagent.dart';
 const developmentAgentRoutePrefix = "remote-participant-name-";
 const _legacyDevelopmentAgentRoutePrefix = "remote-participant:";
 
-enum AgentConversationKind { chat, voiceOnly }
+enum AgentConversationKind { chat, voiceOnly, meeting }
 
 enum ChatThreadDisplayMode { singleThread, multiThreadComposer }
 
@@ -30,6 +30,8 @@ class AgentConversationDescriptor {
 
   const AgentConversationDescriptor.voiceOnly() : this._(kind: AgentConversationKind.voiceOnly);
 
+  const AgentConversationDescriptor.meeting() : this._(kind: AgentConversationKind.meeting);
+
   final AgentConversationKind kind;
   final ChatThreadDisplayMode chatThreadDisplayMode;
   final String? threadDir;
@@ -37,6 +39,7 @@ class AgentConversationDescriptor {
 
   bool get isChat => kind == AgentConversationKind.chat;
   bool get isVoiceOnly => kind == AgentConversationKind.voiceOnly;
+  bool get isMeeting => kind == AgentConversationKind.meeting;
   bool get isMultiThreadChat => isChat && chatThreadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
 }
 
@@ -247,6 +250,10 @@ AgentConversationDescriptor? serviceConversationDescriptor(
   final type = service.agents.firstOrNull?.annotations["meshagent.agent.type"];
   if (type == "VoiceBot") {
     return const AgentConversationDescriptor.voiceOnly();
+  }
+
+  if (type == "MeetingTranscriber") {
+    return const AgentConversationDescriptor.meeting();
   }
 
   if (type != "ChatBot") {

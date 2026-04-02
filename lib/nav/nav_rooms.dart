@@ -229,7 +229,7 @@ class _RoomTileState extends State<_RoomTile> {
                       items: menuItems,
                       child: ShadGestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: controller.show,
+                        onTap: controller.toggle,
                         child: SizedBox(
                           width: 40,
                           height: 40,

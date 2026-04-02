@@ -133,12 +133,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
           childBuilder: (context, controller) {
             return Tooltip(
               message: "Room options",
-              child: ShadIconButton.outline(
-                icon: const Icon(LucideIcons.ellipsis),
-                onPressed: () {
-                  if (!controller.isOpen) controller.show();
-                },
-              ),
+              child: ShadIconButton.outline(icon: const Icon(LucideIcons.ellipsis), onPressed: controller.toggle),
             );
           },
         );
