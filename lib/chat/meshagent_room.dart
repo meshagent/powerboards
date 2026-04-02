@@ -2310,9 +2310,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   void _endMeeting() {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final navController = Controller.ofType<NavController>(context);
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     meetingViewController.resetToLobby();
     navController.showNav();
     _meetingSplitViewController.expand();
+    if (isMobile) {
+      _showChatPane(context);
+    }
   }
 
   void _joinMeeting() {
