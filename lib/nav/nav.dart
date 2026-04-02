@@ -69,6 +69,7 @@ class _NavState extends State<Nav> {
   Timer? resizeDebounceTimer;
   bool? _lastDesktopHidden;
   int _panelGroupVersion = 0;
+  int _mobileNavigationDirection = 1;
 
   final childKey = GlobalKey();
   Resource<List<Project>> get projects {
@@ -205,6 +206,14 @@ class _NavState extends State<Nav> {
   @override
   void didUpdateWidget(Nav oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.selectedRoom == null && widget.selectedRoom != null) {
+      _mobileNavigationDirection = 1;
+    } else if (oldWidget.selectedRoom != null && widget.selectedRoom == null) {
+      _mobileNavigationDirection = -1;
+    } else if (oldWidget.selectedRoom != widget.selectedRoom && widget.selectedRoom != null) {
+      _mobileNavigationDirection = 1;
+    }
 
     if (oldWidget.projectId != widget.projectId || oldWidget.selectedRoom != widget.selectedRoom) {
       rooms.refresh();
@@ -409,34 +418,78 @@ class _NavState extends State<Nav> {
       );
     }
 
-    if (widget.selectedRoom == null) {
-      return ColoredBox(
-        color: ShadTheme.of(context).colorScheme.card,
-        child: SafeArea(
-          child: Column(
-            children: [
-              _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
+    final mobileContent = widget.selectedRoom == null
+        ? KeyedSubtree(
+            key: const ValueKey('mobile-room-list'),
+            child: ColoredBox(
+              color: ShadTheme.of(context).colorScheme.card,
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
 
-              SignalBuilder(
-                builder: (context, _) => Expanded(
-                  child: _NavBar(
-                    projectId: widget.projectId,
-                    rooms: rooms.state.isReady ? filteredRooms : [],
-                    canCreateRooms: canCreateRooms,
-                    setFilter: setFilter,
-                    onSave: () => rooms.refresh(),
-                    onRefresh: () => rooms.refresh(),
-                    balanceLow: balanceLow,
-                  ),
+                    SignalBuilder(
+                      builder: (context, _) => Expanded(
+                        child: _NavBar(
+                          projectId: widget.projectId,
+                          rooms: rooms.state.isReady ? filteredRooms : [],
+                          canCreateRooms: canCreateRooms,
+                          setFilter: setFilter,
+                          onSave: () => rooms.refresh(),
+                          onRefresh: () => rooms.refresh(),
+                          balanceLow: balanceLow,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      return Container(key: childKey, child: widget.child);
-    }
+            ),
+          )
+        : KeyedSubtree(
+            key: ValueKey('mobile-room-${widget.selectedRoom}'),
+            child: Container(key: childKey, child: widget.child),
+          );
+
+    return ClipRect(
+      child: AnimatedSwitcher(
+        duration: powerboardsMobileTransitionDuration,
+        switchInCurve: powerboardsMobileTransitionInCurve,
+        switchOutCurve: powerboardsMobileTransitionOutCurve,
+        layoutBuilder: (currentChild, previousChildren) {
+          return Stack(fit: StackFit.expand, children: [...previousChildren, if (currentChild != null) currentChild]);
+        },
+        transitionBuilder: (child, animation) {
+          final isCurrentChild = child.key == mobileContent.key;
+          final direction = _mobileNavigationDirection.toDouble();
+          final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut, reverseCurve: Curves.easeIn);
+
+          if (isCurrentChild) {
+            final position = Tween<Offset>(
+              begin: Offset(direction, 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: animation, curve: powerboardsMobileTransitionInCurve));
+
+            return SlideTransition(
+              position: position,
+              child: FadeTransition(opacity: fade, child: child),
+            );
+          }
+
+          final reverseAnimation = ReverseAnimation(animation);
+          final position = Tween<Offset>(
+            begin: Offset.zero,
+            end: Offset(-0.18 * direction, 0),
+          ).animate(CurvedAnimation(parent: reverseAnimation, curve: powerboardsMobileTransitionOutCurve));
+
+          return SlideTransition(
+            position: position,
+            child: FadeTransition(opacity: fade, child: child),
+          );
+        },
+        child: mobileContent,
+      ),
+    );
   }
 
   Widget outOfCreditBanner(BuildContext context, ProjectRole? userRole) {

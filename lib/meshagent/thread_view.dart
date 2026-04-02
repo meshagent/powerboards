@@ -371,7 +371,7 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
                 desktopActionButton(
                   onPressed: onOpen,
                   selected: isSelected,
-                  leading: _newThreadActionIcon(isSelected, color: foreground),
+                  leading: _newThreadActionIcon(context, isSelected, color: foreground),
                   child: Text(
                     "New thread",
                     maxLines: 1,
@@ -877,7 +877,7 @@ class _ThreadListCreateItem extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           hoverBackgroundColor: theme.colorScheme.accent,
           pressedBackgroundColor: theme.colorScheme.accent,
-          leading: _newThreadActionIcon(selected, color: foreground),
+          leading: _newThreadActionIcon(context, selected, color: foreground),
           gap: 12,
           mainAxisAlignment: MainAxisAlignment.start,
           onPressed: onOpen,
@@ -950,11 +950,11 @@ class _ThreadListEmptyHint extends StatelessWidget {
   }
 }
 
-Widget _newThreadActionIcon(bool selected, {required Color color}) {
+Widget _newThreadActionIcon(BuildContext context, bool selected, {required Color color}) {
   return AnimatedSwitcher(
-    duration: const Duration(milliseconds: 180),
-    switchInCurve: Curves.easeOutCubic,
-    switchOutCurve: Curves.easeInCubic,
+    duration: powerboardsAdaptiveTransitionDuration(context),
+    switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
+    switchOutCurve: powerboardsAdaptiveTransitionOutCurve(context),
     transitionBuilder: (child, animation) => FadeTransition(
       opacity: animation,
       child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),

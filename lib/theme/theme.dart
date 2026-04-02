@@ -1,6 +1,7 @@
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
 import "package:google_fonts/google_fonts.dart";
+import "package:responsive_framework/responsive_framework.dart";
 import "package:shadcn_ui/shadcn_ui.dart";
 
 const textScale = kIsWeb ? 1.0 : 1.2;
@@ -47,6 +48,21 @@ const shadDarkBorder = Color(0xFF3A3A3C);
 const shadDarkInput = Color(0xFF1D1E20);
 const shadDarkRing = Color(0xFF9A86F3);
 const shadDarkSelection = Color(0xFF473A77);
+const powerboardsMobileTransitionDuration = Duration(milliseconds: 320);
+const Curve powerboardsMobileTransitionInCurve = Curves.easeInOutCubicEmphasized;
+const Curve powerboardsMobileTransitionOutCurve = Curves.easeInOutCubic;
+
+Duration powerboardsAdaptiveTransitionDuration(BuildContext context, {Duration desktop = const Duration(milliseconds: 180)}) {
+  return ResponsiveBreakpoints.of(context).isMobile ? powerboardsMobileTransitionDuration : desktop;
+}
+
+Curve powerboardsAdaptiveTransitionInCurve(BuildContext context, {Curve desktop = Curves.easeOutCubic}) {
+  return ResponsiveBreakpoints.of(context).isMobile ? powerboardsMobileTransitionInCurve : desktop;
+}
+
+Curve powerboardsAdaptiveTransitionOutCurve(BuildContext context, {Curve desktop = Curves.easeInCubic}) {
+  return ResponsiveBreakpoints.of(context).isMobile ? powerboardsMobileTransitionOutCurve : desktop;
+}
 
 ShadColorScheme powerboardsShadColorScheme() {
   return ShadColorScheme(

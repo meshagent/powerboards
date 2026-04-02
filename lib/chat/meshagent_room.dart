@@ -1194,9 +1194,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 180),
-                    switchInCurve: Curves.easeOutCubic,
-                    switchOutCurve: Curves.easeInCubic,
+                    duration: powerboardsAdaptiveTransitionDuration(context),
+                    switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
+                    switchOutCurve: powerboardsAdaptiveTransitionOutCurve(context),
                     transitionBuilder: (child, animation) => FadeTransition(
                       opacity: animation,
                       child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
