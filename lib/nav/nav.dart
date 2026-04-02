@@ -803,30 +803,42 @@ class _NavBarTopState extends State<_NavBarTop> {
           if (isSmallDisplay)
             SizedBox(
               height: headerHeight,
-              child: Row(
-                spacing: 12,
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  const NavMainLogo(),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: ShadButton.ghost(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        onPressed: _switchProject,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(displayName, style: projectTitleStyle, overflow: TextOverflow.ellipsis, maxLines: 1),
+                  const Positioned(left: 0, child: NavMainLogo()),
+                  Positioned(
+                    right: 0,
+                    child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+                  ),
+                  Positioned.fill(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 56),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return Center(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                              child: ShadButton.ghost(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                onPressed: _switchProject,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Flexible(
+                                      child: Text(displayName, style: projectTitleStyle, overflow: TextOverflow.ellipsis, maxLines: 1),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                                  ],
+                                ),
+                              ),
                             ),
-                            const SizedBox(width: 8),
-                            Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
-                          ],
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ),
-                  UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
                 ],
               ),
             ),

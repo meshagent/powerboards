@@ -119,68 +119,69 @@ class _RoomTileState extends State<_RoomTile> {
 
   List<ShadContextMenuItem> _buildContextMenuItems(BuildContext context) {
     final name = roomDisplayName(widget.room);
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
-    return [
-      ShadContextMenuItem(
-        height: 40.0,
-        leading: Icon(LucideIcons.pencil, size: 16),
-        onPressed: () async {
-          final newName = await showRenameRoomDialog(context, initialValue: name);
+    final renameItem = ShadContextMenuItem(
+      height: 40.0,
+      leading: Icon(LucideIcons.pencil, size: 16),
+      onPressed: () async {
+        final newName = await showRenameRoomDialog(context, initialValue: name);
 
-          if (newName == null || newName == name) return;
+        if (newName == null || newName == name) return;
 
+        final client = getMeshagentClient();
+
+        await client.updateRoom(
+          projectId: widget.projectId,
+          roomId: widget.room.id,
+          name: widget.room.name,
+          metadata: {"displayName": newName},
+        );
+
+        widget.onSave();
+      },
+      child: Text('Rename'),
+    );
+
+    final permissionsItem = ShadContextMenuItem(
+      height: 40.0,
+      leading: Icon(LucideIcons.userPlus, size: 16),
+      onPressed: () {
+        showUpdateRoomPermsDialog(context, room: widget.room, projectId: widget.projectId);
+      },
+      child: Text('Permissions'),
+    );
+
+    final deleteItem = ShadContextMenuItem(
+      height: 40.0,
+      leading: Icon(LucideIcons.trash, size: 16),
+      onPressed: () async {
+        final confirmed =
+            await showDeleteRoomDialog(
+              context,
+              title: 'Delete room',
+              description: 'Are you sure you want to delete the room "$name"? This action cannot be undone.',
+              confirmText: 'Delete',
+              destructive: true,
+            ) ??
+            false;
+
+        if (confirmed) {
           final client = getMeshagentClient();
-
-          await client.updateRoom(
-            projectId: widget.projectId,
-            roomId: widget.room.id,
-            name: widget.room.name,
-            metadata: {"displayName": newName},
-          );
+          await client.deleteRoom(projectId: widget.projectId, roomId: widget.room.id);
 
           widget.onSave();
-        },
-        child: Text('Rename'),
-      ),
 
-      ShadContextMenuItem(
-        height: 40.0,
-        leading: Icon(LucideIcons.trash, size: 16),
-        onPressed: () async {
-          final confirmed =
-              await showDeleteRoomDialog(
-                context,
-                title: 'Delete room',
-                description: 'Are you sure you want to delete the room "$name"? This action cannot be undone.',
-                confirmText: 'Delete',
-                destructive: true,
-              ) ??
-              false;
-
-          if (confirmed) {
-            final client = getMeshagentClient();
-            await client.deleteRoom(projectId: widget.projectId, roomId: widget.room.id);
-
-            widget.onSave();
-
-            if (widget.selected && context.mounted) {
-              clearLastSelectedRoom(widget.projectId);
-              context.go('/p/${fromUUID(widget.projectId)}');
-            }
+          if (widget.selected && context.mounted) {
+            clearLastSelectedRoom(widget.projectId);
+            context.go('/p/${fromUUID(widget.projectId)}');
           }
-        },
-        child: Text('Delete'),
-      ),
+        }
+      },
+      child: Text('Delete'),
+    );
 
-      ShadContextMenuItem(
-        height: 40.0,
-        leading: Icon(LucideIcons.lock, size: 16),
-        onPressed: () {
-          showUpdateRoomPermsDialog(context, room: widget.room, projectId: widget.projectId);
-        },
-        child: Text('Permissions'),
-      ),
-    ];
+    return isMobile ? [renameItem, permissionsItem, deleteItem] : [renameItem, deleteItem, permissionsItem];
   }
 
   @override
