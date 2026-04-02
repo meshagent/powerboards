@@ -18,6 +18,7 @@ import 'package:powerboards/meshagent/room_not_found.dart';
 import 'package:powerboards/oauth/oauth.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
 import 'package:powerboards/ui/main_wrapper.dart';
 
@@ -66,10 +67,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
 
     if (isSmallDisplay) {
-      return Tooltip(
-        message: "Back",
-        child: ShadIconButton.ghost(icon: const Icon(LucideIcons.arrowLeft), onPressed: () => context.go("/")),
-      );
+      return PowerboardsBackIconButton(onPressed: () => context.go("/"));
     }
 
     return const SizedBox.shrink();

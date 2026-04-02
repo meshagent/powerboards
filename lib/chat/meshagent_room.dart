@@ -50,6 +50,7 @@ import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/meeting_view.dart';
+import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/resizable_split_view.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
@@ -59,7 +60,6 @@ final meetingHeaderTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: Font
 const double _meetingToolbarCompactThreshold = 620;
 const double _meetingToolbarPreferredExpandedWidth = 640;
 const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
-const double _mobileRoomHeaderHorizontalInset = 12;
 const double _mobileRoomHeaderGap = 8;
 const String _roomPaneQueryParameter = 'pane';
 
@@ -128,6 +128,10 @@ EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
   }
 
   return const EdgeInsets.symmetric(horizontal: 10);
+}
+
+Color _mobileRoomSurfaceColor(BuildContext context) {
+  return ShadTheme.of(context).colorScheme.card;
 }
 
 class ParticipantsButton extends StatefulWidget {
@@ -403,29 +407,25 @@ class BackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: "Back",
-      child: ShadIconButton.ghost(
-        icon: const Icon(LucideIcons.arrowLeft),
-        onPressed: () async {
-          final videoRoom = room.VideoRoomModel.maybeOf(context)?.room;
-          final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    return PowerboardsBackIconButton(
+      onPressed: () async {
+        final videoRoom = room.VideoRoomModel.maybeOf(context)?.room;
+        final meetingViewController = Controller.ofType<MeetingViewController>(context);
 
-          if (videoRoom != null) {
-            final leave = await showLeaveMeeting(context);
+        if (videoRoom != null) {
+          final leave = await showLeaveMeeting(context);
 
-            if (leave) {
-              if (context.mounted) {
-                meetingViewController.resetToLobby();
+          if (leave) {
+            if (context.mounted) {
+              meetingViewController.resetToLobby();
 
-                _goBack(context);
-              }
+              _goBack(context);
             }
-          } else {
-            _goBack(context);
           }
-        },
-      ),
+        } else {
+          _goBack(context);
+        }
+      },
     );
   }
 }
@@ -571,6 +571,7 @@ class ActionsRow extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
         final state = resolvePaneHeaderActionState(constraints, leadingWidth: 320, minimumLeadingWidth: 220, actions: trailingActions);
         final visibleTrailingActions = visiblePaneHeaderActions(trailingActions, overflowCollapsed: state.overflowCollapsed);
 
@@ -582,7 +583,7 @@ class ActionsRow extends StatelessWidget {
               child: SizedBox(
                 height: desktopPaneHeaderContentHeight,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: isMobile ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     spacing: 8,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -1351,7 +1352,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     return Tooltip(
       message: filesLocation.backTooltip,
-      child: ShadIconButton.ghost(icon: const Icon(LucideIcons.arrowLeft), onPressed: () => _navigateBackFromMobileFiles(context)),
+      child: PowerboardsBackIconButton(onPressed: () => _navigateBackFromMobileFiles(context), tooltip: filesLocation.backTooltip),
     );
   }
 
@@ -1361,14 +1362,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required Widget title,
     required List<Widget> trailingActions,
   }) {
-    final cs = ShadTheme.of(context).colorScheme;
-
     return ColoredBox(
-      color: cs.background,
+      color: _mobileRoomSurfaceColor(context),
       child: SizedBox(
         height: headerHeight,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: _mobileRoomHeaderHorizontalInset),
+          padding: powerboardsMobileHorizontalPadding,
           child: Row(
             spacing: _mobileRoomHeaderGap,
             children: [
@@ -1418,14 +1417,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     List<Widget> bottomActions = const [],
   }) {
     return KeyboardSafe(
-      child: SafeArea(
-        minimum: powerboardsMobileScreenSafeAreaMinimum,
-        child: Column(
-          children: [
-            _buildMobileRoomHeader(context, leadingAction: leadingAction, title: title, trailingActions: trailingActions),
-            Expanded(child: body),
-            if (bottomActions.isNotEmpty) ActionsRow(actions: bottomActions),
-          ],
+      child: ColoredBox(
+        color: _mobileRoomSurfaceColor(context),
+        child: SafeArea(
+          minimum: powerboardsMobileScreenSafeAreaMinimum,
+          child: Column(
+            children: [
+              _buildMobileRoomHeader(context, leadingAction: leadingAction, title: title, trailingActions: trailingActions),
+              Expanded(child: body),
+              if (bottomActions.isNotEmpty) ActionsRow(actions: bottomActions),
+            ],
+          ),
         ),
       ),
     );
@@ -1813,7 +1815,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingSessionActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
-      color: cs.background,
+      color: isMobile ? cs.card : cs.background,
       child: Column(
         children: [
           if (isMobile && embedMobileChrome) ActionsRow(actions: actions),
@@ -1845,7 +1847,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingIsActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
-      color: cs.background,
+      color: isMobile ? cs.card : cs.background,
       child: Column(
         children: [
           if (isMobile)

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/markdown.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
@@ -119,6 +120,7 @@ class AgentsDropdown extends StatelessWidget {
     return ChangeNotifierBuilder(
       source: room.messaging,
       builder: (context) {
+        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
         final developmentAgents = _developmentAgents();
         final selectedRouteId = selectedAgentRouteId ?? (selectedService == null ? null : _serviceId(selectedService!));
         final selectedDevelopmentAgent = selectedRouteId == null
@@ -172,7 +174,9 @@ class AgentsDropdown extends StatelessWidget {
                     onOpen?.call();
                     controller.toggle();
                   },
-                  leading: selectedDevelopmentAgent == null
+                  leading: isMobile
+                      ? null
+                      : selectedDevelopmentAgent == null
                       ? const Icon(LucideIcons.bot, size: 18)
                       : Opacity(opacity: 0.25, child: Icon(_developmentAgentIcon(selectedDevelopmentAgent.participant), size: 18)),
                   child: Text(label, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600)),

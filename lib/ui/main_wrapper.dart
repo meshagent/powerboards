@@ -28,7 +28,7 @@ class MainWrapper extends StatelessWidget {
             child: SizedBox(
               height: headerHeight,
               child: Padding(
-                padding: const .symmetric(horizontal: 10),
+                padding: isMobile ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: 10),
                 child: Row(
                   children: [
                     ?leftSideBar,

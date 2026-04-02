@@ -682,13 +682,18 @@ class _NavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final horizontalPadding = isMobile
+        ? powerboardsMobileHorizontalPadding
+        : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset);
+
     return KeyboardSafe(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: desktopPaneSecondaryControlTopOffset),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
+            padding: horizontalPadding,
             child: SizedBox(
               height: desktopPaneSecondaryControlHeight,
               child: ShadInput(
@@ -723,10 +728,10 @@ class _NavBar extends StatelessWidget {
           ),
           if (canCreateRooms)
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                desktopPaneSideHorizontalInset,
+              padding: EdgeInsets.fromLTRB(
+                isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
                 10,
-                desktopPaneSideHorizontalInset,
+                isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
                 desktopPaneBottomInset,
               ),
               child: ShadButton.outline(
@@ -789,7 +794,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     final projectTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: theme.colorScheme.foreground);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
+      padding: isSmallDisplay ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

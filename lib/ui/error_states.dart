@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/theme/theme.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 
 class NotFound extends StatelessWidget {
   const NotFound({super.key, required this.uri});
@@ -12,19 +12,11 @@ class NotFound extends StatelessWidget {
     return SafeArea(
       minimum: powerboardsMobileScreenSafeAreaMinimum,
       child: Padding(
-        padding: const EdgeInsets.all(10.0),
+        padding: EdgeInsets.symmetric(horizontal: powerboardsMobileShellHorizontalInset, vertical: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Tooltip(
-              message: "Back",
-              child: ShadIconButton.ghost(
-                icon: Icon(LucideIcons.arrowLeft),
-                onPressed: () async {
-                  context.go("/");
-                },
-              ),
-            ),
+            PowerboardsBackIconButton(onPressed: () => context.go("/")),
             Expanded(
               child: Center(child: Text(textAlign: TextAlign.center, "Not Found $uri")),
             ),

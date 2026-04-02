@@ -48,7 +48,7 @@ class RoomNotFound extends StatelessWidget {
     if (isMobile) {
       return SafeArea(
         minimum: powerboardsMobileScreenSafeAreaMinimum,
-        child: Padding(padding: const EdgeInsets.all(32.0), child: _inner(context)),
+        child: Padding(padding: powerboardsMobileScreenContentPadding, child: _inner(context)),
       );
     }
 
