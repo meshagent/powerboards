@@ -22,6 +22,9 @@ class RoomOptionsMenu extends StatefulWidget {
   final bool showMeetingPaneEntriesInOverflow;
   final bool showFilesAction;
   final bool showMeetAction;
+  final VoidCallback? onShowChat;
+  final VoidCallback? onShowFiles;
+  final VoidCallback? onShowMeet;
 
   const RoomOptionsMenu({
     super.key,
@@ -34,6 +37,9 @@ class RoomOptionsMenu extends StatefulWidget {
     this.showMeetingPaneEntriesInOverflow = false,
     this.showFilesAction = false,
     this.showMeetAction = false,
+    this.onShowChat,
+    this.onShowFiles,
+    this.onShowMeet,
   });
 
   @override
@@ -65,24 +71,47 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
         final canViewDeveloperLogsValue = canViewDeveloperLogs.state.value == true;
         final isMobile = ResponsiveBreakpoints.of(context).isMobile;
         final overflowCollapsed = CompactHeaderActions.overflowCollapsedOf(context);
+        final showPaneEntriesInMenu = widget.showMeetingPaneEntriesInOverflow && (isMobile || overflowCollapsed);
         final showInlineMeetingInvite = widget.showMeetingPaneEntriesInOverflow && !isMobile;
 
         final entries = <AppMenuEntry>[
-          if (widget.showMeetingPaneEntriesInOverflow && overflowCollapsed && widget.showFilesAction)
+          if (showPaneEntriesInMenu)
+            AppMenuEntry(
+              title: "Chat",
+              description: widget.roomController.isFilesShown || widget.roomController.inMeeting
+                  ? "Show the chat pane."
+                  : "You are viewing chat.",
+              icon: LucideIcons.messageSquareText,
+              selected: !widget.roomController.isFilesShown && !widget.roomController.inMeeting,
+              onPressed: widget.onShowChat ?? widget.roomController.showChat,
+            ),
+          if (showPaneEntriesInMenu && widget.showFilesAction)
             AppMenuEntry(
               title: "Files",
-              description: widget.roomController.isFilesShown ? "Hide the files pane." : "Show the files pane.",
+              description: widget.roomController.isFilesShown
+                  ? (isMobile ? "You are viewing files." : "Hide the files pane.")
+                  : "Show the files pane.",
               icon: LucideIcons.files,
               selected: widget.roomController.isFilesShown,
-              onPressed: widget.roomController.isFilesShown ? widget.roomController.hideFiles : widget.roomController.showFiles,
+              onPressed:
+                  widget.onShowFiles ??
+                  (isMobile
+                      ? () => widget.roomController.selectFilesTab(isMobile: true)
+                      : (widget.roomController.isFilesShown ? widget.roomController.hideFiles : widget.roomController.showFiles)),
             ),
-          if (widget.showMeetingPaneEntriesInOverflow && overflowCollapsed && widget.showMeetAction)
+          if (showPaneEntriesInMenu && widget.showMeetAction)
             AppMenuEntry(
               title: "Meet",
-              description: widget.roomController.inMeeting ? "Hide the meeting pane." : "Show the meeting pane.",
+              description: widget.roomController.inMeeting
+                  ? (isMobile ? "You are viewing meet." : "Hide the meeting pane.")
+                  : "Show the meeting pane.",
               icon: LucideIcons.video,
               selected: widget.roomController.inMeeting,
-              onPressed: widget.roomController.inMeeting ? widget.roomController.exitMeeting : widget.roomController.enterMeeting,
+              onPressed:
+                  widget.onShowMeet ??
+                  (isMobile
+                      ? () => widget.roomController.selectMeetingTab(isMobile: true)
+                      : (widget.roomController.inMeeting ? widget.roomController.exitMeeting : widget.roomController.enterMeeting)),
             ),
           if (isMobile || (overflowCollapsed && !showInlineMeetingInvite))
             AppMenuEntry(
@@ -90,17 +119,14 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
               description: "Invite someone by email to join this room.",
               icon: LucideIcons.userPlus,
               onPressed: _openPermissions,
-              separatorBefore: widget.showMeetingPaneEntriesInOverflow && overflowCollapsed,
+              separatorBefore: showPaneEntriesInMenu,
             ),
           AppMenuEntry(
             title: "Permissions",
             description: isOwnerValue ? "Add or remove users from this room." : "View users of this room",
             icon: LucideIcons.lock,
             onPressed: _openPermissions,
-            separatorBefore:
-                widget.showMeetingPaneEntriesInOverflow &&
-                overflowCollapsed &&
-                !(isMobile || (overflowCollapsed && !showInlineMeetingInvite)),
+            separatorBefore: showPaneEntriesInMenu && !(isMobile || (overflowCollapsed && !showInlineMeetingInvite)),
           ),
           if (isOwnerValue)
             AppMenuEntry(title: "Manage agents", description: "Install or remove agents.", icon: LucideIcons.blocks, onPressed: _addAgent),

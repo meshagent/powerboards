@@ -743,46 +743,31 @@ class _NavBarTopState extends State<_NavBarTop> {
           if (isSmallDisplay)
             SizedBox(
               height: headerHeight,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final maxLabelWidth = (constraints.maxWidth - 160).clamp(80.0, 320.0);
-
-                  return Stack(
-                    children: [
-                      const Align(alignment: Alignment.centerLeft, child: NavMainLogo()),
-                      Center(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _switchProject,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ConstrainedBox(
-                                  constraints: BoxConstraints(maxWidth: maxLabelWidth),
-                                  child: Text(
-                                    displayName,
-                                    style: projectTitleStyle,
-                                    overflow: TextOverflow.ellipsis,
-                                    textAlign: TextAlign.center,
-                                    maxLines: 1,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
-                              ],
+              child: Row(
+                spacing: 12,
+                children: [
+                  const NavMainLogo(),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ShadButton.ghost(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        onPressed: _switchProject,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(displayName, style: projectTitleStyle, overflow: TextOverflow.ellipsis, maxLines: 1),
                             ),
-                          ),
+                            const SizedBox(width: 8),
+                            Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                          ],
                         ),
                       ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
-                      ),
-                    ],
-                  );
-                },
+                    ),
+                  ),
+                  UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+                ],
               ),
             ),
           if (!isSmallDisplay)

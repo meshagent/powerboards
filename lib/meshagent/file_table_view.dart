@@ -148,6 +148,7 @@ class FileManagerView extends StatefulWidget {
   final RoomClient client;
   final Resource<List<ServiceSpec>>? services;
   final bool hideSystem;
+  final bool mobileShellOwnsHeader;
   final List<Widget> desktopHeaderActions;
   final double desktopHeaderActionLeadingWidthFloor;
   final double desktopHeaderActionMinimumLeadingWidth;
@@ -158,6 +159,7 @@ class FileManagerView extends StatefulWidget {
     required this.client,
     this.services,
     this.hideSystem = false,
+    this.mobileShellOwnsHeader = false,
     this.desktopHeaderActions = const [],
     this.desktopHeaderActionLeadingWidthFloor = 0,
     this.desktopHeaderActionMinimumLeadingWidth = 0,
@@ -1211,6 +1213,26 @@ class _FileManagerViewState extends State<FileManagerView> {
     final showSelectionActions = selected.isNotEmpty && _openedFile == null;
     final showRouteActions = !showSelectionActions;
     final leading = showSelectionActions ? _buildSelection(selected) : _buildBreadcrumb();
+    final selectToggle = Tooltip(
+      message: "Select items",
+      child: (_forceShowSelect ? ShadIconButton.new : ShadIconButton.outline)(
+        icon: const Icon(LucideIcons.squareCheckBig),
+        onPressed: _toggleForceShowSelect,
+      ),
+    );
+
+    if (widget.mobileShellOwnsHeader && !showSelectionActions) {
+      final actionWidgets = <Widget>[if (showRouteActions) ..._buildRouteActions(), if (_openedFile == null) selectToggle];
+
+      if (actionWidgets.isEmpty) {
+        return const SizedBox.shrink();
+      }
+
+      return Padding(
+        padding: EdgeInsets.only(bottom: _openedFile == null ? 8 : 12),
+        child: Row(mainAxisAlignment: MainAxisAlignment.end, spacing: 6, children: actionWidgets),
+      );
+    }
 
     return Padding(
       padding: EdgeInsets.fromLTRB(0, 0, 0, _openedFile == null ? 0 : 8),
@@ -1223,13 +1245,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             child: Align(alignment: Alignment.centerLeft, child: leading),
           ),
           if (showRouteActions) ..._buildRouteActions(),
-          Tooltip(
-            message: "Select items",
-            child: (_forceShowSelect ? ShadIconButton.new : ShadIconButton.outline)(
-              icon: const Icon(LucideIcons.squareCheckBig),
-              onPressed: _toggleForceShowSelect,
-            ),
-          ),
+          selectToggle,
         ],
       ),
     );
