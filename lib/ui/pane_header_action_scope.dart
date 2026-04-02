@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 const double desktopPaneHeaderButtonGap = 8;
+const double paneHeaderIconButtonIconSize = 20;
 const double desktopPaneHeaderCompactButtonWidth = 48;
 const double desktopPaneHeaderFilesButtonWidth = 96;
 const double desktopPaneHeaderMeetButtonWidth = 96;

@@ -982,6 +982,11 @@ class _FileManagerViewState extends State<FileManagerView> {
       return _buildDesktopToolbar(selected);
     }
 
+    final showSelectionActions = selected.isNotEmpty && _openedFile == null;
+    if (widget.mobileShellOwnsHeader && !showSelectionActions) {
+      return const SizedBox.shrink();
+    }
+
     return _buildMobileToolbar(selected);
   }
 
@@ -1655,11 +1660,13 @@ class _FileManagerViewState extends State<FileManagerView> {
           child: SignalBuilder(
             builder: (context, _) {
               final selected = _visibleSelected.value;
+              final hideEmbeddedMobileToolbar =
+                  widget.mobileShellOwnsHeader && ResponsiveBreakpoints.of(context).isMobile && selected.isEmpty && _openedFile == null;
               return Column(
                 crossAxisAlignment: .start,
                 children: [
                   _buildToolbar(selected),
-                  const SizedBox(height: desktopPaneSecondaryRowContentGap),
+                  if (!hideEmbeddedMobileToolbar) const SizedBox(height: desktopPaneSecondaryRowContentGap),
                   Expanded(
                     child: IndexedStack(
                       index: _openedFile == null ? 0 : 1,

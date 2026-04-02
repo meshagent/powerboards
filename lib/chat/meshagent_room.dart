@@ -21,6 +21,7 @@ import 'package:meshagent_flutter_dev/developer_console.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
+import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
@@ -31,6 +32,7 @@ import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
+import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/grant.dart' as grant;
 import 'package:powerboards/meshagent/loader.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -47,6 +49,7 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/meeting_view.dart';
@@ -54,6 +57,7 @@ import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/resizable_split_view.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
+import 'package:powerboards/ui/text_validators.dart';
 
 const defaultDebugSize = 0.4;
 final meetingHeaderTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600);
@@ -61,7 +65,9 @@ const double _meetingToolbarCompactThreshold = 620;
 const double _meetingToolbarPreferredExpandedWidth = 640;
 const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
 const double _mobileRoomHeaderGap = 8;
+const double _mobilePlainHeaderTitleInset = 8;
 const String _roomPaneQueryParameter = 'pane';
+const String _mobileFilesPlaceholderFileName = '.placeholder';
 
 enum _MobileRoomPane { chat, files, meeting }
 
@@ -128,6 +134,26 @@ EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
   }
 
   return const EdgeInsets.symmetric(horizontal: 10);
+}
+
+Widget _buildPaneHeaderIconButton({
+  required String tooltip,
+  required IconData icon,
+  required VoidCallback? onPressed,
+  ShadButtonVariant variant = ShadButtonVariant.outline,
+  Color? iconColor,
+}) {
+  final iconWidget = Icon(icon, size: paneHeaderIconButtonIconSize, color: iconColor);
+
+  final button = switch (variant) {
+    ShadButtonVariant.primary => ShadIconButton(icon: iconWidget, onPressed: onPressed),
+    ShadButtonVariant.destructive => ShadIconButton.destructive(icon: iconWidget, onPressed: onPressed),
+    ShadButtonVariant.secondary => ShadIconButton.secondary(icon: iconWidget, onPressed: onPressed),
+    ShadButtonVariant.ghost => ShadIconButton.ghost(icon: iconWidget, onPressed: onPressed),
+    _ => ShadIconButton.outline(icon: iconWidget, onPressed: onPressed),
+  };
+
+  return Tooltip(message: tooltip, child: button);
 }
 
 Color _mobileRoomSurfaceColor(BuildContext context) {
@@ -291,15 +317,27 @@ class InviteUserButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final compact = CompactHeaderActions.compactOf(context);
-    final buttonWidth = isMobile || compact ? desktopPaneHeaderCompactButtonWidth : desktopPaneHeaderInviteButtonWidth;
-    final buttonPadding = _paneHeaderButtonPadding(compact: isMobile || compact);
+
+    if (isMobile || compact) {
+      return _buildPaneHeaderIconButton(
+        tooltip: "Invite user",
+        icon: LucideIcons.userPlus,
+        onPressed: () async {
+          final room = await getMeshagentClient().getRoom(name: roomName, projectId: projectId);
+
+          if (context.mounted) {
+            await showUpdateRoomPermsDialog(context, projectId: projectId, room: room);
+          }
+        },
+      );
+    }
 
     return Tooltip(
       message: "Invite user",
       child: SizedBox(
-        width: buttonWidth,
+        width: desktopPaneHeaderInviteButtonWidth,
         child: ShadButton.outline(
-          padding: buttonPadding,
+          padding: _paneHeaderButtonPadding(compact: false),
           leading: Icon(LucideIcons.userPlus),
           onPressed: () async {
             final room = await getMeshagentClient().getRoom(name: roomName, projectId: projectId);
@@ -327,26 +365,34 @@ class MeetButton extends StatelessWidget {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final compact = CompactHeaderActions.compactOf(context);
     final theme = ShadTheme.of(context);
-    final buttonWidth = isMobile || compact ? desktopPaneHeaderCompactButtonWidth : desktopPaneHeaderMeetButtonWidth;
-    final buttonPadding = _paneHeaderButtonPadding(compact: isMobile || compact);
-
-    final buttonBuilder = controller.inMeeting
-        ? ShadButton.new
+    final buttonVariant = controller.inMeeting
+        ? ShadButtonVariant.primary
         : meetingSessionActive
-        ? ShadButton.destructive
-        : ShadButton.outline;
+        ? ShadButtonVariant.destructive
+        : ShadButtonVariant.outline;
     final iconData = meetingSessionActive ? LucideIcons.circleDot : LucideIcons.video;
     final iconColor = controller.inMeeting && meetingSessionActive ? theme.colorScheme.destructive : null;
+
+    if (isMobile || compact) {
+      return _buildPaneHeaderIconButton(
+        tooltip: "Meet",
+        icon: iconData,
+        iconColor: iconColor,
+        onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
+        variant: buttonVariant,
+      );
+    }
 
     return Tooltip(
       message: "Meet",
       child: SizedBox(
-        width: buttonWidth,
-        child: buttonBuilder(
-          padding: buttonPadding,
+        width: desktopPaneHeaderMeetButtonWidth,
+        child: ShadButton.raw(
+          variant: buttonVariant,
+          padding: _paneHeaderButtonPadding(compact: false),
           leading: Icon(iconData, color: iconColor),
           onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
-          child: isMobile || compact ? null : Text("Meet"),
+          child: Text("Meet"),
         ),
       ),
     );
@@ -363,33 +409,45 @@ class FilesButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final compact = CompactHeaderActions.compactOf(context);
-    final buttonWidth = isMobile || compact ? desktopPaneHeaderCompactButtonWidth : desktopPaneHeaderFilesButtonWidth;
-    final buttonPadding = _paneHeaderButtonPadding(compact: isMobile || compact);
+    final isIconOnly = isMobile || compact;
 
     return controller.isFilesShown
         ? Tooltip(
             message: "Hide files",
-            child: SizedBox(
-              width: buttonWidth,
-              child: ShadButton(
-                padding: buttonPadding,
-                leading: Icon(LucideIcons.files),
-                onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
-                child: isMobile || compact ? null : Text("Files"),
-              ),
-            ),
+            child: isIconOnly
+                ? _buildPaneHeaderIconButton(
+                    tooltip: "Hide files",
+                    icon: LucideIcons.files,
+                    onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
+                    variant: ShadButtonVariant.primary,
+                  )
+                : SizedBox(
+                    width: desktopPaneHeaderFilesButtonWidth,
+                    child: ShadButton(
+                      padding: _paneHeaderButtonPadding(compact: false),
+                      leading: Icon(LucideIcons.files),
+                      onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
+                      child: Text("Files"),
+                    ),
+                  ),
           )
         : Tooltip(
             message: "Show files",
-            child: SizedBox(
-              width: buttonWidth,
-              child: ShadButton.outline(
-                padding: buttonPadding,
-                leading: Icon(LucideIcons.files),
-                onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
-                child: isMobile || compact ? null : Text("Files"),
-              ),
-            ),
+            child: isIconOnly
+                ? _buildPaneHeaderIconButton(
+                    tooltip: "Show files",
+                    icon: LucideIcons.files,
+                    onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
+                  )
+                : SizedBox(
+                    width: desktopPaneHeaderFilesButtonWidth,
+                    child: ShadButton.outline(
+                      padding: _paneHeaderButtonPadding(compact: false),
+                      leading: Icon(LucideIcons.files),
+                      onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
+                      child: Text("Files"),
+                    ),
+                  ),
           );
   }
 }
@@ -1341,11 +1399,194 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _showChatPane(context);
   }
 
+  Future<void> _uploadFileToRoom(Stream<Uint8List> stream, String path, int totalBytes) async {
+    final upload = MeshagentFileUpload(room: widget.room, path: path, dataStream: stream);
+    await upload.done;
+  }
+
+  Future<void> _addFilesToFolder(String path) async {
+    await FileUploadHelper.pickAndUploadFiles(path: path, onUpload: _uploadFileToRoom);
+  }
+
+  Future<void> _addFolderToCurrentFilesLocation(BuildContext context) async {
+    final folder = _mobileFilesLocation(context).folder;
+    final result = await showShadDialog<String>(
+      context: context,
+      builder: (context) {
+        return ControlledForm(
+          builder: (context, controller, formKey) {
+            void submit() {
+              if (!formKey.currentState!.saveAndValidate()) {
+                return;
+              }
+
+              Navigator.of(context).pop(formKey.currentState!.value["name"] ?? "");
+            }
+
+            return PowerboardsShadDialog.compact(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              title: const Text("New folder"),
+              actions: [
+                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
+                ShadButton(onPressed: submit, child: const Text("OK")),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 16,
+                  children: [
+                    ShadInputFormField(
+                      initialValue: "",
+                      validator: TextValidators.folder,
+                      id: "name",
+                      label: const Text("Name"),
+                      autofocus: true,
+                      onSubmitted: (_) => submit(),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null || result.trim().isEmpty) {
+      return;
+    }
+
+    final fileName = joinPaths(folder, "${result.trim()}/$_mobileFilesPlaceholderFileName");
+    await _uploadFileToRoom(Stream<Uint8List>.value(Uint8List(0)), fileName, 0);
+  }
+
+  Future<void> _showNewTextFileDialogForCurrentFilesLocation(BuildContext context) async {
+    final folder = _mobileFilesLocation(context).folder;
+    final resolvedName = await showShadDialog<String>(
+      context: context,
+      builder: (context) {
+        return ControlledForm(
+          builder: (context, controller, formKey) {
+            Future<void> submit(_) async {
+              if (!formKey.currentState!.saveAndValidate()) {
+                return;
+              }
+
+              final String name = (formKey.currentState!.value["name"] ?? "").trim();
+              var nextName = name;
+
+              if (!name.contains('.')) {
+                final maybeName = await showShadDialog<String>(
+                  context: context,
+                  builder: (context) => PowerboardsShadDialog.compact(
+                    title: const Text("Add .txt extension?"),
+                    description: Text("`$name` has no extension."),
+                    actions: [
+                      ShadButton.outline(onPressed: () => Navigator.of(context).pop(name), child: const Text("No extension")),
+                      ShadButton(onPressed: () => Navigator.of(context).pop("$name.txt"), child: const Text("Add .txt")),
+                    ],
+                  ),
+                );
+
+                if (maybeName == null) {
+                  return;
+                }
+                nextName = maybeName;
+              }
+
+              if (!context.mounted) {
+                return;
+              }
+
+              Navigator.of(context).pop(nextName);
+            }
+
+            return PowerboardsShadDialog.compact(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              title: const Text("New Text File"),
+              actions: [
+                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
+                ShadButton(onPressed: () => submit(null), child: const Text("OK")),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 16,
+                  children: [
+                    ShadInputFormField(
+                      id: "name",
+                      initialValue: "",
+                      validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,
+                      label: const Text("Name"),
+                      autofocus: true,
+                      onSubmitted: submit,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (resolvedName == null || resolvedName.trim().isEmpty) {
+      return;
+    }
+
+    await _uploadFileToRoom(Stream<Uint8List>.value(Uint8List(0)), joinPaths(folder, resolvedName.trim()), 0);
+  }
+
+  Widget _buildMobileFilesCreateMenuButton(BuildContext context) {
+    final folder = _mobileFilesLocation(context).folder;
+
+    return AppContextMenuButton(
+      compact: true,
+      boundaryContext: context,
+      entries: [
+        AppMenuEntry(
+          title: "New folder",
+          description: "Create a folder in this location.",
+          icon: LucideIcons.folderPlus,
+          onPressed: () => _addFolderToCurrentFilesLocation(context),
+        ),
+        AppMenuEntry(
+          title: "New text file",
+          description: "Create a new text file in this location.",
+          icon: LucideIcons.fileText,
+          onPressed: () => _showNewTextFileDialogForCurrentFilesLocation(context),
+        ),
+        AppMenuEntry(
+          title: "Upload files",
+          description: "Upload files to this folder.",
+          icon: LucideIcons.upload,
+          onPressed: () => _addFilesToFolder(folder),
+        ),
+      ],
+      constraints: const BoxConstraints(minWidth: 220),
+      childBuilder: (context, controller) => Tooltip(
+        message: "Create or upload",
+        child: ShadIconButton.outline(
+          icon: const Icon(LucideIcons.plus, size: paneHeaderIconButtonIconSize),
+          onPressed: controller.toggle,
+        ),
+      ),
+    );
+  }
+
   Widget _buildMobileRoomLeadingAction(BuildContext context, {required bool filesVisible}) {
     final pane = _mobileActivePane(filesVisible: filesVisible);
 
-    if (pane != _MobileRoomPane.files) {
+    if (pane == _MobileRoomPane.chat) {
       return BackButton(projectId: widget.projectId);
+    }
+
+    if (pane == _MobileRoomPane.meeting) {
+      return PowerboardsBackIconButton(onPressed: () => _showChatPane(context), tooltip: "Close meet", icon: LucideIcons.x);
     }
 
     final filesLocation = _mobileFilesLocation(context);
@@ -1361,6 +1602,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required Widget leadingAction,
     required Widget title,
     required List<Widget> trailingActions,
+    Alignment titleAlignment = Alignment.centerLeft,
   }) {
     return ColoredBox(
       color: _mobileRoomSurfaceColor(context),
@@ -1374,7 +1616,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               leadingAction,
               Expanded(
                 child: Align(
-                  alignment: Alignment.centerLeft,
+                  alignment: titleAlignment,
                   child: DefaultTextStyle.merge(overflow: TextOverflow.ellipsis, maxLines: 1, child: title),
                 ),
               ),
@@ -1386,11 +1628,42 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  Widget _buildMobileMeetingHeaderTitle(BuildContext context) {
+    final controls = _meetingToolbarControls(context, compact: true);
+    if (controls.isEmpty) {
+      return Text("Get ready to meet", style: meetingHeaderTitleStyle);
+    }
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: controls),
+      ),
+    );
+  }
+
+  Widget _buildMobilePlainHeaderTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: _mobilePlainHeaderTitleInset),
+      child: Text(title, style: meetingHeaderTitleStyle),
+    );
+  }
+
   List<Widget> _buildMobileRoomHeaderActions(BuildContext context, {required bool canViewStorageAllowed, required bool filesVisible}) {
     final pane = _mobileActivePane(filesVisible: filesVisible);
+    final showMeetingInviteAction = pane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
+    final showFilesHeaderStack = pane == _MobileRoomPane.files;
+    final meetingSessionActive = _isMeetingSessionActive(context);
 
     return [
+      if (showFilesHeaderStack) _buildMobileFilesCreateMenuButton(context),
       if (pane == _MobileRoomPane.chat) InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+      if (showFilesHeaderStack)
+        MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _showMeetingPane(context)),
+      if (pane == _MobileRoomPane.chat)
+        MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _showMeetingPane(context)),
+      if (showMeetingInviteAction) InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
       RoomOptionsMenu(
         projectId: widget.projectId,
         room: widget.room,
@@ -1415,6 +1688,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required List<Widget> trailingActions,
     required Widget body,
     List<Widget> bottomActions = const [],
+    Alignment titleAlignment = Alignment.centerLeft,
   }) {
     return KeyboardSafe(
       child: ColoredBox(
@@ -1423,7 +1697,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           minimum: powerboardsMobileScreenSafeAreaMinimum,
           child: Column(
             children: [
-              _buildMobileRoomHeader(context, leadingAction: leadingAction, title: title, trailingActions: trailingActions),
+              _buildMobileRoomHeader(
+                context,
+                leadingAction: leadingAction,
+                title: title,
+                trailingActions: trailingActions,
+                titleAlignment: titleAlignment,
+              ),
               Expanded(child: body),
               if (bottomActions.isNotEmpty) ActionsRow(actions: bottomActions),
             ],
@@ -1811,6 +2091,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final horizontalInset = isMobile ? 12.0 : 20.0;
+    final topInset = isMobile ? 20.0 : 0.0;
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
     final meetingSessionActive = _isMeetingSessionActive(context);
 
@@ -1821,7 +2102,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           if (isMobile && embedMobileChrome) ActionsRow(actions: actions),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, bottomInset),
+              padding: EdgeInsets.fromLTRB(horizontalInset, topInset, horizontalInset, bottomInset),
               child: FileManagerView(
                 client: widget.room,
                 services: services,
@@ -2410,6 +2691,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
                                 if (isMobile) {
                                   final activePane = _mobileActivePane(filesVisible: filesVisible);
+                                  final useMobileMeetingHeaderControls =
+                                      activePane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
+                                  final centerMobileHeaderTitle = activePane == _MobileRoomPane.meeting && !useMobileMeetingHeaderControls;
                                   final headerTitle = switch (activePane) {
                                     _MobileRoomPane.chat => AgentsDropdown(
                                       projectId: widget.projectId,
@@ -2420,8 +2704,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                       onOpen: services.refresh,
                                       onManageAgents: isOwner.state.value != true ? null : showManageAgents,
                                     ),
-                                    _MobileRoomPane.files => Text(_mobileFilesLocation(context).title, style: meetingHeaderTitleStyle),
-                                    _MobileRoomPane.meeting => Text("Meet", style: meetingHeaderTitleStyle),
+                                    _MobileRoomPane.files => _buildMobilePlainHeaderTitle(_mobileFilesLocation(context).title),
+                                    _MobileRoomPane.meeting =>
+                                      useMobileMeetingHeaderControls
+                                          ? _buildMobileMeetingHeaderTitle(context)
+                                          : Text("Get ready to meet", style: meetingHeaderTitleStyle),
                                   };
 
                                   final mobileBody = controller.inMeeting
@@ -2432,15 +2719,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
                                   return _buildMobileRoomScaffold(
                                     context,
-                                    leadingAction: _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
+                                    leadingAction: useMobileMeetingHeaderControls
+                                        ? const SizedBox.shrink()
+                                        : _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
                                     title: headerTitle,
                                     trailingActions: _buildMobileRoomHeaderActions(
                                       context,
                                       canViewStorageAllowed: canViewStorageAllowed,
                                       filesVisible: filesVisible,
                                     ),
+                                    titleAlignment: centerMobileHeaderTitle ? Alignment.center : Alignment.centerLeft,
                                     body: mobileBody,
-                                    bottomActions: controller.inMeeting ? meetingActions(context) : const [],
+                                    bottomActions: useMobileMeetingHeaderControls
+                                        ? const []
+                                        : (controller.inMeeting ? meetingActions(context) : const []),
                                   );
                                 }
 

@@ -113,7 +113,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
                       ? () => widget.roomController.selectMeetingTab(isMobile: true)
                       : (widget.roomController.inMeeting ? widget.roomController.exitMeeting : widget.roomController.enterMeeting)),
             ),
-          if (isMobile || (overflowCollapsed && !showInlineMeetingInvite))
+          if (!isMobile && overflowCollapsed && !showInlineMeetingInvite)
             AppMenuEntry(
               title: "Invite user",
               description: "Invite someone by email to join this room.",
@@ -124,24 +124,25 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
           AppMenuEntry(
             title: "Permissions",
             description: isOwnerValue ? "Add or remove users from this room." : "View users of this room",
-            icon: LucideIcons.lock,
+            icon: LucideIcons.userPlus,
             onPressed: _openPermissions,
-            separatorBefore: showPaneEntriesInMenu && !(isMobile || (overflowCollapsed && !showInlineMeetingInvite)),
+            separatorBefore: showPaneEntriesInMenu && !(!isMobile && overflowCollapsed && !showInlineMeetingInvite),
           ),
           if (isOwnerValue)
             AppMenuEntry(title: "Manage agents", description: "Install or remove agents.", icon: LucideIcons.blocks, onPressed: _addAgent),
-          AppMenuEntry(
-            title: "Keychain",
-            description: "Manage saved connections.",
-            icon: LucideIcons.plug,
-            onPressed: () {
-              showShadDialog<void>(
-                context: context,
-                builder: (context) => KeychainDialog(room: widget.room),
-              );
-            },
-          ),
-          if (canViewDeveloperLogsValue)
+          if (!isMobile)
+            AppMenuEntry(
+              title: "Keychain",
+              description: "Manage saved connections.",
+              icon: LucideIcons.plug,
+              onPressed: () {
+                showShadDialog<void>(
+                  context: context,
+                  builder: (context) => KeychainDialog(room: widget.room),
+                );
+              },
+            ),
+          if (!isMobile && canViewDeveloperLogsValue)
             AppMenuEntry(
               title: "Developer console",
               description: "Show or hide the developer console.",
@@ -159,7 +160,10 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
           childBuilder: (context, controller) {
             return Tooltip(
               message: "Room options",
-              child: ShadIconButton.outline(icon: const Icon(LucideIcons.ellipsis), onPressed: controller.toggle),
+              child: ShadIconButton.outline(
+                icon: const Icon(LucideIcons.ellipsis, size: paneHeaderIconButtonIconSize),
+                onPressed: controller.toggle,
+              ),
             );
           },
         );
