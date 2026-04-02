@@ -48,6 +48,12 @@ const shadDarkBorder = Color(0xFF3A3A3C);
 const shadDarkInput = Color(0xFF1D1E20);
 const shadDarkRing = Color(0xFF9A86F3);
 const shadDarkSelection = Color(0xFF473A77);
+const double powerboardsMobileScreenTopInset = 10.0;
+const double powerboardsMobileScreenBottomInset = 15.0;
+const EdgeInsets powerboardsMobileScreenSafeAreaMinimum = EdgeInsets.only(
+  top: powerboardsMobileScreenTopInset,
+  bottom: powerboardsMobileScreenBottomInset,
+);
 const powerboardsMobileTransitionDuration = Duration(milliseconds: 320);
 const Curve powerboardsMobileTransitionInCurve = Curves.easeInOutCubicEmphasized;
 const Curve powerboardsMobileTransitionOutCurve = Curves.easeInOutCubic;

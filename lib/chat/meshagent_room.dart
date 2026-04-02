@@ -1419,6 +1419,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }) {
     return KeyboardSafe(
       child: SafeArea(
+        minimum: powerboardsMobileScreenSafeAreaMinimum,
         child: Column(
           children: [
             _buildMobileRoomHeader(context, leadingAction: leadingAction, title: title, trailingActions: trailingActions),

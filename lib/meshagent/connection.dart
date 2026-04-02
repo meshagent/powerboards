@@ -127,6 +127,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
     return SafeArea(
+      minimum: powerboardsMobileScreenSafeAreaMinimum,
       child: Column(
         children: [
           ColoredBox(
@@ -150,6 +151,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
 
   Widget _roomDisconnectedCard() {
     return SafeArea(
+      minimum: powerboardsMobileScreenSafeAreaMinimum,
       child: _loadingBody(
         RoomEndedCard(
           title: "Disconnected from room",
@@ -162,6 +164,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
 
   Widget _roomConnectionFailedCard() {
     return SafeArea(
+      minimum: powerboardsMobileScreenSafeAreaMinimum,
       child: _loadingBody(
         RoomEndedCard(title: "Unable to connect to room", description: "Please try reconnecting.", onReconnect: _reconnect),
       ),

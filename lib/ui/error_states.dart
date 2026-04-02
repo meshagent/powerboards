@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class NotFound extends StatelessWidget {
@@ -9,6 +10,7 @@ class NotFound extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
+      minimum: powerboardsMobileScreenSafeAreaMinimum,
       child: Padding(
         padding: const EdgeInsets.all(10.0),
         child: Column(

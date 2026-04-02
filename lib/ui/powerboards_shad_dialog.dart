@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/theme/theme.dart';
 
 const double powerboardsCompactDesktopDialogWidth = 360;
 const BoxConstraints powerboardsCompactDesktopDialogConstraints = BoxConstraints(maxWidth: powerboardsCompactDesktopDialogWidth);
@@ -310,11 +311,15 @@ class PowerboardsShadDialog extends StatelessWidget {
     final mediaQuery = MediaQuery.maybeOf(context);
     final screenSize = mediaQuery?.size ?? const Size(1024.0, 768.0);
     final isMobile = screenSize.width < 600;
+    final mobileTopInset = isMobile ? powerboardsMobileScreenTopInset : 0.0;
+    final mobileBottomInset = isMobile ? powerboardsMobileScreenBottomInset : 0.0;
     final effectiveConstraints = _resolveDialogConstraints(
       constraints,
       screenSize: screenSize,
       isMobile: isMobile,
       mobilePresentation: mobilePresentation,
+      mobileTopInset: mobileTopInset,
+      mobileBottomInset: mobileBottomInset,
     );
     final effectiveDialogMaxWidth = _dialogMaxWidth(effectiveConstraints, screenSize: screenSize, isMobile: isMobile);
     final isCompactDesktopDialog = !isMobile && effectiveDialogMaxWidth <= _compactDesktopDialogWidthThreshold;
@@ -345,6 +350,8 @@ class PowerboardsShadDialog extends StatelessWidget {
             : ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisAlignment.start : MainAxisAlignment.end));
     final effectiveTitleTextAlign = titleTextAlign ?? TextAlign.left;
     final effectiveDescriptionTextAlign = descriptionTextAlign ?? TextAlign.left;
+    final effectiveAlignment =
+        alignment ?? (isMobile && mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen ? Alignment.topCenter : null);
 
     return ShadDialog.raw(
       key: key,
@@ -372,7 +379,7 @@ class PowerboardsShadDialog extends StatelessWidget {
       descriptionStyle: descriptionStyle,
       titleTextAlign: effectiveTitleTextAlign,
       descriptionTextAlign: effectiveDescriptionTextAlign,
-      alignment: alignment,
+      alignment: effectiveAlignment,
       mainAxisAlignment: mainAxisAlignment,
       crossAxisAlignment: crossAxisAlignment,
       scrollable: scrollable,
@@ -427,13 +434,17 @@ BoxConstraints? _resolveDialogConstraints(
   required Size screenSize,
   required bool isMobile,
   required PowerboardsDialogMobilePresentation mobilePresentation,
+  required double mobileTopInset,
+  required double mobileBottomInset,
 }) {
+  final availableMobileHeight = (screenSize.height - mobileTopInset - mobileBottomInset).clamp(0.0, screenSize.height).toDouble();
+
   if (isMobile && mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen) {
     return BoxConstraints(
       minWidth: screenSize.width,
       maxWidth: screenSize.width,
-      minHeight: screenSize.height,
-      maxHeight: screenSize.height,
+      minHeight: availableMobileHeight,
+      maxHeight: availableMobileHeight,
     );
   }
 
@@ -445,7 +456,11 @@ BoxConstraints? _resolveDialogConstraints(
     return _clampToViewport(constraints, maxWidth: _dialogInsetExtent(screenSize.width), maxHeight: _dialogInsetExtent(screenSize.height));
   }
 
-  return _clampToViewport(constraints, maxWidth: _dialogInsetExtent(screenSize.width), maxHeight: _dialogInsetExtent(screenSize.height));
+  return _clampToViewport(
+    constraints,
+    maxWidth: _dialogInsetExtent(screenSize.width),
+    maxHeight: _dialogInsetExtent(availableMobileHeight),
+  );
 }
 
 BoxConstraints _clampToViewport(BoxConstraints? constraints, {required double maxWidth, required double maxHeight}) {

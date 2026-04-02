@@ -424,6 +424,7 @@ class _NavState extends State<Nav> {
             child: ColoredBox(
               color: ShadTheme.of(context).colorScheme.card,
               child: SafeArea(
+                minimum: powerboardsMobileScreenSafeAreaMinimum,
                 child: Column(
                   children: [
                     _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
@@ -567,6 +568,7 @@ class _NavState extends State<Nav> {
 
     if (isSmallDisplay) {
       return SafeArea(
+        minimum: powerboardsMobileScreenSafeAreaMinimum,
         child: Column(
           children: [
             _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),

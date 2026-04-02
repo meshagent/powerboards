@@ -5,6 +5,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/theme/theme.dart';
 
 class RoomNotFound extends StatelessWidget {
   const RoomNotFound({super.key});
@@ -46,6 +47,7 @@ class RoomNotFound extends StatelessWidget {
 
     if (isMobile) {
       return SafeArea(
+        minimum: powerboardsMobileScreenSafeAreaMinimum,
         child: Padding(padding: const EdgeInsets.all(32.0), child: _inner(context)),
       );
     }

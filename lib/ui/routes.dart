@@ -21,6 +21,7 @@ import 'package:powerboards/meshagent/rooms_list_builder.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/settings/selected_room.dart';
+import 'package:powerboards/theme/theme.dart';
 
 import 'empty_states.dart';
 import 'login_button.dart';
@@ -156,6 +157,7 @@ class _SingInScreenState extends State<_SingInScreen> {
 
     if (isMobile) {
       return SafeArea(
+        minimum: powerboardsMobileScreenSafeAreaMinimum,
         child: Padding(padding: const EdgeInsets.all(32.0), child: _inner(context)),
       );
     }
@@ -257,6 +259,7 @@ class _LoginFailedState extends State<_LoginFailed> {
 
     if (isMobile) {
       return SafeArea(
+        minimum: powerboardsMobileScreenSafeAreaMinimum,
         child: Padding(padding: const EdgeInsets.all(32.0), child: _inner(context)),
       );
     }
