@@ -128,6 +128,13 @@ class _MobileFilesLocation {
   }
 }
 
+class _MobileFilesBackDestination {
+  const _MobileFilesBackDestination({required this.label, required this.path});
+
+  final String label;
+  final String path;
+}
+
 EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
   if (compact) {
     return const EdgeInsets.symmetric(horizontal: 0);
@@ -1399,6 +1406,38 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _showChatPane(context);
   }
 
+  List<AppMenuEntry> _mobileFilesBackMenuEntries(BuildContext context) {
+    final filesLocation = _mobileFilesLocation(context);
+    final folderSegments = filesLocation.folder.split('/').where((segment) => segment.isNotEmpty).toList(growable: false);
+    final destinations = <_MobileFilesBackDestination>[];
+
+    var accumulatedPath = "";
+    for (final segment in folderSegments) {
+      accumulatedPath = accumulatedPath.isEmpty ? segment : "$accumulatedPath/$segment";
+      destinations.add(_MobileFilesBackDestination(label: segment, path: accumulatedPath));
+    }
+
+    final ancestorDestinations = filesLocation.openedFile != null
+        ? destinations.reversed.toList(growable: false)
+        : destinations.reversed.skip(1).toList(growable: false);
+
+    if (ancestorDestinations.isEmpty && filesLocation.openedFile == null) {
+      return const [];
+    }
+
+    return [
+      ...ancestorDestinations.map(
+        (destination) => AppMenuEntry(
+          title: destination.label,
+          icon: LucideIcons.folder,
+          onPressed: () => _openMobileFilesEntry(context, destination.path, isFolder: true),
+        ),
+      ),
+      AppMenuEntry(title: "Files", icon: LucideIcons.files, onPressed: () => _openMobileFilesEntry(context, "", isFolder: true)),
+      AppMenuEntry(title: "Chat", icon: LucideIcons.messageSquareText, separatorBefore: true, onPressed: () => _showChatPane(context)),
+    ];
+  }
+
   Future<void> _uploadFileToRoom(Stream<Uint8List> stream, String path, int totalBytes) async {
     final upload = MeshagentFileUpload(room: widget.room, path: path, dataStream: stream);
     await upload.done;
@@ -1590,10 +1629,28 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final filesLocation = _mobileFilesLocation(context);
+    final backMenuEntries = _mobileFilesBackMenuEntries(context);
 
-    return Tooltip(
-      message: filesLocation.backTooltip,
-      child: PowerboardsBackIconButton(onPressed: () => _navigateBackFromMobileFiles(context), tooltip: filesLocation.backTooltip),
+    if (backMenuEntries.isEmpty) {
+      return Tooltip(
+        message: filesLocation.backTooltip,
+        child: PowerboardsBackIconButton(onPressed: () => _navigateBackFromMobileFiles(context), tooltip: filesLocation.backTooltip),
+      );
+    }
+
+    return AppContextMenuButton(
+      compact: true,
+      boundaryContext: context,
+      entries: backMenuEntries,
+      constraints: const BoxConstraints(minWidth: 220),
+      childBuilder: (context, controller) => Tooltip(
+        message: "${filesLocation.backTooltip}. Press and hold to browse ancestors.",
+        child: PowerboardsBackIconButton(
+          onPressed: () => _navigateBackFromMobileFiles(context),
+          onLongPress: controller.toggle,
+          tooltip: filesLocation.backTooltip,
+        ),
+      ),
     );
   }
 
