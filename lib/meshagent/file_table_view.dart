@@ -661,6 +661,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (selected.isEmpty) return;
 
     final toaster = ShadToaster.of(context);
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final count = selected.length;
     final names = selected.take(6).map(_FilePathKey.displayNameFromKey).toList();
 
@@ -693,6 +694,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     int success = 0;
     final failures = <String>[];
     final toDelete = selected.toList();
+
+    if (isMobile) {
+      _clearMobileSelectionMode();
+    }
 
     for (final key in toDelete) {
       final isFolder = _FilePathKey.isFolderKey(key);
