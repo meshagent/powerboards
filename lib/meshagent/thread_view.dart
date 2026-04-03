@@ -322,12 +322,14 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
     super.key,
     required this.onOpen,
     required this.onViewAllThreads,
+    required this.currentThreadLabel,
     this.createItemTopPadding = 0,
     this.isSelected = false,
   });
 
   final VoidCallback onOpen;
   final VoidCallback onViewAllThreads;
+  final String currentThreadLabel;
   final double createItemTopPadding;
   final bool isSelected;
 
@@ -335,65 +337,85 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final foreground = theme.colorScheme.foreground;
-    const desktopActionButtonPadding = EdgeInsets.symmetric(horizontal: 16);
-
-    Widget desktopActionButton({
-      required VoidCallback onPressed,
-      required Widget child,
-      Widget? leading,
-      EdgeInsetsGeometry padding = desktopActionButtonPadding,
-      MainAxisAlignment? mainAxisAlignment,
-      bool selected = false,
-    }) {
-      return ShadButton.ghost(
-        height: desktopPaneSecondaryControlHeight,
-        padding: padding,
-        hoverBackgroundColor: theme.colorScheme.accent,
-        pressedBackgroundColor: theme.colorScheme.accent,
-        leading: leading,
-        gap: 12,
-        mainAxisAlignment: mainAxisAlignment,
-        onPressed: onPressed,
-        child: child,
-      );
-    }
+    const desktopActionButtonPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 8);
+    final threadIcon = AnimatedSwitcher(
+      duration: powerboardsAdaptiveTransitionDuration(context),
+      switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
+      switchOutCurve: powerboardsAdaptiveTransitionOutCurve(context),
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
+      ),
+      child: Icon(
+        isSelected ? LucideIcons.check : LucideIcons.messageSquare,
+        key: ValueKey("${isSelected}_$currentThreadLabel"),
+        size: 16,
+        color: foreground,
+      ),
+    );
 
     return ColoredBox(
       color: Colors.transparent,
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: Padding(
-          padding: EdgeInsets.only(top: createItemTopPadding),
-          child: SizedBox(
-            width: double.infinity,
-            height: desktopPaneSecondaryControlHeight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                desktopActionButton(
-                  onPressed: onOpen,
-                  selected: isSelected,
-                  leading: _newThreadActionIcon(context, isSelected, color: foreground),
-                  child: Text(
-                    "New thread",
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _MeshagentThreadListPaneState.createActionStyle(context),
+      child: Padding(
+        padding: EdgeInsets.only(top: createItemTopPadding),
+        child: SizedBox(
+          width: double.infinity,
+          height: desktopPaneSecondaryControlHeight,
+          child: Row(
+            children: [
+              Expanded(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    hoverColor: theme.colorScheme.accent,
+                    highlightColor: Colors.transparent,
+                    splashColor: Colors.transparent,
+                    onTap: onOpen,
+                    child: Padding(
+                      padding: desktopActionButtonPadding,
+                      child: Row(
+                        children: [
+                          threadIcon,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              currentThreadLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: _MeshagentThreadListPaneState.createActionStyle(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                const SizedBox(width: desktopPaneHeaderButtonGap),
-                desktopActionButton(
-                  onPressed: onViewAllThreads,
-                  padding: desktopActionButtonPadding,
-                  child: Text(
-                    "View all threads",
-                    maxLines: 1,
-                    softWrap: false,
-                    style: _MeshagentThreadListPaneState.threadNameStyle(context),
+              ),
+              const SizedBox(width: desktopPaneHeaderButtonGap),
+              IntrinsicWidth(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    hoverColor: theme.colorScheme.accent,
+                    highlightColor: Colors.transparent,
+                    splashColor: Colors.transparent,
+                    onTap: onViewAllThreads,
+                    child: Padding(
+                      padding: desktopActionButtonPadding,
+                      child: Text(
+                        "View all threads",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: false,
+                        style: _MeshagentThreadListPaneState.threadNameStyle(context),
+                      ),
+                    ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -461,6 +483,16 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     return filename;
   }
 
+  String? _threadDisplayNameFromNode(MeshElement node) {
+    final rawName = node.getAttribute("name");
+    if (rawName is! String) {
+      return null;
+    }
+
+    final trimmed = rawName.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   List<_ThreadListEntry> _threadListEntries() {
     final document = _threadListDocument;
     if (document == null) {
@@ -479,14 +511,15 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       }
       final path = rawPath.trim();
 
-      final rawName = node.getAttribute("name");
-      final name = rawName is String && rawName.trim().isNotEmpty ? rawName.trim() : _threadNameFromPath(path);
+      final displayName = _threadDisplayNameFromNode(node);
+      final name = displayName ?? _threadNameFromPath(path);
       final createdAt = node.getAttribute("created_at");
       final modifiedAt = node.getAttribute("modified_at");
 
       entries.add(
         _ThreadListEntry(
           element: node,
+          displayName: displayName,
           name: name,
           path: path,
           createdAt: createdAt is String ? createdAt : "",
@@ -788,7 +821,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
           mobileUseDialogListStyle: widget.mobileUseDialogListStyle,
           onOpen: () {
             widget.onSelectedThreadPathChanged(entry.path);
-            widget.onSelectedThreadResolved?.call(entry.path, entry.name);
+            widget.onSelectedThreadResolved?.call(entry.path, entry.displayName);
           },
           onRename: () => _renameThread(entry),
           onDelete: () => _deleteThread(entry),
@@ -827,6 +860,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
 class _ThreadListEntry {
   const _ThreadListEntry({
     required this.element,
+    required this.displayName,
     required this.name,
     required this.path,
     required this.createdAt,
@@ -834,6 +868,7 @@ class _ThreadListEntry {
   });
 
   final MeshElement element;
+  final String? displayName;
   final String name;
   final String path;
   final String createdAt;

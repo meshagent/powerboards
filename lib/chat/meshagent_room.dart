@@ -142,6 +142,156 @@ class _MobileMeetingOrigin {
   final String? rawPath;
 }
 
+class _MobileSelectedThreadLabelResolver extends StatefulWidget {
+  const _MobileSelectedThreadLabelResolver({
+    super.key,
+    required this.client,
+    required this.threadListPath,
+    required this.selectedThreadPath,
+    required this.onResolved,
+  });
+
+  final RoomClient client;
+  final String threadListPath;
+  final String selectedThreadPath;
+  final ValueChanged<String?> onResolved;
+
+  @override
+  State<_MobileSelectedThreadLabelResolver> createState() => _MobileSelectedThreadLabelResolverState();
+}
+
+class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThreadLabelResolver> {
+  MeshDocument? _document;
+  String? _openedThreadListPath;
+  String? _lastResolvedDisplayName;
+
+  String _normalizedSelectedThreadPath() => widget.selectedThreadPath.trim();
+
+  String? _displayNameForSelectedThread() {
+    final document = _document;
+    if (document == null) {
+      return null;
+    }
+
+    final selectedThreadPath = _normalizedSelectedThreadPath();
+    for (final node in document.root.getChildren()) {
+      if (node is! MeshElement || node.tagName != "thread") {
+        continue;
+      }
+
+      final rawPath = node.getAttribute("path");
+      if (rawPath is! String || rawPath.trim() != selectedThreadPath) {
+        continue;
+      }
+
+      final rawName = node.getAttribute("name");
+      if (rawName is! String) {
+        return null;
+      }
+
+      final trimmedName = rawName.trim();
+      return trimmedName.isEmpty ? null : trimmedName;
+    }
+
+    return null;
+  }
+
+  void _emitResolved() {
+    final displayName = _displayNameForSelectedThread();
+    if (displayName == _lastResolvedDisplayName) {
+      return;
+    }
+
+    _lastResolvedDisplayName = displayName;
+    widget.onResolved(displayName);
+  }
+
+  void _onThreadListChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    _emitResolved();
+  }
+
+  Future<void> _closeDocument() async {
+    final document = _document;
+    final openedThreadListPath = _openedThreadListPath;
+
+    if (document != null) {
+      document.removeListener(_onThreadListChanged);
+    }
+
+    _document = null;
+    _openedThreadListPath = null;
+
+    if (openedThreadListPath != null) {
+      try {
+        await widget.client.sync.close(openedThreadListPath);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _rebindDocument() async {
+    final nextThreadListPath = widget.threadListPath.trim();
+    if (_openedThreadListPath == nextThreadListPath && _document != null) {
+      _emitResolved();
+      return;
+    }
+
+    await _closeDocument();
+
+    try {
+      final document = await widget.client.sync.open(nextThreadListPath);
+      if (!mounted || widget.threadListPath.trim() != nextThreadListPath) {
+        try {
+          await widget.client.sync.close(nextThreadListPath);
+        } catch (_) {}
+        return;
+      }
+
+      document.addListener(_onThreadListChanged);
+      _document = document;
+      _openedThreadListPath = nextThreadListPath;
+      _emitResolved();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _emitResolved();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_rebindDocument());
+  }
+
+  @override
+  void didUpdateWidget(covariant _MobileSelectedThreadLabelResolver oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath) {
+      unawaited(_rebindDocument());
+      return;
+    }
+
+    if (oldWidget.selectedThreadPath != widget.selectedThreadPath) {
+      _emitResolved();
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_closeDocument());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
 EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
   if (compact) {
     return const EdgeInsets.symmetric(horizontal: 0);
@@ -953,14 +1103,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return _selectedThreadPathByAgentKey[agentKey];
   }
 
-  String _threadDisplayNameFromPath(String path) {
-    final filename = path.split('/').last;
-    if (filename.endsWith('.thread')) {
-      return filename.substring(0, filename.length - '.thread'.length);
-    }
-    return filename;
-  }
-
   String? _selectedThreadLabelForAgentKey(String? agentKey) {
     if (agentKey == null) {
       return null;
@@ -970,13 +1112,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (stored != null && stored.trim().isNotEmpty) {
       return stored;
     }
-
-    final path = _selectedThreadPathByAgentKey[agentKey];
-    if (path == null || path.trim().isEmpty) {
-      return null;
-    }
-
-    return _threadDisplayNameFromPath(path);
+    return null;
   }
 
   void _setSelectedThreadPath(String? agentKey, String? path, {String? displayName}) {
@@ -984,18 +1120,28 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
+    final normalizedPath = path?.trim();
+    final resolvedPath = normalizedPath == null || normalizedPath.isEmpty ? null : normalizedPath;
+    final normalizedName = displayName?.trim();
+    final resolvedDisplayName = normalizedName == null || normalizedName.isEmpty ? null : normalizedName;
+    final previousPath = _selectedThreadPathByAgentKey[agentKey];
+    final previousDisplayName = _selectedThreadLabelByAgentKey[agentKey];
+
+    if (resolvedPath == previousPath && resolvedDisplayName == previousDisplayName) {
+      return;
+    }
+
     setState(() {
-      if (path == null || path.trim().isEmpty) {
+      if (resolvedPath == null) {
         _selectedThreadPathByAgentKey.remove(agentKey);
         _selectedThreadLabelByAgentKey.remove(agentKey);
         _newThreadResetVersion++;
       } else {
-        _selectedThreadPathByAgentKey[agentKey] = path;
-        final normalizedName = displayName?.trim();
-        if (normalizedName == null || normalizedName.isEmpty) {
+        _selectedThreadPathByAgentKey[agentKey] = resolvedPath;
+        if (resolvedDisplayName == null) {
           _selectedThreadLabelByAgentKey.remove(agentKey);
         } else {
-          _selectedThreadLabelByAgentKey[agentKey] = normalizedName;
+          _selectedThreadLabelByAgentKey[agentKey] = resolvedDisplayName;
         }
       }
     });
@@ -2019,6 +2165,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       color: isMobile ? cs.card : Colors.transparent,
       child: Column(
         children: [
+          if ((showMobileThreadActions || showInlineThreadList) && selectedThreadPath != null && resolvedThreadListPath != null)
+            _MobileSelectedThreadLabelResolver(
+              key: ValueKey("mobile-thread-label-$agentKey-$selectedThreadPath"),
+              client: widget.room,
+              threadListPath: resolvedThreadListPath,
+              selectedThreadPath: selectedThreadPath,
+              onResolved: (displayName) => _setSelectedThreadPath(agentKey, selectedThreadPath, displayName: displayName),
+            ),
           if (!isMobile || embedMobileChrome) ...[
             ActionsRow(actions: chatActions),
             _buildDesktopChatViewportCutoffSpacer(context),
@@ -2066,6 +2220,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     chatView: chatView,
                     threadListPath: resolvedThreadListPath,
                     agentKey: agentKey,
+                    currentThreadLabel: currentThreadLabel,
+                    horizontalInset: chatHorizontalInset,
                   )
                 : chatView,
           ),
@@ -2109,18 +2265,23 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required Widget chatView,
     required String threadListPath,
     required String? agentKey,
+    required String currentThreadLabel,
+    required double horizontalInset,
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = math.min(520.0, math.max(420.0, constraints.maxWidth * 0.55));
-
         return Column(
           children: [
             Align(
               alignment: Alignment.topLeft,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxWidth),
-                child: _buildDesktopInlineThreadList(context, agentKey: agentKey),
+              child: SizedBox(
+                width: constraints.maxWidth,
+                child: _buildDesktopInlineThreadList(
+                  context,
+                  agentKey: agentKey,
+                  currentThreadLabel: currentThreadLabel,
+                  horizontalInset: horizontalInset,
+                ),
               ),
             ),
             const SizedBox(height: desktopPaneSecondaryRowContentGap),
@@ -2512,14 +2673,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildDesktopInlineThreadList(BuildContext context, {required String? agentKey}) {
+  Widget _buildDesktopInlineThreadList(
+    BuildContext context, {
+    required String? agentKey,
+    required String currentThreadLabel,
+    required double horizontalInset,
+  }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 16, desktopPaneBottomInset),
+      padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, desktopPaneBottomInset),
       child: MeshagentInlineThreadCreatePrompt(
         key: ValueKey("inline-thread-create-${agentKey ?? "none"}"),
         createItemTopPadding: 0,
+        currentThreadLabel: currentThreadLabel,
         isSelected: _selectedThreadPathForAgentKey(agentKey) == null,
-        onOpen: () => _setSelectedThreadPath(agentKey, null),
+        onOpen: _showMaximizedChat,
         onViewAllThreads: _showMaximizedChat,
       ),
     );
