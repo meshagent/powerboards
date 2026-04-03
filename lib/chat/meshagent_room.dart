@@ -640,15 +640,19 @@ class BackButton extends StatelessWidget {
       onPressed: () async {
         final videoRoom = room.VideoRoomModel.maybeOf(context)?.room;
         final meetingViewController = Controller.ofType<MeetingViewController>(context);
+        final roomController = Controller.ofType<MeshagentRoomController>(context);
         final navController = Controller.ofType<NavController>(context);
         final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+        final meetingSessionActive = meetingViewController.state == MeetingViewState.joined && videoRoom != null;
 
-        if (videoRoom != null) {
+        if (meetingSessionActive) {
           final leave = await showLeaveMeeting(context);
 
           if (leave) {
             if (context.mounted) {
+              context.findAncestorStateOfType<room.VideoChatConnectionState>()?.hangup();
               meetingViewController.resetToLobby();
+              roomController.showChat();
               navController.showNav();
               if (isMobile) {
                 _goToRoomChat(context);
@@ -2571,6 +2575,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final navController = Controller.ofType<NavController>(context);
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    context.findAncestorStateOfType<room.VideoChatConnectionState>()?.hangup();
     meetingViewController.resetToLobby();
     navController.showNav();
 
@@ -2586,6 +2591,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final navController = Controller.ofType<NavController>(context);
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    context.findAncestorStateOfType<room.VideoChatConnectionState>()?.hangup();
     meetingViewController.resetToLobby();
     navController.showNav();
     _meetingSplitViewController.expand();
