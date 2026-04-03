@@ -586,17 +586,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   late final isOwner = Resource(
     () => grant
-        .amIOwnerOfRoom(projectId: widget.projectId, roomName: widget.room.roomName!)
+        .amIOwnerOfRoom(room: widget.room)
         .timeout(_roomResourceTimeout, onTimeout: () => throw TimeoutException("Timed out while checking room ownership.")),
   );
   late final canViewDeveloperLogs = Resource(
     () => grant
-        .canViewDeveloperLogs(projectId: widget.projectId, roomName: widget.room.roomName!, userId: "me")
+        .canViewDeveloperLogs(room: widget.room)
         .timeout(_roomResourceTimeout, onTimeout: () => throw TimeoutException("Timed out while loading developer log permissions.")),
   );
   late final canViewStorage = Resource(
     () => grant
-        .canViewStorage(projectId: widget.projectId, roomName: widget.room.roomName!, userId: "me")
+        .canViewStorage(room: widget.room)
         .timeout(_roomResourceTimeout, onTimeout: () => throw TimeoutException("Timed out while loading storage permissions.")),
   );
 

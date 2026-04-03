@@ -54,9 +54,8 @@ Future<ProjectRoomGrant?> myGrantForRoom({required String projectId, required St
   return grants.firstWhereOrNull((g) => isMe(g.userId));
 }
 
-Future<bool> amIOwnerOfRoom({required String projectId, required String roomName}) async {
-  final myGrant = await myGrantForRoom(projectId: projectId, roomName: roomName);
-  return myGrant != null && GrantRole.fromGrant(myGrant) == GrantRole.owner;
+Future<bool> amIOwnerOfRoom({required RoomClient room}) async {
+  return room.apiGrant?.admin != null;
 }
 
 Future<Map<String, GrantSummary>> roomGrantSummaries({required String projectId, required String roomName}) async {
@@ -64,18 +63,10 @@ Future<Map<String, GrantSummary>> roomGrantSummaries({required String projectId,
   return {for (final g in grants) g.userId: GrantSummary.fromGrant(g)};
 }
 
-Future<bool> canViewDeveloperLogs({required String projectId, required String roomName, required String userId}) async {
-  final client = getMeshagentClient();
-  final grants = await client.listRoomGrantsByUser(projectId: projectId, userId: userId);
-  final grantForRoom = grants.cast<ProjectRoomGrant?>().firstWhere((g) => g?.room.name == roomName, orElse: () => null);
-  final developer = grantForRoom?.permissions.developer;
-
-  return developer?.logs == true;
+Future<bool> canViewDeveloperLogs({required RoomClient room}) async {
+  return room.apiGrant?.developer?.logs == true;
 }
 
-Future<bool> canViewStorage({required String projectId, required String roomName, required String userId}) async {
-  final client = getMeshagentClient();
-  final grants = await client.listRoomGrantsByUser(projectId: projectId, userId: userId);
-  final grantForRoom = grants.cast<ProjectRoomGrant?>().firstWhere((g) => g?.room.name == roomName, orElse: () => null);
-  return grantForRoom?.permissions.storage != null;
+Future<bool> canViewStorage({required RoomClient room}) async {
+  return room.apiGrant?.storage != null;
 }
