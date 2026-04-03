@@ -3,20 +3,18 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 Future<bool> showLeaveMeeting(BuildContext context) async {
-  final tt = ShadTheme.of(context).textTheme;
-
   final res = await showShadDialog<bool>(
     context: context,
     builder: (ctx) => PowerboardsShadDialog.compact(
-      title: Text("Leave meeting in progress", style: tt.h3),
+      title: const Text("Meeting in progress"),
       description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text("Are you sure you want to leave this meeting?")),
       actions: [
-        ShadButton.outline(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-        ShadButton(
+        ShadButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Stay')),
+        ShadButton.destructive(
           onPressed: () {
             Navigator.of(ctx).pop(true);
           },
-          child: const Text('Continue'),
+          child: const Text('Leave'),
         ),
       ],
     ),

@@ -627,12 +627,21 @@ class BackButton extends StatelessWidget {
     context.go("/p/$pid");
   }
 
+  void _goToRoomChat(BuildContext context) {
+    final currentUri = PathRouteMatch.of(context).uri;
+    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    updatedQueryParameters[_roomPaneQueryParameter] = 'chat';
+    context.go(currentUri.replace(queryParameters: updatedQueryParameters).toString());
+  }
+
   @override
   Widget build(BuildContext context) {
     return PowerboardsBackIconButton(
       onPressed: () async {
         final videoRoom = room.VideoRoomModel.maybeOf(context)?.room;
         final meetingViewController = Controller.ofType<MeetingViewController>(context);
+        final navController = Controller.ofType<NavController>(context);
+        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
         if (videoRoom != null) {
           final leave = await showLeaveMeeting(context);
@@ -640,8 +649,12 @@ class BackButton extends StatelessWidget {
           if (leave) {
             if (context.mounted) {
               meetingViewController.resetToLobby();
-
-              _goBack(context);
+              navController.showNav();
+              if (isMobile) {
+                _goToRoomChat(context);
+              } else {
+                _goBack(context);
+              }
             }
           }
         } else {
@@ -1928,6 +1941,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  List<Widget> _buildMobileEmptyRoomHeaderActions(BuildContext context, {required bool canManageAgents}) {
+    return [
+      InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+      if (canManageAgents) _buildPaneHeaderIconButton(tooltip: "Manage agents", icon: LucideIcons.blocks, onPressed: showManageAgents),
+    ];
+  }
+
   List<Widget> _buildMobileRoomHeaderActions(BuildContext context, {required bool canViewStorageAllowed, required bool filesVisible}) {
     final pane = _mobileActivePane(filesVisible: filesVisible);
     final filesLocation = pane == _MobileRoomPane.files ? _mobileFilesLocation(context) : null;
@@ -2547,9 +2567,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   void _leaveMeeting() {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final navController = Controller.ofType<NavController>(context);
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     meetingViewController.resetToLobby();
     navController.showNav();
-    _mobileMeetingOrigin = null;
+
+    if (isMobile) {
+      _closeMobileMeetingLobby(context);
+      return;
+    }
+
     _showChatPane(context);
   }
 
@@ -2977,11 +3003,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   child: _buildMobileRoomScaffold(
                                     context,
                                     leadingAction: BackButton(projectId: widget.projectId),
-                                    title: Text(widget.room.roomName ?? "Room", style: meetingHeaderTitleStyle),
-                                    trailingActions: _buildMobileRoomHeaderActions(
+                                    title: const SizedBox.shrink(),
+                                    trailingActions: _buildMobileEmptyRoomHeaderActions(
                                       context,
-                                      canViewStorageAllowed: canViewStorageAllowed,
-                                      filesVisible: filesVisible,
+                                      canManageAgents: isOwner.state.value == true,
                                     ),
                                     body: emptyStateBody,
                                   ),
