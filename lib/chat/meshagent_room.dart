@@ -1235,7 +1235,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: powerboardsMobileSecondaryRowPadding,
       child: Row(
         children: [
           ShadButton.ghost(
@@ -2177,9 +2177,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final mobileFilesLocation = isMobile ? _mobileFilesLocation(context) : null;
-    final horizontalInset = isMobile ? (mobileFilesLocation?.openedFile != null ? powerboardsMobileShellHorizontalInset : 0.0) : 20.0;
+    final hasOpenedFile = mobileFilesLocation?.openedFile != null;
+    final horizontalInset = isMobile ? 0.0 : 20.0;
     final topInset = 0.0;
-    final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
+    final bottomInset = isMobile ? (hasOpenedFile ? 0.0 : 8.0) : desktopPaneBottomInset;
     final meetingSessionActive = _isMeetingSessionActive(context);
 
     return ColoredBox(

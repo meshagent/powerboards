@@ -1369,7 +1369,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       height: powerboardsMobileSecondaryRowHeight,
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
+          padding: powerboardsMobileSecondaryRowPadding,
           child: Row(
             children: [
               _buildAdaptiveMobileOpenedFileTextAction(),
@@ -1837,6 +1837,15 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildOpenedFileSurface(Widget child, {required bool insetContent}) {
+    final isAdaptiveMobile = ResponsiveBreakpoints.of(context).isMobile && widget.mobileShellOwnsHeader;
+    if (isAdaptiveMobile) {
+      return SizedBox.expand(
+        child: ClipRect(
+          child: ColoredBox(color: shadCard, child: child),
+        ),
+      );
+    }
+
     final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
     const borderWidth = 1.0;
     const previewPadding = 16.0;
@@ -1847,17 +1856,19 @@ class _FileManagerViewState extends State<FileManagerView> {
       bottomRight: Radius.circular(math.max(0, radius.bottomRight.x - borderWidth)),
     );
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: shadCard,
-        border: Border.all(color: shadBorder, width: borderWidth),
-        borderRadius: radius,
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(borderWidth + (insetContent ? previewPadding : 0)),
-        child: ClipRRect(
-          borderRadius: innerRadius,
-          child: ColoredBox(color: shadCard, child: child),
+    return SizedBox.expand(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: shadCard,
+          border: Border.all(color: shadBorder, width: borderWidth),
+          borderRadius: radius,
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(borderWidth + (insetContent ? previewPadding : 0)),
+          child: ClipRRect(
+            borderRadius: innerRadius,
+            child: ColoredBox(color: shadCard, child: child),
+          ),
         ),
       ),
     );
@@ -2003,8 +2014,6 @@ class FileTableView extends StatefulWidget {
 class _FileTableViewState extends State<FileTableView> {
   static TextStyle dataStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x22, 0x22, 0x22));
   static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x66, 0x66, 0x66));
-  static const double _mobileRowLeadingInset = 22;
-  static const double _mobileRowTrailingInset = 15;
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
   final GlobalKey _tableCardKey = GlobalKey();
@@ -2252,7 +2261,7 @@ class _FileTableViewState extends State<FileTableView> {
       height: powerboardsMobileSecondaryRowHeight,
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(_mobileRowLeadingInset, 0, _mobileRowTrailingInset, 0),
+          padding: powerboardsMobileSecondaryRowPadding,
           child: Row(
             children: [
               if (showSelectColumn) ...[
@@ -2310,7 +2319,12 @@ class _FileTableViewState extends State<FileTableView> {
                   child: InkWell(
                     onTap: () => widget.onOpen(fullPath, entry.isFolder),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(_mobileRowLeadingInset, 14, _mobileRowTrailingInset, 14),
+                      padding: const EdgeInsets.fromLTRB(
+                        powerboardsMobileSecondaryRowLeadingInset,
+                        14,
+                        powerboardsMobileSecondaryRowTrailingInset,
+                        14,
+                      ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [

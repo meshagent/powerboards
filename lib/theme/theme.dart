@@ -52,7 +52,15 @@ const double powerboardsMobileScreenTopInset = 10.0;
 const double powerboardsMobileScreenBottomInset = 15.0;
 const double powerboardsMobileShellHorizontalInset = 15.0;
 const double powerboardsMobileSecondaryRowHeight = 68.0;
+const double powerboardsMobileSecondaryRowLeadingInset = 22.0;
+const double powerboardsMobileSecondaryRowTrailingInset = 15.0;
 const EdgeInsets powerboardsMobileHorizontalPadding = EdgeInsets.symmetric(horizontal: powerboardsMobileShellHorizontalInset);
+const EdgeInsets powerboardsMobileSecondaryRowPadding = EdgeInsets.fromLTRB(
+  powerboardsMobileSecondaryRowLeadingInset,
+  0.0,
+  powerboardsMobileSecondaryRowTrailingInset,
+  0.0,
+);
 const EdgeInsets powerboardsMobileScreenContentPadding = EdgeInsets.fromLTRB(
   powerboardsMobileShellHorizontalInset,
   32.0,
