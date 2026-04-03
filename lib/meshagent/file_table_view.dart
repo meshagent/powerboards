@@ -187,6 +187,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   final ShadContextMenuController _collapsedBreadcrumbMenuController = ShadContextMenuController();
   final CodePreviewController _codePreviewController = CodePreviewController();
   late final uploadNotifications = UploadProgressNotifications(popoverController: popoverController);
+  final Set<String> _optimisticEmptyTextFiles = <String>{};
 
   late StreamSubscription<RoomEvent> roomSub;
 
@@ -281,6 +282,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (openedFileChanged) {
       _forceShowSelect = false;
       widget.client.localParticipant?.setAttribute("current_file", next.openedFile);
+      if (next.openedFile != null) {
+        unawaited(_refreshCurrentFolder());
+      }
     }
 
     setState(() {
@@ -334,6 +338,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     } else if (event is FileDeletedEvent) {
       next.removeWhere((e) => e.name == name);
       _toggleSelected(_FilePathKey.keyForPath(path, false), false);
+      _optimisticEmptyTextFiles.remove(path);
     }
 
     _setEntries(next);
@@ -445,6 +450,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _uploadFile(Stream<Uint8List> stream, String path, int totalBytes) async {
+    if (totalBytes == 0 && _isEditableTextFile(path)) {
+      _optimisticEmptyTextFiles.add(path);
+    }
+
     final upload = MeshagentFileUpload(room: widget.client, path: path, dataStream: stream, size: totalBytes);
     uploadNotifications.addUpload(upload, totalBytes);
 
@@ -498,6 +507,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (!mounted) {
       return;
     }
+
+    for (final entry in entries) {
+      if (entry.isFolder || entry.size == null || entry.size == 0) {
+        continue;
+      }
+      _optimisticEmptyTextFiles.remove(joinPaths(_folderSig.value, entry.name));
+    }
+
     _setEntries(entries);
   }
 
@@ -1776,7 +1793,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final openedFileEntry = storageEntries.state.asReady?.value.firstWhereOrNull(
       (entry) => !entry.isFolder && joinPaths(_folderSig.value, entry.name) == path,
     );
-    final isKnownEmptyTextFile = showExternalSave && openedFileEntry?.size == 0;
+    final isKnownEmptyTextFile = showExternalSave && ((openedFileEntry?.size == 0) || _optimisticEmptyTextFiles.contains(path));
 
     Widget buildTextDocument({required bool readOnly, required bool showToolbar, CodePreviewController? controller}) {
       if (isKnownEmptyTextFile) {
