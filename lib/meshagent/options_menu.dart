@@ -186,7 +186,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
               selected: widget.roomController.isDebugShown,
               onPressed: widget.roomController.isDebugShown ? widget.roomController.hideDebug : widget.roomController.showDebug,
             ),
-          if (isOwnerValue)
+          if (isOwnerValue && !isMobile)
             AppMenuEntry(
               title: "Shutdown",
               description: "Stop the current room session.",

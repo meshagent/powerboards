@@ -2476,7 +2476,7 @@ class _FileTableViewState extends State<FileTableView> {
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
         final showSize = availableWidth > 500;
-        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+        final isMobile = _usesAdaptiveMobileLayout(context);
         final colorScheme = ShadTheme.of(context).colorScheme;
         final showSelectColumn = !isMobile || widget.forceShowSelect;
         final alwaysShowMenu = isMobile;

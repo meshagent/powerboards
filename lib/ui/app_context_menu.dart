@@ -53,9 +53,11 @@ class AppContextMenuButton extends StatefulWidget {
 
 class _AppContextMenuButtonState extends State<AppContextMenuButton> {
   late final ShadContextMenuController controller = ShadContextMenuController();
+  late final ScrollController menuScrollController = ScrollController();
 
   @override
   void dispose() {
+    menuScrollController.dispose();
     controller.dispose();
     super.dispose();
   }
@@ -63,7 +65,7 @@ class _AppContextMenuButtonState extends State<AppContextMenuButton> {
   @override
   Widget build(BuildContext context) {
     final items = widget.compact ? _buildCompactItems(widget.entries) : _buildItems(widget.entries, radius: widget.radius);
-    final menuContent = _buildMenuContent(items, maxMenuHeight: widget.maxMenuHeight);
+    final menuContent = _buildMenuContent(items, maxMenuHeight: widget.maxMenuHeight, scrollController: menuScrollController);
 
     return AdaptiveShadContextMenu(
       controller: controller,
@@ -114,7 +116,7 @@ double _estimatedMenuHeight(List<AppMenuEntry> entries, {required bool compact, 
   return rawHeight.clamp(0.0, maxMenuHeight).toDouble();
 }
 
-Widget _buildMenuContent(List<Widget> items, {double? maxMenuHeight}) {
+Widget _buildMenuContent(List<Widget> items, {double? maxMenuHeight, ScrollController? scrollController}) {
   Widget content = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: items);
 
   if (maxMenuHeight == null) {
@@ -123,7 +125,11 @@ Widget _buildMenuContent(List<Widget> items, {double? maxMenuHeight}) {
 
   return ConstrainedBox(
     constraints: BoxConstraints(maxHeight: maxMenuHeight),
-    child: Scrollbar(thumbVisibility: true, child: SingleChildScrollView(child: content)),
+    child: Scrollbar(
+      controller: scrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(controller: scrollController, child: content),
+    ),
   );
 }
 
