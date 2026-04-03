@@ -323,12 +323,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     _setEntries(next);
   }
 
-  String _ext(String path) {
-    final base = p.basename(path);
-    if (base.isEmpty) return "";
-    return base.split(".").last.toLowerCase();
-  }
-
   void _removePath(String path, {isFolder = false}) {
     if (parentPath(path) != _folderSig.value) return;
 
@@ -1122,7 +1116,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return false;
     }
 
-    return editExtensions.contains(_ext(openedFile));
+    return _isEditableTextFile(openedFile);
   }
 
   bool get _openedFileSupportsExternalSave {
@@ -1131,7 +1125,15 @@ class _FileManagerViewState extends State<FileManagerView> {
       return false;
     }
 
-    return isCodeFile(openedFile);
+    return _isEditableTextFile(openedFile);
+  }
+
+  bool _isEditableTextFile(String path) {
+    return switch (classifyFile(path)) {
+      FileKind.image || FileKind.video || FileKind.audio || FileKind.pdf || FileKind.parquet || FileKind.office || FileKind.custom => false,
+      FileKind.code || FileKind.markdown => true,
+      FileKind.unknown => false,
+    };
   }
 
   Widget _buildOpenFileTabs() {
@@ -1556,10 +1558,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (_openedFile == null) return const SizedBox.shrink();
 
     final path = _openedFile!;
-    final ext = _ext(path);
     final fileKind = classifyFile(path);
-    final showEditTabs = editExtensions.contains(ext);
-    final showExternalSave = isCodeFile(path);
+    final showEditTabs = _isEditableTextFile(path);
+    final showExternalSave = _isEditableTextFile(path);
 
     if (!showExternalSave) {
       return _buildOpenedFileSurface(
