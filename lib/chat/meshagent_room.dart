@@ -135,6 +135,13 @@ class _MobileFilesBackDestination {
   final String path;
 }
 
+class _MobileMeetingOrigin {
+  const _MobileMeetingOrigin({required this.pane, required this.rawPath});
+
+  final _MobileRoomPane pane;
+  final String? rawPath;
+}
+
 EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
   if (compact) {
     return const EdgeInsets.symmetric(horizontal: 0);
@@ -712,6 +719,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   String _lastRoomStatusText = "Connecting to room";
   String? _lastSyncedRoutePath;
   _MobileRoomPane? _lastSyncedRoutePane;
+  _MobileMeetingOrigin? _mobileMeetingOrigin;
   StreamSubscription<RoomStatusEvent>? _roomStatusSubscription;
 
   final List<RoomEvent> events = [];
@@ -1351,9 +1359,35 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _replaceRoomRouteState(context, pane: _MobileRoomPane.files);
   }
 
+  void _rememberMobileMeetingOrigin(BuildContext context) {
+    final currentPane = _mobileActivePane(filesVisible: controller.isFilesShown);
+    if (currentPane == _MobileRoomPane.meeting) {
+      return;
+    }
+
+    final currentUri = PathRouteMatch.of(context).uri;
+    _mobileMeetingOrigin = _MobileMeetingOrigin(pane: currentPane, rawPath: currentUri.queryParameters['p']);
+  }
+
   void _showMeetingPane(BuildContext context) {
+    if (ResponsiveBreakpoints.of(context).isMobile) {
+      _rememberMobileMeetingOrigin(context);
+    }
     controller.enterMeeting();
     _replaceRoomRouteState(context, pane: _MobileRoomPane.meeting);
+  }
+
+  void _closeMobileMeetingLobby(BuildContext context) {
+    final origin = _mobileMeetingOrigin;
+    _mobileMeetingOrigin = null;
+
+    if (origin?.pane == _MobileRoomPane.files) {
+      controller.showFiles();
+      _replaceRoomRouteState(context, pane: _MobileRoomPane.files, rawPath: origin?.rawPath ?? '');
+      return;
+    }
+
+    _showChatPane(context);
   }
 
   void _toggleFilesPane(BuildContext context) {
@@ -1625,10 +1659,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     if (pane == _MobileRoomPane.meeting) {
-      return PowerboardsBackIconButton(onPressed: () => _showChatPane(context), tooltip: "Close meet", icon: LucideIcons.x);
+      return PowerboardsBackIconButton(onPressed: () => _closeMobileMeetingLobby(context), tooltip: "Close meet", icon: LucideIcons.x);
     }
 
     final filesLocation = _mobileFilesLocation(context);
+    if (filesLocation.openedFile != null) {
+      return Tooltip(
+        message: "Close file",
+        child: PowerboardsBackIconButton(
+          onPressed: () => _navigateBackFromMobileFiles(context),
+          tooltip: "Close file",
+          icon: LucideIcons.x,
+        ),
+      );
+    }
+
     final backMenuEntries = _mobileFilesBackMenuEntries(context);
 
     if (backMenuEntries.isEmpty) {
@@ -1709,12 +1754,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   List<Widget> _buildMobileRoomHeaderActions(BuildContext context, {required bool canViewStorageAllowed, required bool filesVisible}) {
     final pane = _mobileActivePane(filesVisible: filesVisible);
+    final filesLocation = pane == _MobileRoomPane.files ? _mobileFilesLocation(context) : null;
     final showMeetingInviteAction = pane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
     final showFilesHeaderStack = pane == _MobileRoomPane.files;
+    final showFilesCreateAction = showFilesHeaderStack && filesLocation?.openedFile == null;
     final meetingSessionActive = _isMeetingSessionActive(context);
 
     return [
-      if (showFilesHeaderStack) _buildMobileFilesCreateMenuButton(context),
+      if (showFilesCreateAction) _buildMobileFilesCreateMenuButton(context),
       if (pane == _MobileRoomPane.chat) InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
       if (showFilesHeaderStack)
         MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _showMeetingPane(context)),
@@ -2147,7 +2194,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Widget _buildFilesArea(BuildContext context, List<Widget> actions, {bool embedMobileChrome = true}) {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    final horizontalInset = isMobile ? 12.0 : 20.0;
+    final mobileFilesLocation = isMobile ? _mobileFilesLocation(context) : null;
+    final horizontalInset = isMobile ? (mobileFilesLocation?.openedFile != null ? powerboardsMobileShellHorizontalInset : 0.0) : 20.0;
     final topInset = isMobile ? 20.0 : 0.0;
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
     final meetingSessionActive = _isMeetingSessionActive(context);
@@ -2304,6 +2352,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final navController = Controller.ofType<NavController>(context);
     meetingViewController.resetToLobby();
     navController.showNav();
+    _mobileMeetingOrigin = null;
     _showChatPane(context);
   }
 
@@ -2314,6 +2363,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     meetingViewController.resetToLobby();
     navController.showNav();
     _meetingSplitViewController.expand();
+    _mobileMeetingOrigin = null;
     if (isMobile) {
       _showChatPane(context);
     }
