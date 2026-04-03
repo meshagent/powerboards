@@ -5,6 +5,7 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
@@ -55,6 +56,40 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
     final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
     if (!mounted) return;
     showUpdateRoomPermsDialog(context, projectId: widget.projectId, room: room);
+  }
+
+  Future<void> _shutdownRoom() async {
+    final sessionId = widget.room.sessionId;
+    if (sessionId == null || sessionId.isEmpty) {
+      ShadToaster.maybeOf(
+        context,
+      )?.show(ShadToast.destructive(description: Text("Unable to shut down room: session id is not available yet.")));
+      return;
+    }
+
+    final confirmed = await showDeleteRoomDialog(
+      context,
+      title: "Shutdown room?",
+      description: "This will stop the current room session for everyone connected.",
+      confirmText: "Shutdown",
+      destructive: true,
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    try {
+      await getMeshagentClient().terminate(projectId: widget.projectId, sessionId: sessionId);
+      if (!mounted) {
+        return;
+      }
+      ShadToaster.maybeOf(context)?.show(ShadToast(description: Text("Room shutdown requested.")));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text("Unable to shut down room: $error")));
+    }
   }
 
   @override
@@ -122,6 +157,14 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
               icon: LucideIcons.terminal,
               selected: widget.roomController.isDebugShown,
               onPressed: widget.roomController.isDebugShown ? widget.roomController.hideDebug : widget.roomController.showDebug,
+            ),
+          if (isOwnerValue)
+            AppMenuEntry(
+              title: "Shutdown",
+              description: "Stop the current room session.",
+              icon: LucideIcons.circleStop,
+              onPressed: _shutdownRoom,
+              separatorBefore: canViewDeveloperLogsValue,
             ),
         ];
 
