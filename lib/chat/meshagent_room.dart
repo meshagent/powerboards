@@ -1230,9 +1230,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (model?.room == null) {
       return [];
     }
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final usesMobileRoomLayout = _usesMobileRoomLayout(context);
+    final isLandscapePhone = _isLandscapePhoneViewport(context);
     final meetingSessionActive = _isMeetingSessionActive(context);
-    final showExpandSplitButton = !isMobile && meetingSessionActive && _meetingSplitViewController.collapsed;
+    final showExpandSplitButton = !usesMobileRoomLayout && meetingSessionActive && _meetingSplitViewController.collapsed;
+    final compactTranscriptionControl = compact && !isLandscapePhone;
 
     return [
       if (showExpandSplitButton)
@@ -1254,8 +1256,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       room.MicToggle(),
       room.CameraToggle(),
       room.ChangeSettings(),
-      if (!isMobile) room.ShareScreen(compact: compact),
-      MeetingToolkits(room: widget.room, compact: compact),
+      if (!usesMobileRoomLayout) room.ShareScreen(compact: compact),
+      MeetingToolkits(room: widget.room, compact: compactTranscriptionControl),
     ];
   }
 

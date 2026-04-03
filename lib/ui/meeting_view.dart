@@ -322,6 +322,11 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
 
   late final toolkits = Resource<List<ToolkitDescription>>(() => widget.room.agents.listToolkits());
 
+  bool _isLandscapePhoneViewport(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return size.width > size.height && size.shortestSide < 600;
+  }
+
   double _mobileTranscriptionButtonWidth(BuildContext context) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final usedWidth =
@@ -387,7 +392,7 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile || _isLandscapePhoneViewport(context);
 
     return SignalBuilder(
       builder: (context, _) {
