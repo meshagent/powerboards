@@ -286,6 +286,7 @@ class MeshagentThreadListPane extends StatefulWidget {
     super.key,
     required this.client,
     required this.onSelectedThreadPathChanged,
+    this.onSelectedThreadResolved,
     this.threadListPath,
     this.agentName,
     this.selectedThreadPath,
@@ -310,6 +311,7 @@ class MeshagentThreadListPane extends StatefulWidget {
   final bool mobileUseDialogListStyle;
   final bool showCreateItem;
   final ValueChanged<String?> onSelectedThreadPathChanged;
+  final void Function(String? path, String? displayName)? onSelectedThreadResolved;
 
   @override
   State<MeshagentThreadListPane> createState() => _MeshagentThreadListPaneState();
@@ -688,6 +690,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     if (oldWidget.newThreadResetVersion != widget.newThreadResetVersion && widget.selectedThreadPath != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         widget.onSelectedThreadPathChanged(null);
+        widget.onSelectedThreadResolved?.call(null, null);
       });
     }
   }
@@ -750,7 +753,10 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
           return _ThreadListCreateItem(
             topPadding: widget.createItemTopPadding,
             selected: widget.selectedThreadPath == null,
-            onOpen: () => widget.onSelectedThreadPathChanged(null),
+            onOpen: () {
+              widget.onSelectedThreadPathChanged(null);
+              widget.onSelectedThreadResolved?.call(null, null);
+            },
           );
         }
 
@@ -765,7 +771,10 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
             showUnderline: contentItemCount > 1,
             mobileRowVerticalPadding: widget.mobileRowVerticalPadding,
             mobileUseDialogListStyle: widget.mobileUseDialogListStyle,
-            onOpen: () => widget.onSelectedThreadPathChanged(null),
+            onOpen: () {
+              widget.onSelectedThreadPathChanged(null);
+              widget.onSelectedThreadResolved?.call(null, null);
+            },
           );
         }
 
@@ -777,7 +786,10 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
           selected: entry.path == widget.selectedThreadPath,
           mobileRowVerticalPadding: widget.mobileRowVerticalPadding,
           mobileUseDialogListStyle: widget.mobileUseDialogListStyle,
-          onOpen: () => widget.onSelectedThreadPathChanged(entry.path),
+          onOpen: () {
+            widget.onSelectedThreadPathChanged(entry.path);
+            widget.onSelectedThreadResolved?.call(entry.path, entry.name);
+          },
           onRename: () => _renameThread(entry),
           onDelete: () => _deleteThread(entry),
         );

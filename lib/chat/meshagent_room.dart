@@ -712,6 +712,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final meetingViewKey = GlobalKey();
 
   final Map<String, String> _selectedThreadPathByAgentKey = <String, String>{};
+  final Map<String, String> _selectedThreadLabelByAgentKey = <String, String>{};
   static const Duration _roomResourceTimeout = Duration(seconds: 30);
 
   final MeshagentRoomController controller = MeshagentRoomController();
@@ -952,7 +953,33 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return _selectedThreadPathByAgentKey[agentKey];
   }
 
-  void _setSelectedThreadPath(String? agentKey, String? path) {
+  String _threadDisplayNameFromPath(String path) {
+    final filename = path.split('/').last;
+    if (filename.endsWith('.thread')) {
+      return filename.substring(0, filename.length - '.thread'.length);
+    }
+    return filename;
+  }
+
+  String? _selectedThreadLabelForAgentKey(String? agentKey) {
+    if (agentKey == null) {
+      return null;
+    }
+
+    final stored = _selectedThreadLabelByAgentKey[agentKey];
+    if (stored != null && stored.trim().isNotEmpty) {
+      return stored;
+    }
+
+    final path = _selectedThreadPathByAgentKey[agentKey];
+    if (path == null || path.trim().isEmpty) {
+      return null;
+    }
+
+    return _threadDisplayNameFromPath(path);
+  }
+
+  void _setSelectedThreadPath(String? agentKey, String? path, {String? displayName}) {
     if (agentKey == null) {
       return;
     }
@@ -960,9 +987,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     setState(() {
       if (path == null || path.trim().isEmpty) {
         _selectedThreadPathByAgentKey.remove(agentKey);
+        _selectedThreadLabelByAgentKey.remove(agentKey);
         _newThreadResetVersion++;
       } else {
         _selectedThreadPathByAgentKey[agentKey] = path;
+        final normalizedName = displayName?.trim();
+        if (normalizedName == null || normalizedName.isEmpty) {
+          _selectedThreadLabelByAgentKey.remove(agentKey);
+        } else {
+          _selectedThreadLabelByAgentKey[agentKey] = normalizedName;
+        }
       }
     });
   }
@@ -1224,54 +1258,70 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     BuildContext context, {
     required VoidCallback onNewThread,
     required bool isNewThreadSelected,
-    VoidCallback? onViewAll,
+    required String currentThreadLabel,
+    VoidCallback? onManage,
   }) {
     final theme = ShadTheme.of(context);
     final createActionStyle = GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: theme.colorScheme.foreground);
     final secondaryActionStyle = GoogleFonts.inter(
       fontSize: 14,
       fontWeight: FontWeight.w500,
-      color: onViewAll == null ? theme.colorScheme.mutedForeground.withValues(alpha: 0.7) : theme.colorScheme.mutedForeground,
+      color: onManage == null ? theme.colorScheme.mutedForeground.withValues(alpha: 0.7) : theme.colorScheme.mutedForeground,
     );
 
     return Padding(
       padding: powerboardsMobileSecondaryRowPadding,
       child: Row(
         children: [
-          ShadButton.ghost(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            onPressed: onNewThread,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedSwitcher(
-                  duration: powerboardsAdaptiveTransitionDuration(context),
-                  switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
-                  switchOutCurve: powerboardsAdaptiveTransitionOutCurve(context),
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
-                  ),
-                  child: Icon(
-                    isNewThreadSelected ? LucideIcons.check : LucideIcons.messageSquarePlus,
-                    key: ValueKey(isNewThreadSelected),
-                    size: 16,
-                    color: theme.colorScheme.foreground,
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: onManage ?? onNewThread,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  child: Row(
+                    children: [
+                      AnimatedSwitcher(
+                        duration: powerboardsAdaptiveTransitionDuration(context),
+                        switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
+                        switchOutCurve: powerboardsAdaptiveTransitionOutCurve(context),
+                        transitionBuilder: (child, animation) => FadeTransition(
+                          opacity: animation,
+                          child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
+                        ),
+                        child: Icon(
+                          isNewThreadSelected ? LucideIcons.check : LucideIcons.messageSquare,
+                          key: ValueKey(currentThreadLabel),
+                          size: 16,
+                          color: theme.colorScheme.foreground,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          currentThreadLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: false,
+                          style: createActionStyle,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Text("New thread", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: createActionStyle),
-              ],
+              ),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 12),
           ShadButton.ghost(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            onPressed: onViewAll,
+            onPressed: onManage,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text("View all", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: secondaryActionStyle),
+                Text("Manage", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: secondaryActionStyle),
                 const SizedBox(width: 6),
                 Icon(LucideIcons.chevronRight, size: 16, color: secondaryActionStyle.color),
               ],
@@ -1940,6 +1990,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final agentKey = _selectedThreadAgentKey(
       services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!),
     );
+    final currentThreadLabel = selectedThreadPath == null ? "New thread" : (_selectedThreadLabelForAgentKey(agentKey) ?? "New thread");
     final chatView = Padding(
       padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
       child: MeshagentThreadView(
@@ -1978,7 +2029,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       context,
                       onNewThread: () => onSelectedThreadPathChanged?.call(null),
                       isNewThreadSelected: selectedThreadPath == null,
-                      onViewAll: resolvedThreadListPath == null
+                      currentThreadLabel: currentThreadLabel,
+                      onManage: resolvedThreadListPath == null
                           ? null
                           : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
                     )
@@ -1992,7 +2044,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   context,
                   onNewThread: () => onSelectedThreadPathChanged?.call(null),
                   isNewThreadSelected: selectedThreadPath == null,
-                  onViewAll: resolvedThreadListPath == null
+                  currentThreadLabel: currentThreadLabel,
+                  onManage: resolvedThreadListPath == null
                       ? null
                       : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
                 ),
@@ -2376,7 +2429,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         }
 
         return PowerboardsShadDialog.listPicker(
-          title: const Text("Threads"),
+          title: const Text("Manage threads"),
           description: const Text("Select a thread to view or manage it."),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360.0, maxHeight: 520.0),
@@ -2402,6 +2455,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       onSelectedThreadPathChanged: (path) {
                         _setSelectedThreadPath(agentKey, path);
                         Navigator.of(dialogContext).pop();
+                      },
+                      onSelectedThreadResolved: (path, displayName) {
+                        _setSelectedThreadPath(agentKey, path, displayName: displayName);
                       },
                     ),
                   ),
