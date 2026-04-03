@@ -337,7 +337,7 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final foreground = theme.colorScheme.foreground;
-    const desktopActionButtonPadding = EdgeInsets.symmetric(horizontal: 16, vertical: 8);
+    const desktopActionButtonPadding = EdgeInsets.symmetric(horizontal: _desktopThreadListHorizontalPadding, vertical: 8);
     final threadIcon = AnimatedSwitcher(
       duration: powerboardsAdaptiveTransitionDuration(context),
       switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
@@ -376,6 +376,7 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
                       padding: desktopActionButtonPadding,
                       child: Row(
                         children: [
+                          const SizedBox(width: _desktopThreadContentAlignmentOffset),
                           threadIcon,
                           const SizedBox(width: 12),
                           Expanded(
@@ -921,10 +922,13 @@ class _ThreadListCreateItem extends StatelessWidget {
         child: ShadButton.ghost(
           width: double.infinity,
           height: desktopPaneSecondaryControlHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: _desktopThreadListHorizontalPadding),
           hoverBackgroundColor: theme.colorScheme.accent,
           pressedBackgroundColor: theme.colorScheme.accent,
-          leading: _newThreadActionIcon(context, selected, color: foreground),
+          leading: Padding(
+            padding: const EdgeInsets.only(left: _desktopThreadContentAlignmentOffset),
+            child: _newThreadActionIcon(context, selected, color: foreground),
+          ),
           gap: 12,
           mainAxisAlignment: MainAxisAlignment.start,
           onPressed: onOpen,
@@ -985,7 +989,9 @@ class _ThreadListEmptyHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final leadingInset =
-        (isMobile ? 12.0 : _desktopThreadListHorizontalPadding) + _threadListLeadingWidth(isMobile) + _threadListGap(isMobile);
+        (isMobile ? 12.0 : _desktopThreadListHorizontalPadding + _desktopThreadContentAlignmentOffset) +
+        _threadListLeadingWidth(isMobile) +
+        _threadListGap(isMobile);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(leadingInset, isMobile ? 4 : 8, 0, 0),
@@ -1038,7 +1044,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
       return EdgeInsets.zero;
     }
 
-    return const EdgeInsets.symmetric(vertical: 8);
+    return const EdgeInsets.fromLTRB(_desktopThreadContentAlignmentOffset, 8, 0, 8);
   }
 
   double _trailingButtonHeight(bool isMobile) {
@@ -1187,6 +1193,7 @@ double _threadListLeadingWidth(bool isMobile) => isMobile ? 36 : 16;
 double _threadListGap(bool isMobile) => isMobile ? 10 : 12;
 
 const double _desktopThreadListHorizontalPadding = 16;
+const double _desktopThreadContentAlignmentOffset = 10;
 
 class _DraftThreadListItem extends StatelessWidget {
   const _DraftThreadListItem({
@@ -1247,6 +1254,7 @@ class _DraftThreadListItem extends StatelessWidget {
               padding: _rowPadding(isMobile),
               child: Row(
                 children: [
+                  if (!isMobile) const SizedBox(width: _desktopThreadContentAlignmentOffset),
                   SizedBox(
                     width: _leadingWidth(isMobile),
                     child: const Center(child: Icon(LucideIcons.check, size: 16, color: shadForeground)),
