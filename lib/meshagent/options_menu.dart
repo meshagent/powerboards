@@ -59,11 +59,10 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
   }
 
   Future<void> _shutdownRoom() async {
+    final toaster = ShadToaster.of(context);
     final sessionId = widget.room.sessionId;
     if (sessionId == null || sessionId.isEmpty) {
-      ShadToaster.maybeOf(
-        context,
-      )?.show(ShadToast.destructive(description: Text("Unable to shut down room: session id is not available yet.")));
+      toaster.show(ShadToast.destructive(description: Text("Unable to shut down room: session id is not available yet.")));
       return;
     }
 
@@ -83,12 +82,12 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
       if (!mounted) {
         return;
       }
-      ShadToaster.maybeOf(context)?.show(ShadToast(description: Text("Room shutdown requested.")));
+      toaster.show(const ShadToast(title: Text("Room shutdown requested")));
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text("Unable to shut down room: $error")));
+      toaster.show(ShadToast.destructive(description: Text("Unable to shut down room: $error")));
     }
   }
 
