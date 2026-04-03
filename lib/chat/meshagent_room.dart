@@ -1487,7 +1487,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text("Manage", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: secondaryActionStyle),
+                Text("All threads", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: secondaryActionStyle),
                 const SizedBox(width: 6),
                 Icon(LucideIcons.chevronRight, size: 16, color: secondaryActionStyle.color),
               ],
@@ -2625,8 +2625,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         }
 
         return PowerboardsShadDialog.listPicker(
-          title: const Text("Manage threads"),
-          description: const Text("Select a thread to view or manage it."),
+          title: const Text("All threads"),
+          description: const Text("Select a thread to view."),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360.0, maxHeight: 520.0),
             child: Column(
