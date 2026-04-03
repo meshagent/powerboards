@@ -270,9 +270,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (folderChanged) {
       _folderSig.value = next.folder;
       _selectedSig.value = <String>{};
+      _forceShowSelect = false;
     }
 
     if (openedFileChanged) {
+      _forceShowSelect = false;
       widget.client.localParticipant?.setAttribute("current_file", next.openedFile);
     }
 
@@ -375,6 +377,20 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _selectAllVisible() => _setSelected(_visibleKeys.value);
   void _clearSelected() => _setSelected(<String>{});
+
+  void _activateMobileSelectionMode() {
+    _selectAllVisible();
+    setState(() {
+      _forceShowSelect = true;
+    });
+  }
+
+  void _clearMobileSelectionMode() {
+    _clearSelected();
+    setState(() {
+      _forceShowSelect = false;
+    });
+  }
 
   void _toggleForceShowSelect() {
     setState(() {
@@ -682,6 +698,52 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
   }
 
+  Future<void> _downloadSelected() async {
+    final selected = _visibleSelected.value;
+    if (selected.isEmpty) return;
+
+    final toaster = ShadToaster.of(context);
+    var downloaded = 0;
+    var skippedFolders = 0;
+
+    for (final key in selected) {
+      if (_FilePathKey.isFolderKey(key)) {
+        skippedFolders++;
+        continue;
+      }
+
+      await _downloadFile(_FilePathKey.pathFromKey(key));
+      downloaded++;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (downloaded > 0 && skippedFolders == 0) {
+      toaster.show(
+        ShadToast(description: Text("Downloading $downloaded file${downloaded == 1 ? '' : 's'}"), duration: const Duration(seconds: 4)),
+      );
+      return;
+    }
+
+    if (downloaded > 0) {
+      toaster.show(
+        ShadToast(
+          description: Text(
+            "Downloading $downloaded file${downloaded == 1 ? '' : 's'}. Skipped $skippedFolders folder${skippedFolders == 1 ? '' : 's'}.",
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
+    toaster.show(
+      ShadToast(description: const Text("Folders can’t be downloaded from multi-select yet."), duration: const Duration(seconds: 4)),
+    );
+  }
+
   void _showNewTextFileDialog() {
     showShadDialog<String>(
       context: context,
@@ -976,8 +1038,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return _buildDesktopToolbar(selected);
     }
 
-    final showSelectionActions = selected.isNotEmpty && _openedFile == null;
-    if (widget.mobileShellOwnsHeader && !showSelectionActions) {
+    if (widget.mobileShellOwnsHeader) {
       return const SizedBox.shrink();
     }
 
@@ -1650,7 +1711,9 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): _openedFile == null ? _clearSelected : _closeFile,
+        const SingleActivator(LogicalKeyboardKey.escape): _openedFile == null
+            ? (_forceShowSelect ? _clearMobileSelectionMode : _clearSelected)
+            : _closeFile,
         const SingleActivator(LogicalKeyboardKey.arrowLeft): _previousFile,
         const SingleActivator(LogicalKeyboardKey.arrowRight): _nextFile,
       },
@@ -1662,7 +1725,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             builder: (context, _) {
               final selected = _visibleSelected.value;
               final hideEmbeddedMobileToolbar =
-                  widget.mobileShellOwnsHeader && ResponsiveBreakpoints.of(context).isMobile && selected.isEmpty && _openedFile == null;
+                  widget.mobileShellOwnsHeader && ResponsiveBreakpoints.of(context).isMobile && _openedFile == null;
               return Column(
                 crossAxisAlignment: .start,
                 children: [
@@ -1704,6 +1767,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                                       onToggleSelected: _toggleSelected,
                                       onToggleAllSelected: _toggleAllSelected,
                                       onSortChanged: _setSort,
+                                      onActivateSelectionMode: _activateMobileSelectionMode,
+                                      onClearSelectionMode: _clearMobileSelectionMode,
+                                      onDownloadSelected: _downloadSelected,
+                                      onDeleteSelected: _confirmAndDeleteSelected,
                                       onUploadFiles: () => _addFiles(folder),
                                       onCreateFolder: () => _addFolder(folder),
                                       onCreateTextFile: _showNewTextFileDialog,
@@ -1740,6 +1807,10 @@ class FileTableView extends StatefulWidget {
   final void Function(String key, bool selected) onToggleSelected;
   final void Function(bool selected) onToggleAllSelected;
   final void Function(FileSort) onSortChanged;
+  final VoidCallback onActivateSelectionMode;
+  final VoidCallback onClearSelectionMode;
+  final VoidCallback onDownloadSelected;
+  final VoidCallback onDeleteSelected;
   final VoidCallback onUploadFiles;
   final VoidCallback onCreateFolder;
   final VoidCallback onCreateTextFile;
@@ -1757,6 +1828,10 @@ class FileTableView extends StatefulWidget {
     required this.onToggleSelected,
     required this.onToggleAllSelected,
     required this.onSortChanged,
+    required this.onActivateSelectionMode,
+    required this.onClearSelectionMode,
+    required this.onDownloadSelected,
+    required this.onDeleteSelected,
     required this.onUploadFiles,
     required this.onCreateFolder,
     required this.onCreateTextFile,
@@ -1770,6 +1845,8 @@ class FileTableView extends StatefulWidget {
 class _FileTableViewState extends State<FileTableView> {
   static TextStyle dataStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x22, 0x22, 0x22));
   static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x66, 0x66, 0x66));
+  static const double _mobileRowLeadingInset = 22;
+  static const double _mobileRowTrailingInset = 15;
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
   final GlobalKey _tableCardKey = GlobalKey();
@@ -1803,6 +1880,10 @@ class _FileTableViewState extends State<FileTableView> {
   }
 
   Widget _buildTableCard(Widget child) {
+    if (ResponsiveBreakpoints.of(context).isMobile) {
+      return ColoredBox(key: _tableCardKey, color: shadCard, child: child);
+    }
+
     final radius = ShadTheme.of(context).radius.resolve(Directionality.of(context));
     const borderWidth = 1.0;
     final innerRadius = BorderRadius.only(
@@ -1913,8 +1994,8 @@ class _FileTableViewState extends State<FileTableView> {
     return MouseRegion(opaque: true, onEnter: (_) => _setHovered(rowKey), onExit: (_) => _clearHoveredIf(rowKey), child: child);
   }
 
-  Icon _sortIcon(bool ascending) {
-    return Icon(ascending ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 16, color: shadMutedForeground);
+  Icon _sortIcon(bool ascending, {Color color = shadMutedForeground}) {
+    return Icon(ascending ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 16, color: color);
   }
 
   Widget _fileSelectionCheckbox({required bool value, required ShadDecoration decoration, ValueChanged<bool?>? onChanged}) {
@@ -1928,25 +2009,89 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
-  Widget _buildSortButton({required String label, required bool active, required bool ascending, required VoidCallback onPressed}) {
+  Widget _buildMobileHeaderActionButton({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool destructive = false,
+  }) {
+    final button = destructive
+        ? ShadIconButton.destructive(
+            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
+            onPressed: onPressed,
+          )
+        : ShadIconButton.outline(
+            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
+            onPressed: onPressed,
+          );
+
+    return Tooltip(message: tooltip, child: button);
+  }
+
+  Widget _buildMobileSelectionHeaderButton() {
+    final selectionActive = widget.forceShowSelect;
+    final label = selectionActive ? 'Cancel' : 'Select';
+    final textColor = selectionActive ? shadDestructive : shadForeground;
+
     return ShadButton.ghost(
-      onPressed: onPressed,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      onPressed: selectionActive ? widget.onClearSelectionMode : widget.onActivateSelectionMode,
+      child: Text(
+        label,
+        style: headerStyle.copyWith(color: textColor, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+
+  Widget _buildMobileSortHeaderButton() {
+    final isNameSort = widget.sort.field == FileSortField.name;
+
+    return ShadButton.ghost(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      onPressed: () => widget.onSortChanged(FileSort(FileSortField.name, isNameSort ? !widget.sort.ascending : true)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: headerStyle.copyWith(color: active ? shadForeground : shadMutedForeground)),
-          if (active) ...[const SizedBox(width: 6), _sortIcon(ascending)],
+          Text('Sort by name', style: headerStyle.copyWith(color: shadMutedForeground)),
+          const SizedBox(width: 6),
+          _sortIcon(widget.sort.ascending, color: shadMutedForeground),
         ],
       ),
     );
   }
 
+  Widget _buildMobileSelectedActions() {
+    if (!widget.forceShowSelect) {
+      return const SizedBox.shrink();
+    }
+
+    final showDownloadAction = widget.selected.isNotEmpty && widget.selected.every((key) => !_FilePathKey.isFolderKey(key));
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showDownloadAction) ...[
+          _buildMobileHeaderActionButton(tooltip: "Download selected", icon: LucideIcons.download, onPressed: widget.onDownloadSelected),
+          const SizedBox(width: 8),
+        ],
+        _buildMobileHeaderActionButton(
+          tooltip: "Delete selected",
+          icon: LucideIcons.trash,
+          onPressed: widget.onDeleteSelected,
+          destructive: true,
+        ),
+      ],
+    );
+  }
+
   Widget _buildMobileHeader(bool showSelectColumn, bool? selectAllValue) {
-    final isNameSort = widget.sort.field == FileSortField.name;
-    final isModifiedSort = widget.sort.field == FileSortField.modified;
+    final selectButton = _buildMobileSelectionHeaderButton();
+    final sortButton = _buildMobileSortHeaderButton();
+    final selectionActions = _buildMobileSelectedActions();
+    final showSelectionModeActions = widget.forceShowSelect;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(_mobileRowLeadingInset, 10, _mobileRowTrailingInset, 10),
       child: Row(
         children: [
           if (showSelectColumn) ...[
@@ -1958,24 +2103,19 @@ class _FileTableViewState extends State<FileTableView> {
             ),
             const SizedBox(width: 4),
           ],
-          _buildSortButton(
-            label: 'Name',
-            active: isNameSort,
-            ascending: widget.sort.ascending,
-            onPressed: () => widget.onSortChanged(FileSort(FileSortField.name, isNameSort ? !widget.sort.ascending : true)),
-          ),
+          selectButton,
           const Spacer(),
-          _buildSortButton(
-            label: 'Modified',
-            active: isModifiedSort,
-            ascending: widget.sort.ascending,
-            onPressed: () => widget.onSortChanged(FileSort(FileSortField.modified, isModifiedSort ? !widget.sort.ascending : false)),
-          ),
-          SizedBox(
-            width: 36,
-            child: widget.isRefreshing
-                ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
-                : const SizedBox.shrink(),
+          if (showSelectionModeActions) selectionActions,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.isRefreshing)
+                const Padding(
+                  padding: EdgeInsets.only(right: 8),
+                  child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+              if (!showSelectionModeActions) sortButton,
+            ],
           ),
         ],
       ),
@@ -2000,15 +2140,14 @@ class _FileTableViewState extends State<FileTableView> {
                 final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
                 final isSelected = widget.selected.contains(key);
                 final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
-                final modifiedLabel = entry.updatedAt?.modified() ?? '';
-                final showModifiedLabel = modifiedLabel.isNotEmpty;
+                final showRowMenu = !widget.forceShowSelect;
 
                 return Material(
                   color: isSelected ? const Color(0xFFF2F1FF) : shadCard,
                   child: InkWell(
                     onTap: () => widget.onOpen(fullPath, entry.isFolder),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      padding: const EdgeInsets.fromLTRB(_mobileRowLeadingInset, 14, _mobileRowTrailingInset, 14),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -2030,13 +2169,7 @@ class _FileTableViewState extends State<FileTableView> {
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(entry.name, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                if (showModifiedLabel) ...[
-                                  const SizedBox(height: 4),
-                                  Text(modifiedLabel, style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                ],
-                              ],
+                              children: [Text(entry.name, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis)],
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -2046,7 +2179,7 @@ class _FileTableViewState extends State<FileTableView> {
                               _tableCardKey.currentContext,
                               fullPath,
                               entry.isFolder,
-                              alwaysShowMenu || isSelected || hoveredKey == key,
+                              showRowMenu && (alwaysShowMenu || isSelected || hoveredKey == key),
                             ),
                           ),
                         ],
@@ -2072,7 +2205,6 @@ class _FileTableViewState extends State<FileTableView> {
     final colorScheme = ShadTheme.of(context).colorScheme;
     final showSelectColumn = !isMobile || widget.forceShowSelect;
     final alwaysShowMenu = isMobile;
-
     final bool? selectAllValue = widget.selected.isEmpty ? false : (widget.selected.length == widget.entries.length ? true : null);
 
     if (isMobile) {
@@ -2237,6 +2369,7 @@ class _FileActionsMenuButton extends StatefulWidget {
 }
 
 class _FileActionsMenuButtonState extends State<_FileActionsMenuButton> {
+  static const double _mobileRowMenuTriggerSize = 48;
   late final ShadContextMenuController _controller = ShadContextMenuController();
   bool _menuOpen = false;
 
@@ -2285,7 +2418,11 @@ class _FileActionsMenuButtonState extends State<_FileActionsMenuButton> {
           child: ShadGestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: _controller.toggle,
-            child: const SizedBox(width: 40, height: 40, child: Center(child: Icon(LucideIcons.ellipsis, size: 20))),
+            child: const SizedBox(
+              width: _mobileRowMenuTriggerSize,
+              height: _mobileRowMenuTriggerSize,
+              child: Center(child: Icon(LucideIcons.ellipsis, size: 20)),
+            ),
           ),
         ),
       ),
