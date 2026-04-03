@@ -1893,13 +1893,30 @@ class _FileManagerViewState extends State<FileManagerView> {
           child: SignalBuilder(
             builder: (context, _) {
               final selected = _visibleSelected.value;
-              final hideEmbeddedMobileToolbar =
-                  widget.mobileShellOwnsHeader && ResponsiveBreakpoints.of(context).isMobile && _openedFile == null;
+              final isAdaptiveMobile = widget.mobileShellOwnsHeader && ResponsiveBreakpoints.of(context).isMobile;
+              final hasOpenedFile = _openedFile != null;
+              final hideEmbeddedMobileToolbar = isAdaptiveMobile && !hasOpenedFile;
+              final showAdaptiveOpenedFileDivider = isAdaptiveMobile && hasOpenedFile;
               return Column(
                 crossAxisAlignment: .start,
                 children: [
-                  _buildToolbar(selected),
-                  if (!hideEmbeddedMobileToolbar) const SizedBox(height: desktopPaneSecondaryRowContentGap),
+                  if (showAdaptiveOpenedFileDivider)
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border(bottom: BorderSide(color: shadBorder.withValues(alpha: 0.5))),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildToolbar(selected),
+                          const SizedBox(height: desktopPaneSecondaryRowContentGap),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    _buildToolbar(selected),
+                    if (!hideEmbeddedMobileToolbar) const SizedBox(height: desktopPaneSecondaryRowContentGap),
+                  ],
                   Expanded(
                     child: IndexedStack(
                       index: _openedFile == null ? 0 : 1,
