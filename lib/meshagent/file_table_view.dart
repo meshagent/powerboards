@@ -431,8 +431,20 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _uploadFile(Stream<Uint8List> stream, String path, int totalBytes) async {
-    final upload = MeshagentFileUpload(room: widget.client, path: path, dataStream: stream);
+    final upload = MeshagentFileUpload(room: widget.client, path: path, dataStream: stream, size: totalBytes);
     uploadNotifications.addUpload(upload, totalBytes);
+
+    unawaited(
+      upload.done.then((_) async {
+        if (!mounted) {
+          return;
+        }
+
+        if (parentPath(path) == _folderSig.value) {
+          await _refreshCurrentFolder();
+        }
+      }),
+    );
   }
 
   Future<void> _downloadFile(String path) async {
@@ -1347,7 +1359,11 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   List<Widget> _buildRouteActions() {
     if (_openedFile != null) {
+      final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
       return [
+        if (isMobile && _openedFileSupportsEditTabs) _buildOpenFileTabs(),
+        if (isMobile && _openedFileSupportsExternalSave) _buildExternalSaveButton(compact: true),
         Tooltip(
           message: "Download",
           child: ShadIconButton.outline(
@@ -1622,6 +1638,32 @@ class _FileManagerViewState extends State<FileManagerView> {
     final fileKind = classifyFile(path);
     final showEditTabs = _isEditableTextFile(path);
     final showExternalSave = _isEditableTextFile(path);
+    final openedFileEntry = storageEntries.state.asReady?.value.firstWhereOrNull(
+      (entry) => !entry.isFolder && joinPaths(_folderSig.value, entry.name) == path,
+    );
+    final isKnownEmptyTextFile = showExternalSave && openedFileEntry?.size == 0;
+
+    Widget buildTextDocument({required bool readOnly, required bool showToolbar, CodePreviewController? controller}) {
+      if (isKnownEmptyTextFile) {
+        return CodePreview(
+          filename: path,
+          room: widget.client,
+          text: "",
+          readOnly: readOnly,
+          controller: controller,
+          showToolbar: showToolbar,
+        );
+      }
+
+      return DocumentPane(
+        path: path,
+        room: widget.client,
+        forceTextViewer: true,
+        readOnlyTextViewer: readOnly,
+        codePreviewController: controller,
+        showCodeToolbar: showToolbar,
+      );
+    }
 
     if (!showExternalSave) {
       return _buildOpenedFileSurface(
@@ -1631,24 +1673,25 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     final edit = _buildOpenedFileSurface(
-      DocumentPane(
-        path: path,
-        room: widget.client,
-        forceTextViewer: true,
-        codePreviewController: _codePreviewController,
-        showCodeToolbar: false,
-      ),
+      buildTextDocument(readOnly: false, controller: _codePreviewController, showToolbar: false),
       insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: true),
+    );
+
+    final readOnlyTextPreview = _buildOpenedFileSurface(
+      buildTextDocument(readOnly: true, showToolbar: false),
+      insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: false),
     );
 
     if (!showEditTabs) {
       return edit;
     }
 
-    final view = _buildOpenedFileSurface(
-      fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client),
-      insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: false),
-    );
+    final view = fileKind == FileKind.code
+        ? readOnlyTextPreview
+        : _buildOpenedFileSurface(
+            fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client),
+            insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: false),
+          );
 
     return Column(
       key: ValueKey(_openedFile),

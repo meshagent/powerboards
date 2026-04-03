@@ -27,6 +27,7 @@ class DocumentPane extends StatefulWidget {
     required this.path,
     required this.room,
     this.forceTextViewer = false,
+    this.readOnlyTextViewer = false,
     this.codePreviewController,
     this.showCodeToolbar = true,
   });
@@ -34,6 +35,7 @@ class DocumentPane extends StatefulWidget {
   final String path;
   final RoomClient room;
   final bool forceTextViewer;
+  final bool readOnlyTextViewer;
   final CodePreviewController? codePreviewController;
   final bool showCodeToolbar;
 
@@ -96,6 +98,7 @@ class _DocumentPane extends State<DocumentPane> {
           room: widget.room,
           filename: widget.path,
           url: Uri.parse(snap.data!),
+          readOnly: widget.readOnlyTextViewer,
           controller: widget.codePreviewController,
           showToolbar: widget.showCodeToolbar,
         );
