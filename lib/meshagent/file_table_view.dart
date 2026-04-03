@@ -278,7 +278,12 @@ class _FileManagerViewState extends State<FileManagerView> {
       widget.client.localParticipant?.setAttribute("current_file", next.openedFile);
     }
 
-    setState(() => _location = next);
+    setState(() {
+      if (openedFileChanged) {
+        _tab = 'preview';
+      }
+      _location = next;
+    });
   }
 
   void _onRoomEvent(RoomEvent event) {
@@ -1051,6 +1056,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (widget.mobileShellOwnsHeader) {
+      if (_openedFile != null) {
+        return _buildAdaptiveMobileOpenedFileToolbar();
+      }
       return const SizedBox.shrink();
     }
 
@@ -1289,6 +1297,107 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  TextStyle _mobileOpenedFileTextActionStyle(Color color) {
+    return _FileTableViewState.headerStyle.copyWith(color: color, fontWeight: FontWeight.w700);
+  }
+
+  Future<void> _saveAdaptiveMobileEdits() async {
+    await _codePreviewController.save();
+
+    if (!mounted) {
+      return;
+    }
+
+    if (_codePreviewController.dirty || _codePreviewController.saving || _codePreviewController.saveError != null) {
+      return;
+    }
+
+    setState(() {
+      _tab = 'preview';
+    });
+  }
+
+  Widget _buildAdaptiveMobileOpenedFileIconButton({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool destructive = false,
+  }) {
+    final button = destructive
+        ? ShadIconButton.destructive(
+            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
+            onPressed: onPressed,
+          )
+        : ShadIconButton.outline(
+            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
+            onPressed: onPressed,
+          );
+
+    return Tooltip(message: tooltip, child: button);
+  }
+
+  Widget _buildAdaptiveMobileOpenedFileTextAction() {
+    if (!_openedFileSupportsEditTabs) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        child: Text("Preview", style: _mobileOpenedFileTextActionStyle(shadForeground)),
+      );
+    }
+
+    if (_tab != 'edit') {
+      return ShadButton.ghost(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+        onPressed: () => setState(() => _tab = 'edit'),
+        child: Text("Edit this file", style: _mobileOpenedFileTextActionStyle(shadForeground)),
+      );
+    }
+
+    return AnimatedBuilder(
+      animation: _codePreviewController,
+      builder: (context, _) {
+        return ShadButton.ghost(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          onPressed: _saveAdaptiveMobileEdits,
+          child: Text("Save your edits", style: _mobileOpenedFileTextActionStyle(shadDestructive)),
+        );
+      },
+    );
+  }
+
+  Widget _buildAdaptiveMobileOpenedFileToolbar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 0, 12),
+      child: Row(
+        children: [
+          _buildAdaptiveMobileOpenedFileTextAction(),
+          const Spacer(),
+          _buildAdaptiveMobileOpenedFileIconButton(
+            tooltip: "Download",
+            icon: LucideIcons.download,
+            onPressed: () => _downloadFile(_openedFile!),
+          ),
+          const SizedBox(width: 8),
+          _buildAdaptiveMobileOpenedFileIconButton(
+            tooltip: "Delete file",
+            icon: LucideIcons.trash,
+            destructive: true,
+            onPressed: () async {
+              final openedFile = _openedFile;
+              if (openedFile == null) {
+                return;
+              }
+
+              final confirmDelete = await _confirmAndDelete(openedFile, false);
+              if (confirmDelete == true) {
+                _openEntry(_folderSig.value, true);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMobileToolbar(Set<String> selected) {
     final showSelectionActions = selected.isNotEmpty && _openedFile == null;
     final showRouteActions = !showSelectionActions;
@@ -1360,10 +1469,11 @@ class _FileManagerViewState extends State<FileManagerView> {
   List<Widget> _buildRouteActions() {
     if (_openedFile != null) {
       final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+      final showLegacyMobileEditActions = isMobile && !widget.mobileShellOwnsHeader;
 
       return [
-        if (isMobile && _openedFileSupportsEditTabs) _buildOpenFileTabs(),
-        if (isMobile && _openedFileSupportsExternalSave) _buildExternalSaveButton(compact: true),
+        if (showLegacyMobileEditActions && _openedFileSupportsEditTabs) _buildOpenFileTabs(),
+        if (showLegacyMobileEditActions && _openedFileSupportsExternalSave) _buildExternalSaveButton(compact: true),
         Tooltip(
           message: "Download",
           child: ShadIconButton.outline(
