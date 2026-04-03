@@ -1298,7 +1298,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   TextStyle _mobileOpenedFileTextActionStyle(Color color) {
-    return _FileTableViewState.headerStyle.copyWith(color: color, fontWeight: FontWeight.w700);
+    return GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: color);
   }
 
   Future<void> _saveAdaptiveMobileEdits() async {
@@ -1365,35 +1365,40 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildAdaptiveMobileOpenedFileToolbar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 0, 12),
-      child: Row(
-        children: [
-          _buildAdaptiveMobileOpenedFileTextAction(),
-          const Spacer(),
-          _buildAdaptiveMobileOpenedFileIconButton(
-            tooltip: "Download",
-            icon: LucideIcons.download,
-            onPressed: () => _downloadFile(_openedFile!),
-          ),
-          const SizedBox(width: 8),
-          _buildAdaptiveMobileOpenedFileIconButton(
-            tooltip: "Delete file",
-            icon: LucideIcons.trash,
-            destructive: true,
-            onPressed: () async {
-              final openedFile = _openedFile;
-              if (openedFile == null) {
-                return;
-              }
+    return SizedBox(
+      height: powerboardsMobileSecondaryRowHeight,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 0, 0),
+          child: Row(
+            children: [
+              _buildAdaptiveMobileOpenedFileTextAction(),
+              const Spacer(),
+              _buildAdaptiveMobileOpenedFileIconButton(
+                tooltip: "Download",
+                icon: LucideIcons.download,
+                onPressed: () => _downloadFile(_openedFile!),
+              ),
+              const SizedBox(width: 8),
+              _buildAdaptiveMobileOpenedFileIconButton(
+                tooltip: "Delete file",
+                icon: LucideIcons.trash,
+                destructive: true,
+                onPressed: () async {
+                  final openedFile = _openedFile;
+                  if (openedFile == null) {
+                    return;
+                  }
 
-              final confirmDelete = await _confirmAndDelete(openedFile, false);
-              if (confirmDelete == true) {
-                _openEntry(_folderSig.value, true);
-              }
-            },
+                  final confirmDelete = await _confirmAndDelete(openedFile, false);
+                  if (confirmDelete == true) {
+                    _openEntry(_folderSig.value, true);
+                  }
+                },
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2191,7 +2196,7 @@ class _FileTableViewState extends State<FileTableView> {
       onPressed: selectionActive ? widget.onClearSelectionMode : widget.onActivateSelectionMode,
       child: Text(
         label,
-        style: headerStyle.copyWith(color: textColor, fontWeight: FontWeight.w700),
+        style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: textColor),
       ),
     );
   }
@@ -2243,34 +2248,39 @@ class _FileTableViewState extends State<FileTableView> {
     final selectionActions = _buildMobileSelectedActions();
     final showSelectionModeActions = widget.forceShowSelect;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(_mobileRowLeadingInset, 10, _mobileRowTrailingInset, 10),
-      child: Row(
-        children: [
-          if (showSelectColumn) ...[
-            SizedBox(
-              width: 36,
-              child: Center(
-                child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
-          selectButton,
-          const Spacer(),
-          if (showSelectionModeActions) selectionActions,
-          Row(
-            mainAxisSize: MainAxisSize.min,
+    return SizedBox(
+      height: powerboardsMobileSecondaryRowHeight,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(_mobileRowLeadingInset, 0, _mobileRowTrailingInset, 0),
+          child: Row(
             children: [
-              if (widget.isRefreshing)
-                const Padding(
-                  padding: EdgeInsets.only(right: 8),
-                  child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              if (showSelectColumn) ...[
+                SizedBox(
+                  width: 36,
+                  child: Center(
+                    child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+                  ),
                 ),
-              if (!showSelectionModeActions) sortButton,
+                const SizedBox(width: 4),
+              ],
+              selectButton,
+              const Spacer(),
+              if (showSelectionModeActions) selectionActions,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.isRefreshing)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                    ),
+                  if (!showSelectionModeActions) sortButton,
+                ],
+              ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

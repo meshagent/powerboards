@@ -1229,72 +1229,52 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final theme = ShadTheme.of(context);
     final createActionStyle = GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: theme.colorScheme.foreground);
     final secondaryActionStyle = GoogleFonts.inter(
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: FontWeight.w500,
       color: onViewAll == null ? theme.colorScheme.mutedForeground.withValues(alpha: 0.7) : theme.colorScheme.mutedForeground,
     );
-    const outerHorizontalInset = 8.0;
-    const pillRadius = 999.0;
-
-    Widget pill({required VoidCallback? onTap, required Widget child}) {
-      return Material(
-        color: theme.colorScheme.card,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(pillRadius),
-          side: BorderSide(color: theme.colorScheme.border.withValues(alpha: onTap == null ? 0.75 : 1)),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(pillRadius),
-          onTap: onTap,
-          child: SizedBox(
-            height: 48,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Center(child: child),
-            ),
-          ),
-        ),
-      );
-    }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: outerHorizontalInset),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          Expanded(
-            child: pill(
-              onTap: onNewThread,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedSwitcher(
-                    duration: powerboardsAdaptiveTransitionDuration(context),
-                    switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
-                    switchOutCurve: powerboardsAdaptiveTransitionOutCurve(context),
-                    transitionBuilder: (child, animation) => FadeTransition(
-                      opacity: animation,
-                      child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
-                    ),
-                    child: Icon(
-                      isNewThreadSelected ? LucideIcons.check : LucideIcons.messageSquarePlus,
-                      key: ValueKey(isNewThreadSelected),
-                      size: 16,
-                      color: theme.colorScheme.foreground,
-                    ),
+          ShadButton.ghost(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            onPressed: onNewThread,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedSwitcher(
+                  duration: powerboardsAdaptiveTransitionDuration(context),
+                  switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
+                  switchOutCurve: powerboardsAdaptiveTransitionOutCurve(context),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
                   ),
-                  const SizedBox(width: 12),
-                  Flexible(
-                    child: Text("New thread", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: createActionStyle),
+                  child: Icon(
+                    isNewThreadSelected ? LucideIcons.check : LucideIcons.messageSquarePlus,
+                    key: ValueKey(isNewThreadSelected),
+                    size: 16,
+                    color: theme.colorScheme.foreground,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                Text("New thread", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: createActionStyle),
+              ],
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: pill(
-              onTap: onViewAll,
-              child: Text("View all", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: secondaryActionStyle),
+          const Spacer(),
+          ShadButton.ghost(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            onPressed: onViewAll,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text("View all", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: secondaryActionStyle),
+                const SizedBox(width: 6),
+                Icon(LucideIcons.chevronRight, size: 16, color: secondaryActionStyle.color),
+              ],
             ),
           ),
         ],
@@ -2005,15 +1985,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   : null,
             ),
           ] else if (showMobileThreadActions)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-              child: _buildMobileThreadGetStartedActions(
-                context,
-                onNewThread: () => onSelectedThreadPathChanged?.call(null),
-                isNewThreadSelected: selectedThreadPath == null,
-                onViewAll: resolvedThreadListPath == null
-                    ? null
-                    : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
+            SizedBox(
+              height: powerboardsMobileSecondaryRowHeight,
+              child: Center(
+                child: _buildMobileThreadGetStartedActions(
+                  context,
+                  onNewThread: () => onSelectedThreadPathChanged?.call(null),
+                  isNewThreadSelected: selectedThreadPath == null,
+                  onViewAll: resolvedThreadListPath == null
+                      ? null
+                      : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
+                ),
               ),
             ),
           Expanded(
@@ -2196,7 +2178,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final mobileFilesLocation = isMobile ? _mobileFilesLocation(context) : null;
     final horizontalInset = isMobile ? (mobileFilesLocation?.openedFile != null ? powerboardsMobileShellHorizontalInset : 0.0) : 20.0;
-    final topInset = isMobile ? 20.0 : 0.0;
+    final topInset = 0.0;
     final bottomInset = isMobile ? 8.0 : desktopPaneBottomInset;
     final meetingSessionActive = _isMeetingSessionActive(context);
 

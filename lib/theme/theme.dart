@@ -51,6 +51,7 @@ const shadDarkSelection = Color(0xFF473A77);
 const double powerboardsMobileScreenTopInset = 10.0;
 const double powerboardsMobileScreenBottomInset = 15.0;
 const double powerboardsMobileShellHorizontalInset = 15.0;
+const double powerboardsMobileSecondaryRowHeight = 68.0;
 const EdgeInsets powerboardsMobileHorizontalPadding = EdgeInsets.symmetric(horizontal: powerboardsMobileShellHorizontalInset);
 const EdgeInsets powerboardsMobileScreenContentPadding = EdgeInsets.fromLTRB(
   powerboardsMobileShellHorizontalInset,
