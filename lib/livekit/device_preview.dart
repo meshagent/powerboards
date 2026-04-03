@@ -80,6 +80,11 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     return 'Unable to change microphone state: $message';
   }
 
+  bool _isLandscapePhoneViewport(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return size.width > size.height && size.shortestSide < 600;
+  }
+
   Future<void> _runWithMinimumProcessingDuration(Future<void> Function() action) async {
     final startedAt = DateTime.now();
     await action();
@@ -374,10 +379,13 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final isMobile = MediaQuery.sizeOf(context).width < 600;
-        final statusTextStyle = GoogleFonts.inter(fontSize: isMobile ? 17.6 : 16, fontWeight: FontWeight.w600);
+        final size = MediaQuery.sizeOf(context);
+        final isLandscapePhone = _isLandscapePhoneViewport(context);
+        final isMobile = size.width < 600;
+        final useMobileLobbyLayout = isMobile || isLandscapePhone;
+        final statusTextStyle = GoogleFonts.inter(fontSize: useMobileLobbyLayout ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
-        final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - (isMobile ? 190 : 150) : double.infinity;
+        final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - (useMobileLobbyLayout ? 190 : 150) : double.infinity;
 
         // Cap the width to 800px - large monitors preview overwhelming
         double width = maxWidth > 800 ? 800 : maxWidth;
@@ -455,7 +463,10 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           ),
         ];
 
-        final previewSectionControls = <Widget>[...previewControls, if (isMobile) buildDeviceSettingsButton(showLabel: false)];
+        final previewSectionControls = <Widget>[
+          ...previewControls,
+          if (useMobileLobbyLayout && !isLandscapePhone) buildDeviceSettingsButton(showLabel: false),
+        ];
 
         final previewSection = Column(
           mainAxisSize: MainAxisSize.min,
@@ -476,47 +487,125 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 ),
               ),
             ),
-            Center(
-              child: Wrap(
-                alignment: WrapAlignment.center,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 8,
-                children: previewSectionControls,
+            if (!isLandscapePhone)
+              Center(
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: previewSectionControls,
+                ),
               ),
-            ),
           ],
         );
 
-        if (isMobile) {
+        if (useMobileLobbyLayout) {
+          Widget buildLandscapePhoneFooter() {
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final compactActionButtons = constraints.maxWidth < 560;
+                final actionButtonSpacing = compactActionButtons ? 6.0 : 8.0;
+                final footerControls = [...previewControls, buildDeviceSettingsButton(showLabel: false)];
+                final useIntrinsicActionButtonWidth = isLandscapePhone;
+
+                Widget buildCancelButton() {
+                  final button = ShadButton.outline(
+                    padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                    onPressed: () {
+                      widget.onCancel?.call();
+                    },
+                    child: const Text("Cancel"),
+                  );
+
+                  if (useIntrinsicActionButtonWidth) {
+                    return button;
+                  }
+
+                  if (compactActionButtons) {
+                    return Expanded(child: button);
+                  }
+
+                  return SizedBox(width: 120, child: button);
+                }
+
+                Widget buildJoinButton() {
+                  final button = ShadButton.destructive(
+                    padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                    onPressed: audioPending || videoPending
+                        ? null
+                        : () {
+                            widget.onJoin?.call(videoOn, audioOn);
+                          },
+                    child: const Text("Meet Now"),
+                  );
+
+                  if (compactActionButtons) {
+                    return Expanded(child: button);
+                  }
+
+                  return SizedBox(width: 120, child: button);
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Wrap(
+                      alignment: WrapAlignment.start,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: footerControls,
+                    ),
+                    if (widget.onCancel != null || widget.onJoin != null) SizedBox(width: compactActionButtons ? 8 : 12),
+                    if (widget.onCancel != null || widget.onJoin != null)
+                      Expanded(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (widget.onCancel != null) buildCancelButton(),
+                            if (widget.onCancel != null && widget.onJoin != null) SizedBox(width: actionButtonSpacing),
+                            if (widget.onJoin != null) buildJoinButton(),
+                          ],
+                        ),
+                      ),
+                    if (widget.onCancel == null && widget.onJoin == null) const Spacer(),
+                  ],
+                );
+              },
+            );
+          }
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(child: Center(child: previewSection)),
               Padding(
                 padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 12,
-                  children: [
-                    if (widget.onJoin != null)
-                      ShadButton.destructive(
-                        onPressed: audioPending || videoPending
-                            ? null
-                            : () {
-                                widget.onJoin?.call(videoOn, audioOn);
+                child: isLandscapePhone
+                    ? buildLandscapePhoneFooter()
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        spacing: 12,
+                        children: [
+                          if (widget.onJoin != null)
+                            ShadButton.destructive(
+                              onPressed: audioPending || videoPending
+                                  ? null
+                                  : () {
+                                      widget.onJoin?.call(videoOn, audioOn);
+                                    },
+                              child: const Text("Meet Now"),
+                            ),
+                          if (widget.onCancel != null)
+                            ShadButton.outline(
+                              onPressed: () {
+                                widget.onCancel?.call();
                               },
-                        child: const Text("Meet Now"),
+                              child: const Text("Cancel"),
+                            ),
+                        ],
                       ),
-                    if (widget.onCancel != null)
-                      ShadButton.outline(
-                        onPressed: () {
-                          widget.onCancel?.call();
-                        },
-                        child: const Text("Cancel"),
-                      ),
-                  ],
-                ),
               ),
             ],
           );

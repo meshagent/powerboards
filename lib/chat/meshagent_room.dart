@@ -2014,7 +2014,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildErrorArea(BuildContext context, String error, List<Widget> actions, {bool embedMobileChrome = true}) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
 
     return Column(
       children: [
@@ -2096,7 +2096,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Widget _buildShellArea(BuildContext context, ServiceSpec service, List<Widget> actions, {bool embedMobileChrome = true}) {
     final command = service.metadata.annotations["meshagent.service.shell.command"];
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
 
     return Column(
       children: [
@@ -2136,7 +2136,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final cs = ShadTheme.of(context).colorScheme;
     final documentPath = getDocumentPath(agentName, threadDir: threadDir);
     final isMultiThread = threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
     final chatActions = actions;
     final chatHorizontalInset = isMobile ? 0.0 : desktopPaneChatHorizontalInset;
     final chatBottomInset = isMobile ? 0.0 : desktopPaneBottomInset - 8;
@@ -2314,7 +2314,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Widget _buildVoiceArea(BuildContext context, String agentName, List<Widget> actions, {bool embedMobileChrome = true}) {
     final meetingSessionActive = _isMeetingSessionActive(context);
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
 
     return Column(
       children: [
@@ -2361,7 +2361,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Widget _buildMeetingTranscriberArea(BuildContext context, String agentName, List<Widget> actions, {bool embedMobileChrome = true}) {
     final meetingIsActive = _isMeetingSessionActive(context);
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
 
     Widget startMeetingAction() {
       return ShadButton(
@@ -2409,7 +2409,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Widget _buildFilesArea(BuildContext context, List<Widget> actions, {bool embedMobileChrome = true}) {
     final cs = ShadTheme.of(context).colorScheme;
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
     final mobileFilesLocation = isMobile ? _mobileFilesLocation(context) : null;
     final hasOpenedFile = mobileFilesLocation?.openedFile != null;
     final horizontalInset = isMobile ? 0.0 : 20.0;
@@ -2446,7 +2446,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
 
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
     final meetingIsActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
@@ -2747,7 +2747,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Widget _buildAgentArea(BuildContext context, List<Widget> actions, {bool showEmbeddedThreadList = true, bool embedMobileChrome = true}) {
     final cs = ShadTheme.of(context).colorScheme;
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
 
     return ColoredBox(
       color: isMobile ? cs.card : Colors.transparent,
@@ -2884,10 +2884,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   static const double _meetingActivePaneActionLeadingWidthFloor = 260;
 
+  bool _isLandscapePhoneViewport(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return size.width > size.height && size.shortestSide < 600;
+  }
+
+  bool _usesMobileRoomLayout(BuildContext context) {
+    return ResponsiveBreakpoints.of(context).isMobile || _isLandscapePhoneViewport(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final rb = ResponsiveBreakpoints.of(context);
-    final isMobile = rb.isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
     final isSmallDisplay = rb.smallerOrEqualTo("chromebook");
 
     return RoomParticipantsBuilder(
@@ -2938,7 +2947,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             final supported = _supportedServices(services.state.value!);
                             final selected = _resolveSelectedAgent(supported);
                             final meetingSessionActive = _isMeetingSessionActive(context);
-                            final split = filesVisible || controller.inMeeting;
+                            final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;
+                            final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
 
                             if (!_hasVisibleAgents(supported)) {
                               final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
@@ -3108,29 +3118,31 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                             setState(() {});
                                           },
                                           split: split,
-                                          area1: ColoredBox(
-                                            color: cs.card,
-                                            child: _buildAgentArea(context, [
-                                              if (isSmallDisplay) BackButton(projectId: widget.projectId),
+                                          area1: useLandscapePhoneMeetingPane
+                                              ? _buildMeeting(context, null, actions)
+                                              : ColoredBox(
+                                                  color: cs.card,
+                                                  child: _buildAgentArea(context, [
+                                                    if (isSmallDisplay) BackButton(projectId: widget.projectId),
 
-                                              AgentsDropdown(
-                                                projectId: widget.projectId,
-                                                room: widget.room,
-                                                selectedService: selected.service,
-                                                selectedAgentRouteId: selected.routeId,
-                                                services: supported,
-                                                onOpen: services.refresh,
-                                                onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-                                              ),
+                                                    AgentsDropdown(
+                                                      projectId: widget.projectId,
+                                                      room: widget.room,
+                                                      selectedService: selected.service,
+                                                      selectedAgentRouteId: selected.routeId,
+                                                      services: supported,
+                                                      onOpen: services.refresh,
+                                                      onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+                                                    ),
 
-                                              ParticipantsButton(
-                                                participants: participants,
-                                                localParticipant: widget.room.localParticipant,
-                                              ),
+                                                    ParticipantsButton(
+                                                      participants: participants,
+                                                      localParticipant: widget.room.localParticipant,
+                                                    ),
 
-                                              if (!split) ...actions,
-                                            ], showEmbeddedThreadList: !split),
-                                          ),
+                                                    if (!split) ...actions,
+                                                  ], showEmbeddedThreadList: !split),
+                                                ),
                                           area2: !split
                                               ? Container()
                                               : filesVisible

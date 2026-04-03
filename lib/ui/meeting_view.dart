@@ -20,6 +20,7 @@ import 'package:powerboards/livekit/video_room_participants_builder.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
+import 'package:powerboards/ui/pane_header_action_scope.dart';
 
 const _railGap = 16.0;
 const _compactControlWidth = 48.0;
@@ -414,67 +415,81 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
             if (startRecording != null && !transcribing)
               Tooltip(
                 message: "Start Transcription",
-                child: SizedBox(
-                  width: useCompactPresentation ? _compactControlWidth : (isMobile ? mobileButtonWidth : null),
-                  child: ShadButton.outline(
-                    padding: useCompactPresentation
-                        ? const EdgeInsets.symmetric(horizontal: 0)
-                        : isMobile
-                        ? const EdgeInsets.symmetric(horizontal: 12)
-                        : null,
-                    leading: Icon(LucideIcons.captions),
-                    onPressed: () async {
-                      await _invokeTranscriptionTool(
-                        transcription: transcription!,
-                        toolName: startRecording.name,
-                        input: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
-                        successMessage: "Transcription started",
-                        showToast: useCompressedPresentation,
-                      );
-                    },
-                    child: useCompactPresentation
-                        ? null
-                        : Text(
+                child: useCompactPresentation
+                    ? ShadIconButton.outline(
+                        icon: const Icon(LucideIcons.captions, size: paneHeaderIconButtonIconSize),
+                        onPressed: () async {
+                          await _invokeTranscriptionTool(
+                            transcription: transcription!,
+                            toolName: startRecording.name,
+                            input: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                            successMessage: "Transcription started",
+                            showToast: useCompressedPresentation,
+                          );
+                        },
+                      )
+                    : SizedBox(
+                        width: isMobile ? mobileButtonWidth : null,
+                        child: ShadButton.outline(
+                          padding: isMobile ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                          leading: Icon(LucideIcons.captions),
+                          onPressed: () async {
+                            await _invokeTranscriptionTool(
+                              transcription: transcription!,
+                              toolName: startRecording.name,
+                              input: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                              successMessage: "Transcription started",
+                              showToast: useCompressedPresentation,
+                            );
+                          },
+                          child: Text(
                             _transcriptionButtonLabel(transcribing: false, shortLabel: useShortLabel),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             softWrap: false,
                           ),
-                  ),
-                ),
+                        ),
+                      ),
               ),
 
             if (stopRecording != null && transcribing)
               Tooltip(
                 message: "Stop Transcription",
-                child: SizedBox(
-                  width: useCompactPresentation ? _compactControlWidth : (isMobile ? mobileButtonWidth : null),
-                  child: ShadButton.outline(
-                    padding: useCompactPresentation
-                        ? const EdgeInsets.symmetric(horizontal: 0)
-                        : isMobile
-                        ? const EdgeInsets.symmetric(horizontal: 12)
-                        : null,
-                    leading: Icon(LucideIcons.captionsOff),
-                    onPressed: () async {
-                      await _invokeTranscriptionTool(
-                        transcription: transcription!,
-                        toolName: stopRecording.name,
-                        input: {"breakout_room": ""},
-                        successMessage: "Transcription stopped",
-                        showToast: useCompressedPresentation,
-                      );
-                    },
-                    child: useCompactPresentation
-                        ? null
-                        : Text(
+                child: useCompactPresentation
+                    ? ShadIconButton.outline(
+                        icon: const Icon(LucideIcons.captionsOff, size: paneHeaderIconButtonIconSize),
+                        onPressed: () async {
+                          await _invokeTranscriptionTool(
+                            transcription: transcription!,
+                            toolName: stopRecording.name,
+                            input: {"breakout_room": ""},
+                            successMessage: "Transcription stopped",
+                            showToast: useCompressedPresentation,
+                          );
+                        },
+                      )
+                    : SizedBox(
+                        width: isMobile ? mobileButtonWidth : null,
+                        child: ShadButton.outline(
+                          padding: isMobile ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                          leading: Icon(LucideIcons.captionsOff),
+                          onPressed: () async {
+                            await _invokeTranscriptionTool(
+                              transcription: transcription!,
+                              toolName: stopRecording.name,
+                              input: {"breakout_room": ""},
+                              successMessage: "Transcription stopped",
+                              showToast: useCompressedPresentation,
+                            );
+                          },
+                          child: Text(
                             _transcriptionButtonLabel(transcribing: true, shortLabel: useShortLabel),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             softWrap: false,
                           ),
-                  ),
-                ),
+                        ),
+                      ),
               ),
           ],
         );

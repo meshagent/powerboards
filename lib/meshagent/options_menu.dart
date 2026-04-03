@@ -50,6 +50,11 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
   late final isOwner = widget.isOwner;
   late final canViewDeveloperLogs = widget.canViewDeveloperLogs;
 
+  bool _usesMobileRoomLayout(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return ResponsiveBreakpoints.of(context).isMobile || (size.width > size.height && size.shortestSide < 600);
+  }
+
   Future<void> _addAgent() async {
     await showShadDialog<void>(
       context: context,
@@ -69,7 +74,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
       builder: (context, _) {
         final isOwnerValue = isOwner.state.value == true;
         final canViewDeveloperLogsValue = canViewDeveloperLogs.state.value == true;
-        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+        final isMobile = _usesMobileRoomLayout(widget.boundaryContext ?? context);
         final overflowCollapsed = CompactHeaderActions.overflowCollapsedOf(context);
         final showPaneEntriesInMenu = widget.showMeetingPaneEntriesInOverflow && (isMobile || overflowCollapsed);
         final showInlineMeetingInvite = widget.showMeetingPaneEntriesInOverflow && !isMobile;

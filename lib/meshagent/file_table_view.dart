@@ -40,6 +40,11 @@ const Set<String> editExtensions = {"md"};
 const String placeholderFileName = ".placeholder";
 const double filePaneTableHeaderHeight = 48;
 
+bool _usesAdaptiveMobileLayout(BuildContext context) {
+  final size = MediaQuery.sizeOf(context);
+  return ResponsiveBreakpoints.of(context).isMobile || (size.width > size.height && size.shortestSide < 600);
+}
+
 enum FileSortField { name, modified }
 
 enum _FileAction { open, download, upload, compressFolder, delete }
@@ -661,7 +666,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (selected.isEmpty) return;
 
     final toaster = ShadToaster.of(context);
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesAdaptiveMobileLayout(context);
     final count = selected.length;
     final names = selected.take(6).map(_FilePathKey.displayNameFromKey).toList();
 
@@ -1059,7 +1064,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildToolbar(Set<String> selected) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesAdaptiveMobileLayout(context);
     if (!isMobile) {
       return _buildDesktopToolbar(selected);
     }
@@ -1488,7 +1493,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   List<Widget> _buildRouteActions() {
     if (_openedFile != null) {
-      final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+      final isMobile = _usesAdaptiveMobileLayout(context);
       final showLegacyMobileEditActions = isMobile && !widget.mobileShellOwnsHeader;
 
       return [
@@ -1573,7 +1578,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildSelection(Set<String> selected) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesAdaptiveMobileLayout(context);
     final countPadding = isMobile ? 4.0 : 6.0;
     final children = <Widget>[
       ShadButton.outline(onPressed: _clearSelected, child: Text(isMobile ? "Clear" : "Clear selection")),
@@ -1852,7 +1857,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildOpenedFileSurface(Widget child, {required bool insetContent}) {
-    final isAdaptiveMobile = ResponsiveBreakpoints.of(context).isMobile && widget.mobileShellOwnsHeader;
+    final isAdaptiveMobile = _usesAdaptiveMobileLayout(context) && widget.mobileShellOwnsHeader;
     if (isAdaptiveMobile) {
       return SizedBox.expand(
         child: ClipRect(
@@ -1908,7 +1913,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           child: SignalBuilder(
             builder: (context, _) {
               final selected = _visibleSelected.value;
-              final isAdaptiveMobile = widget.mobileShellOwnsHeader && ResponsiveBreakpoints.of(context).isMobile;
+              final isAdaptiveMobile = widget.mobileShellOwnsHeader && _usesAdaptiveMobileLayout(context);
               final hasOpenedFile = _openedFile != null;
               final hideEmbeddedMobileToolbar = isAdaptiveMobile && !hasOpenedFile;
               final showAdaptiveOpenedFileDivider = isAdaptiveMobile && hasOpenedFile;
@@ -2079,7 +2084,7 @@ class _FileTableViewState extends State<FileTableView> {
   }
 
   Widget _buildTableCard(Widget child) {
-    if (ResponsiveBreakpoints.of(context).isMobile) {
+    if (_usesAdaptiveMobileLayout(context)) {
       return ColoredBox(key: _tableCardKey, color: shadCard, child: child);
     }
 
@@ -2410,7 +2415,7 @@ class _FileTableViewState extends State<FileTableView> {
       return _buildEmptyState(context);
     }
 
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesAdaptiveMobileLayout(context);
     final colorScheme = ShadTheme.of(context).colorScheme;
     final showSelectColumn = !isMobile || widget.forceShowSelect;
     final alwaysShowMenu = isMobile;
