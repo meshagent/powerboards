@@ -31,6 +31,7 @@ class AgentsDropdown extends StatelessWidget {
   final List<ServiceSpec> services;
   final VoidCallback? onOpen;
   final VoidCallback? onManageAgents;
+  final BuildContext? boundaryContext;
 
   const AgentsDropdown({
     super.key,
@@ -41,6 +42,7 @@ class AgentsDropdown extends StatelessWidget {
     required this.services,
     this.onOpen,
     this.onManageAgents,
+    this.boundaryContext,
   });
 
   String _serviceId(ServiceSpec service) => service.metadata.annotations["meshagent.service.id"] ?? "";
@@ -115,12 +117,20 @@ class AgentsDropdown extends StatelessWidget {
     );
   }
 
+  bool _isLandscapePhoneViewport(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return size.width > size.height && size.shortestSide < 600;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierBuilder(
       source: room.messaging,
       builder: (context) {
-        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+        final size = MediaQuery.sizeOf(context);
+        final isLandscapePhone = _isLandscapePhoneViewport(context);
+        final isMobileAdaptive = ResponsiveBreakpoints.of(context).isMobile || isLandscapePhone;
+        final centerMenuInViewport = isMobileAdaptive && !isLandscapePhone;
         final developmentAgents = _developmentAgents();
         final selectedRouteId = selectedAgentRouteId ?? (selectedService == null ? null : _serviceId(selectedService!));
         final selectedDevelopmentAgent = selectedRouteId == null
@@ -161,11 +171,20 @@ class AgentsDropdown extends StatelessWidget {
           );
         }
 
+        final mobileMenuWidth = max(240.0, min(size.width - 32, 420.0));
+        final mobileMenuHeight = max(220.0, size.height - 96.0);
+
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             AppContextMenuButton(
-              anchor: const ShadAnchor(childAlignment: Alignment.topLeft),
+              anchor: isMobileAdaptive ? null : const ShadAnchor(childAlignment: Alignment.topLeft),
+              boundaryContext: boundaryContext,
+              constraints: isMobileAdaptive
+                  ? BoxConstraints(minWidth: mobileMenuWidth, maxWidth: mobileMenuWidth)
+                  : const BoxConstraints(minWidth: 320, maxWidth: 420),
+              maxMenuHeight: isMobileAdaptive ? mobileMenuHeight : null,
+              centerHorizontallyInBoundary: centerMenuInViewport,
               entries: entries,
               childBuilder: (context, controller) {
                 return ShadButton.ghost(
@@ -174,7 +193,7 @@ class AgentsDropdown extends StatelessWidget {
                     onOpen?.call();
                     controller.toggle();
                   },
-                  leading: isMobile
+                  leading: isMobileAdaptive
                       ? null
                       : selectedDevelopmentAgent == null
                       ? const Icon(LucideIcons.bot, size: 18)

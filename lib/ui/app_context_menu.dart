@@ -33,6 +33,8 @@ class AppContextMenuButton extends StatefulWidget {
     this.constraints = const BoxConstraints(minWidth: 320, maxWidth: 420),
     this.radius = 12,
     this.compact = false,
+    this.maxMenuHeight,
+    this.centerHorizontallyInBoundary = false,
   });
 
   final List<AppMenuEntry> entries;
@@ -42,6 +44,8 @@ class AppContextMenuButton extends StatefulWidget {
   final BoxConstraints constraints;
   final double radius;
   final bool compact;
+  final double? maxMenuHeight;
+  final bool centerHorizontallyInBoundary;
 
   @override
   State<AppContextMenuButton> createState() => _AppContextMenuButtonState();
@@ -58,20 +62,24 @@ class _AppContextMenuButtonState extends State<AppContextMenuButton> {
 
   @override
   Widget build(BuildContext context) {
+    final items = widget.compact ? _buildCompactItems(widget.entries) : _buildItems(widget.entries, radius: widget.radius);
+    final menuContent = _buildMenuContent(items, maxMenuHeight: widget.maxMenuHeight);
+
     return AdaptiveShadContextMenu(
       controller: controller,
       anchor: widget.anchor,
       boundaryContext: widget.boundaryContext,
       constraints: widget.constraints,
       estimatedMenuWidth: _estimatedMenuWidth(widget.constraints),
-      estimatedMenuHeight: _estimatedMenuHeight(widget.entries, compact: widget.compact),
+      estimatedMenuHeight: _estimatedMenuHeight(widget.entries, compact: widget.compact, maxMenuHeight: widget.maxMenuHeight),
+      centerHorizontallyInBoundary: widget.centerHorizontallyInBoundary,
       padding: widget.compact ? const EdgeInsets.symmetric(vertical: 4) : EdgeInsets.zero,
       decoration: widget.compact
           ? null
           : ShadDecoration(
               border: ShadBorder.all(color: const Color(0xFFE3E3E3), radius: BorderRadius.circular(widget.radius)),
             ),
-      items: widget.compact ? _buildCompactItems(widget.entries) : _buildItems(widget.entries, radius: widget.radius),
+      items: [menuContent],
       child: widget.childBuilder(context, controller),
     );
   }
@@ -89,7 +97,7 @@ double _estimatedMenuWidth(BoxConstraints constraints) {
   return 128;
 }
 
-double _estimatedMenuHeight(List<AppMenuEntry> entries, {required bool compact}) {
+double _estimatedMenuHeight(List<AppMenuEntry> entries, {required bool compact, double? maxMenuHeight}) {
   final entryCount = entries.length;
   if (entryCount <= 0) {
     return 0;
@@ -97,12 +105,26 @@ double _estimatedMenuHeight(List<AppMenuEntry> entries, {required bool compact})
 
   final extraSeparators = entries.where((entry) => entry.separatorBefore).length;
 
-  if (compact) {
-    return entryCount * 40.0 + extraSeparators * 13.0;
+  final rawHeight = compact ? entryCount * 40.0 + extraSeparators * 13.0 : entryCount * 80.0 + (entryCount - 1) + extraSeparators * 13.0;
+
+  if (maxMenuHeight == null) {
+    return rawHeight;
   }
 
-  final separatorCount = entryCount - 1;
-  return entryCount * 80.0 + separatorCount + extraSeparators * 13.0;
+  return rawHeight.clamp(0.0, maxMenuHeight).toDouble();
+}
+
+Widget _buildMenuContent(List<Widget> items, {double? maxMenuHeight}) {
+  Widget content = Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: items);
+
+  if (maxMenuHeight == null) {
+    return content;
+  }
+
+  return ConstrainedBox(
+    constraints: BoxConstraints(maxHeight: maxMenuHeight),
+    child: Scrollbar(thumbVisibility: true, child: SingleChildScrollView(child: content)),
+  );
 }
 
 List<Widget> _buildCompactItems(List<AppMenuEntry> entries) {

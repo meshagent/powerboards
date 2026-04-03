@@ -1382,7 +1382,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Widget _buildAgentsActionRow(BuildContext context, {Widget? mobileBelowDropdown}) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _usesMobileRoomLayout(context);
     if (!isMobile) return const SizedBox.shrink();
 
     if (!services.state.isReady) return const SizedBox.shrink();
@@ -1397,6 +1397,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       services: supported,
       onOpen: services.refresh,
       onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+      boundaryContext: context,
     );
 
     return Align(

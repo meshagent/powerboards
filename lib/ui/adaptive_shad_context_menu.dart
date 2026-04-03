@@ -34,6 +34,7 @@ class AdaptiveShadContextMenu extends StatelessWidget {
     this.anchorGap = 8,
     this.viewportVerticalSplit = 2 / 3,
     this.viewportEdgePadding = 12,
+    this.centerHorizontallyInBoundary = false,
   });
 
   final Widget child;
@@ -61,6 +62,7 @@ class AdaptiveShadContextMenu extends StatelessWidget {
   final double anchorGap;
   final double viewportVerticalSplit;
   final double viewportEdgePadding;
+  final bool centerHorizontallyInBoundary;
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +90,7 @@ class AdaptiveShadContextMenu extends StatelessWidget {
       anchorGap: anchorGap,
       viewportVerticalSplit: viewportVerticalSplit,
       viewportEdgePadding: viewportEdgePadding,
+      centerHorizontallyInBoundary: centerHorizontallyInBoundary,
       items: items,
       child: child,
     );
