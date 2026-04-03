@@ -318,9 +318,13 @@ class _FileManagerViewState extends State<FileManagerView> {
       final idx = next.indexWhere((e) => e.name == name);
       if (idx == -1) {
         next.add(StorageEntry(name: name, isFolder: false, size: null, createdAt: now, updatedAt: now));
+        unawaited(_refreshCurrentFolder());
       } else {
         final old = next[idx];
         next[idx] = StorageEntry(name: name, isFolder: false, size: old.size, createdAt: old.createdAt, updatedAt: now);
+        if (old.size == null || old.size == 0) {
+          unawaited(_refreshCurrentFolder());
+        }
       }
     } else if (event is FileDeletedEvent) {
       next.removeWhere((e) => e.name == name);
@@ -1309,6 +1313,12 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (_codePreviewController.dirty || _codePreviewController.saving || _codePreviewController.saveError != null) {
+      return;
+    }
+
+    await _refreshCurrentFolder();
+
+    if (!mounted) {
       return;
     }
 

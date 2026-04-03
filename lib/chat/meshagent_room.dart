@@ -1662,7 +1662,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Future<void> _uploadFileToRoom(Stream<Uint8List> stream, String path, int totalBytes) async {
-    final upload = MeshagentFileUpload(room: widget.room, path: path, dataStream: stream);
+    final upload = MeshagentFileUpload(room: widget.room, path: path, dataStream: stream, size: totalBytes);
     await upload.done;
   }
 
