@@ -23,6 +23,7 @@ import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
+import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
@@ -140,13 +141,6 @@ class _FilePathKey {
     final last = trimmed.split('/').where((s) => s.isNotEmpty).lastOrNull ?? trimmed;
     return isFolderKey(key) ? '$last/' : last;
   }
-}
-
-class _BreadcrumbSegment {
-  const _BreadcrumbSegment({required this.label, required this.path});
-
-  final String label;
-  final String path;
 }
 
 class FileManagerView extends StatefulWidget {
@@ -1644,14 +1638,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     return math.min(width, math.min(180.0, maxWidth * 0.24));
   }
 
-  List<_BreadcrumbSegment> _folderBreadcrumbSegments() {
-    final segments = <_BreadcrumbSegment>[const _BreadcrumbSegment(label: "Files", path: "")];
+  List<FileBreadcrumbSegment> _folderBreadcrumbSegments() {
+    final segments = <FileBreadcrumbSegment>[const FileBreadcrumbSegment(label: "Files", path: "")];
     final folderSegments = _folderSig.value.split('/').where((s) => s.isNotEmpty).toList();
 
     var accumulated = "";
     for (final segment in folderSegments) {
       accumulated = accumulated.isEmpty ? segment : "$accumulated/$segment";
-      segments.add(_BreadcrumbSegment(label: segment, path: accumulated));
+      segments.add(FileBreadcrumbSegment(label: segment, path: accumulated));
     }
 
     return segments;
@@ -1664,14 +1658,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Widget _buildBreadcrumbCrumb(_BreadcrumbSegment segment) {
+  Widget _buildBreadcrumbCrumb(FileBreadcrumbSegment segment) {
     return ShadButton.ghost(
       onPressed: () => _openEntry(segment.path, true),
       child: Text(segment.label, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 
-  Widget _buildCollapsedBreadcrumbCurrent(_BreadcrumbSegment segment) {
+  Widget _buildCollapsedBreadcrumbCurrent(FileBreadcrumbSegment segment) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1685,7 +1679,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Widget _buildCollapsedBreadcrumbMenu(List<_BreadcrumbSegment> hiddenSegments) {
+  Widget _buildCollapsedBreadcrumbMenu(List<FileBreadcrumbSegment> hiddenSegments) {
     return AdaptiveShadContextMenu(
       controller: _collapsedBreadcrumbMenuController,
       boundaryContext: context,
@@ -1707,6 +1701,38 @@ class _FileManagerViewState extends State<FileManagerView> {
         child: ShadIconButton.outline(icon: const Icon(LucideIcons.folderTree), onPressed: _collapsedBreadcrumbMenuController.toggle),
       ),
     );
+  }
+
+  Widget _buildBreadcrumbTrail(List<FileBreadcrumbSegment> segments) {
+    final children = <Widget>[];
+    for (var i = 0; i < segments.length; i++) {
+      if (i > 0) {
+        children.add(_breadcrumbSeparator());
+      }
+      children.add(_buildBreadcrumbCrumb(segments[i]));
+    }
+    return Row(mainAxisSize: MainAxisSize.min, children: children);
+  }
+
+  Widget _buildCollapsedBreadcrumbTrail(List<FileBreadcrumbSegment> segments) {
+    if (segments.length == 1) {
+      return Row(children: [Expanded(child: _buildCollapsedBreadcrumbCurrent(segments.first))]);
+    }
+
+    final children = <Widget>[];
+    for (var i = 0; i < segments.length; i++) {
+      if (i > 0) {
+        children.add(_breadcrumbSeparator());
+      }
+
+      if (i == segments.length - 1) {
+        children.add(Expanded(child: _buildCollapsedBreadcrumbCurrent(segments[i])));
+        continue;
+      }
+
+      children.add(_buildBreadcrumbCrumb(segments[i]));
+    }
+    return Row(children: children);
   }
 
   Widget _buildFileNameOnly() {
@@ -1737,48 +1763,25 @@ class _FileManagerViewState extends State<FileManagerView> {
             .map((segment) => _measureBreadcrumbLabelWidth(context, segment.label) + crumbChromeWidth)
             .toList(growable: false);
 
-        var startIndex = segments.length - 1;
-        var usedWidth = segmentWidths.last;
+        final layout = computeFileBreadcrumbLayout(
+          segments: segments,
+          segmentWidths: segmentWidths,
+          maxWidth: constraints.maxWidth,
+          separatorWidth: separatorWidth,
+          collapseButtonWidth: collapseButtonWidth,
+        );
 
-        while (startIndex > 0) {
-          final nextWidth = usedWidth + separatorWidth + segmentWidths[startIndex - 1];
-          if (nextWidth > constraints.maxWidth) {
-            break;
-          }
-          startIndex--;
-          usedWidth = nextWidth;
-        }
-
-        var hiddenCount = startIndex;
-        while (hiddenCount > 0 &&
-            usedWidth + separatorWidth + collapseButtonWidth > constraints.maxWidth &&
-            startIndex < segments.length - 1) {
-          usedWidth -= separatorWidth + segmentWidths[startIndex];
-          startIndex++;
-          hiddenCount = startIndex;
-        }
-
-        final children = <Widget>[];
-        if (hiddenCount > 0) {
+        if (layout.isCollapsed) {
           return Row(
             children: [
-              _buildCollapsedBreadcrumbMenu(segments.take(hiddenCount).toList(growable: false)),
+              _buildCollapsedBreadcrumbMenu(layout.hiddenSegments),
               _breadcrumbSeparator(),
-              Expanded(
-                child: Align(alignment: Alignment.centerLeft, child: _buildCollapsedBreadcrumbCurrent(segments.last)),
-              ),
+              Expanded(child: _buildCollapsedBreadcrumbTrail(layout.visibleSegments)),
             ],
           );
         }
 
-        for (var i = startIndex; i < segments.length; i++) {
-          if (i > startIndex) {
-            children.add(_breadcrumbSeparator());
-          }
-          children.add(_buildBreadcrumbCrumb(segments[i]));
-        }
-
-        return Row(mainAxisSize: MainAxisSize.min, children: children);
+        return _buildBreadcrumbTrail(layout.visibleSegments);
       },
     );
   }
