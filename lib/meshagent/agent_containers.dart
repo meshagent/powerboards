@@ -164,52 +164,6 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
         throw RoomServerException('service is missing meshagent.service.id annotation');
       }
 
-      String? email;
-      String? emailQueue;
-      var isMailboxPublic = false;
-
-      for (final variable in inputVariables) {
-        if (variable.type == 'email') {
-          email = (vars[variable.name] ?? '').trim();
-          final privacy = variable.annotations?['meshagent.email.privacy'];
-          isMailboxPublic = switch (privacy) {
-            'public' => true,
-            'private' => false,
-            null => false,
-            _ => throw RoomServerException('invalid email privacy option'),
-          };
-        } else if (variable.type == 'email_queue') {
-          emailQueue = (vars[variable.name] ?? '').trim();
-        }
-      }
-
-      if (email != null && email.isNotEmpty) {
-        try {
-          final mailbox = await client.getMailbox(projectId: projectId, address: email);
-          if (mailbox.room != roomName) {
-            throw RoomServerException('Mailbox has already been assigned to another room');
-          }
-
-          await client.updateMailbox(
-            projectId: projectId,
-            address: email,
-            room: roomName,
-            queue: emailQueue == null || emailQueue.isEmpty ? email : emailQueue,
-            public: isMailboxPublic,
-            annotations: {'meshagent.service.id': serviceId},
-          );
-        } on meshagent_client.NotFoundException {
-          await client.createMailbox(
-            projectId: projectId,
-            address: email,
-            room: roomName,
-            queue: emailQueue == null || emailQueue.isEmpty ? email : emailQueue,
-            public: isMailboxPublic,
-            annotations: {'meshagent.service.id': serviceId},
-          );
-        }
-      }
-
       final routeRequests = <({String domain, String port})>[];
       for (final variable in inputVariables) {
         if (variable.type != 'route') {
