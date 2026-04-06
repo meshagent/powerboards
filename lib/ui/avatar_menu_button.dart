@@ -14,6 +14,32 @@ import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+String userAvatarInitialsFromEmail(String email) {
+  String initials = "U";
+  final normalizedEmail = email.trim();
+  if (normalizedEmail.isNotEmpty) {
+    final local = normalizedEmail.split("@").first;
+    final parts = local.split(RegExp(r"[._\- ]+")).where((p) => p.isNotEmpty).toList();
+
+    if (parts.length >= 2) {
+      initials = "${parts[0].characters.first}${parts[1].characters.first}";
+    } else if (parts.length == 1) {
+      initials = parts[0].characters.first;
+    }
+  }
+  return initials.toUpperCase();
+}
+
+enum UserAvatarVariant { header, standard }
+
+const double userAvatarHeaderDiameter = 40;
+const double userAvatarStandardDiameter = 32;
+
+double userAvatarDiameter(UserAvatarVariant variant) => switch (variant) {
+  UserAvatarVariant.header => userAvatarHeaderDiameter,
+  UserAvatarVariant.standard => userAvatarStandardDiameter,
+};
+
 class UserAvatarMenuButton extends StatefulWidget {
   const UserAvatarMenuButton({super.key, required this.projectId, required this.projects, this.boundaryContext});
   final String? projectId;
@@ -60,22 +86,6 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
     if (state.hasError && !state.isRefreshing) return false;
 
     return state.value == ProjectRole.admin;
-  }
-
-  String _initialsFromUser(Map<String, dynamic>? user) {
-    String initials = "U";
-    final email = (user?["email"] as String?)?.trim() ?? "";
-    if (email.isNotEmpty) {
-      final local = email.split("@").first;
-      final parts = local.split(RegExp(r"[._\- ]+")).where((p) => p.isNotEmpty).toList();
-
-      if (parts.length >= 2) {
-        initials = "${parts[0].characters.first}${parts[1].characters.first}";
-      } else if (parts.length == 1) {
-        initials = parts[0].characters.first;
-      }
-    }
-    return initials.toUpperCase();
   }
 
   void _signOut() {
@@ -140,7 +150,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
     return SignalBuilder(
       builder: (context, _) {
         final user = MeshagentAuth.current.getUser();
-        final initials = _initialsFromUser(user);
+        final initials = userAvatarInitialsFromEmail((user?["email"] as String?) ?? "");
         final displayName = ((user?["name"] as String?) ?? (user?["full_name"] as String?) ?? "").trim();
         final email = ((user?["email"] as String?) ?? "").trim();
         final title = displayName.isNotEmpty ? displayName : (email.isNotEmpty ? email : "Account");
@@ -155,7 +165,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
             title: title,
             description: description,
             onPressed: null,
-            leading: UserAvatarCircle(initials: initials, size: 32),
+            leading: UserAvatarCircle(initials: initials, variant: UserAvatarVariant.standard),
           ),
           AppMenuEntry(
             title: "Change project",
@@ -186,7 +196,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
                 decoration: ShadDecoration.none,
                 onPressed: controller.toggle,
                 onHoverChange: (hovering) => setState(() => hovered = hovering),
-                child: UserAvatarCircle(initials: initials, hovered: hovered),
+                child: UserAvatarCircle(initials: initials, variant: UserAvatarVariant.header, hovered: hovered),
               ),
             );
           },
@@ -197,10 +207,10 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
 }
 
 class UserAvatarCircle extends StatelessWidget {
-  const UserAvatarCircle({super.key, required this.initials, this.size = 40, this.hovered = false});
+  const UserAvatarCircle({super.key, required this.initials, this.variant = UserAvatarVariant.standard, this.hovered = false});
 
   final String initials;
-  final double size;
+  final UserAvatarVariant variant;
   final bool hovered;
 
   @override
@@ -212,10 +222,13 @@ class UserAvatarCircle extends StatelessWidget {
     final buttonTheme = theme.outlineButtonTheme;
     final hoverBackgroundColor = buttonTheme.hoverBackgroundColor ?? avatarAccent;
     final backgroundColor = avatarAccent;
+    final diameter = userAvatarDiameter(variant);
+    final baseFontSize = tt.small.fontSize ?? 14;
+    final fontSize = baseFontSize * (diameter / userAvatarHeaderDiameter);
 
     return Container(
-      width: size,
-      height: size,
+      width: diameter,
+      height: diameter,
       alignment: .center,
       decoration: BoxDecoration(
         shape: .circle,
@@ -224,7 +237,7 @@ class UserAvatarCircle extends StatelessWidget {
       ),
       child: Text(
         initials,
-        style: tt.small.copyWith(fontWeight: .w700, color: cs.foreground),
+        style: tt.small.copyWith(fontWeight: .w700, color: cs.foreground, fontSize: fontSize),
       ),
     );
   }

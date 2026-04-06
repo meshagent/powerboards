@@ -11,6 +11,7 @@ import 'package:powerboards/meshagent/grant.dart';
 import 'package:powerboards/meshagent/user_builder.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
+import 'package:powerboards/ui/avatar_menu_button.dart';
 
 import 'package:powerboards/widgets/select_users.dart';
 
@@ -112,14 +113,23 @@ class _UserGrantRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = ShadTheme.of(context).colorScheme;
+    final avatarInitials = userAvatarInitialsFromEmail(user.email);
 
     return Row(
       children: [
         Expanded(
-          child: Text(
-            user.email,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: cs.foreground),
+          child: Row(
+            children: [
+              UserAvatarCircle(initials: avatarInitials, variant: UserAvatarVariant.standard),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  user.email,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: cs.foreground),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(width: 8),

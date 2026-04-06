@@ -364,7 +364,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
   }
 
   Widget _buildOverlapAvatars(List<String> names, Set<ShadState> states) {
-    const avatarSize = 38.0;
+    const avatarSize = userAvatarStandardDiameter;
     const overlapOffset = 24.0;
     final width = avatarSize + (names.length - 1) * overlapOffset;
     final hovered = states.contains(ShadState.hovered);
@@ -379,7 +379,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
             left: index * overlapOffset,
             child: Tooltip(
               message: name,
-              child: UserAvatarCircle(initials: _initialsFromName(name), size: avatarSize, hovered: hovered),
+              child: UserAvatarCircle(initials: _initialsFromName(name), variant: UserAvatarVariant.standard, hovered: hovered),
             ),
           );
         }),
