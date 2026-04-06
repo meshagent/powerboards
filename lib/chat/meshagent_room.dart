@@ -19,7 +19,6 @@ import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:meshagent_flutter_dev/developer_console.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
-import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
@@ -921,16 +920,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         _lastRoomStatusText = status;
       });
     });
-
-    customViewers["thread"] = ({Key? key, required RoomClient room, required String filename, required Uri url}) {
-      return MeshagentThreadView(
-        client: room,
-        participantNames: [],
-        documentPath: filename,
-        joinMeeting: _joinMeeting,
-        projectId: widget.projectId,
-      );
-    };
   }
 
   @override

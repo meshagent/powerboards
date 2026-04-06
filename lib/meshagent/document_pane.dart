@@ -109,6 +109,7 @@ class _DocumentPane extends State<DocumentPane> {
   Widget _meshagentPreview() {
     final ext = _ext(widget.path);
     final allowEmptyDocumentViewer = switch (ext) {
+      "thread" => true,
       "transcript" => true,
       _ => false,
     };

@@ -1236,7 +1236,14 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   bool _isEditableTextFile(String path) {
     return switch (classifyFile(path)) {
-      FileKind.image || FileKind.video || FileKind.audio || FileKind.pdf || FileKind.parquet || FileKind.office || FileKind.custom => false,
+      FileKind.image ||
+      FileKind.video ||
+      FileKind.audio ||
+      FileKind.pdf ||
+      FileKind.parquet ||
+      FileKind.office ||
+      FileKind.custom ||
+      FileKind.thread => false,
       FileKind.code || FileKind.markdown => true,
       FileKind.unknown => false,
     };
