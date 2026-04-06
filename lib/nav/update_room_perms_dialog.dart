@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
@@ -114,29 +115,50 @@ class _UserGrantRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = ShadTheme.of(context).colorScheme;
     final avatarInitials = userAvatarInitialsFromEmail(user.email);
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
 
     return Row(
+      crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: [
         Expanded(
           child: Row(
+            crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
             children: [
               UserAvatarCircle(initials: avatarInitials, variant: UserAvatarVariant.standard),
-              const SizedBox(width: 12),
+              const SizedBox(width: 18),
               Expanded(
-                child: Text(
-                  user.email,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: cs.foreground),
-                ),
+                child: isMobile
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.email,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: GoogleFonts.inter(color: cs.foreground, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(grantSummary.role.displayName, style: TextStyle(color: cs.foreground)),
+                        ],
+                      )
+                    : Text(
+                        user.email,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(color: cs.foreground, fontWeight: FontWeight.w600),
+                      ),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 90,
-          child: Text(grantSummary.role.displayName, style: TextStyle(color: cs.foreground)),
-        ),
+        if (!isMobile) ...[
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 90,
+            child: Text(grantSummary.role.displayName, style: TextStyle(color: cs.foreground)),
+          ),
+        ] else ...[
+          const SizedBox(width: 12),
+        ],
 
         if (canEdit)
           _UserSettingsMenuButton(role: grantSummary.role, onSetOwner: setAsOwner, onSetNonOwner: setAsNonOwner, onRemove: onRemove)
@@ -228,7 +250,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
 
     return Padding(
       key: ValueKey(grant.userId),
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 9),
       child: _UserGrantRow(
         grantSummary: grant,
         user: user,
@@ -714,7 +736,8 @@ Future<void> showUpdateRoomPermsDialog(BuildContext context, {required String pr
                 room: room,
                 projectId: projectId,
                 title: 'Update room permissions',
-                description: 'Adjust who can manage settings and members for this room.',
+                description:
+                    'Owners control room setup, members, and permissions. Members can only collaborate, share ideas, and create content with agents.',
                 onAddUser: () => mode.value = _View.addUser,
               );
             case _View.addUser:
