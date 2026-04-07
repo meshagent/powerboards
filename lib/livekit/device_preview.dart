@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -15,7 +16,13 @@ import 'room.dart';
 class DevicePreview extends StatelessWidget {
   const DevicePreview({super.key, this.onJoin, this.onCancel});
 
-  final Function(bool enableVideo, bool enableAudio)? onJoin;
+  final void Function({
+    required bool enableVideo,
+    required bool enableAudio,
+    required bool videoUnavailable,
+    required bool audioUnavailable,
+  })?
+  onJoin;
   final VoidCallback? onCancel;
 
   @override
@@ -29,7 +36,13 @@ class DevicePreview extends StatelessWidget {
 class _DeviceSettings extends StatefulWidget {
   const _DeviceSettings({this.onJoin, this.onCancel});
 
-  final Function(bool enableVideo, bool enableAudio)? onJoin;
+  final void Function({
+    required bool enableVideo,
+    required bool enableAudio,
+    required bool videoUnavailable,
+    required bool audioUnavailable,
+  })?
+  onJoin;
   final VoidCallback? onCancel;
 
   @override
@@ -43,6 +56,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   bool _videoOn = false;
   bool _audioProcessing = false;
   bool _videoProcessing = false;
+  bool _audioUnavailable = false;
+  bool _videoUnavailable = false;
   String? _audioDeviceId;
   String? _audioOutputDeviceId;
   String? _videoDeviceId;
@@ -240,6 +255,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         if (mounted) {
           setState(() {
             _audio = track;
+            _audioUnavailable = false;
           });
         } else {
           await track.dispose();
@@ -249,6 +265,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           setState(() {
             _audioOn = false;
             _audio = null;
+            _audioUnavailable = true;
           });
           if (showErrors) {
             ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeAudioToggleError(error))));
@@ -279,6 +296,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         if (mounted) {
           setState(() {
             _video = track;
+            _videoUnavailable = false;
           });
         } else {
           await track.dispose();
@@ -288,6 +306,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           setState(() {
             _videoOn = false;
             _video = null;
+            _videoUnavailable = true;
           });
           if (showErrors) {
             ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeVideoToggleError(error))));
@@ -332,14 +351,16 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
   String get title {
     final deviceManager = DeviceManagerProvider.of(context);
-    final cameraState = deviceManager.canTurnOnCamera
+    final cameraAvailable = deviceManager.canTurnOnCamera && !_videoUnavailable;
+    final microphoneAvailable = deviceManager.canTurnOnMicrophone && !_audioUnavailable;
+    final cameraState = cameraAvailable
         ? _videoPending
               ? "starting"
               : _video != null
               ? "on"
               : "off"
         : "disabled";
-    final microphoneState = deviceManager.canTurnOnMicrophone
+    final microphoneState = microphoneAvailable
         ? _audioPending
               ? "starting"
               : _audio != null
@@ -357,10 +378,12 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   @override
   Widget build(BuildContext context) {
     final deviceManager = DeviceManagerProvider.of(context);
-    final videoOn = _video != null && deviceManager.canTurnOnCamera;
-    final audioOn = _audio != null && deviceManager.canTurnOnMicrophone;
-    final videoPending = _videoPending && deviceManager.canTurnOnCamera;
-    final audioPending = _audioPending && deviceManager.canTurnOnMicrophone;
+    final cameraAvailable = deviceManager.canTurnOnCamera && !_videoUnavailable;
+    final microphoneAvailable = deviceManager.canTurnOnMicrophone && !_audioUnavailable;
+    final videoOn = _video != null && cameraAvailable;
+    final audioOn = _audio != null && microphoneAvailable;
+    final videoPending = _videoPending && cameraAvailable;
+    final audioPending = _audioPending && microphoneAvailable;
 
     final aspectRatio = 3 / 2;
 
@@ -374,8 +397,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         : audioOn
         ? "Turn off microphone"
         : "Turn on microphone";
-    final cameraTooltipText = deviceManager.canTurnOnCamera ? cameraStatusText : "Camera disabled";
-    final audioTooltipText = deviceManager.canTurnOnMicrophone ? audioStatusText : "Microphone disabled";
+    final cameraTooltipText = cameraAvailable ? cameraStatusText : "Camera disabled";
+    final audioTooltipText = microphoneAvailable ? audioStatusText : "Microphone disabled";
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -404,6 +427,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             selectedVideoInputDeviceId: () => _videoDeviceId,
             selectedAudioInputDeviceId: () => _audioDeviceId,
             selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
+            cameraUnavailable: _videoUnavailable,
+            microphoneUnavailable: _audioUnavailable,
             presentation: ChangeDeviceButtonPresentation.dialog,
             renderButton: (onPressed) {
               if (showLabel) {
@@ -422,14 +447,19 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           );
         }
 
+        final availableToggleColor = ShadTheme.of(context).colorScheme.greenCustom;
+        final availableToggleForeground = ShadTheme.of(context).colorScheme.greenCustomForeground;
+        final unavailableToggleColor = ShadTheme.of(context).colorScheme.destructive;
+        final unavailableToggleForeground = ShadTheme.of(context).colorScheme.destructiveForeground;
+
         final previewControls = <Widget>[
           RoomToolbarButton(
             text: audioTooltipText,
             on: audioOn || audioPending,
-            onColor: ShadTheme.of(context).colorScheme.foreground,
-            onForeground: ShadTheme.of(context).colorScheme.background,
-            offColor: ShadTheme.of(context).colorScheme.destructive,
-            offForeground: Colors.white,
+            onColor: availableToggleColor,
+            onForeground: availableToggleForeground,
+            offColor: microphoneAvailable ? availableToggleColor : unavailableToggleColor,
+            offForeground: microphoneAvailable ? availableToggleForeground : unavailableToggleForeground,
             loading: audioPending,
             onPressed: !audioPending
                 ? () {
@@ -445,10 +475,10 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           RoomToolbarButton(
             text: cameraTooltipText,
             on: videoOn || videoPending,
-            onColor: ShadTheme.of(context).colorScheme.foreground,
-            onForeground: ShadTheme.of(context).colorScheme.background,
-            offColor: ShadTheme.of(context).colorScheme.destructive,
-            offForeground: Colors.white,
+            onColor: availableToggleColor,
+            onForeground: availableToggleForeground,
+            offColor: cameraAvailable ? availableToggleColor : unavailableToggleColor,
+            offForeground: cameraAvailable ? availableToggleForeground : unavailableToggleForeground,
             loading: videoPending,
             onPressed: !videoPending
                 ? () {
@@ -535,7 +565,12 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                     onPressed: audioPending || videoPending
                         ? null
                         : () {
-                            widget.onJoin?.call(videoOn, audioOn);
+                            widget.onJoin?.call(
+                              enableVideo: videoOn,
+                              enableAudio: audioOn,
+                              videoUnavailable: _videoUnavailable || !cameraAvailable,
+                              audioUnavailable: _audioUnavailable || !microphoneAvailable,
+                            );
                           },
                     child: const Text("Meet Now"),
                   );
@@ -593,7 +628,12 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                               onPressed: audioPending || videoPending
                                   ? null
                                   : () {
-                                      widget.onJoin?.call(videoOn, audioOn);
+                                      widget.onJoin?.call(
+                                        enableVideo: videoOn,
+                                        enableAudio: audioOn,
+                                        videoUnavailable: _videoUnavailable || !cameraAvailable,
+                                        audioUnavailable: _audioUnavailable || !microphoneAvailable,
+                                      );
                                     },
                               child: const Text("Meet Now"),
                             ),
@@ -661,7 +701,12 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                       onPressed: audioPending || videoPending
                           ? null
                           : () {
-                              widget.onJoin?.call(videoOn, audioOn);
+                              widget.onJoin?.call(
+                                enableVideo: videoOn,
+                                enableAudio: audioOn,
+                                videoUnavailable: _videoUnavailable || !cameraAvailable,
+                                audioUnavailable: _audioUnavailable || !microphoneAvailable,
+                              );
                             },
                       child: const Text("Meet Now"),
                     );

@@ -130,12 +130,21 @@ class _MeetingViewState extends State<MeetingView> {
         return Padding(
           padding: const .symmetric(horizontal: 20.0),
           child: DevicePreview(
-            onJoin: (enableVideo, enableAudio) {
+            onJoin: ({required enableVideo, required enableAudio, required videoUnavailable, required audioUnavailable}) {
               final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
               final navController = Controller.ofType<NavController>(context);
 
               if (videoChatConnection != null) {
-                videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
+                videoChatConnection.setRoomFromDoc(
+                  "",
+                  widget.room,
+                  "",
+                  video: enableVideo,
+                  audio: enableAudio,
+                  videoUnavailable: videoUnavailable,
+                  audioUnavailable: audioUnavailable,
+                  agentID: null,
+                );
               }
 
               meetingViewController.enterMeeting();
