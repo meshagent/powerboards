@@ -19,7 +19,7 @@ String userAvatarInitialsFromEmail(String email) {
   final normalizedEmail = email.trim();
   if (normalizedEmail.isNotEmpty) {
     final local = normalizedEmail.split("@").first;
-    final parts = local.split(RegExp(r"[._\- ]+")).where((p) => p.isNotEmpty).toList();
+    final parts = local.split(RegExp(r"[-._ ]+")).where((p) => p.isNotEmpty).toList();
 
     if (parts.length >= 2) {
       initials = "${parts[0].characters.first}${parts[1].characters.first}";
@@ -30,14 +30,16 @@ String userAvatarInitialsFromEmail(String email) {
   return initials.toUpperCase();
 }
 
-enum UserAvatarVariant { header, standard }
+enum UserAvatarVariant { header, standard, menu }
 
 const double userAvatarHeaderDiameter = 40;
 const double userAvatarStandardDiameter = 32;
+const double userAvatarMenuDiameter = 24;
 
 double userAvatarDiameter(UserAvatarVariant variant) => switch (variant) {
   UserAvatarVariant.header => userAvatarHeaderDiameter,
   UserAvatarVariant.standard => userAvatarStandardDiameter,
+  UserAvatarVariant.menu => userAvatarMenuDiameter,
 };
 
 class UserAvatarMenuButton extends StatefulWidget {
