@@ -33,6 +33,7 @@ import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
+import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/grant.dart' as grant;
 import 'package:powerboards/meshagent/loader.dart';
@@ -90,7 +91,13 @@ class _MobileFilesLocation {
       return "Files";
     }
 
-    return openedFile == null ? fileName : formatTranscriptFileNameForDisplay(fileName);
+    if (openedFile == null) {
+      return fileName;
+    }
+    if (isThreadPath(path)) {
+      return threadFileDisplayNameFromPath(path);
+    }
+    return formatTranscriptFileNameForDisplay(fileName);
   }
 
   String? get backFolderPath {
@@ -176,11 +183,10 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
 
   String? _displayNameForSelectedThread() {
     final document = _document;
-    if (document == null) {
-      return null;
-    }
-
     final selectedThreadPath = _normalizedSelectedThreadPath();
+    if (document == null) {
+      return defaultThreadDisplayNameFromPath(selectedThreadPath);
+    }
     for (final node in document.root.getChildren()) {
       if (node is! MeshElement || node.tagName != "thread") {
         continue;
@@ -193,14 +199,14 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
 
       final rawName = node.getAttribute("name");
       if (rawName is! String) {
-        return null;
+        return defaultThreadDisplayNameFromPath(selectedThreadPath);
       }
 
       final trimmedName = rawName.trim();
-      return trimmedName.isEmpty ? null : trimmedName;
+      return trimmedName.isEmpty ? defaultThreadDisplayNameFromPath(selectedThreadPath) : trimmedName;
     }
 
-    return null;
+    return defaultThreadDisplayNameFromPath(selectedThreadPath);
   }
 
   void _emitResolved() {
@@ -2165,7 +2171,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final agentKey = _selectedThreadAgentKey(
       services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!),
     );
-    final currentThreadLabel = selectedThreadPath == null ? "New thread" : (_selectedThreadLabelForAgentKey(agentKey) ?? "New thread");
+    final currentThreadLabel = selectedThreadPath == null
+        ? "New thread"
+        : (_selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
     final chatView = Padding(
       padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
       child: MeshagentThreadView(
