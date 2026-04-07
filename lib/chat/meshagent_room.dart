@@ -49,6 +49,7 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
@@ -335,8 +336,11 @@ class ParticipantsButton extends StatefulWidget {
 }
 
 class _ParticipantsButtonState extends State<ParticipantsButton> {
-  late final popoverController = ShadPopoverController();
+  late final popoverController = ShadContextMenuController();
   final statesController = ShadStatesController();
+  static const double _menuWidth = 320;
+  static const double _menuHeaderHeight = 53;
+  static const double _menuRowHeight = 40;
 
   String _initialFromText(String value) {
     final trimmed = value.trim();
@@ -350,7 +354,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
     if (trimmed.isEmpty) return "U";
 
     final localPart = trimmed.split("@").first;
-    final parts = localPart.split(RegExp(r"[._\- ]+")).where((part) => part.isNotEmpty).toList();
+    final parts = localPart.split(RegExp(r"[-._ ]+")).where((part) => part.isNotEmpty).toList();
 
     if (parts.length >= 2) {
       return "${_initialFromText(parts[0])}${_initialFromText(parts[1])}";
@@ -390,13 +394,13 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
   @override
   void dispose() {
     popoverController.dispose();
+    statesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
-    final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final nameSet = <String>{};
     final myName = (widget.localParticipant?.getAttribute("name") as String?)?.trim().toLowerCase();
@@ -420,52 +424,44 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
             builder: (BuildContext context, Set<ShadState> states, Widget? child) {
               return ShadButton.ghost(
                 statesController: statesController,
-                hoverBackgroundColor: cs.background,
+                backgroundColor: Colors.transparent,
+                hoverBackgroundColor: Colors.transparent,
                 padding: .zero,
                 onPressed: popoverController.toggle,
-                decoration: ShadDecoration(shape: .circle),
+                decoration: ShadDecoration.none,
                 child: _buildOverlapAvatars(sortedNames, states),
               );
             },
           )
         : ShadButton.outline(leading: Icon(LucideIcons.users), onPressed: popoverController.toggle, child: Text("+${nameSet.length}"));
 
-    return ShadPopover(
+    return AdaptiveShadContextMenu(
       controller: popoverController,
-      popover: (context) => Container(
-        width: 250,
-        padding: const .symmetric(vertical: 8),
-        child: Column(
-          spacing: 16,
-          mainAxisSize: .min,
-          mainAxisAlignment: .start,
-          crossAxisAlignment: .start,
+      constraints: const BoxConstraints(minWidth: _menuWidth, maxWidth: _menuWidth),
+      estimatedMenuWidth: _menuWidth,
+      estimatedMenuHeight: _menuHeaderHeight + sortedNames.length * _menuRowHeight,
+      items: [
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text("People here right now", style: tt.large),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              child: Text(
+                "People here right now",
+                style: tt.large.copyWith(fontWeight: FontWeight.w700, color: theme.colorScheme.foreground, fontSize: tt.p.fontSize),
+              ),
             ),
-            Column(
-              spacing: 8,
-              mainAxisSize: .min,
-              mainAxisAlignment: .start,
-              crossAxisAlignment: .start,
-              children: sortedNames.map((name) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.user, size: 16),
-                      SizedBox(width: 8),
-                      Flexible(child: Text(name, overflow: .ellipsis)),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
+            for (final name in sortedNames)
+              ShadContextMenuItem(
+                height: _menuRowHeight,
+                leading: UserAvatarCircle(initials: _initialsFromName(name), variant: UserAvatarVariant.menu),
+                onPressed: popoverController.hide,
+                child: Text(name, overflow: TextOverflow.ellipsis),
+              ),
           ],
         ),
-      ),
+      ],
       child: trigger,
     );
   }
