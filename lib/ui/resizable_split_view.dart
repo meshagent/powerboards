@@ -162,7 +162,13 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
       return;
     }
 
-    _applyCollapsedState(requestedCollapsed);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      _applyCollapsedState(requestedCollapsed);
+    });
   }
 
   double _sanitizePanelFraction(double? value, {required double fallback}) {

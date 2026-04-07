@@ -301,6 +301,7 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
   final PendingLocalMediaState pendingLocalMedia = PendingLocalMediaState();
   lk.Room? _observedRoom;
   lk.LocalParticipant? _observedLocalParticipant;
+  bool _isHangingUp = false;
 
   @override
   void initState() {
@@ -311,8 +312,6 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
 
   @override
   void dispose() {
-    super.dispose();
-
     _detachPendingLocalMediaListeners();
     pendingLocalMedia.dispose();
 
@@ -321,47 +320,55 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
       room.disconnect().whenComplete(() => room.dispose());
       this.room = null;
     }
+
+    super.dispose();
   }
 
   void hangup() {
     debugPrint("hanging up");
+    if (_isHangingUp) {
+      return;
+    }
+
     final room = this.room;
 
     if (room != null) {
+      _isHangingUp = true;
       pendingLocalMedia.clear();
       _detachPendingLocalMediaListeners();
 
-      pendingConnections = pendingConnections.whenComplete(() async {
-        debugPrint("pending connection finished");
-        final local = room.localParticipant;
-        if (local != null) {
-          debugPrint("disabling connection ${local.isCameraEnabled()}");
+      pendingConnections = pendingConnections
+          .whenComplete(() async {
+            debugPrint("pending connection finished");
+            final local = room.localParticipant;
+            if (local != null) {
+              debugPrint("disabling connection ${local.isCameraEnabled()}");
 
-          await local.setCameraEnabled(false);
-          await local.setMicrophoneEnabled(false);
-
-          if (local.videoTrackPublications.isNotEmpty) {
-            for (final track in local.videoTrackPublications) {
-              track.track?.mediaStreamTrack.stop();
-              track.track?.stop();
-              track.track?.dispose();
+              if (local.isCameraEnabled()) {
+                try {
+                  await local.setCameraEnabled(false);
+                } catch (err) {
+                  debugPrint("unable to disable camera during hangup $err");
+                }
+              }
+              if (local.isMicrophoneEnabled()) {
+                try {
+                  await local.setMicrophoneEnabled(false);
+                } catch (err) {
+                  debugPrint("unable to disable microphone during hangup $err");
+                }
+              }
+            } else {
+              debugPrint("no local participant");
             }
-          }
-          if (local.audioTrackPublications.isNotEmpty) {
-            for (final track in local.audioTrackPublications) {
-              track.track?.mediaStreamTrack.stop();
-              track.track?.stop();
-              track.track?.dispose();
-            }
-          }
-        } else {
-          debugPrint("no local participant");
-        }
 
-        await room.disconnect().whenComplete(() => room.dispose()).catchError((err) {
-          debugPrint("unable to disconnect $err");
-        });
-      });
+            await room.disconnect().whenComplete(() => room.dispose()).catchError((err) {
+              debugPrint("unable to disconnect $err");
+            });
+          })
+          .whenComplete(() {
+            _isHangingUp = false;
+          });
 
       _roomConnectFuture = null;
 
