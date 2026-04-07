@@ -176,6 +176,8 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   _FileLocation _location = const _FileLocation(folder: "", openedFile: null);
   String? get _openedFile => _location.openedFile;
+  bool _isDisposing = false;
+  bool get _canUpdateUi => mounted && !_isDisposing;
 
   bool _forceShowSelect = false;
   String _tab = 'preview';
@@ -245,6 +247,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   @override
   void dispose() {
+    _isDisposing = true;
     roomSub.cancel();
 
     uploadNotifications.dispose();
@@ -261,7 +264,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     _sortSig.dispose();
     _selectedSig.dispose();
     _folderSig.dispose();
-    unawaited(_closeThreadIndexDocument());
+    unawaited(_closeThreadIndexDocument(refreshUi: false));
 
     widget.client.localParticipant?.setAttribute("current_file", null);
     super.dispose();
@@ -368,7 +371,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     return entry.isFolder ? entry.name : _displayNameForPath(path);
   }
 
-  Future<void> _closeThreadIndexDocument() async {
+  Future<void> _closeThreadIndexDocument({bool refreshUi = true}) async {
     final document = _threadIndexDocument;
     final threadIndexPath = _threadIndexPath;
     if (document != null) {
@@ -385,13 +388,13 @@ class _FileManagerViewState extends State<FileManagerView> {
       } catch (_) {}
     }
 
-    if (mounted) {
+    if (refreshUi && _canUpdateUi) {
       setState(() {});
     }
   }
 
   void _onThreadIndexChanged() {
-    if (!mounted) {
+    if (!_canUpdateUi) {
       return;
     }
     _refreshThreadDisplayNames();
@@ -407,18 +410,21 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     await _closeThreadIndexDocument();
+    if (!_canUpdateUi) {
+      return;
+    }
     if (nextThreadIndexPath == null) {
       return;
     }
 
     try {
       final exists = await widget.client.storage.exists(nextThreadIndexPath);
-      if (!exists) {
+      if (!_canUpdateUi || !exists) {
         return;
       }
 
       final document = await widget.client.sync.open(nextThreadIndexPath);
-      if (!mounted || _threadIndexPathForFolder(_folderSig.value) != nextThreadIndexPath) {
+      if (!_canUpdateUi || _threadIndexPathForFolder(_folderSig.value) != nextThreadIndexPath) {
         try {
           await widget.client.sync.close(nextThreadIndexPath);
         } catch (_) {}
@@ -431,7 +437,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       _refreshThreadDisplayNames();
       unawaited(_backfillThreadDisplayNames());
     } catch (_) {
-      if (!mounted) {
+      if (!_canUpdateUi) {
         return;
       }
       setState(() {
@@ -472,6 +478,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (!mapEquals(_threadDisplayNamesByPath, next)) {
+      if (!_canUpdateUi) {
+        _threadDisplayNamesByPath = next;
+        return;
+      }
       setState(() {
         _threadDisplayNamesByPath = next;
       });
@@ -479,6 +489,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _backfillThreadDisplayNames() async {
+    if (!_canUpdateUi) {
+      return;
+    }
+
     final entries = storageEntries.state.value;
     if (entries == null) {
       return;
@@ -521,7 +535,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       final document = await widget.client.sync.open(path);
       try {
         final resolvedName = deriveThreadDisplayNameFromDocument(document);
-        if (!mounted || resolvedName == null || resolvedName.trim().isEmpty) {
+        if (!_canUpdateUi || resolvedName == null || resolvedName.trim().isEmpty) {
           return;
         }
 
