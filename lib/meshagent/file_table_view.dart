@@ -412,6 +412,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     try {
+      final exists = await widget.client.storage.exists(nextThreadIndexPath);
+      if (!exists) {
+        return;
+      }
+
       final document = await widget.client.sync.open(nextThreadIndexPath);
       if (!mounted || _threadIndexPathForFolder(_folderSig.value) != nextThreadIndexPath) {
         try {
@@ -486,6 +491,10 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
 
       final path = joinPaths(currentFolder, entry.name);
+      if (!shouldReadThreadDocumentForDisplayName(path)) {
+        continue;
+      }
+
       final currentDisplayName = _threadDisplayNamesByPath[path];
       if (!shouldBackfillThreadDisplayName(currentDisplayName) || _threadTitleResolutionsInFlight.contains(path)) {
         continue;
@@ -551,6 +560,13 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _setEntries(List<StorageEntry> entries) {
     storageEntries.state = ResourceState.ready(entries);
+    final hasThreadIndex = entries.any((entry) => !entry.isFolder && entry.name == _threadIndexFileName);
+    final expectedThreadIndexPath = _threadIndexPathForFolder(_folderSig.value);
+    if (hasThreadIndex && _threadIndexDocument == null && expectedThreadIndexPath != null) {
+      unawaited(_rebindThreadIndexDocument());
+    } else if (!hasThreadIndex && _threadIndexPath == expectedThreadIndexPath && _threadIndexDocument != null) {
+      unawaited(_closeThreadIndexDocument());
+    }
     unawaited(_backfillThreadDisplayNames());
   }
 
