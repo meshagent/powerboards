@@ -21,6 +21,7 @@ import 'package:meshagent_flutter_dev/developer_console.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
+import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
@@ -84,7 +85,12 @@ class _MobileFilesLocation {
       return "Files";
     }
 
-    return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? "Files";
+    final fileName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull;
+    if (fileName == null) {
+      return "Files";
+    }
+
+    return openedFile == null ? fileName : formatTranscriptFileNameForDisplay(fileName);
   }
 
   String? get backFolderPath {

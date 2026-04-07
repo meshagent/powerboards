@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:meshagent/room_server_client.dart';
+import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/theme/theme.dart';
@@ -131,9 +132,10 @@ class FilePickerMenuState extends State<FilePickerMenu> {
             PowerboardsMenuItemButton(child: Text("This folder is empty"))
           else
             ...files.map((entry) {
+              final displayName = formatTranscriptFileNameForDisplay(entry.name);
               return PowerboardsMenuItemButton(
                 onPressed: () => widget.onSelect(entry.name),
-                child: Row(children: [Expanded(child: Text(entry.name))]),
+                child: Row(children: [Expanded(child: Text(displayName))]),
               );
             }),
         ];

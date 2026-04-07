@@ -10,6 +10,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
+import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 
 import 'package:powerboards/livekit/camera_grid.dart';
 import 'package:powerboards/livekit/camera_strip.dart';
@@ -427,7 +428,7 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
                           await _invokeTranscriptionTool(
                             transcription: transcription!,
                             toolName: startRecording.name,
-                            input: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                            input: {"breakout_room": "", "path": "transcripts/meetings/${buildTranscriptFileName()}"},
                             successMessage: "Transcription started",
                             showToast: useCompressedPresentation,
                           );
@@ -442,7 +443,7 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
                             await _invokeTranscriptionTool(
                               transcription: transcription!,
                               toolName: startRecording.name,
-                              input: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                              input: {"breakout_room": "", "path": "transcripts/meetings/${buildTranscriptFileName()}"},
                               successMessage: "Transcription started",
                               showToast: useCompressedPresentation,
                             );

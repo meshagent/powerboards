@@ -20,6 +20,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
+import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
@@ -44,6 +45,15 @@ const double filePaneTableHeaderHeight = 48;
 bool _usesAdaptiveMobileLayout(BuildContext context) {
   final size = MediaQuery.sizeOf(context);
   return ResponsiveBreakpoints.of(context).isMobile || (size.width > size.height && size.shortestSide < 600);
+}
+
+String _displayFileName(String fileName) {
+  return formatTranscriptFileNameForDisplay(fileName);
+}
+
+String _displayPathName(String path) {
+  final fileName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+  return _displayFileName(fileName);
 }
 
 enum FileSortField { name, modified }
@@ -139,7 +149,7 @@ class _FilePathKey {
   static String displayNameFromKey(String key) {
     final trimmed = pathFromKey(key);
     final last = trimmed.split('/').where((s) => s.isNotEmpty).lastOrNull ?? trimmed;
-    return isFolderKey(key) ? '$last/' : last;
+    return isFolderKey(key) ? '$last/' : _displayFileName(last);
   }
 }
 
@@ -645,13 +655,14 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Future<bool> _confirmAndDelete(String fullPath, bool isFolder) async {
     final name = fullPath.split('/').where((s) => s.isNotEmpty).last;
+    final displayName = isFolder ? name : _displayFileName(name);
     final bool? confirmDelete = await showShadDialog<bool>(
       context: context,
       builder: (context) => PowerboardsShadDialog.compactAlert(
         title: const Text("Confirm Delete"),
         description: Padding(
           padding: EdgeInsets.only(bottom: 8),
-          child: Text("Are you sure you want to delete ${isFolder ? 'folder $name and all its contents' : name}?"),
+          child: Text("Are you sure you want to delete ${isFolder ? 'folder $displayName and all its contents' : displayName}?"),
         ),
         actions: [
           ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
@@ -1157,7 +1168,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return _buildBreadcrumb();
     }
 
-    final fileName = _openedFile!.split('/').last;
+    final fileName = _displayPathName(_openedFile!);
 
     return Row(
       spacing: desktopPaneHeaderButtonGap,
@@ -1620,7 +1631,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   double _estimateDesktopHeaderLeadingWidth(BuildContext context, double maxWidth) {
     final openedFile = _openedFile;
     if (openedFile != null) {
-      final fileName = openedFile.split('/').last;
+      final fileName = _displayPathName(openedFile);
       final closeActionWidth = 40.0 + desktopPaneHeaderButtonGap;
       final fileNameWidth = _measureBreadcrumbLabelWidth(context, fileName) + 24.0;
       return math.min(closeActionWidth + fileNameWidth, math.min(180.0, maxWidth * 0.24));
@@ -1736,7 +1747,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildFileNameOnly() {
-    final fileName = _openedFile!.split('/').last;
+    final fileName = _displayPathName(_openedFile!);
 
     return Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
   }
@@ -2404,6 +2415,7 @@ class _FileTableViewState extends State<FileTableView> {
                 final modifiedLabel = entry.updatedAt?.modified() ?? '';
                 final metadataLabel = <String>[if (sizeLabel != null) sizeLabel, if (modifiedLabel.isNotEmpty) modifiedLabel].join(' • ');
                 final showMetadataLabel = metadataLabel.isNotEmpty;
+                final displayName = entry.isFolder ? entry.name : _displayFileName(entry.name);
 
                 return Material(
                   color: isSelected ? const Color(0xFFF2F1FF) : shadCard,
@@ -2438,7 +2450,7 @@ class _FileTableViewState extends State<FileTableView> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(entry.name, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                Text(displayName, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
                                 if (showMetadataLabel) ...[
                                   const SizedBox(height: 4),
                                   Text(metadataLabel, style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -2497,6 +2509,7 @@ class _FileTableViewState extends State<FileTableView> {
           final isSelected = widget.selected.contains(key);
           final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
           final sizeLabel = showSize ? (_formatEntrySize(entry) ?? "") : "";
+          final displayName = entry.isFolder ? entry.name : _displayFileName(entry.name);
 
           return DataRow(
             onSelectChanged: (_) {
@@ -2530,7 +2543,7 @@ class _FileTableViewState extends State<FileTableView> {
                       _getIcon(entry),
                       const SizedBox(width: 10),
                       Flexible(
-                        child: Text(entry.name, style: dataStyle, overflow: TextOverflow.ellipsis),
+                        child: Text(displayName, style: dataStyle, overflow: TextOverflow.ellipsis),
                       ),
                     ],
                   ),
