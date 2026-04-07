@@ -9,10 +9,11 @@ import 'package:powerboards/livekit/room.dart';
 
 const audioIconSize = 16.0;
 const audioIconColor = Colors.white;
-const textStyle = TextStyle(color: audioIconColor, fontSize: 11, fontWeight: .w500);
+const _overlayElementShadows = [Shadow(color: Color(0xCC000000), blurRadius: 1.8, offset: Offset(0, 2))];
+const textStyle = TextStyle(color: audioIconColor, fontSize: 11, fontWeight: .w500, shadows: _overlayElementShadows);
 const _overlayPadding = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
 const _overlayBorderRadius = BorderRadius.all(Radius.circular(6));
-const _unmutedOverlayColor = Color(0x80222222);
+const _unmutedOverlayColor = Colors.transparent;
 const _mutedIconColor = Color(0xFFE84D5B);
 
 bool _isMicrophoneEnabled(lk.Participant participant) {
@@ -103,7 +104,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
                   child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(audioIconColor)),
                 )
               else
-                Icon(muted ? LucideIcons.micOff : LucideIcons.mic, color: iconColor, size: audioIconSize),
+                Icon(muted ? LucideIcons.micOff : LucideIcons.mic, color: iconColor, size: audioIconSize, shadows: _overlayElementShadows),
 
               if (name.isNotEmpty)
                 AnimatedBuilder(
@@ -130,7 +131,12 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
                   width: 20.0,
                   height: 20.0,
                   hoverBackgroundColor: Colors.transparent,
-                  icon: Icon(expanded ? LucideIcons.minimize2 : LucideIcons.expand, color: expandIconColor, size: 14),
+                  icon: Icon(
+                    expanded ? LucideIcons.minimize2 : LucideIcons.expand,
+                    color: expandIconColor,
+                    size: 14,
+                    shadows: _overlayElementShadows,
+                  ),
                   onPressed: () {
                     expandController.toggle(widget.participant.identity);
                   },
