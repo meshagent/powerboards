@@ -22,6 +22,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
+import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
@@ -319,16 +320,20 @@ Widget _buildPaneHeaderIconButton({
   required VoidCallback? onPressed,
   ShadButtonVariant variant = ShadButtonVariant.outline,
   Color? iconColor,
+  Color? backgroundColor,
+  Color? foregroundColor,
 }) {
   final iconWidget = Icon(icon, size: paneHeaderIconButtonIconSize, color: iconColor);
 
-  final button = switch (variant) {
-    ShadButtonVariant.primary => ShadIconButton(icon: iconWidget, onPressed: onPressed),
-    ShadButtonVariant.destructive => ShadIconButton.destructive(icon: iconWidget, onPressed: onPressed),
-    ShadButtonVariant.secondary => ShadIconButton.secondary(icon: iconWidget, onPressed: onPressed),
-    ShadButtonVariant.ghost => ShadIconButton.ghost(icon: iconWidget, onPressed: onPressed),
-    _ => ShadIconButton.outline(icon: iconWidget, onPressed: onPressed),
-  };
+  final button = backgroundColor != null || foregroundColor != null
+      ? ShadIconButton(icon: iconWidget, onPressed: onPressed, backgroundColor: backgroundColor, foregroundColor: foregroundColor)
+      : switch (variant) {
+          ShadButtonVariant.primary => ShadIconButton(icon: iconWidget, onPressed: onPressed),
+          ShadButtonVariant.destructive => ShadIconButton.destructive(icon: iconWidget, onPressed: onPressed),
+          ShadButtonVariant.secondary => ShadIconButton.secondary(icon: iconWidget, onPressed: onPressed),
+          ShadButtonVariant.ghost => ShadIconButton.ghost(icon: iconWidget, onPressed: onPressed),
+          _ => ShadIconButton.outline(icon: iconWidget, onPressed: onPressed),
+        };
 
   return Tooltip(message: tooltip, child: button);
 }
@@ -537,37 +542,63 @@ class MeetButton extends StatelessWidget {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final compact = CompactHeaderActions.compactOf(context);
     final theme = ShadTheme.of(context);
-    final buttonVariant = controller.inMeeting
-        ? ShadButtonVariant.primary
-        : meetingSessionActive
-        ? ShadButtonVariant.destructive
-        : ShadButtonVariant.outline;
-    final iconData = meetingSessionActive ? LucideIcons.circleDot : LucideIcons.video;
-    final iconColor = controller.inMeeting && meetingSessionActive ? theme.colorScheme.destructive : null;
+    final model = room.VideoRoomModel.maybeOf(context);
+    final pendingLocalMedia = model?.pendingLocalMedia;
 
-    if (isMobile || compact) {
-      return _buildPaneHeaderIconButton(
-        tooltip: "Meet",
-        icon: iconData,
-        iconColor: iconColor,
-        onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
-        variant: buttonVariant,
+    Widget buildMeetButton() {
+      final microphoneAvailable = !(pendingLocalMedia?.microphoneUnavailable ?? false);
+      final activeMeetingColor = microphoneAvailable ? theme.colorScheme.greenCustom : theme.colorScheme.destructive;
+      final activeMeetingForeground = microphoneAvailable
+          ? theme.colorScheme.greenCustomForeground
+          : theme.colorScheme.destructiveForeground;
+      final buttonVariant = controller.inMeeting
+          ? ShadButtonVariant.primary
+          : meetingSessionActive
+          ? ShadButtonVariant.primary
+          : ShadButtonVariant.outline;
+      final iconData = meetingSessionActive ? LucideIcons.circleDot : LucideIcons.video;
+      final iconColor = controller.inMeeting && meetingSessionActive ? activeMeetingColor : null;
+      final customBackgroundColor = !controller.inMeeting && meetingSessionActive ? activeMeetingColor : null;
+      final customForegroundColor = !controller.inMeeting && meetingSessionActive ? activeMeetingForeground : null;
+
+      if (isMobile || compact) {
+        return _buildPaneHeaderIconButton(
+          tooltip: "Meet",
+          icon: iconData,
+          iconColor: iconColor,
+          backgroundColor: customBackgroundColor,
+          foregroundColor: customForegroundColor,
+          onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
+          variant: buttonVariant,
+        );
+      }
+
+      return Tooltip(
+        message: "Meet",
+        child: SizedBox(
+          width: desktopPaneHeaderMeetButtonWidth,
+          child: ShadButton.raw(
+            variant: buttonVariant,
+            padding: _paneHeaderButtonPadding(compact: false),
+            backgroundColor: customBackgroundColor,
+            foregroundColor: customForegroundColor,
+            hoverBackgroundColor: customBackgroundColor,
+            hoverForegroundColor: customForegroundColor,
+            pressedBackgroundColor: customBackgroundColor,
+            pressedForegroundColor: customForegroundColor,
+            leading: Icon(iconData, color: iconColor),
+            onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
+            child: Text("Meet"),
+          ),
+        ),
       );
     }
 
-    return Tooltip(
-      message: "Meet",
-      child: SizedBox(
-        width: desktopPaneHeaderMeetButtonWidth,
-        child: ShadButton.raw(
-          variant: buttonVariant,
-          padding: _paneHeaderButtonPadding(compact: false),
-          leading: Icon(iconData, color: iconColor),
-          onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
-          child: Text("Meet"),
-        ),
-      ),
-    );
+    if (pendingLocalMedia == null) {
+      return buildMeetButton();
+    }
+
+    return ListenableBuilder(listenable: pendingLocalMedia, builder: (context, _) => buildMeetButton());
   }
 }
 
