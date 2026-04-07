@@ -2962,6 +2962,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 }
 
                 final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
+                final cs = ShadTheme.of(context).colorScheme;
                 if (isMobile) {
                   return _buildMobileRoomScaffold(
                     context,
@@ -2973,11 +2974,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 }
 
                 return SafeArea(
-                  child: Column(
-                    children: [
-                      ActionsRow(actions: actions),
-                      Expanded(child: _buildRoomLoading(context, title: "Loading room services")),
-                    ],
+                  child: ColoredBox(
+                    color: cs.card,
+                    child: Column(
+                      children: [
+                        ActionsRow(actions: actions),
+                        Expanded(child: _buildRoomLoading(context, title: "Loading room services")),
+                      ],
+                    ),
                   ),
                 );
               }

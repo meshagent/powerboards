@@ -82,6 +82,15 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
     );
   }
 
+  Widget _roomSafeAreaShell(Widget child) {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
+    return ColoredBox(
+      color: isMobile ? Colors.transparent : shadCard,
+      child: SafeArea(minimum: powerboardsMobileScreenSafeAreaMinimum, child: child),
+    );
+  }
+
   Widget _connectionProgress({RoomClient? room, String? fallbackStatusText}) {
     return Center(
       child: ConstrainedBox(
@@ -124,9 +133,8 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   Widget _withReservedRoomHeader(Widget child) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
-    return SafeArea(
-      minimum: powerboardsMobileScreenSafeAreaMinimum,
-      child: Column(
+    return _roomSafeAreaShell(
+      Column(
         children: [
           ColoredBox(
             color: isMobile ? Colors.transparent : shadCard,
@@ -148,9 +156,8 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   }
 
   Widget _roomDisconnectedCard() {
-    return SafeArea(
-      minimum: powerboardsMobileScreenSafeAreaMinimum,
-      child: _loadingBody(
+    return _roomSafeAreaShell(
+      _loadingBody(
         RoomEndedCard(
           title: "Disconnected from room",
           description: "You were disconnected from the room due to inactivity.",
@@ -161,11 +168,8 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   }
 
   Widget _roomConnectionFailedCard() {
-    return SafeArea(
-      minimum: powerboardsMobileScreenSafeAreaMinimum,
-      child: _loadingBody(
-        RoomEndedCard(title: "Unable to connect to room", description: "Please try reconnecting.", onReconnect: _reconnect),
-      ),
+    return _roomSafeAreaShell(
+      _loadingBody(RoomEndedCard(title: "Unable to connect to room", description: "Please try reconnecting.", onReconnect: _reconnect)),
     );
   }
 
