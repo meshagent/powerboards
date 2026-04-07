@@ -30,6 +30,8 @@ import 'main_wrapper.dart';
 import 'nav_page.dart';
 
 const homeKey = ValueKey("home");
+const _meshagentOfficialOAuthScope =
+    'profile project/* room/* create_users create_rooms admin developer connect_room delete_room update_room';
 
 class _OAuthPayloadState {
   const _OAuthPayloadState({required this.redirectUri});
@@ -303,7 +305,7 @@ Widget loginRequiredBuilder(BuildContext context, WidgetBuilder builder, Uri cur
     onAuthenticated: (returnUrl) => context.go(returnUrl),
     signInBuilder: signInBuilder,
     builder: builder,
-    scope: "email",
+    scope: _meshagentOfficialOAuthScope,
     extraQueryParams: {"state": state.encode()},
   );
 }
