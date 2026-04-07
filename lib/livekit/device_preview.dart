@@ -451,6 +451,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final availableToggleForeground = ShadTheme.of(context).colorScheme.greenCustomForeground;
         final unavailableToggleColor = ShadTheme.of(context).colorScheme.destructive;
         final unavailableToggleForeground = ShadTheme.of(context).colorScheme.destructiveForeground;
+        final meetNowButtonColor = microphoneAvailable ? availableToggleColor : unavailableToggleColor;
+        final meetNowButtonForeground = microphoneAvailable ? availableToggleForeground : unavailableToggleForeground;
 
         final previewControls = <Widget>[
           RoomToolbarButton(
@@ -560,8 +562,14 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 }
 
                 Widget buildJoinButton() {
-                  final button = ShadButton.destructive(
+                  final button = ShadButton(
                     padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                    backgroundColor: meetNowButtonColor,
+                    hoverBackgroundColor: meetNowButtonColor,
+                    pressedBackgroundColor: meetNowButtonColor,
+                    foregroundColor: meetNowButtonForeground,
+                    hoverForegroundColor: meetNowButtonForeground,
+                    pressedForegroundColor: meetNowButtonForeground,
                     onPressed: audioPending || videoPending
                         ? null
                         : () {
@@ -624,7 +632,13 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                         spacing: 12,
                         children: [
                           if (widget.onJoin != null)
-                            ShadButton.destructive(
+                            ShadButton(
+                              backgroundColor: meetNowButtonColor,
+                              hoverBackgroundColor: meetNowButtonColor,
+                              pressedBackgroundColor: meetNowButtonColor,
+                              foregroundColor: meetNowButtonForeground,
+                              hoverForegroundColor: meetNowButtonForeground,
+                              pressedForegroundColor: meetNowButtonForeground,
                               onPressed: audioPending || videoPending
                                   ? null
                                   : () {
@@ -696,8 +710,14 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                   }
 
                   Widget buildJoinButton() {
-                    final button = ShadButton.destructive(
+                    final button = ShadButton(
                       padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                      backgroundColor: meetNowButtonColor,
+                      hoverBackgroundColor: meetNowButtonColor,
+                      pressedBackgroundColor: meetNowButtonColor,
+                      foregroundColor: meetNowButtonForeground,
+                      hoverForegroundColor: meetNowButtonForeground,
+                      pressedForegroundColor: meetNowButtonForeground,
                       onPressed: audioPending || videoPending
                           ? null
                           : () {
