@@ -1,4 +1,5 @@
 import 'dart:core';
+import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -408,10 +409,16 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final useMobileLobbyLayout = isMobile || isLandscapePhone;
         final statusTextStyle = GoogleFonts.inter(fontSize: useMobileLobbyLayout ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
+        final contentHorizontalInset = switch (maxWidth) {
+          >= 850 => 0.0,
+          >= 520 => 48.0,
+          _ => 24.0,
+        };
+        final contentMaxWidth = math.max(0.0, maxWidth - (contentHorizontalInset * 2));
         final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - (useMobileLobbyLayout ? 190 : 150) : double.infinity;
 
         // Cap the width to 800px - large monitors preview overwhelming
-        double width = maxWidth > 800 ? 800 : maxWidth;
+        double width = contentMaxWidth > 800 ? 800 : contentMaxWidth;
         double height = width / aspectRatio;
 
         if (height > maxHeight) {
@@ -619,154 +626,160 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             );
           }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: Center(child: previewSection)),
-              Padding(
-                padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + 12),
-                child: isLandscapePhone
-                    ? buildLandscapePhoneFooter()
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        spacing: 12,
-                        children: [
-                          if (widget.onJoin != null)
-                            ShadButton(
-                              backgroundColor: meetNowButtonColor,
-                              hoverBackgroundColor: meetNowButtonColor,
-                              pressedBackgroundColor: meetNowButtonColor,
-                              foregroundColor: meetNowButtonForeground,
-                              hoverForegroundColor: meetNowButtonForeground,
-                              pressedForegroundColor: meetNowButtonForeground,
-                              onPressed: audioPending || videoPending
-                                  ? null
-                                  : () {
-                                      widget.onJoin?.call(
-                                        enableVideo: videoOn,
-                                        enableAudio: audioOn,
-                                        videoUnavailable: _videoUnavailable || !cameraAvailable,
-                                        audioUnavailable: _audioUnavailable || !microphoneAvailable,
-                                      );
-                                    },
-                              child: const Text("Meet Now"),
-                            ),
-                          if (widget.onCancel != null)
-                            ShadButton.outline(
-                              onPressed: () {
-                                widget.onCancel?.call();
-                              },
-                              child: const Text("Cancel"),
-                            ),
-                        ],
-                      ),
-              ),
-            ],
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: contentHorizontalInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: Center(child: previewSection)),
+                Padding(
+                  padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + 12),
+                  child: isLandscapePhone
+                      ? buildLandscapePhoneFooter()
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          spacing: 12,
+                          children: [
+                            if (widget.onJoin != null)
+                              ShadButton(
+                                backgroundColor: meetNowButtonColor,
+                                hoverBackgroundColor: meetNowButtonColor,
+                                pressedBackgroundColor: meetNowButtonColor,
+                                foregroundColor: meetNowButtonForeground,
+                                hoverForegroundColor: meetNowButtonForeground,
+                                pressedForegroundColor: meetNowButtonForeground,
+                                onPressed: audioPending || videoPending
+                                    ? null
+                                    : () {
+                                        widget.onJoin?.call(
+                                          enableVideo: videoOn,
+                                          enableAudio: audioOn,
+                                          videoUnavailable: _videoUnavailable || !cameraAvailable,
+                                          audioUnavailable: _audioUnavailable || !microphoneAvailable,
+                                        );
+                                      },
+                                child: const Text("Meet Now"),
+                              ),
+                            if (widget.onCancel != null)
+                              ShadButton.outline(
+                                onPressed: () {
+                                  widget.onCancel?.call();
+                                },
+                                child: const Text("Cancel"),
+                              ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
           );
         }
 
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          spacing: 20,
-          children: [
-            Container(
-              child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
-            ),
-            SizedBox(
-              height: height,
-              width: width,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(5),
-                child: Container(
-                  color: const Color(0xFF222222),
-                  foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
-                  child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: contentHorizontalInset),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            spacing: 20,
+            children: [
+              Container(
+                child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
+              ),
+              SizedBox(
+                height: height,
+                width: width,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: Container(
+                    color: const Color(0xFF222222),
+                    foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+                    child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
+                  ),
                 ),
               ),
-            ),
-            SizedBox(
-              width: width,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final compactActionButtons = constraints.maxWidth < 560;
-                  final actionButtonSpacing = compactActionButtons ? 6.0 : 8.0;
-                  final showDesktopDeviceSettingsLabel = !compactActionButtons;
-                  final footerControls = [...previewControls, buildDeviceSettingsButton(showLabel: showDesktopDeviceSettingsLabel)];
+              SizedBox(
+                width: width,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compactActionButtons = constraints.maxWidth < 560;
+                    final actionButtonSpacing = compactActionButtons ? 6.0 : 8.0;
+                    final showDesktopDeviceSettingsLabel = !compactActionButtons;
+                    final footerControls = [...previewControls, buildDeviceSettingsButton(showLabel: showDesktopDeviceSettingsLabel)];
 
-                  Widget buildCancelButton() {
-                    final button = ShadButton.outline(
-                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
-                      onPressed: () {
-                        widget.onCancel?.call();
-                      },
-                      child: const Text("Cancel"),
-                    );
+                    Widget buildCancelButton() {
+                      final button = ShadButton.outline(
+                        padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                        onPressed: () {
+                          widget.onCancel?.call();
+                        },
+                        child: const Text("Cancel"),
+                      );
 
-                    if (compactActionButtons) {
-                      return Expanded(child: button);
+                      if (compactActionButtons) {
+                        return Expanded(child: button);
+                      }
+
+                      return SizedBox(width: 120, child: button);
                     }
 
-                    return SizedBox(width: 120, child: button);
-                  }
+                    Widget buildJoinButton() {
+                      final button = ShadButton(
+                        padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                        backgroundColor: meetNowButtonColor,
+                        hoverBackgroundColor: meetNowButtonColor,
+                        pressedBackgroundColor: meetNowButtonColor,
+                        foregroundColor: meetNowButtonForeground,
+                        hoverForegroundColor: meetNowButtonForeground,
+                        pressedForegroundColor: meetNowButtonForeground,
+                        onPressed: audioPending || videoPending
+                            ? null
+                            : () {
+                                widget.onJoin?.call(
+                                  enableVideo: videoOn,
+                                  enableAudio: audioOn,
+                                  videoUnavailable: _videoUnavailable || !cameraAvailable,
+                                  audioUnavailable: _audioUnavailable || !microphoneAvailable,
+                                );
+                              },
+                        child: const Text("Meet Now"),
+                      );
 
-                  Widget buildJoinButton() {
-                    final button = ShadButton(
-                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
-                      backgroundColor: meetNowButtonColor,
-                      hoverBackgroundColor: meetNowButtonColor,
-                      pressedBackgroundColor: meetNowButtonColor,
-                      foregroundColor: meetNowButtonForeground,
-                      hoverForegroundColor: meetNowButtonForeground,
-                      pressedForegroundColor: meetNowButtonForeground,
-                      onPressed: audioPending || videoPending
-                          ? null
-                          : () {
-                              widget.onJoin?.call(
-                                enableVideo: videoOn,
-                                enableAudio: audioOn,
-                                videoUnavailable: _videoUnavailable || !cameraAvailable,
-                                audioUnavailable: _audioUnavailable || !microphoneAvailable,
-                              );
-                            },
-                      child: const Text("Meet Now"),
-                    );
+                      if (compactActionButtons) {
+                        return Expanded(child: button);
+                      }
 
-                    if (compactActionButtons) {
-                      return Expanded(child: button);
+                      return SizedBox(width: 120, child: button);
                     }
 
-                    return SizedBox(width: 120, child: button);
-                  }
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Wrap(
-                        alignment: WrapAlignment.start,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: footerControls,
-                      ),
-                      if (widget.onCancel != null || widget.onJoin != null) SizedBox(width: compactActionButtons ? 8 : 12),
-                      if (widget.onCancel != null || widget.onJoin != null)
-                        Expanded(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              if (widget.onCancel != null) buildCancelButton(),
-                              if (widget.onCancel != null && widget.onJoin != null) SizedBox(width: actionButtonSpacing),
-                              if (widget.onJoin != null) buildJoinButton(),
-                            ],
-                          ),
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Wrap(
+                          alignment: WrapAlignment.start,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: footerControls,
                         ),
-                      if (widget.onCancel == null && widget.onJoin == null) const Spacer(),
-                    ],
-                  );
-                },
+                        if (widget.onCancel != null || widget.onJoin != null) SizedBox(width: compactActionButtons ? 8 : 12),
+                        if (widget.onCancel != null || widget.onJoin != null)
+                          Expanded(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                if (widget.onCancel != null) buildCancelButton(),
+                                if (widget.onCancel != null && widget.onJoin != null) SizedBox(width: actionButtonSpacing),
+                                if (widget.onJoin != null) buildJoinButton(),
+                              ],
+                            ),
+                          ),
+                        if (widget.onCancel == null && widget.onJoin == null) const Spacer(),
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
