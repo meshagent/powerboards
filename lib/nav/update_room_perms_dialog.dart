@@ -434,9 +434,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       if (usersToAddToProject.isNotEmpty) {
         if (isMeAdmin) {
           // add users to project if needed
-          await Future.wait(
-            usersToAddToProject.map((u) => client.addUserToProjectByEmail(widget.projectId, u.email, canCreateRooms: true)),
-          );
+          await Future.wait(usersToAddToProject.map((u) => client.addUserToProjectByEmail(widget.projectId, u.email)));
         } else {
           if (!mounted) return;
 
