@@ -53,10 +53,12 @@ dependencies:
   localstorage: ^5.0.0
   mime: ^2.0.0
   path: ^1.9.1
+  path_provider: ^2.1.5
   responsive_framework: ^1.1.1
   screenshot: ^3.0.0
   sentry_flutter: ^9.6.0
   shared_preferences: ^2.2.2
+  share_plus: ^10.1.4
   siri_wave: ^2.0.0+1
   stream_transform: ^2.1.1
   syntax_highlight: ^0.4.0
