@@ -26,6 +26,7 @@ import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/path.dart';
+import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
 import 'package:powerboards/theme/theme.dart';
@@ -48,7 +49,7 @@ bool _usesAdaptiveMobileLayout(BuildContext context) {
 
 enum FileSortField { name, modified }
 
-enum _FileAction { open, download, upload, compressFolder, rename, delete }
+enum _FileAction { open, download, share, upload, compressFolder, rename, delete }
 
 String _relocatePathForMove(String currentPath, String sourcePath, String destinationPath) {
   if (currentPath == sourcePath) {
@@ -545,6 +546,18 @@ class _FileManagerViewState extends State<FileManagerView> {
   Future<void> _downloadFile(String path) async {
     final url = await widget.client.storage.downloadUrl(path);
     launchUrl(Uri.parse(url));
+  }
+
+  Future<void> _shareFile(String path) async {
+    try {
+      await shareRemoteStorageFile(context: context, client: widget.client, path: path);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ShadToaster.of(context).show(ShadToast.destructive(title: const Text('Unable to share file'), description: Text('$error')));
+    }
   }
 
   Future<void> _deleteFile(String path) async {
@@ -1166,6 +1179,9 @@ class _FileManagerViewState extends State<FileManagerView> {
         case _FileAction.download:
           await _downloadFile(fullPath);
           break;
+        case _FileAction.share:
+          await _shareFile(fullPath);
+          break;
       }
     }
 
@@ -1210,6 +1226,13 @@ class _FileManagerViewState extends State<FileManagerView> {
             leading: const Icon(LucideIcons.download, size: 16),
             onPressed: () => onAction(_FileAction.download),
             child: const Text('Download'),
+          ),
+        if (!isFolder && supportsNativeFileShare)
+          ShadContextMenuItem(
+            height: 40.0,
+            leading: const Icon(LucideIcons.share, size: 16),
+            onPressed: () => onAction(_FileAction.share),
+            child: const Text('Share'),
           ),
         if (isFolder)
           ShadContextMenuItem(
@@ -1607,6 +1630,14 @@ class _FileManagerViewState extends State<FileManagerView> {
             children: [
               _buildAdaptiveMobileOpenedFileTextAction(),
               const Spacer(),
+              if (supportsNativeFileShare) ...[
+                _buildAdaptiveMobileOpenedFileIconButton(
+                  tooltip: "Share",
+                  icon: LucideIcons.share,
+                  onPressed: () => _shareFile(_openedFile!),
+                ),
+                const SizedBox(width: 8),
+              ],
               _buildAdaptiveMobileOpenedFileIconButton(
                 tooltip: "Download",
                 icon: LucideIcons.download,
@@ -1712,6 +1743,16 @@ class _FileManagerViewState extends State<FileManagerView> {
       return [
         if (showLegacyMobileEditActions && _openedFileSupportsEditTabs) _buildOpenFileTabs(),
         if (showLegacyMobileEditActions && _openedFileSupportsExternalSave) _buildExternalSaveButton(compact: true),
+        if (supportsNativeFileShare)
+          Tooltip(
+            message: "Share",
+            child: ShadIconButton.outline(
+              icon: const Icon(LucideIcons.share),
+              onPressed: () {
+                _shareFile(_openedFile!);
+              },
+            ),
+          ),
         Tooltip(
           message: "Download",
           child: ShadIconButton.outline(

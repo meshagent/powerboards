@@ -12,6 +12,7 @@ import 'package:meshagent_flutter_shadcn/viewers/presentation.dart';
 import 'package:meshagent_flutter_shadcn/viewers/transcript.dart';
 import 'package:path/path.dart' as p;
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -173,6 +174,13 @@ class _DocumentPane extends State<DocumentPane> {
             message: "Download",
             child: ShadButton.outline(leading: const Icon(LucideIcons.download), onPressed: _download, child: const Text("Download")),
           ),
+          if (supportsNativeFileShare) ...[
+            const SizedBox(width: 8),
+            Tooltip(
+              message: "Share",
+              child: ShadButton.outline(leading: const Icon(LucideIcons.share), onPressed: _share, child: const Text("Share")),
+            ),
+          ],
           const SizedBox(width: 8),
           _openWithMenuButton(),
         ],
@@ -236,6 +244,15 @@ class _DocumentPane extends State<DocumentPane> {
   Future<void> _download() async {
     final url = await widget.room.storage.downloadUrl(widget.path);
     launchUrl(Uri.parse(url));
+  }
+
+  Future<void> _share() async {
+    try {
+      await shareRemoteStorageFile(context: context, client: widget.room, path: widget.path);
+    } catch (error) {
+      if (!mounted) return;
+      ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to share file"), description: Text('$error')));
+    }
   }
 
   @override

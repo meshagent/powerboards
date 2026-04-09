@@ -175,6 +175,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
     updatedQueryParameters['p'] = path;
+    updatedQueryParameters.remove('pane'); // remove the pane parameter to ensure file is shown
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
 
