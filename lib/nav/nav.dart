@@ -700,6 +700,7 @@ class _NavBar extends StatelessWidget {
                   decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.input),
                   key: const Key('room-list-search-field'),
                   onChanged: setFilter,
+                  inputPadding: isMobile ? const EdgeInsets.only(left: 5) : null,
                   placeholder: Text("Filter rooms..."),
                 );
 

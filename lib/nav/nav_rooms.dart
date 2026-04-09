@@ -189,61 +189,64 @@ class _RoomTileState extends State<_RoomTile> {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
-
-    final bg = widget.balanceLow ? cs.background : (widget.selected ? cs.secondaryForeground : Colors.transparent);
-
-    final textStyle = widget.balanceLow
-        ? tt.p.copyWith(color: cs.mutedForeground)
-        : (widget.selected ? tt.p.copyWith(color: cs.secondary) : tt.p);
-
     final name = roomDisplayName(widget.room);
 
-    return HoverBuilder(
-      builder: (context, hovered, focused) {
-        final breakpoints = ResponsiveBreakpoints.of(context);
-        final isMobile = breakpoints.isMobile;
-        final settingsColor = hovered || isMobile ? textStyle.color : Colors.transparent;
-        final menuItems = _buildContextMenuItems(context);
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) => HoverBuilder(
+        builder: (context, hovered, focused) {
+          final breakpoints = ResponsiveBreakpoints.of(context);
+          final isMobile = breakpoints.isMobile;
+          final menuOpen = controller.isOpen;
+          final bg = widget.balanceLow ? cs.background : (widget.selected ? cs.secondaryForeground : Colors.transparent);
+          final baseTextStyle = widget.balanceLow
+              ? tt.p.copyWith(color: cs.mutedForeground)
+              : (widget.selected ? tt.p.copyWith(color: cs.secondary) : tt.p);
+          final textColor = (baseTextStyle.color ?? cs.foreground).withValues(alpha: menuOpen ? 0.5 : 1.0);
+          final textStyle = baseTextStyle.copyWith(color: textColor);
+          final settingsColor = hovered || isMobile ? baseTextStyle.color : Colors.transparent;
+          final menuItems = _buildContextMenuItems(context);
 
-        return Container(
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: bg),
+          return Container(
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: bg),
 
-          child: ShadGestureDetector(
-            behavior: HitTestBehavior.opaque,
-            cursor: widget.balanceLow ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
-            onTap: widget.balanceLow ? null : widget.onTap,
-            child: Padding(
-              padding: const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(name, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
+            child: ShadGestureDetector(
+              behavior: HitTestBehavior.opaque,
+              cursor: widget.balanceLow ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
+              onTap: widget.balanceLow ? null : widget.onTap,
+              child: Padding(
+                padding: const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(name, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
 
-                  if (!widget.balanceLow)
-                    AdaptiveShadContextMenu(
-                      controller: controller,
-                      boundaryContext: widget.menuBoundaryContext,
-                      constraints: const BoxConstraints(minWidth: 200),
-                      estimatedMenuWidth: 200,
-                      estimatedMenuHeight: menuItems.length * 40.0 + 8.0,
-                      items: menuItems,
-                      child: ShadGestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: controller.toggle,
-                        child: SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: Center(child: Icon(LucideIcons.ellipsis, size: 20, color: settingsColor)),
+                    if (!widget.balanceLow)
+                      AdaptiveShadContextMenu(
+                        controller: controller,
+                        boundaryContext: widget.menuBoundaryContext,
+                        constraints: const BoxConstraints(minWidth: 200),
+                        estimatedMenuWidth: 200,
+                        estimatedMenuHeight: menuItems.length * 40.0 + 8.0,
+                        items: menuItems,
+                        child: ShadGestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: controller.toggle,
+                          child: SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: Center(child: Icon(LucideIcons.ellipsis, size: 20, color: settingsColor)),
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
