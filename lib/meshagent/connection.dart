@@ -132,20 +132,22 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
 
   Widget _withReservedRoomHeader(Widget child) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-
-    return _roomSafeAreaShell(
-      Column(
-        children: [
-          ColoredBox(
-            color: isMobile ? Colors.transparent : shadCard,
-            child: const SizedBox(height: headerHeight, width: double.infinity),
-          ),
-          Expanded(
-            child: ColoredBox(color: isMobile ? Colors.transparent : shadCard, child: child),
-          ),
-        ],
-      ),
+    final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+    final content = Column(
+      children: [
+        SizedBox(
+          height: headerHeight,
+          child: isSmallDisplay
+              ? Padding(
+                  padding: isMobile ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(children: [PowerboardsBackIconButton(onPressed: () => context.go("/"))]),
+                )
+              : null,
+        ),
+        Expanded(child: child),
+      ],
     );
+    return _roomSafeAreaShell(content);
   }
 
   void _reconnect() {

@@ -14,6 +14,8 @@ Widget _buildTestApp({
   double? preferredArea2Fraction = 0.75,
   double? minArea2Fraction = 0.5,
   double? collapseArea1Width = 300,
+  Widget area1 = const ColoredBox(color: Colors.red),
+  Widget area2 = const ColoredBox(color: Colors.blue),
 }) {
   return ShadApp(
     home: Scaffold(
@@ -32,8 +34,8 @@ Widget _buildTestApp({
             minArea2Fraction: minArea2Fraction,
             collapseArea1Width: collapseArea1Width,
             onCollapsedChanged: onCollapsedChanged,
-            area1: const ColoredBox(color: Colors.red),
-            area2: const ColoredBox(color: Colors.blue),
+            area1: area1,
+            area2: area2,
           ),
         ),
       ),
@@ -41,8 +43,70 @@ Widget _buildTestApp({
   );
 }
 
+class _StatefulTextArea extends StatefulWidget {
+  const _StatefulTextArea();
+
+  @override
+  State<_StatefulTextArea> createState() => _StatefulTextAreaState();
+}
+
+class _StatefulTextAreaState extends State<_StatefulTextArea> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: 200,
+          child: TextField(key: const ValueKey('area1-input'), controller: _controller),
+        ),
+      ),
+    );
+  }
+}
+
 void main() {
   group('ResizableSplitView', () {
+    testWidgets('preserves area1 state across split and collapse changes', (tester) async {
+      final controller = ResizableSplitViewController();
+
+      await tester.pumpWidget(
+        _buildTestApp(width: 960, split: true, allowCollapse: true, controller: controller, area1: const _StatefulTextArea()),
+      );
+
+      await tester.enterText(find.byKey(const ValueKey('area1-input')), 'draft comment');
+      expect(find.text('draft comment'), findsOneWidget);
+
+      await tester.pumpWidget(
+        _buildTestApp(width: 960, split: false, allowCollapse: true, controller: controller, area1: const _StatefulTextArea()),
+      );
+      await tester.pump();
+      expect(find.text('draft comment'), findsOneWidget);
+
+      await tester.pumpWidget(
+        _buildTestApp(width: 960, split: true, allowCollapse: true, controller: controller, area1: const _StatefulTextArea()),
+      );
+      await tester.pump();
+      expect(find.text('draft comment'), findsOneWidget);
+
+      controller.collapse();
+      await tester.pump();
+      await tester.pump();
+
+      controller.expand();
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('draft comment'), findsOneWidget);
+    });
+
     testWidgets('reports an automatic uncollapse when collapse becomes unavailable', (tester) async {
       final controller = ResizableSplitViewController();
       final collapsedStates = <bool>[];
@@ -108,7 +172,7 @@ void main() {
 
       await tester.pumpWidget(
         _buildTestApp(
-          width: 960,
+          width: 1400,
           split: true,
           allowCollapse: false,
           controller: controller,
@@ -166,6 +230,85 @@ void main() {
       await gesture.up();
       await tester.pump();
 
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('stops dragging when collapse happens during an active drag', (tester) async {
+      final controller = ResizableSplitViewController();
+
+      await tester.pumpWidget(_buildTestApp(width: 960, split: true, allowCollapse: true, controller: controller));
+      await tester.pump(const Duration(milliseconds: 40));
+
+      final dragStart = tester.getCenter(find.byIcon(LucideIcons.gripVertical));
+
+      final gesture = await tester.startGesture(dragStart);
+      await tester.pump();
+
+      await gesture.moveBy(const Offset(-32, 0));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      controller.collapse();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      expect(controller.collapsed, isTrue);
+
+      await gesture.moveBy(const Offset(80, 0));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      expect(controller.collapsed, isTrue);
+
+      await gesture.up();
+      await tester.pump();
+    });
+
+    testWidgets('can resize after switching into meeting split config', (tester) async {
+      final controller = ResizableSplitViewController();
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          width: 960,
+          split: true,
+          allowCollapse: false,
+          controller: controller,
+          minArea1Width: 360,
+          preferredArea2Fraction: null,
+          minArea2Fraction: null,
+          collapseArea1Width: null,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      await tester.pumpWidget(
+        _buildTestApp(
+          width: 1400,
+          split: true,
+          allowCollapse: true,
+          controller: controller,
+          minArea1Width: 58,
+          preferredArea2Fraction: 0.75,
+          minArea2Fraction: 0.5,
+          collapseArea1Width: 300,
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      expect(controller.collapsed, isFalse);
+      final dragStart = tester.getCenter(find.byIcon(LucideIcons.gripVertical));
+      final gesture = await tester.startGesture(dragStart);
+      await tester.pump();
+
+      await gesture.moveBy(const Offset(80, 0));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      expect(controller.collapsed, isFalse);
+      await gesture.up();
+      await tester.pump();
       expect(tester.takeException(), isNull);
     });
   });

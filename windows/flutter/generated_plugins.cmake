@@ -15,6 +15,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   irondash_engine_context
   livekit_client
   sentry_flutter
+  share_plus
   super_native_extensions
   url_launcher_windows
   window_to_front

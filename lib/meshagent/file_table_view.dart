@@ -29,6 +29,7 @@ import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
+import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
 import 'package:powerboards/theme/theme.dart';
@@ -55,7 +56,21 @@ String _displayFileName(String fileName) {
 
 enum FileSortField { name, modified }
 
-enum _FileAction { open, download, upload, compressFolder, delete }
+enum _FileAction { open, download, share, upload, compressFolder, rename, delete }
+
+String _relocatePathForMove(String currentPath, String sourcePath, String destinationPath) {
+  if (currentPath == sourcePath) {
+    return destinationPath;
+  }
+
+  final sourcePrefix = '$sourcePath/';
+  if (!currentPath.startsWith(sourcePrefix)) {
+    return currentPath;
+  }
+
+  final suffix = currentPath.substring(sourcePrefix.length);
+  return destinationPath.isEmpty ? suffix : '$destinationPath/$suffix';
+}
 
 class _FileLocation {
   final String folder;
@@ -302,24 +317,33 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onRoomEvent(RoomEvent event) {
-    final path = switch (event) {
-      FileUpdatedEvent e => e.path,
-      FileDeletedEvent e => e.path,
-      _ => null,
-    };
-    if (path == null) return;
+    if (event is FileUpdatedEvent) {
+      _onFileUpdated(event.path);
+      return;
+    }
 
+    if (event is FileDeletedEvent) {
+      _onFileDeleted(event.path);
+      return;
+    }
+
+    if (event is FileMovedEvent) {
+      _onFileMoved(event.sourcePath, event.destinationPath);
+    }
+  }
+
+  void _onFileUpdated(String path) {
     final ready = storageEntries.state.asReady;
     if (ready == null) return; // ignore if loading/error
 
     final name = path.split('/').where((s) => s.isNotEmpty).last;
     final next = List<StorageEntry>.of(ready.value);
     final now = DateTime.now();
-    final p = parentPath(path);
+    final fileParent = parentPath(path);
 
-    if (p != _folderSig.value) {
-      if (event is FileUpdatedEvent && parentPath(p) == _folderSig.value) {
-        final parentName = p.split('/').where((s) => s.isNotEmpty).last;
+    if (fileParent != _folderSig.value) {
+      if (parentPath(fileParent) == _folderSig.value) {
+        final parentName = fileParent.split('/').where((s) => s.isNotEmpty).last;
         final idx = next.indexWhere((e) => e.name == parentName);
         if (idx == -1) {
           next.add(StorageEntry(name: parentName, isFolder: true, size: null, createdAt: now, updatedAt: null));
@@ -329,25 +353,115 @@ class _FileManagerViewState extends State<FileManagerView> {
       return;
     }
 
-    if (event is FileUpdatedEvent) {
-      final idx = next.indexWhere((e) => e.name == name);
-      if (idx == -1) {
-        next.add(StorageEntry(name: name, isFolder: false, size: null, createdAt: now, updatedAt: now));
+    final idx = next.indexWhere((e) => e.name == name);
+    if (idx == -1) {
+      next.add(StorageEntry(name: name, isFolder: false, size: null, createdAt: now, updatedAt: now));
+      unawaited(_refreshCurrentFolder());
+    } else {
+      final old = next[idx];
+      next[idx] = StorageEntry(name: name, isFolder: false, size: old.size, createdAt: old.createdAt, updatedAt: now);
+      if (old.size == null || old.size == 0) {
         unawaited(_refreshCurrentFolder());
-      } else {
-        final old = next[idx];
-        next[idx] = StorageEntry(name: name, isFolder: false, size: old.size, createdAt: old.createdAt, updatedAt: now);
-        if (old.size == null || old.size == 0) {
-          unawaited(_refreshCurrentFolder());
-        }
       }
-    } else if (event is FileDeletedEvent) {
-      next.removeWhere((e) => e.name == name);
-      _toggleSelected(_FilePathKey.keyForPath(path, false), false);
-      _optimisticEmptyTextFiles.remove(path);
     }
 
     _setEntries(next);
+  }
+
+  void _onFileDeleted(String path) {
+    final ready = storageEntries.state.asReady;
+    if (ready == null) return; // ignore if loading/error
+
+    final name = path.split('/').where((s) => s.isNotEmpty).last;
+    final next = List<StorageEntry>.of(ready.value);
+    next.removeWhere((e) => e.name == name);
+    _toggleSelected(_FilePathKey.keyForPath(path, false), false);
+    _optimisticEmptyTextFiles.remove(path);
+
+    _setEntries(next);
+  }
+
+  bool _replaceLocationForMove(String sourcePath, String destinationPath) {
+    final nextFolder = _relocatePathForMove(_location.folder, sourcePath, destinationPath);
+    final openedFile = _location.openedFile;
+    final nextOpenedFile = openedFile == null ? null : _relocatePathForMove(openedFile, sourcePath, destinationPath);
+
+    if (nextFolder == _location.folder && nextOpenedFile == _location.openedFile) {
+      return false;
+    }
+
+    _openEntry(nextOpenedFile ?? nextFolder, nextOpenedFile == null);
+    return true;
+  }
+
+  void _moveSelectedPaths(String sourcePath, String destinationPath) {
+    _mutateSelected((selected) {
+      return selected.map((key) {
+        final isFolder = _FilePathKey.isFolderKey(key);
+        final movedPath = _relocatePathForMove(_FilePathKey.pathFromKey(key), sourcePath, destinationPath);
+        return _FilePathKey.keyForPath(movedPath, isFolder);
+      }).toSet();
+    });
+  }
+
+  void _moveOptimisticPaths(String sourcePath, String destinationPath) {
+    if (_optimisticEmptyTextFiles.isEmpty) {
+      return;
+    }
+
+    final movedPaths = _optimisticEmptyTextFiles.map((path) => _relocatePathForMove(path, sourcePath, destinationPath)).toSet();
+    _optimisticEmptyTextFiles
+      ..clear()
+      ..addAll(movedPaths);
+  }
+
+  void _moveThreadDisplayNameState(String sourcePath, String destinationPath) {
+    if (_threadDisplayNamesByPath.isEmpty && _threadTitleResolutionsInFlight.isEmpty) {
+      return;
+    }
+
+    String relocate(String path) => _relocatePathForMove(path, sourcePath, destinationPath);
+
+    final nextDisplayNames = <String, String>{for (final entry in _threadDisplayNamesByPath.entries) relocate(entry.key): entry.value};
+    final nextInFlight = _threadTitleResolutionsInFlight.map(relocate).toSet();
+
+    if (!_canUpdateUi) {
+      _threadDisplayNamesByPath = nextDisplayNames;
+      _threadTitleResolutionsInFlight
+        ..clear()
+        ..addAll(nextInFlight);
+      return;
+    }
+
+    final displayNamesChanged = !mapEquals(_threadDisplayNamesByPath, nextDisplayNames);
+    final inFlightChanged =
+        _threadTitleResolutionsInFlight.length != nextInFlight.length || !_threadTitleResolutionsInFlight.containsAll(nextInFlight);
+
+    if (!displayNamesChanged && !inFlightChanged) {
+      return;
+    }
+
+    setState(() {
+      _threadDisplayNamesByPath = nextDisplayNames;
+    });
+    _threadTitleResolutionsInFlight
+      ..clear()
+      ..addAll(nextInFlight);
+  }
+
+  void _onFileMoved(String sourcePath, String destinationPath) {
+    _moveSelectedPaths(sourcePath, destinationPath);
+    _moveOptimisticPaths(sourcePath, destinationPath);
+    _moveThreadDisplayNameState(sourcePath, destinationPath);
+
+    if (_replaceLocationForMove(sourcePath, destinationPath)) {
+      return;
+    }
+
+    final currentFolder = _folderSig.value;
+    if (parentPath(sourcePath) == currentFolder || parentPath(destinationPath) == currentFolder) {
+      unawaited(_refreshCurrentFolder());
+    }
   }
 
   String? _threadIndexPathForFolder(String folder) {
@@ -697,6 +811,18 @@ class _FileManagerViewState extends State<FileManagerView> {
     launchUrl(Uri.parse(url));
   }
 
+  Future<void> _shareFile(String path) async {
+    try {
+      await shareRemoteStorageFile(context: context, client: widget.client, path: path);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ShadToaster.of(context).show(ShadToast.destructive(title: const Text('Unable to share file'), description: Text('$error')));
+    }
+  }
+
   Future<void> _deleteFile(String path) async {
     await widget.client.storage.delete(path);
   }
@@ -715,6 +841,114 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     _removePath(folderPath, isFolder: true);
+  }
+
+  String? _validateRenameInput(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return 'Name cannot be empty';
+    }
+    if (trimmed.contains('/') || trimmed.contains('\\')) {
+      return 'Enter a name, not a path';
+    }
+    if (trimmed == '.' || trimmed == '..') {
+      return 'Enter a valid name';
+    }
+    return null;
+  }
+
+  Future<String?> _promptRenamePath(String fullPath, {required bool isFolder}) async {
+    final currentName = p.basename(fullPath);
+    return await showShadDialog<String>(
+      context: context,
+      builder: (context) {
+        return ControlledForm(
+          builder: (context, controller, formKey) {
+            void submit() {
+              if (!formKey.currentState!.saveAndValidate()) {
+                return;
+              }
+
+              final formData = formKey.currentState!.value;
+              final name = (formData["name"] as String? ?? "").trim();
+              Navigator.of(context).pop(name);
+            }
+
+            return PowerboardsShadDialog.compact(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              title: Text(isFolder ? "Rename folder" : "Rename file"),
+              actions: [
+                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
+                ShadButton(onPressed: submit, child: const Text("Rename")),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 16,
+                  children: [
+                    ShadInputFormField(
+                      id: "name",
+                      initialValue: currentName,
+                      validator: _validateRenameInput,
+                      label: const Text("Name"),
+                      autofocus: true,
+                      onSubmitted: (_) => submit(),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _renamePath(String fullPath, {required bool isFolder}) async {
+    final currentName = p.basename(fullPath);
+    final nextName = await _promptRenamePath(fullPath, isFolder: isFolder);
+    if (!mounted) {
+      return;
+    }
+    if (nextName == null || nextName == currentName) {
+      return;
+    }
+
+    final destinationPath = joinPaths(parentPath(fullPath), nextName);
+    final toaster = ShadToaster.of(context);
+
+    try {
+      if (await widget.client.storage.exists(destinationPath)) {
+        if (!mounted) {
+          return;
+        }
+
+        toaster.show(
+          ShadToast.destructive(
+            title: const Text("Rename failed"),
+            description: Text("${isFolder ? 'Folder' : 'File'} `$nextName` already exists in this location."),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
+
+      await widget.client.storage.move(fullPath, destinationPath);
+      if (!mounted) {
+        return;
+      }
+      _onFileMoved(fullPath, destinationPath);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      toaster.show(
+        ShadToast.destructive(title: const Text("Rename failed"), description: Text("$error"), duration: const Duration(seconds: 6)),
+      );
+    }
   }
 
   String _shellQuote(String value) {
@@ -1210,8 +1444,14 @@ class _FileManagerViewState extends State<FileManagerView> {
         case _FileAction.compressFolder:
           await _compressFolder(fullPath);
           break;
+        case _FileAction.rename:
+          await _renamePath(fullPath, isFolder: isFolder);
+          break;
         case _FileAction.download:
           await _downloadFile(fullPath);
+          break;
+        case _FileAction.share:
+          await _shareFile(fullPath);
           break;
       }
     }
@@ -1258,6 +1498,13 @@ class _FileManagerViewState extends State<FileManagerView> {
             onPressed: () => onAction(_FileAction.download),
             child: const Text('Download'),
           ),
+        if (!isFolder && supportsNativeFileShare)
+          ShadContextMenuItem(
+            height: 40.0,
+            leading: const Icon(LucideIcons.share, size: 16),
+            onPressed: () => onAction(_FileAction.share),
+            child: const Text('Share'),
+          ),
         if (isFolder)
           ShadContextMenuItem(
             height: 40.0,
@@ -1279,6 +1526,12 @@ class _FileManagerViewState extends State<FileManagerView> {
             onPressed: () => onAction(_FileAction.compressFolder),
             child: const Text('Compress folder'),
           ),
+        ShadContextMenuItem(
+          height: 40.0,
+          leading: const Icon(LucideIcons.pencil, size: 16),
+          onPressed: () => onAction(_FileAction.rename),
+          child: const Text('Rename'),
+        ),
         ShadContextMenuItem(
           height: 40.0,
           leading: const Icon(LucideIcons.trash, size: 16),
@@ -1648,6 +1901,14 @@ class _FileManagerViewState extends State<FileManagerView> {
             children: [
               _buildAdaptiveMobileOpenedFileTextAction(),
               const Spacer(),
+              if (supportsNativeFileShare) ...[
+                _buildAdaptiveMobileOpenedFileIconButton(
+                  tooltip: "Share",
+                  icon: LucideIcons.share,
+                  onPressed: () => _shareFile(_openedFile!),
+                ),
+                const SizedBox(width: 8),
+              ],
               _buildAdaptiveMobileOpenedFileIconButton(
                 tooltip: "Download",
                 icon: LucideIcons.download,
@@ -1753,6 +2014,16 @@ class _FileManagerViewState extends State<FileManagerView> {
       return [
         if (showLegacyMobileEditActions && _openedFileSupportsEditTabs) _buildOpenFileTabs(),
         if (showLegacyMobileEditActions && _openedFileSupportsExternalSave) _buildExternalSaveButton(compact: true),
+        if (supportsNativeFileShare)
+          Tooltip(
+            message: "Share",
+            child: ShadIconButton.outline(
+              icon: const Icon(LucideIcons.share),
+              onPressed: () {
+                _shareFile(_openedFile!);
+              },
+            ),
+          ),
         Tooltip(
           message: "Download",
           child: ShadIconButton.outline(
