@@ -1460,6 +1460,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       FileKind.pdf ||
       FileKind.parquet ||
       FileKind.office ||
+      FileKind.lance ||
       FileKind.custom ||
       FileKind.thread => false,
       FileKind.code || FileKind.markdown => true,
