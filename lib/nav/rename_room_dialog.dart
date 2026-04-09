@@ -5,7 +5,7 @@ import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 Future<String?> showRenameRoomDialog(
   BuildContext context, {
   String title = 'Rename room',
-  String description = 'Use this a short, memorable name.',
+  String description = 'Use a short memorable name.',
   String initialValue = '',
   String label = 'Name',
   String placeholder = 'e.g. General',
