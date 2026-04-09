@@ -43,10 +43,11 @@ double userAvatarDiameter(UserAvatarVariant variant) => switch (variant) {
 };
 
 class UserAvatarMenuButton extends StatefulWidget {
-  const UserAvatarMenuButton({super.key, required this.projectId, required this.projects, this.boundaryContext});
+  const UserAvatarMenuButton({super.key, required this.projectId, required this.projects, this.boundaryContext, this.avatarSize = 40});
   final String? projectId;
   final Resource<List<Project>> projects;
   final BuildContext? boundaryContext;
+  final double avatarSize;
 
   @override
   State<UserAvatarMenuButton> createState() => _UserAvatarMenuButtonState();
@@ -198,7 +199,8 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
                 decoration: ShadDecoration.none,
                 onPressed: controller.toggle,
                 onHoverChange: (hovering) => setState(() => hovered = hovering),
-                child: UserAvatarCircle(initials: initials, variant: UserAvatarVariant.header, hovered: hovered),
+<<<<<<< HEAD
+                child: UserAvatarCircle(initials: initials, size: widget.avatarSize, hovered: hovered),
               ),
             );
           },
@@ -209,10 +211,17 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
 }
 
 class UserAvatarCircle extends StatelessWidget {
-  const UserAvatarCircle({super.key, required this.initials, this.variant = UserAvatarVariant.standard, this.hovered = false});
+  const UserAvatarCircle({
+    super.key,
+    required this.initials,
+    this.variant = UserAvatarVariant.standard,
+    this.size,
+    this.hovered = false,
+  });
 
   final String initials;
   final UserAvatarVariant variant;
+  final double? size;
   final bool hovered;
 
   @override
@@ -224,7 +233,7 @@ class UserAvatarCircle extends StatelessWidget {
     final buttonTheme = theme.outlineButtonTheme;
     final hoverBackgroundColor = buttonTheme.hoverBackgroundColor ?? avatarAccent;
     final backgroundColor = avatarAccent;
-    final diameter = userAvatarDiameter(variant);
+    final diameter = size ?? userAvatarDiameter(variant);
     final baseFontSize = tt.small.fontSize ?? 14;
     final fontSize = baseFontSize * (diameter / userAvatarHeaderDiameter);
 

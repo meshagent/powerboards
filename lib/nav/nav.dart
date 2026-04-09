@@ -694,14 +694,21 @@ class _NavBar extends StatelessWidget {
           const SizedBox(height: desktopPaneSecondaryControlTopOffset),
           Padding(
             padding: horizontalPadding,
-            child: SizedBox(
-              height: desktopPaneSecondaryControlHeight,
-              child: ShadInput(
-                decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.input),
-                key: const Key('room-list-search-field'),
-                onChanged: setFilter,
-                placeholder: Text("Filter rooms..."),
-              ),
+            child: Builder(
+              builder: (context) {
+                final filterInput = ShadInput(
+                  decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.input),
+                  key: const Key('room-list-search-field'),
+                  onChanged: setFilter,
+                  placeholder: Text("Filter rooms..."),
+                );
+
+                if (isMobile) {
+                  return filterInput;
+                }
+
+                return SizedBox(height: desktopPaneSecondaryControlHeight, child: filterInput);
+              },
             ),
           ),
           const SizedBox(height: desktopPaneSecondaryRowContentGap),
@@ -790,6 +797,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     final projectList = widget.projects.state.value ?? const <Project>[];
     final selectedProject = projectList.firstWhereOrNull((p) => p.id == widget.projectId);
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+    final mobileHeaderControlSize = desktopPaneHeaderCompactButtonWidth;
     final displayName = selectedProject?.name ?? "Select project";
     final projectTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: theme.colorScheme.foreground);
 
@@ -806,14 +814,36 @@ class _NavBarTopState extends State<_NavBarTop> {
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  const Positioned(left: 0, child: NavMainLogo()),
+                  Positioned(
+                    left: 0,
+                    child: SizedBox(
+                      width: mobileHeaderControlSize,
+                      height: headerHeight,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: NavMainLogo(size: mobileHeaderControlSize - 8),
+                      ),
+                    ),
+                  ),
                   Positioned(
                     right: 0,
-                    child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+                    child: SizedBox(
+                      width: mobileHeaderControlSize,
+                      height: headerHeight,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: UserAvatarMenuButton(
+                          projectId: widget.projectId,
+                          projects: widget.projects,
+                          boundaryContext: context,
+                          avatarSize: mobileHeaderControlSize,
+                        ),
+                      ),
+                    ),
                   ),
                   Positioned.fill(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 56),
+                      padding: EdgeInsets.symmetric(horizontal: mobileHeaderControlSize + 8),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           return Center(
