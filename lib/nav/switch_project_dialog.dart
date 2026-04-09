@@ -67,6 +67,7 @@ class SwitchProjectDialog extends StatelessWidget {
     return PowerboardsShadDialog.listPicker(
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
+      mobilePresentation: PowerboardsDialogMobilePresentation.fullScreen,
       actions: [
         ShadButton.outline(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
         ShadButton(
