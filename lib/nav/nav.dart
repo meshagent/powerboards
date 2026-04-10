@@ -800,7 +800,12 @@ class _NavBarTopState extends State<_NavBarTop> {
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final mobileHeaderControlSize = desktopPaneHeaderCompactButtonWidth;
     final displayName = selectedProject?.name ?? "Select project";
-    final projectTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: theme.colorScheme.foreground);
+    final projectTitleStyle = GoogleFonts.inter(
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+      height: 1.2,
+      color: theme.colorScheme.foreground,
+    );
 
     return Container(
       padding: isSmallDisplay ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
@@ -847,21 +852,33 @@ class _NavBarTopState extends State<_NavBarTop> {
                       padding: EdgeInsets.symmetric(horizontal: mobileHeaderControlSize + 8),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
-                          return Center(
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-                              child: ShadButton.ghost(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                onPressed: _switchProject,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Flexible(
-                                      child: Text(displayName, style: projectTitleStyle, overflow: TextOverflow.ellipsis, maxLines: 1),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
-                                  ],
+                          return SizedBox(
+                            width: constraints.maxWidth,
+                            child: ShadButton.ghost(
+                              expands: true,
+                              height: desktopPaneHeaderContentHeight,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              onPressed: _switchProject,
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          displayName,
+                                          style: projectTitleStyle,
+                                          strutStyle: StrutStyle.fromTextStyle(projectTitleStyle, forceStrutHeight: true),
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -905,6 +922,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                                 child: Text(
                                   displayName,
                                   style: projectTitleStyle,
+                                  strutStyle: StrutStyle.fromTextStyle(projectTitleStyle, forceStrutHeight: true),
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.center,
                                   maxLines: 1,
