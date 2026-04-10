@@ -64,21 +64,23 @@ class SwitchProjectDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final actions = [
+      ShadButton.outline(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+      ShadButton(
+        leading: const Icon(LucideIcons.clipboardPlus),
+        onPressed: () {
+          Navigator.of(context).pop();
+          onNewProject();
+        },
+        child: const Text('New Project'),
+      ),
+    ];
+
     return PowerboardsShadDialog.listPicker(
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
       mobilePresentation: PowerboardsDialogMobilePresentation.fullScreen,
-      actions: [
-        ShadButton.outline(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        ShadButton(
-          leading: const Icon(LucideIcons.clipboardPlus),
-          onPressed: () {
-            Navigator.of(context).pop();
-            onNewProject();
-          },
-          child: const Text('New Project'),
-        ),
-      ],
+      actions: actions,
       child: Padding(
         padding: powerboardsDialogScrollableListPadding,
         child: ConstrainedBox(

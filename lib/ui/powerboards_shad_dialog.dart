@@ -14,6 +14,10 @@ const double _desktopDialogCloseButtonSize = 32;
 const double _desktopDialogCloseIconSize = 24;
 const double _desktopDialogCloseButtonTop = 20;
 const double _desktopDialogCloseButtonInset = 24;
+const double _mobileFullScreenDialogTitleTopPadding = 40;
+const double _mobileFullScreenDialogHorizontalPadding = 24;
+const double _mobileFullScreenDialogBottomPadding = 48;
+const double _mobileFullScreenDialogTitleRowHeight = 34;
 const double _compactDesktopDialogWidthThreshold = 420;
 const double _desktopDialogActionMinWidth = 152;
 const double _desktopDialogActionMaxWidth = 220;
@@ -311,8 +315,11 @@ class PowerboardsShadDialog extends StatelessWidget {
     final mediaQuery = MediaQuery.maybeOf(context);
     final screenSize = mediaQuery?.size ?? const Size(1024.0, 768.0);
     final isMobile = screenSize.width < 600;
-    final mobileTopInset = isMobile ? powerboardsMobileScreenTopInset : 0.0;
-    final mobileBottomInset = isMobile ? powerboardsMobileScreenBottomInset : 0.0;
+    final usesMobileFullScreenPresentation = isMobile && mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen;
+    final mobileTopInset = usesMobileFullScreenPresentation
+        ? (powerboardsMobileScreenTopInset + powerboardsMobileScreenBottomInset) * 2
+        : (isMobile ? powerboardsMobileScreenTopInset : 0.0);
+    final mobileBottomInset = usesMobileFullScreenPresentation ? 0.0 : (isMobile ? powerboardsMobileScreenBottomInset : 0.0);
     final effectiveConstraints = _resolveDialogConstraints(
       constraints,
       screenSize: screenSize,
@@ -328,6 +335,21 @@ class PowerboardsShadDialog extends StatelessWidget {
     final effectiveCloseIconPosition =
         closeIconPosition ??
         (isMobile ? null : const ShadPosition(top: _desktopDialogCloseButtonTop, right: _desktopDialogCloseButtonInset));
+    final effectiveScrollable = _resolveDialogScrollable(scrollable, usesMobileFullScreenPresentation: usesMobileFullScreenPresentation);
+    final effectiveUseSafeArea = _resolveDialogUseSafeArea(useSafeArea, usesMobileFullScreenPresentation: usesMobileFullScreenPresentation);
+    final effectivePadding = _resolveDialogPadding(padding, usesMobileFullScreenPresentation: usesMobileFullScreenPresentation);
+    final effectiveChild = usesMobileFullScreenPresentation
+        ? _buildMobileFullScreenDialogContent(
+            context,
+            title: title,
+            description: description,
+            child: child,
+            titleStyle: titleStyle,
+            descriptionStyle: descriptionStyle,
+            closeIconData: closeIconData,
+            gap: gap ?? 8,
+          )
+        : child;
     final effectiveActions = _buildDialogActions(
       actions,
       isMobile: isMobile,
@@ -350,22 +372,21 @@ class PowerboardsShadDialog extends StatelessWidget {
             : ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisAlignment.start : MainAxisAlignment.end));
     final effectiveTitleTextAlign = titleTextAlign ?? TextAlign.left;
     final effectiveDescriptionTextAlign = descriptionTextAlign ?? TextAlign.left;
-    final effectiveAlignment =
-        alignment ?? (isMobile && mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen ? Alignment.topCenter : null);
+    final effectiveAlignment = alignment ?? (usesMobileFullScreenPresentation ? Alignment.bottomCenter : null);
 
     return ShadDialog.raw(
       key: key,
       variant: variant,
-      title: title,
-      description: description,
+      title: usesMobileFullScreenPresentation ? null : title,
+      description: usesMobileFullScreenPresentation ? null : description,
       actions: effectiveActions,
-      closeIcon: effectiveCloseIcon,
-      closeIconData: effectiveCloseIcon == null ? closeIconData : null,
-      closeIconPosition: effectiveCloseIconPosition,
+      closeIcon: usesMobileFullScreenPresentation ? const SizedBox.shrink() : effectiveCloseIcon,
+      closeIconData: usesMobileFullScreenPresentation ? null : (effectiveCloseIcon == null ? closeIconData : null),
+      closeIconPosition: usesMobileFullScreenPresentation ? const ShadPosition(top: 0, right: 0) : effectiveCloseIconPosition,
       radius: radius,
       backgroundColor: backgroundColor,
       expandActionsWhenTiny: expandActionsWhenTiny,
-      padding: padding,
+      padding: effectivePadding,
       gap: gap,
       constraints: effectiveConstraints,
       border: border,
@@ -382,16 +403,104 @@ class PowerboardsShadDialog extends StatelessWidget {
       alignment: effectiveAlignment,
       mainAxisAlignment: mainAxisAlignment,
       crossAxisAlignment: crossAxisAlignment,
-      scrollable: scrollable,
+      scrollable: effectiveScrollable,
       scrollPadding: scrollPadding,
       actionsGap: actionsGap,
-      useSafeArea: useSafeArea,
+      useSafeArea: effectiveUseSafeArea,
       titlePinned: titlePinned,
       descriptionPinned: descriptionPinned,
       actionsPinned: actionsPinned,
-      child: child,
+      child: effectiveChild,
     );
   }
+}
+
+Widget? _buildMobileFullScreenDialogContent(
+  BuildContext context, {
+  required Widget? title,
+  required Widget? description,
+  required Widget? child,
+  required TextStyle? titleStyle,
+  required TextStyle? descriptionStyle,
+  required IconData? closeIconData,
+  required double gap,
+}) {
+  if (title == null && description == null && child == null) {
+    return null;
+  }
+
+  final theme = ShadTheme.of(context);
+  final resolvedTitleStyle = (titleStyle ?? theme.textTheme.large).fallback(color: theme.colorScheme.foreground);
+  final resolvedDescriptionStyle = (descriptionStyle ?? theme.textTheme.muted).fallback(color: theme.colorScheme.mutedForeground);
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    mainAxisSize: MainAxisSize.max,
+    children: [
+      if (title != null)
+        SizedBox(
+          height: _mobileFullScreenDialogTitleRowHeight,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: DefaultTextStyle(style: resolvedTitleStyle, textAlign: TextAlign.left, child: title),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(width: 20, height: 20, child: _PowerboardsMobileDialogCloseButton(iconData: closeIconData)),
+            ],
+          ),
+        )
+      else
+        Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(width: 20, height: 20, child: _PowerboardsMobileDialogCloseButton(iconData: closeIconData)),
+        ),
+      if (description != null) ...[
+        SizedBox(height: gap),
+        DefaultTextStyle(style: resolvedDescriptionStyle, textAlign: TextAlign.left, child: description),
+      ],
+      if (child != null) ...[
+        SizedBox(height: gap),
+        Expanded(
+          child: Align(alignment: Alignment.topCenter, child: child),
+        ),
+      ],
+    ],
+  );
+}
+
+bool? _resolveDialogScrollable(bool? scrollable, {required bool usesMobileFullScreenPresentation}) {
+  if (usesMobileFullScreenPresentation) {
+    return false;
+  }
+
+  return scrollable;
+}
+
+bool? _resolveDialogUseSafeArea(bool? useSafeArea, {required bool usesMobileFullScreenPresentation}) {
+  if (usesMobileFullScreenPresentation) {
+    return false;
+  }
+
+  return useSafeArea;
+}
+
+EdgeInsetsGeometry? _resolveDialogPadding(EdgeInsetsGeometry? padding, {required bool usesMobileFullScreenPresentation}) {
+  if (padding != null) {
+    return padding;
+  }
+
+  if (!usesMobileFullScreenPresentation) {
+    return null;
+  }
+
+  return const EdgeInsets.fromLTRB(
+    _mobileFullScreenDialogHorizontalPadding,
+    _mobileFullScreenDialogTitleTopPadding,
+    _mobileFullScreenDialogHorizontalPadding,
+    _mobileFullScreenDialogBottomPadding,
+  );
 }
 
 List<Widget> _buildDialogActions(
@@ -511,6 +620,29 @@ class _PowerboardsDialogCloseButton extends StatelessWidget {
       hoverForegroundColor: theme.colorScheme.foreground,
       pressedForegroundColor: theme.colorScheme.foreground,
       icon: Icon(iconData ?? LucideIcons.x, size: _desktopDialogCloseIconSize),
+    );
+  }
+}
+
+class _PowerboardsMobileDialogCloseButton extends StatelessWidget {
+  const _PowerboardsMobileDialogCloseButton({this.iconData});
+
+  final IconData? iconData;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+
+    return ShadIconButton.ghost(
+      onPressed: () => Navigator.of(context).pop(),
+      width: 20,
+      height: 20,
+      padding: EdgeInsets.zero,
+      foregroundColor: theme.colorScheme.foreground.withValues(alpha: .5),
+      hoverBackgroundColor: Colors.transparent,
+      hoverForegroundColor: theme.colorScheme.foreground,
+      pressedForegroundColor: theme.colorScheme.foreground,
+      icon: Icon(iconData ?? LucideIcons.x, size: 16),
     );
   }
 }
