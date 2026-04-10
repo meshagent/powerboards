@@ -3077,6 +3077,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                       services: supported,
                                       onOpen: services.refresh,
                                       onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+                                      expandToAvailableWidth: true,
                                     ),
                                     _MobileRoomPane.files => _buildMobilePlainHeaderTitle(_mobileFilesLocation(context).title),
                                     _MobileRoomPane.meeting =>
