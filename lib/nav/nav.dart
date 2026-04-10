@@ -743,6 +743,7 @@ class _NavBar extends StatelessWidget {
                 desktopPaneBottomInset,
               ),
               child: ShadButton.outline(
+                height: powerboardsFooterActionButtonHeight,
                 decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
                 backgroundColor: ShadTheme.of(context).colorScheme.background,
                 hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,

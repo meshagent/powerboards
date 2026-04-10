@@ -11,6 +11,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/device_manager.dart';
+import 'package:powerboards/theme/theme.dart';
 
 import 'room.dart';
 
@@ -550,6 +551,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
                 Widget buildCancelButton() {
                   final button = ShadButton.outline(
+                    height: powerboardsFooterActionButtonHeight,
                     padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
                     onPressed: () {
                       widget.onCancel?.call();
@@ -570,6 +572,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
                 Widget buildJoinButton() {
                   final button = ShadButton(
+                    height: powerboardsFooterActionButtonHeight,
                     padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
                     backgroundColor: meetNowButtonColor,
                     hoverBackgroundColor: meetNowButtonColor,
@@ -642,6 +645,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                           children: [
                             if (widget.onJoin != null)
                               ShadButton(
+                                height: powerboardsFooterActionButtonHeight,
                                 backgroundColor: meetNowButtonColor,
                                 hoverBackgroundColor: meetNowButtonColor,
                                 pressedBackgroundColor: meetNowButtonColor,
@@ -662,6 +666,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                               ),
                             if (widget.onCancel != null)
                               ShadButton.outline(
+                                height: powerboardsFooterActionButtonHeight,
                                 onPressed: () {
                                   widget.onCancel?.call();
                                 },
@@ -707,6 +712,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
                     Widget buildCancelButton() {
                       final button = ShadButton.outline(
+                        height: powerboardsFooterActionButtonHeight,
                         padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
                         onPressed: () {
                           widget.onCancel?.call();

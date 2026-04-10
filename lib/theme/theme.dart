@@ -51,6 +51,7 @@ const shadDarkSelection = Color(0xFF473A77);
 const double powerboardsMobileScreenTopInset = 10.0;
 const double powerboardsMobileScreenBottomInset = 15.0;
 const double powerboardsMobileShellHorizontalInset = 15.0;
+const double powerboardsFooterActionButtonHeight = 44.0;
 const double powerboardsMobileSecondaryRowHeight = 68.0;
 const double powerboardsMobileSecondaryRowLeadingInset = 22.0;
 const double powerboardsMobileSecondaryRowTrailingInset = 15.0;

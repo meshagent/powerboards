@@ -199,7 +199,6 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
                 decoration: ShadDecoration.none,
                 onPressed: controller.toggle,
                 onHoverChange: (hovering) => setState(() => hovered = hovering),
-<<<<<<< HEAD
                 child: UserAvatarCircle(initials: initials, size: widget.avatarSize, hovered: hovered),
               ),
             );

@@ -518,24 +518,32 @@ List<Widget> _buildDialogActions(
 
   if (isMobile) {
     if (!stackActionsOnMobile) {
-      return actions;
+      return actions.map(_wrapDialogAction).toList(growable: false);
     }
 
-    return actions.map((action) => SizedBox(width: double.infinity, child: action)).toList(growable: false);
+    return actions
+        .map((action) => SizedBox(width: double.infinity, height: powerboardsFooterActionButtonHeight, child: action))
+        .toList(growable: false);
   }
 
   if (isCompactDesktopDialog) {
-    return actions.map((action) => Expanded(child: action)).toList(growable: false);
+    return actions.map((action) => Expanded(child: _wrapDialogAction(action))).toList(growable: false);
   }
 
   if (expandDesktopActions) {
-    return actions.map((action) => Expanded(child: action)).toList(growable: false);
+    return actions.map((action) => Expanded(child: _wrapDialogAction(action))).toList(growable: false);
   }
 
   final usableWidth = effectiveDialogMaxWidth - 48 - (actionsGap * (actions.length - 1));
   final actionWidth = (usableWidth / actions.length).clamp(_desktopDialogActionMinWidth, _desktopDialogActionMaxWidth);
 
-  return actions.map((action) => SizedBox(width: actionWidth, child: action)).toList(growable: false);
+  return actions
+      .map((action) => SizedBox(width: actionWidth, height: powerboardsFooterActionButtonHeight, child: action))
+      .toList(growable: false);
+}
+
+Widget _wrapDialogAction(Widget action) {
+  return SizedBox(height: powerboardsFooterActionButtonHeight, child: action);
 }
 
 BoxConstraints? _resolveDialogConstraints(
