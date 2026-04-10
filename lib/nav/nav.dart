@@ -449,7 +449,7 @@ class _NavState extends State<Nav> {
           )
         : KeyedSubtree(
             key: ValueKey('mobile-room-${widget.selectedRoom}'),
-            child: Container(key: childKey, child: widget.child),
+            child: ColoredBox(key: childKey, color: ShadTheme.of(context).colorScheme.card, child: widget.child),
           );
 
     return ClipRect(

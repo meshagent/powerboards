@@ -2934,7 +2934,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   return _buildMobileRoomScaffold(
                     context,
                     leadingAction: BackButton(projectId: widget.projectId),
-                    title: Text(widget.room.roomName ?? "Room", style: meetingHeaderTitleStyle),
+                    title: const SizedBox.shrink(),
                     trailingActions: const [],
                     body: _buildRoomLoading(context, title: "Loading room services"),
                   );
