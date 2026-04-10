@@ -2650,6 +2650,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           description: const Text("Select a thread to view."),
           mobilePresentation: PowerboardsDialogMobilePresentation.fullScreen,
           actions: [
+            ShadButton.outline(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close")),
             ShadButton(
               onPressed: () {
                 _setSelectedThreadPath(agentKey, null);
@@ -2657,7 +2658,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               },
               child: const Text("New Thread"),
             ),
-            ShadButton.outline(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close")),
           ],
           child: Padding(
             padding: powerboardsDialogScrollableListPadding,
