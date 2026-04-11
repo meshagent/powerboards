@@ -59,10 +59,14 @@ import 'package:powerboards/ui/sweep_status_text.dart';
 import 'package:powerboards/ui/text_validators.dart';
 
 const defaultDebugSize = 0.4;
-final meetingHeaderTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600);
+final meetingHeaderTitleStyle = GoogleFonts.inter(
+  fontSize: 16,
+  fontWeight: FontWeight.w600,
+);
 const double _meetingToolbarCompactThreshold = 620;
 const double _meetingToolbarPreferredExpandedWidth = 640;
-const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
+const double _meetingToolbarPreferredCompactWidth =
+    _meetingToolbarCompactThreshold;
 const double _mobileRoomHeaderGap = 8;
 const double _mobilePlainHeaderTitleInset = 8;
 const String _roomPaneQueryParameter = 'pane';
@@ -82,7 +86,8 @@ class _MobileFilesLocation {
       return "Files";
     }
 
-    return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? "Files";
+    return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ??
+        "Files";
   }
 
   String? get backFolderPath {
@@ -123,7 +128,10 @@ class _MobileFilesLocation {
       return _MobileFilesLocation(folder: normalizedPath, openedFile: null);
     }
 
-    return _MobileFilesLocation(folder: parentPath(normalizedPath), openedFile: normalizedPath);
+    return _MobileFilesLocation(
+      folder: parentPath(normalizedPath),
+      openedFile: normalizedPath,
+    );
   }
 }
 
@@ -156,10 +164,12 @@ class _MobileSelectedThreadLabelResolver extends StatefulWidget {
   final ValueChanged<String?> onResolved;
 
   @override
-  State<_MobileSelectedThreadLabelResolver> createState() => _MobileSelectedThreadLabelResolverState();
+  State<_MobileSelectedThreadLabelResolver> createState() =>
+      _MobileSelectedThreadLabelResolverState();
 }
 
-class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThreadLabelResolver> {
+class _MobileSelectedThreadLabelResolverState
+    extends State<_MobileSelectedThreadLabelResolver> {
   MeshDocument? _document;
   String? _openedThreadListPath;
   String? _lastResolvedDisplayName;
@@ -271,7 +281,8 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
   void didUpdateWidget(covariant _MobileSelectedThreadLabelResolver oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath) {
+    if (oldWidget.client != widget.client ||
+        oldWidget.threadListPath != widget.threadListPath) {
       unawaited(_rebindDocument());
       return;
     }
@@ -306,13 +317,29 @@ Widget _buildPaneHeaderIconButton({
   ShadButtonVariant variant = ShadButtonVariant.outline,
   Color? iconColor,
 }) {
-  final iconWidget = Icon(icon, size: paneHeaderIconButtonIconSize, color: iconColor);
+  final iconWidget = Icon(
+    icon,
+    size: paneHeaderIconButtonIconSize,
+    color: iconColor,
+  );
 
   final button = switch (variant) {
-    ShadButtonVariant.primary => ShadIconButton(icon: iconWidget, onPressed: onPressed),
-    ShadButtonVariant.destructive => ShadIconButton.destructive(icon: iconWidget, onPressed: onPressed),
-    ShadButtonVariant.secondary => ShadIconButton.secondary(icon: iconWidget, onPressed: onPressed),
-    ShadButtonVariant.ghost => ShadIconButton.ghost(icon: iconWidget, onPressed: onPressed),
+    ShadButtonVariant.primary => ShadIconButton(
+      icon: iconWidget,
+      onPressed: onPressed,
+    ),
+    ShadButtonVariant.destructive => ShadIconButton.destructive(
+      icon: iconWidget,
+      onPressed: onPressed,
+    ),
+    ShadButtonVariant.secondary => ShadIconButton.secondary(
+      icon: iconWidget,
+      onPressed: onPressed,
+    ),
+    ShadButtonVariant.ghost => ShadIconButton.ghost(
+      icon: iconWidget,
+      onPressed: onPressed,
+    ),
     _ => ShadIconButton.outline(icon: iconWidget, onPressed: onPressed),
   };
 
@@ -324,7 +351,11 @@ Color _mobileRoomSurfaceColor(BuildContext context) {
 }
 
 class ParticipantsButton extends StatefulWidget {
-  const ParticipantsButton({super.key, required this.participants, required this.localParticipant});
+  const ParticipantsButton({
+    super.key,
+    required this.participants,
+    required this.localParticipant,
+  });
 
   final List<RemoteParticipant> participants;
   final LocalParticipant? localParticipant;
@@ -349,7 +380,10 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
     if (trimmed.isEmpty) return "U";
 
     final localPart = trimmed.split("@").first;
-    final parts = localPart.split(RegExp(r"[._\- ]+")).where((part) => part.isNotEmpty).toList();
+    final parts = localPart
+        .split(RegExp(r"[._\- ]+"))
+        .where((part) => part.isNotEmpty)
+        .toList();
 
     if (parts.length >= 2) {
       return "${_initialFromText(parts[0])}${_initialFromText(parts[1])}";
@@ -378,7 +412,11 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
             left: index * overlapOffset,
             child: Tooltip(
               message: name,
-              child: UserAvatarCircle(initials: _initialsFromName(name), size: avatarSize, hovered: hovered),
+              child: UserAvatarCircle(
+                initials: _initialsFromName(name),
+                size: avatarSize,
+                hovered: hovered,
+              ),
             ),
           );
         }),
@@ -398,12 +436,17 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final nameSet = <String>{};
-    final myName = (widget.localParticipant?.getAttribute("name") as String?)?.trim().toLowerCase();
+    final myName = (widget.localParticipant?.getAttribute("name") as String?)
+        ?.trim()
+        .toLowerCase();
 
     for (final participant in widget.participants) {
       final name = participant.getAttribute("name") as String?;
 
-      if (participant.role != 'agent' && name != null && name.isNotEmpty && (myName == null || name.trim().toLowerCase() != myName)) {
+      if (participant.role != 'agent' &&
+          name != null &&
+          name.isNotEmpty &&
+          (myName == null || name.trim().toLowerCase() != myName)) {
         nameSet.add(name);
       }
     }
@@ -412,22 +455,29 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
       return SizedBox.shrink();
     }
 
-    final sortedNames = nameSet.sorted((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final sortedNames = nameSet.sorted(
+      (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+    );
     final trigger = sortedNames.length <= 3
         ? ValueListenableBuilder(
             valueListenable: statesController,
-            builder: (BuildContext context, Set<ShadState> states, Widget? child) {
-              return ShadButton.ghost(
-                statesController: statesController,
-                hoverBackgroundColor: cs.background,
-                padding: .zero,
-                onPressed: popoverController.toggle,
-                decoration: ShadDecoration(shape: .circle),
-                child: _buildOverlapAvatars(sortedNames, states),
-              );
-            },
+            builder:
+                (BuildContext context, Set<ShadState> states, Widget? child) {
+                  return ShadButton.ghost(
+                    statesController: statesController,
+                    hoverBackgroundColor: cs.background,
+                    padding: .zero,
+                    onPressed: popoverController.toggle,
+                    decoration: ShadDecoration(shape: .circle),
+                    child: _buildOverlapAvatars(sortedNames, states),
+                  );
+                },
           )
-        : ShadButton.outline(leading: Icon(LucideIcons.users), onPressed: popoverController.toggle, child: Text("+${nameSet.length}"));
+        : ShadButton.outline(
+            leading: Icon(LucideIcons.users),
+            onPressed: popoverController.toggle,
+            child: Text("+${nameSet.length}"),
+          );
 
     return ShadPopover(
       controller: popoverController,
@@ -451,7 +501,10 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
               crossAxisAlignment: .start,
               children: sortedNames.map((name) {
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   child: Row(
                     children: [
                       Icon(LucideIcons.user, size: 16),
@@ -471,7 +524,11 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
 }
 
 class InviteUserButton extends StatelessWidget {
-  const InviteUserButton({super.key, required this.projectId, required this.roomName});
+  const InviteUserButton({
+    super.key,
+    required this.projectId,
+    required this.roomName,
+  });
 
   final String projectId;
   final String roomName;
@@ -486,10 +543,17 @@ class InviteUserButton extends StatelessWidget {
         tooltip: "Invite user",
         icon: LucideIcons.userPlus,
         onPressed: () async {
-          final room = await getMeshagentClient().getRoom(name: roomName, projectId: projectId);
+          final room = await getMeshagentClient().getRoom(
+            name: roomName,
+            projectId: projectId,
+          );
 
           if (context.mounted) {
-            await showUpdateRoomPermsDialog(context, projectId: projectId, room: room);
+            await showUpdateRoomPermsDialog(
+              context,
+              projectId: projectId,
+              room: room,
+            );
           }
         },
       );
@@ -503,10 +567,17 @@ class InviteUserButton extends StatelessWidget {
           padding: _paneHeaderButtonPadding(compact: false),
           leading: Icon(LucideIcons.userPlus),
           onPressed: () async {
-            final room = await getMeshagentClient().getRoom(name: roomName, projectId: projectId);
+            final room = await getMeshagentClient().getRoom(
+              name: roomName,
+              projectId: projectId,
+            );
 
             if (context.mounted) {
-              await showUpdateRoomPermsDialog(context, projectId: projectId, room: room);
+              await showUpdateRoomPermsDialog(
+                context,
+                projectId: projectId,
+                room: room,
+              );
             }
           },
           child: isMobile || compact ? null : Text("Invite"),
@@ -517,7 +588,12 @@ class InviteUserButton extends StatelessWidget {
 }
 
 class MeetButton extends StatelessWidget {
-  const MeetButton({super.key, required this.controller, required this.meetingSessionActive, this.onPressed});
+  const MeetButton({
+    super.key,
+    required this.controller,
+    required this.meetingSessionActive,
+    this.onPressed,
+  });
 
   final MeshagentRoomController controller;
   final bool meetingSessionActive;
@@ -533,15 +609,20 @@ class MeetButton extends StatelessWidget {
         : meetingSessionActive
         ? ShadButtonVariant.destructive
         : ShadButtonVariant.outline;
-    final iconData = meetingSessionActive ? LucideIcons.circleDot : LucideIcons.video;
-    final iconColor = controller.inMeeting && meetingSessionActive ? theme.colorScheme.destructive : null;
+    final iconData = meetingSessionActive
+        ? LucideIcons.circleDot
+        : LucideIcons.video;
+    final iconColor = controller.inMeeting && meetingSessionActive
+        ? theme.colorScheme.destructive
+        : null;
 
     if (isMobile || compact) {
       return _buildPaneHeaderIconButton(
         tooltip: "Meet",
         icon: iconData,
         iconColor: iconColor,
-        onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
+        onPressed:
+            onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
         variant: buttonVariant,
       );
     }
@@ -554,7 +635,9 @@ class MeetButton extends StatelessWidget {
           variant: buttonVariant,
           padding: _paneHeaderButtonPadding(compact: false),
           leading: Icon(iconData, color: iconColor),
-          onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
+          onPressed:
+              onPressed ??
+              () => controller.selectMeetingTab(isMobile: isMobile),
           child: Text("Meet"),
         ),
       ),
@@ -581,7 +664,9 @@ class FilesButton extends StatelessWidget {
                 ? _buildPaneHeaderIconButton(
                     tooltip: "Hide files",
                     icon: LucideIcons.files,
-                    onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
+                    onPressed:
+                        onPressed ??
+                        () => controller.selectFilesTab(isMobile: isMobile),
                     variant: ShadButtonVariant.primary,
                   )
                 : SizedBox(
@@ -589,7 +674,9 @@ class FilesButton extends StatelessWidget {
                     child: ShadButton(
                       padding: _paneHeaderButtonPadding(compact: false),
                       leading: Icon(LucideIcons.files),
-                      onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
+                      onPressed:
+                          onPressed ??
+                          () => controller.selectFilesTab(isMobile: isMobile),
                       child: Text("Files"),
                     ),
                   ),
@@ -600,14 +687,18 @@ class FilesButton extends StatelessWidget {
                 ? _buildPaneHeaderIconButton(
                     tooltip: "Show files",
                     icon: LucideIcons.files,
-                    onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
+                    onPressed:
+                        onPressed ??
+                        () => controller.selectFilesTab(isMobile: isMobile),
                   )
                 : SizedBox(
                     width: desktopPaneHeaderFilesButtonWidth,
                     child: ShadButton.outline(
                       padding: _paneHeaderButtonPadding(compact: false),
                       leading: Icon(LucideIcons.files),
-                      onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
+                      onPressed:
+                          onPressed ??
+                          () => controller.selectFilesTab(isMobile: isMobile),
                       child: Text("Files"),
                     ),
                   ),
@@ -628,9 +719,13 @@ class BackButton extends StatelessWidget {
 
   void _goToRoomChat(BuildContext context) {
     final currentUri = PathRouteMatch.of(context).uri;
-    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    final updatedQueryParameters = Map<String, String>.from(
+      currentUri.queryParameters,
+    );
     updatedQueryParameters[_roomPaneQueryParameter] = 'chat';
-    context.go(currentUri.replace(queryParameters: updatedQueryParameters).toString());
+    context.go(
+      currentUri.replace(queryParameters: updatedQueryParameters).toString(),
+    );
   }
 
   @override
@@ -638,18 +733,26 @@ class BackButton extends StatelessWidget {
     return PowerboardsBackIconButton(
       onPressed: () async {
         final videoRoom = room.VideoRoomModel.maybeOf(context)?.room;
-        final meetingViewController = Controller.ofType<MeetingViewController>(context);
-        final roomController = Controller.ofType<MeshagentRoomController>(context);
+        final meetingViewController = Controller.ofType<MeetingViewController>(
+          context,
+        );
+        final roomController = Controller.ofType<MeshagentRoomController>(
+          context,
+        );
         final navController = Controller.ofType<NavController>(context);
         final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-        final meetingSessionActive = meetingViewController.state == MeetingViewState.joined && videoRoom != null;
+        final meetingSessionActive =
+            meetingViewController.state == MeetingViewState.joined &&
+            videoRoom != null;
 
         if (meetingSessionActive) {
           final leave = await showLeaveMeeting(context);
 
           if (leave) {
             if (context.mounted) {
-              context.findAncestorStateOfType<room.VideoChatConnectionState>()?.hangup();
+              context
+                  .findAncestorStateOfType<room.VideoChatConnectionState>()
+                  ?.hangup();
               meetingViewController.resetToLobby();
               roomController.showChat();
               navController.showNav();
@@ -804,14 +907,26 @@ class ActionsRow extends StatelessWidget {
     }
 
     final spacerIndex = act.indexWhere((widget) => widget is Spacer);
-    final leadingActions = spacerIndex == -1 ? const <Widget>[] : act.take(spacerIndex).toList(growable: false);
-    final trailingActions = spacerIndex == -1 ? act : act.skip(spacerIndex + 1).toList(growable: false);
+    final leadingActions = spacerIndex == -1
+        ? const <Widget>[]
+        : act.take(spacerIndex).toList(growable: false);
+    final trailingActions = spacerIndex == -1
+        ? act
+        : act.skip(spacerIndex + 1).toList(growable: false);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-        final state = resolvePaneHeaderActionState(constraints, leadingWidth: 320, minimumLeadingWidth: 220, actions: trailingActions);
-        final visibleTrailingActions = visiblePaneHeaderActions(trailingActions, overflowCollapsed: state.overflowCollapsed);
+        final state = resolvePaneHeaderActionState(
+          constraints,
+          leadingWidth: 320,
+          minimumLeadingWidth: 220,
+          actions: trailingActions,
+        );
+        final visibleTrailingActions = visiblePaneHeaderActions(
+          trailingActions,
+          overflowCollapsed: state.overflowCollapsed,
+        );
 
         return CompactHeaderActions(
           state: state,
@@ -821,7 +936,9 @@ class ActionsRow extends StatelessWidget {
               child: SizedBox(
                 height: desktopPaneHeaderContentHeight,
                 child: Padding(
-                  padding: isMobile ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: 20),
+                  padding: isMobile
+                      ? powerboardsMobileHorizontalPadding
+                      : const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     spacing: 8,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -832,13 +949,23 @@ class ActionsRow extends StatelessWidget {
                             alignment: Alignment.centerLeft,
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
-                              child: Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: leadingActions),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                spacing: 8,
+                                children: leadingActions,
+                              ),
                             ),
                           ),
                         ),
-                      if (leadingActions.isEmpty && visibleTrailingActions.isNotEmpty) const Spacer(),
+                      if (leadingActions.isEmpty &&
+                          visibleTrailingActions.isNotEmpty)
+                        const Spacer(),
                       if (visibleTrailingActions.isNotEmpty)
-                        Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: visibleTrailingActions),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          spacing: 8,
+                          children: visibleTrailingActions,
+                        ),
                     ],
                   ),
                 ),
@@ -852,7 +979,13 @@ class ActionsRow extends StatelessWidget {
 }
 
 class MeshagentRoom extends StatefulWidget {
-  const MeshagentRoom({super.key, required this.projectId, required this.projects, required this.room, this.service});
+  const MeshagentRoom({
+    super.key,
+    required this.projectId,
+    required this.projects,
+    required this.room,
+    this.service,
+  });
 
   final String projectId;
   final Resource<List<Project>> projects;
@@ -864,7 +997,11 @@ class MeshagentRoom extends StatefulWidget {
 }
 
 class _ResolvedAgentSelection {
-  const _ResolvedAgentSelection({required this.routeId, required this.service, required this.developmentParticipant});
+  const _ResolvedAgentSelection({
+    required this.routeId,
+    required this.service,
+    required this.developmentParticipant,
+  });
 
   final String? routeId;
   final ServiceSpec? service;
@@ -872,7 +1009,8 @@ class _ResolvedAgentSelection {
 }
 
 class MeshagentRoomState extends State<MeshagentRoom> {
-  final ResizableSplitViewController _meetingSplitViewController = ResizableSplitViewController();
+  final ResizableSplitViewController _meetingSplitViewController =
+      ResizableSplitViewController();
 
   final videoChatKey = GlobalKey();
   final meetingViewKey = GlobalKey();
@@ -894,32 +1032,50 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   late final isOwner = Resource(
     () => grant
         .amIOwnerOfRoom(room: widget.room)
-        .timeout(_roomResourceTimeout, onTimeout: () => throw TimeoutException("Timed out while checking room ownership.")),
+        .timeout(
+          _roomResourceTimeout,
+          onTimeout: () => throw TimeoutException(
+            "Timed out while checking room ownership.",
+          ),
+        ),
   );
   late final canViewDeveloperLogs = Resource(
     () => grant
         .canViewDeveloperLogs(room: widget.room)
-        .timeout(_roomResourceTimeout, onTimeout: () => throw TimeoutException("Timed out while loading developer log permissions.")),
+        .timeout(
+          _roomResourceTimeout,
+          onTimeout: () => throw TimeoutException(
+            "Timed out while loading developer log permissions.",
+          ),
+        ),
   );
   late final canViewStorage = Resource(
     () => grant
         .canViewStorage(room: widget.room)
-        .timeout(_roomResourceTimeout, onTimeout: () => throw TimeoutException("Timed out while loading storage permissions.")),
+        .timeout(
+          _roomResourceTimeout,
+          onTimeout: () => throw TimeoutException(
+            "Timed out while loading storage permissions.",
+          ),
+        ),
   );
 
   @override
   void initState() {
     super.initState();
 
-    _roomStatusSubscription = widget.room.events.where((event) => event is RoomStatusEvent).cast<RoomStatusEvent>().listen((event) {
-      final status = event.description.trim();
-      if (status.isEmpty || !mounted) {
-        return;
-      }
-      setState(() {
-        _lastRoomStatusText = status;
-      });
-    });
+    _roomStatusSubscription = widget.room.events
+        .where((event) => event is RoomStatusEvent)
+        .cast<RoomStatusEvent>()
+        .listen((event) {
+          final status = event.description.trim();
+          if (status.isEmpty || !mounted) {
+            return;
+          }
+          setState(() {
+            _lastRoomStatusText = status;
+          });
+        });
   }
 
   @override
@@ -960,7 +1116,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   late final services = Resource<List<ServiceSpec>>(() async {
     final services = (await widget.room.services.list().timeout(
       _roomResourceTimeout,
-      onTimeout: () => throw TimeoutException("Timed out while loading room services."),
+      onTimeout: () =>
+          throw TimeoutException("Timed out while loading room services."),
     )).where((x) => x.agents.isNotEmpty).toList();
     services.sort(_compareServices);
     return services;
@@ -980,11 +1137,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return supported;
   }
 
-  String _serviceSortKey(ServiceSpec s) => s.agents.firstOrNull?.name ?? s.metadata.name;
-  int _compareServices(ServiceSpec a, ServiceSpec b) => _serviceSortKey(a).compareTo(_serviceSortKey(b));
+  String _serviceSortKey(ServiceSpec s) =>
+      s.agents.firstOrNull?.name ?? s.metadata.name;
+  int _compareServices(ServiceSpec a, ServiceSpec b) =>
+      _serviceSortKey(a).compareTo(_serviceSortKey(b));
 
-  String _serviceId(ServiceSpec s) => s.metadata.annotations["meshagent.service.id"] ?? "";
-  String _serviceType(ServiceSpec s) => s.agents.firstOrNull?.annotations["meshagent.agent.type"] ?? "[Unspecified]";
+  String _serviceId(ServiceSpec s) =>
+      s.metadata.annotations["meshagent.service.id"] ?? "";
+  String _serviceType(ServiceSpec s) =>
+      s.agents.firstOrNull?.annotations["meshagent.agent.type"] ??
+      "[Unspecified]";
   String? _serviceAgentName(ServiceSpec service) {
     final name = service.agents.firstOrNull?.name;
     if (name == null) {
@@ -999,7 +1161,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return trimmed;
   }
 
-  List<RemoteParticipant> _developmentParticipants(List<ServiceSpec> supported) {
+  List<RemoteParticipant> _developmentParticipants(
+    List<ServiceSpec> supported,
+  ) {
     final serviceAgentNames = <String>{};
     for (final service in supported) {
       final name = _serviceAgentName(service);
@@ -1016,7 +1180,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
 
       final name = participantDisplayName(participant);
-      if (name == null || serviceAgentNames.contains(name) || !seenNames.add(name)) {
+      if (name == null ||
+          serviceAgentNames.contains(name) ||
+          !seenNames.add(name)) {
         continue;
       }
 
@@ -1035,16 +1201,24 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   _ResolvedAgentSelection _resolveSelectedAgent(List<ServiceSpec> supported) {
     final requestedRouteId = widget.service;
     if (requestedRouteId != null) {
-      final service = supported.firstWhereOrNull((candidate) => _serviceId(candidate) == requestedRouteId);
+      final service = supported.firstWhereOrNull(
+        (candidate) => _serviceId(candidate) == requestedRouteId,
+      );
       if (service != null) {
-        return _ResolvedAgentSelection(routeId: requestedRouteId, service: service, developmentParticipant: null);
+        return _ResolvedAgentSelection(
+          routeId: requestedRouteId,
+          service: service,
+          developmentParticipant: null,
+        );
       }
 
       final participantName = developmentAgentNameFromRoute(requestedRouteId);
       if (participantName != null) {
-        final participant = _developmentParticipants(
-          supported,
-        ).firstWhereOrNull((candidate) => participantDisplayName(candidate) == participantName);
+        final participant = _developmentParticipants(supported)
+            .firstWhereOrNull(
+              (candidate) =>
+                  participantDisplayName(candidate) == participantName,
+            );
         return _ResolvedAgentSelection(
           routeId: developmentAgentRouteId(participantName),
           service: null,
@@ -1052,26 +1226,47 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         );
       }
 
-      final legacyParticipantId = legacyDevelopmentAgentParticipantIdFromRoute(requestedRouteId);
+      final legacyParticipantId = legacyDevelopmentAgentParticipantIdFromRoute(
+        requestedRouteId,
+      );
       if (legacyParticipantId != null) {
-        final participant = widget.room.messaging.remoteParticipants.firstWhereOrNull(
-          (candidate) => candidate.id == legacyParticipantId && isChatOrVoiceBotParticipant(candidate),
-        );
-        final participantName = participant == null ? null : participantDisplayName(participant);
+        final participant = widget.room.messaging.remoteParticipants
+            .firstWhereOrNull(
+              (candidate) =>
+                  candidate.id == legacyParticipantId &&
+                  isChatOrVoiceBotParticipant(candidate),
+            );
+        final participantName = participant == null
+            ? null
+            : participantDisplayName(participant);
         return _ResolvedAgentSelection(
-          routeId: participantName == null ? requestedRouteId : developmentAgentRouteId(participantName),
+          routeId: participantName == null
+              ? requestedRouteId
+              : developmentAgentRouteId(participantName),
           service: null,
           developmentParticipant: participant,
         );
       }
 
-      return _ResolvedAgentSelection(routeId: requestedRouteId, service: null, developmentParticipant: null);
+      return _ResolvedAgentSelection(
+        routeId: requestedRouteId,
+        service: null,
+        developmentParticipant: null,
+      );
     }
 
     final defaultService =
-        supported.firstWhereOrNull((candidate) => serviceConversationDescriptor(candidate)?.isChat == true) ?? supported.firstOrNull;
+        supported.firstWhereOrNull(
+          (candidate) =>
+              serviceConversationDescriptor(candidate)?.isChat == true,
+        ) ??
+        supported.firstOrNull;
     if (defaultService != null) {
-      return _ResolvedAgentSelection(routeId: _serviceId(defaultService), service: defaultService, developmentParticipant: null);
+      return _ResolvedAgentSelection(
+        routeId: _serviceId(defaultService),
+        service: defaultService,
+        developmentParticipant: null,
+      );
     }
 
     final participant = _developmentParticipants(supported).firstOrNull;
@@ -1086,7 +1281,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
     }
 
-    return const _ResolvedAgentSelection(routeId: null, service: null, developmentParticipant: null);
+    return const _ResolvedAgentSelection(
+      routeId: null,
+      service: null,
+      developmentParticipant: null,
+    );
   }
 
   bool _hasVisibleAgents(List<ServiceSpec> supported) {
@@ -1121,19 +1320,28 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return null;
   }
 
-  void _setSelectedThreadPath(String? agentKey, String? path, {String? displayName}) {
+  void _setSelectedThreadPath(
+    String? agentKey,
+    String? path, {
+    String? displayName,
+  }) {
     if (agentKey == null) {
       return;
     }
 
     final normalizedPath = path?.trim();
-    final resolvedPath = normalizedPath == null || normalizedPath.isEmpty ? null : normalizedPath;
+    final resolvedPath = normalizedPath == null || normalizedPath.isEmpty
+        ? null
+        : normalizedPath;
     final normalizedName = displayName?.trim();
-    final resolvedDisplayName = normalizedName == null || normalizedName.isEmpty ? null : normalizedName;
+    final resolvedDisplayName = normalizedName == null || normalizedName.isEmpty
+        ? null
+        : normalizedName;
     final previousPath = _selectedThreadPathByAgentKey[agentKey];
     final previousDisplayName = _selectedThreadLabelByAgentKey[agentKey];
 
-    if (resolvedPath == previousPath && resolvedDisplayName == previousDisplayName) {
+    if (resolvedPath == previousPath &&
+        resolvedDisplayName == previousDisplayName) {
       return;
     }
 
@@ -1168,7 +1376,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return null;
     }
 
-    return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length - 1) : trimmed;
+    return trimmed.endsWith("/")
+        ? trimmed.substring(0, trimmed.length - 1)
+        : trimmed;
   }
 
   String? _defaultThreadDocumentDir(String? agentName) {
@@ -1184,7 +1394,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return '.threads/$trimmed';
   }
 
-  String? _resolvedThreadListPath(String? threadListPath, {String? threadDir, String? agentName}) {
+  String? _resolvedThreadListPath(
+    String? threadListPath, {
+    String? threadDir,
+    String? agentName,
+  }) {
     if (threadListPath != null) {
       final trimmed = threadListPath.trim();
       if (trimmed.isNotEmpty) {
@@ -1218,7 +1432,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return '.threads/main.thread';
   }
 
-  List<Widget> _meetingToolbarControls(BuildContext context, {bool compact = false}) {
+  List<Widget> _meetingToolbarControls(
+    BuildContext context, {
+    bool compact = false,
+  }) {
     final model = room.VideoRoomModel.maybeOf(context);
     if (model?.room == null) {
       return [];
@@ -1226,7 +1443,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final usesMobileRoomLayout = _usesMobileRoomLayout(context);
     final isLandscapePhone = _isLandscapePhoneViewport(context);
     final meetingSessionActive = _isMeetingSessionActive(context);
-    final showExpandSplitButton = !usesMobileRoomLayout && meetingSessionActive && _meetingSplitViewController.collapsed;
+    final showExpandSplitButton =
+        !usesMobileRoomLayout &&
+        meetingSessionActive &&
+        _meetingSplitViewController.collapsed;
     final compactTranscriptionControl = compact && !isLandscapePhone;
 
     return [
@@ -1264,9 +1484,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   bool _isMeetingSessionActive(BuildContext context) {
-    final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    final meetingViewController = Controller.ofType<MeetingViewController>(
+      context,
+    );
     final videoRoom = room.VideoRoomModel.maybeOf(context)?.room;
-    return meetingViewController.state == MeetingViewState.joined && videoRoom != null;
+    return meetingViewController.state == MeetingViewState.joined &&
+        videoRoom != null;
   }
 
   Widget _buildAudioAgentEmptyState({
@@ -1316,7 +1539,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  List<Widget> _meetingPaneActions(BuildContext context, {required bool canViewStorageAllowed}) {
+  List<Widget> _meetingPaneActions(
+    BuildContext context, {
+    required bool canViewStorageAllowed,
+  }) {
     final meetingSessionActive = _isMeetingSessionActive(context);
     final activeMeetingPane = meetingSessionActive && controller.inMeeting;
     return [
@@ -1325,19 +1551,29 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           expandedWidth: desktopPaneHeaderFilesButtonWidth,
           compactWidth: desktopPaneHeaderCompactButtonWidth,
           overflowOnCompact: activeMeetingPane,
-          child: FilesButton(controller: controller, onPressed: () => _toggleFilesPane(context)),
+          child: FilesButton(
+            controller: controller,
+            onPressed: () => _toggleFilesPane(context),
+          ),
         ),
       PaneHeaderActionItem(
         expandedWidth: desktopPaneHeaderMeetButtonWidth,
         compactWidth: desktopPaneHeaderCompactButtonWidth,
         overflowOnCompact: activeMeetingPane,
-        child: MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _toggleMeetingPane(context)),
+        child: MeetButton(
+          controller: controller,
+          meetingSessionActive: meetingSessionActive,
+          onPressed: () => _toggleMeetingPane(context),
+        ),
       ),
       PaneHeaderActionItem(
         expandedWidth: desktopPaneHeaderInviteButtonWidth,
         compactWidth: desktopPaneHeaderCompactButtonWidth,
         overflowOnCompact: !activeMeetingPane,
-        child: InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+        child: InviteUserButton(
+          projectId: widget.projectId,
+          roomName: widget.room.roomName!,
+        ),
       ),
       PaneHeaderActionItem(
         expandedWidth: desktopPaneHeaderOptionsButtonWidth,
@@ -1360,7 +1596,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       PaneHeaderActionItem(
         expandedWidth: desktopPaneHeaderAvatarButtonWidth,
         compactWidth: desktopPaneHeaderAvatarButtonWidth,
-        child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+        child: UserAvatarMenuButton(
+          projectId: widget.projectId,
+          projects: widget.projects,
+          boundaryContext: context,
+        ),
       ),
     ];
   }
@@ -1368,13 +1608,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Future<void> showManageAgents() async {
     await showShadDialog(
       context: context,
-      builder: (context) => ManageAgentsDialog(projectId: widget.projectId, room: widget.room),
+      builder: (context) =>
+          ManageAgentsDialog(projectId: widget.projectId, room: widget.room),
     );
     if (!mounted) return;
     services.refresh();
   }
 
-  Widget _buildAgentsActionRow(BuildContext context, {Widget? mobileBelowDropdown}) {
+  Widget _buildAgentsActionRow(
+    BuildContext context, {
+    Widget? mobileBelowDropdown,
+  }) {
     final isMobile = _usesMobileRoomLayout(context);
     if (!isMobile) return const SizedBox.shrink();
 
@@ -1402,7 +1646,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           mainAxisSize: MainAxisSize.min,
           children: [
             dropdown,
-            if (mobileBelowDropdown != null) ...[const SizedBox(height: 10), mobileBelowDropdown],
+            if (mobileBelowDropdown != null) ...[
+              const SizedBox(height: 10),
+              mobileBelowDropdown,
+            ],
           ],
         ),
       ),
@@ -1417,11 +1664,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     VoidCallback? onManage,
   }) {
     final theme = ShadTheme.of(context);
-    final createActionStyle = GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: theme.colorScheme.foreground);
+    final createActionStyle = GoogleFonts.inter(
+      fontSize: 15,
+      fontWeight: FontWeight.w700,
+      color: theme.colorScheme.foreground,
+    );
     final secondaryActionStyle = GoogleFonts.inter(
       fontSize: 14,
       fontWeight: FontWeight.w500,
-      color: onManage == null ? theme.colorScheme.mutedForeground.withValues(alpha: 0.7) : theme.colorScheme.mutedForeground,
+      color: onManage == null
+          ? theme.colorScheme.mutedForeground.withValues(alpha: 0.7)
+          : theme.colorScheme.mutedForeground,
     );
 
     return Padding(
@@ -1435,19 +1688,36 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 borderRadius: BorderRadius.circular(8),
                 onTap: onManage ?? onNewThread,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
                   child: Row(
                     children: [
                       AnimatedSwitcher(
-                        duration: powerboardsAdaptiveTransitionDuration(context),
-                        switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
-                        switchOutCurve: powerboardsAdaptiveTransitionOutCurve(context),
+                        duration: powerboardsAdaptiveTransitionDuration(
+                          context,
+                        ),
+                        switchInCurve: powerboardsAdaptiveTransitionInCurve(
+                          context,
+                        ),
+                        switchOutCurve: powerboardsAdaptiveTransitionOutCurve(
+                          context,
+                        ),
                         transitionBuilder: (child, animation) => FadeTransition(
                           opacity: animation,
-                          child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
+                          child: ScaleTransition(
+                            scale: Tween<double>(
+                              begin: 0.92,
+                              end: 1,
+                            ).animate(animation),
+                            child: child,
+                          ),
                         ),
                         child: Icon(
-                          isNewThreadSelected ? LucideIcons.check : LucideIcons.messageSquare,
+                          isNewThreadSelected
+                              ? LucideIcons.check
+                              : LucideIcons.messageSquare,
                           key: ValueKey(currentThreadLabel),
                           size: 16,
                           color: theme.colorScheme.foreground,
@@ -1476,9 +1746,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text("All threads", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: secondaryActionStyle),
+                Text(
+                  "All threads",
+                  maxLines: 1,
+                  overflow: TextOverflow.visible,
+                  softWrap: false,
+                  style: secondaryActionStyle,
+                ),
                 const SizedBox(width: 6),
-                Icon(LucideIcons.chevronRight, size: 16, color: secondaryActionStyle.color),
+                Icon(
+                  LucideIcons.chevronRight,
+                  size: 16,
+                  color: secondaryActionStyle.color,
+                ),
               ],
             ),
           ),
@@ -1515,10 +1795,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     };
   }
 
-  void _replaceRoomRouteState(BuildContext context, {required _MobileRoomPane pane, String? rawPath}) {
+  void _replaceRoomRouteState(
+    BuildContext context, {
+    required _MobileRoomPane pane,
+    String? rawPath,
+  }) {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
-    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    final updatedQueryParameters = Map<String, String>.from(
+      currentUri.queryParameters,
+    );
 
     updatedQueryParameters[_roomPaneQueryParameter] = _roomPaneQueryValue(pane);
 
@@ -1545,13 +1831,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _rememberMobileMeetingOrigin(BuildContext context) {
-    final currentPane = _mobileActivePane(filesVisible: controller.isFilesShown);
+    final currentPane = _mobileActivePane(
+      filesVisible: controller.isFilesShown,
+    );
     if (currentPane == _MobileRoomPane.meeting) {
       return;
     }
 
     final currentUri = PathRouteMatch.of(context).uri;
-    _mobileMeetingOrigin = _MobileMeetingOrigin(pane: currentPane, rawPath: currentUri.queryParameters['p']);
+    _mobileMeetingOrigin = _MobileMeetingOrigin(
+      pane: currentPane,
+      rawPath: currentUri.queryParameters['p'],
+    );
   }
 
   void _showMeetingPane(BuildContext context) {
@@ -1568,7 +1859,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     if (origin?.pane == _MobileRoomPane.files) {
       controller.showFiles();
-      _replaceRoomRouteState(context, pane: _MobileRoomPane.files, rawPath: origin?.rawPath ?? '');
+      _replaceRoomRouteState(
+        context,
+        pane: _MobileRoomPane.files,
+        rawPath: origin?.rawPath ?? '',
+      );
       return;
     }
 
@@ -1609,8 +1904,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return _MobileFilesLocation.fromUri(PathRouteMatch.of(context).uri);
   }
 
-  void _openMobileFilesEntry(BuildContext context, String path, {required bool isFolder}) {
-    _replaceRoomRouteState(context, pane: _MobileRoomPane.files, rawPath: path.isEmpty ? '' : (isFolder ? '$path/' : path));
+  void _openMobileFilesEntry(
+    BuildContext context,
+    String path, {
+    required bool isFolder,
+  }) {
+    _replaceRoomRouteState(
+      context,
+      pane: _MobileRoomPane.files,
+      rawPath: path.isEmpty ? '' : (isFolder ? '$path/' : path),
+    );
   }
 
   void _navigateBackFromMobileFiles(BuildContext context) {
@@ -1627,13 +1930,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   List<AppMenuEntry> _mobileFilesBackMenuEntries(BuildContext context) {
     final filesLocation = _mobileFilesLocation(context);
-    final folderSegments = filesLocation.folder.split('/').where((segment) => segment.isNotEmpty).toList(growable: false);
+    final folderSegments = filesLocation.folder
+        .split('/')
+        .where((segment) => segment.isNotEmpty)
+        .toList(growable: false);
     final destinations = <_MobileFilesBackDestination>[];
 
     var accumulatedPath = "";
     for (final segment in folderSegments) {
-      accumulatedPath = accumulatedPath.isEmpty ? segment : "$accumulatedPath/$segment";
-      destinations.add(_MobileFilesBackDestination(label: segment, path: accumulatedPath));
+      accumulatedPath = accumulatedPath.isEmpty
+          ? segment
+          : "$accumulatedPath/$segment";
+      destinations.add(
+        _MobileFilesBackDestination(label: segment, path: accumulatedPath),
+      );
     }
 
     final ancestorDestinations = filesLocation.openedFile != null
@@ -1649,21 +1959,43 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         (destination) => AppMenuEntry(
           title: destination.label,
           icon: LucideIcons.folder,
-          onPressed: () => _openMobileFilesEntry(context, destination.path, isFolder: true),
+          onPressed: () =>
+              _openMobileFilesEntry(context, destination.path, isFolder: true),
         ),
       ),
-      AppMenuEntry(title: "Files", icon: LucideIcons.files, onPressed: () => _openMobileFilesEntry(context, "", isFolder: true)),
-      AppMenuEntry(title: "Chat", icon: LucideIcons.messageSquareText, separatorBefore: true, onPressed: () => _showChatPane(context)),
+      AppMenuEntry(
+        title: "Files",
+        icon: LucideIcons.files,
+        onPressed: () => _openMobileFilesEntry(context, "", isFolder: true),
+      ),
+      AppMenuEntry(
+        title: "Chat",
+        icon: LucideIcons.messageSquareText,
+        separatorBefore: true,
+        onPressed: () => _showChatPane(context),
+      ),
     ];
   }
 
-  Future<void> _uploadFileToRoom(Stream<Uint8List> stream, String path, int totalBytes) async {
-    final upload = MeshagentFileUpload(room: widget.room, path: path, dataStream: stream, size: totalBytes);
+  Future<void> _uploadFileToRoom(
+    Stream<Uint8List> stream,
+    String path,
+    int totalBytes,
+  ) async {
+    final upload = MeshagentFileUpload(
+      room: widget.room,
+      path: path,
+      dataStream: stream,
+      size: totalBytes,
+    );
     await upload.done;
   }
 
   Future<void> _addFilesToFolder(String path) async {
-    await FileUploadHelper.pickAndUploadFiles(path: path, onUpload: _uploadFileToRoom);
+    await FileUploadHelper.pickAndUploadFiles(
+      path: path,
+      onUpload: _uploadFileToRoom,
+    );
   }
 
   Future<void> _addFolderToCurrentFilesLocation(BuildContext context) async {
@@ -1678,14 +2010,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 return;
               }
 
-              Navigator.of(context).pop(formKey.currentState!.value["name"] ?? "");
+              Navigator.of(
+                context,
+              ).pop(formKey.currentState!.value["name"] ?? "");
             }
 
             return PowerboardsShadDialog.compact(
               crossAxisAlignment: CrossAxisAlignment.start,
               title: const Text("New folder"),
               actions: [
-                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
+                ShadButton.outline(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  child: const Text('Cancel'),
+                ),
                 ShadButton(onPressed: submit, child: const Text("OK")),
               ],
               child: Padding(
@@ -1716,11 +2053,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final fileName = joinPaths(folder, "${result.trim()}/$_mobileFilesPlaceholderFileName");
+    final fileName = joinPaths(
+      folder,
+      "${result.trim()}/$_mobileFilesPlaceholderFileName",
+    );
     await _uploadFileToRoom(Stream<Uint8List>.value(Uint8List(0)), fileName, 0);
   }
 
-  Future<void> _showNewTextFileDialogForCurrentFilesLocation(BuildContext context) async {
+  Future<void> _showNewTextFileDialogForCurrentFilesLocation(
+    BuildContext context,
+  ) async {
     final folder = _mobileFilesLocation(context).folder;
     final resolvedName = await showShadDialog<String>(
       context: context,
@@ -1732,7 +2074,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 return;
               }
 
-              final String name = (formKey.currentState!.value["name"] ?? "").trim();
+              final String name = (formKey.currentState!.value["name"] ?? "")
+                  .trim();
               var nextName = name;
 
               if (!name.contains('.')) {
@@ -1742,8 +2085,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     title: const Text("Add .txt extension?"),
                     description: Text("`$name` has no extension."),
                     actions: [
-                      ShadButton.outline(onPressed: () => Navigator.of(context).pop(name), child: const Text("No extension")),
-                      ShadButton(onPressed: () => Navigator.of(context).pop("$name.txt"), child: const Text("Add .txt")),
+                      ShadButton.outline(
+                        onPressed: () => Navigator.of(context).pop(name),
+                        child: const Text("No extension"),
+                      ),
+                      ShadButton(
+                        onPressed: () => Navigator.of(context).pop("$name.txt"),
+                        child: const Text("Add .txt"),
+                      ),
                     ],
                   ),
                 );
@@ -1765,8 +2114,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               crossAxisAlignment: CrossAxisAlignment.start,
               title: const Text("New Text File"),
               actions: [
-                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
-                ShadButton(onPressed: () => submit(null), child: const Text("OK")),
+                ShadButton.outline(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  child: const Text('Cancel'),
+                ),
+                ShadButton(
+                  onPressed: () => submit(null),
+                  child: const Text("OK"),
+                ),
               ],
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1778,7 +2133,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     ShadInputFormField(
                       id: "name",
                       initialValue: "",
-                      validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,
+                      validator: (value) => value.trim().isEmpty
+                          ? "File name cannot be empty"
+                          : null,
                       label: const Text("Name"),
                       autofocus: true,
                       onSubmitted: submit,
@@ -1796,7 +2153,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    await _uploadFileToRoom(Stream<Uint8List>.value(Uint8List(0)), joinPaths(folder, resolvedName.trim()), 0);
+    await _uploadFileToRoom(
+      Stream<Uint8List>.value(Uint8List(0)),
+      joinPaths(folder, resolvedName.trim()),
+      0,
+    );
   }
 
   Widget _buildMobileFilesCreateMenuButton(BuildContext context) {
@@ -1816,7 +2177,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           title: "New text file",
           description: "Create a new text file in this location.",
           icon: LucideIcons.fileText,
-          onPressed: () => _showNewTextFileDialogForCurrentFilesLocation(context),
+          onPressed: () =>
+              _showNewTextFileDialogForCurrentFilesLocation(context),
         ),
         AppMenuEntry(
           title: "Upload files",
@@ -1829,14 +2191,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       childBuilder: (context, controller) => Tooltip(
         message: "Create or upload",
         child: ShadIconButton.outline(
-          icon: const Icon(LucideIcons.plus, size: paneHeaderIconButtonIconSize),
+          icon: const Icon(
+            LucideIcons.plus,
+            size: paneHeaderIconButtonIconSize,
+          ),
           onPressed: controller.toggle,
         ),
       ),
     );
   }
 
-  Widget _buildMobileRoomLeadingAction(BuildContext context, {required bool filesVisible}) {
+  Widget _buildMobileRoomLeadingAction(
+    BuildContext context, {
+    required bool filesVisible,
+  }) {
     final pane = _mobileActivePane(filesVisible: filesVisible);
 
     if (pane == _MobileRoomPane.chat) {
@@ -1844,7 +2212,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     if (pane == _MobileRoomPane.meeting) {
-      return PowerboardsBackIconButton(onPressed: () => _closeMobileMeetingLobby(context), tooltip: "Close meet", icon: LucideIcons.x);
+      return PowerboardsBackIconButton(
+        onPressed: () => _closeMobileMeetingLobby(context),
+        tooltip: "Close meet",
+        icon: LucideIcons.x,
+      );
     }
 
     final filesLocation = _mobileFilesLocation(context);
@@ -1864,7 +2236,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (backMenuEntries.isEmpty) {
       return Tooltip(
         message: filesLocation.backTooltip,
-        child: PowerboardsBackIconButton(onPressed: () => _navigateBackFromMobileFiles(context), tooltip: filesLocation.backTooltip),
+        child: PowerboardsBackIconButton(
+          onPressed: () => _navigateBackFromMobileFiles(context),
+          tooltip: filesLocation.backTooltip,
+        ),
       );
     }
 
@@ -1874,7 +2249,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       entries: backMenuEntries,
       constraints: const BoxConstraints(minWidth: 220),
       childBuilder: (context, controller) => Tooltip(
-        message: "${filesLocation.backTooltip}. Press and hold to browse ancestors.",
+        message:
+            "${filesLocation.backTooltip}. Press and hold to browse ancestors.",
         child: PowerboardsBackIconButton(
           onPressed: () => _navigateBackFromMobileFiles(context),
           onLongPress: controller.toggle,
@@ -1904,7 +2280,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               Expanded(
                 child: Align(
                   alignment: titleAlignment,
-                  child: DefaultTextStyle.merge(overflow: TextOverflow.ellipsis, maxLines: 1, child: title),
+                  child: DefaultTextStyle.merge(
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    child: title,
+                  ),
                 ),
               ),
               ...trailingActions,
@@ -1925,7 +2305,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       alignment: Alignment.centerLeft,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        child: Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: controls),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: desktopPaneHeaderButtonGap,
+          children: controls,
+        ),
       ),
     );
   }
@@ -1937,29 +2321,64 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  List<Widget> _buildMobileEmptyRoomHeaderActions(BuildContext context, {required bool canManageAgents}) {
+  List<Widget> _buildMobileEmptyRoomHeaderActions(
+    BuildContext context, {
+    required bool canManageAgents,
+  }) {
     return [
-      InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-      if (canManageAgents) _buildPaneHeaderIconButton(tooltip: "Manage agents", icon: LucideIcons.blocks, onPressed: showManageAgents),
+      InviteUserButton(
+        projectId: widget.projectId,
+        roomName: widget.room.roomName!,
+      ),
+      if (canManageAgents)
+        _buildPaneHeaderIconButton(
+          tooltip: "Manage agents",
+          icon: LucideIcons.blocks,
+          onPressed: showManageAgents,
+        ),
     ];
   }
 
-  List<Widget> _buildMobileRoomHeaderActions(BuildContext context, {required bool canViewStorageAllowed, required bool filesVisible}) {
+  List<Widget> _buildMobileRoomHeaderActions(
+    BuildContext context, {
+    required bool canViewStorageAllowed,
+    required bool filesVisible,
+  }) {
     final pane = _mobileActivePane(filesVisible: filesVisible);
-    final filesLocation = pane == _MobileRoomPane.files ? _mobileFilesLocation(context) : null;
-    final showMeetingInviteAction = pane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
+    final filesLocation = pane == _MobileRoomPane.files
+        ? _mobileFilesLocation(context)
+        : null;
+    final showMeetingInviteAction =
+        pane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
     final showFilesHeaderStack = pane == _MobileRoomPane.files;
-    final showFilesCreateAction = showFilesHeaderStack && filesLocation?.openedFile == null;
+    final showFilesCreateAction =
+        showFilesHeaderStack && filesLocation?.openedFile == null;
     final meetingSessionActive = _isMeetingSessionActive(context);
 
     return [
       if (showFilesCreateAction) _buildMobileFilesCreateMenuButton(context),
-      if (pane == _MobileRoomPane.chat) InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-      if (showFilesHeaderStack)
-        MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _showMeetingPane(context)),
       if (pane == _MobileRoomPane.chat)
-        MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _showMeetingPane(context)),
-      if (showMeetingInviteAction) InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+        InviteUserButton(
+          projectId: widget.projectId,
+          roomName: widget.room.roomName!,
+        ),
+      if (showFilesHeaderStack)
+        MeetButton(
+          controller: controller,
+          meetingSessionActive: meetingSessionActive,
+          onPressed: () => _showMeetingPane(context),
+        ),
+      if (pane == _MobileRoomPane.chat)
+        MeetButton(
+          controller: controller,
+          meetingSessionActive: meetingSessionActive,
+          onPressed: () => _showMeetingPane(context),
+        ),
+      if (showMeetingInviteAction)
+        InviteUserButton(
+          projectId: widget.projectId,
+          roomName: widget.room.roomName!,
+        ),
       RoomOptionsMenu(
         projectId: widget.projectId,
         room: widget.room,
@@ -2009,7 +2428,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildErrorArea(BuildContext context, String error, List<Widget> actions, {bool embedMobileChrome = true}) {
+  Widget _buildErrorArea(
+    BuildContext context,
+    String error,
+    List<Widget> actions, {
+    bool embedMobileChrome = true,
+  }) {
     final isMobile = _usesMobileRoomLayout(context);
 
     return Column(
@@ -2035,11 +2459,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             children: [
               SweepStatusText(
                 text: title,
-                style: ShadTheme.of(context).textTheme.p.copyWith(fontWeight: FontWeight.w700),
+                style: ShadTheme.of(
+                  context,
+                ).textTheme.p.copyWith(fontWeight: FontWeight.w700),
               ),
-              SweepStatusText(text: _lastRoomStatusText, style: ShadTheme.of(context).textTheme.muted),
+              SweepStatusText(
+                text: _lastRoomStatusText,
+                style: ShadTheme.of(context).textTheme.muted,
+              ),
               SizedBox(height: 2),
-              SizedBox(width: 24, height: 24, child: CircularProgressIndicator(key: loadingKey)),
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(key: loadingKey),
+              ),
             ],
           ),
         ),
@@ -2047,11 +2480,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  List<Widget> _emptyRoomHeaderActions({required bool isSmallDisplay, required bool isMobile}) {
+  List<Widget> _emptyRoomHeaderActions({
+    required bool isSmallDisplay,
+    required bool isMobile,
+  }) {
     return [
       if (isSmallDisplay) BackButton(projectId: widget.projectId),
       Spacer(),
-      InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+      InviteUserButton(
+        projectId: widget.projectId,
+        roomName: widget.room.roomName!,
+      ),
       if (!isMobile) ...[
         RoomOptionsMenu(
           projectId: widget.projectId,
@@ -2061,12 +2500,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           canViewDeveloperLogs: canViewDeveloperLogs,
           boundaryContext: context,
         ),
-        UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+        UserAvatarMenuButton(
+          projectId: widget.projectId,
+          projects: widget.projects,
+          boundaryContext: context,
+        ),
       ],
     ];
   }
 
-  Widget _buildRoomInitializationError(BuildContext context, {required String title, required Object? error}) {
+  Widget _buildRoomInitializationError(
+    BuildContext context, {
+    required String title,
+    required Object? error,
+  }) {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 680),
@@ -2090,22 +2537,38 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildShellArea(BuildContext context, ServiceSpec service, List<Widget> actions, {bool embedMobileChrome = true}) {
-    final command = service.metadata.annotations["meshagent.service.shell.command"];
+  Widget _buildShellArea(
+    BuildContext context,
+    ServiceSpec service,
+    List<Widget> actions, {
+    bool embedMobileChrome = true,
+  }) {
+    final command =
+        service.metadata.annotations["meshagent.service.shell.command"];
     final isMobile = _usesMobileRoomLayout(context);
 
     return Column(
       children: [
         if (!isMobile || embedMobileChrome) ActionsRow(actions: actions),
-        if (!isMobile || embedMobileChrome) _buildDesktopSecondaryControlSpacer(context),
+        if (!isMobile || embedMobileChrome)
+          _buildDesktopSecondaryControlSpacer(context),
         if (!isMobile || embedMobileChrome) _buildAgentsActionRow(context),
         Expanded(
           child: Builder(
             builder: (context) {
               if (command == null) {
-                return Center(child: ShadAlert.destructive(title: Text("Shell agent must have command")));
+                return Center(
+                  child: ShadAlert.destructive(
+                    title: Text("Shell agent must have command"),
+                  ),
+                );
               }
-              return ShellAgent(key: ValueKey(service.id), command: command, room: widget.room, service: service);
+              return ShellAgent(
+                key: ValueKey(service.id),
+                command: command,
+                room: widget.room,
+                service: service,
+              );
             },
           ),
         ),
@@ -2118,7 +2581,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     String? agentName,
     List<Widget> actions, {
     bool showEmbeddedThreadList = true,
-    ChatThreadDisplayMode threadDisplayMode = ChatThreadDisplayMode.singleThread,
+    ChatThreadDisplayMode threadDisplayMode =
+        ChatThreadDisplayMode.singleThread,
     String? threadListPath,
     String? threadDir,
     String? selectedThreadPath,
@@ -2131,43 +2595,65 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final userEmail = user?["email"];
     final cs = ShadTheme.of(context).colorScheme;
     final documentPath = getDocumentPath(agentName, threadDir: threadDir);
-    final isMultiThread = threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
+    final isMultiThread =
+        threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
     final isMobile = _usesMobileRoomLayout(context);
     final chatActions = actions;
     final chatHorizontalInset = isMobile ? 0.0 : desktopPaneChatHorizontalInset;
     final chatBottomInset = isMobile ? 0.0 : desktopPaneBottomInset - 8;
-    final resolvedThreadListPath = _resolvedThreadListPath(threadListPath, threadDir: threadDir, agentName: agentName);
+    final resolvedThreadListPath = _resolvedThreadListPath(
+      threadListPath,
+      threadDir: threadDir,
+      agentName: agentName,
+    );
     final hasThreadList = isMultiThread && resolvedThreadListPath != null;
     final showThreadRail = !isMobile && showEmbeddedThreadList && hasThreadList;
-    final showInlineThreadList = !isMobile && !showEmbeddedThreadList && hasThreadList;
+    final showInlineThreadList =
+        !isMobile && !showEmbeddedThreadList && hasThreadList;
     final showMobileThreadActions = isMobile && isMultiThread;
     final newThreadEmptyStateVerticalOffset = showInlineThreadList
-        ? -((desktopPaneSecondaryControlHeight + desktopPaneBottomInset + desktopPaneSecondaryRowContentGap) / 2)
+        ? -((desktopPaneSecondaryControlHeight +
+                  desktopPaneBottomInset +
+                  desktopPaneSecondaryRowContentGap) /
+              2)
         : 0.0;
     final meetingActiveSingleThreadEmptyState =
         emptyState ??
-        (_isMeetingSessionActive(context) && threadDisplayMode == ChatThreadDisplayMode.singleThread
+        (_isMeetingSessionActive(context) &&
+                threadDisplayMode == ChatThreadDisplayMode.singleThread
             ? _buildMeetingSingleThreadChatEmptyState("Chat or share files")
             : null);
     final agentKey = _selectedThreadAgentKey(
-      services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!),
+      services.state.value == null
+          ? const <ServiceSpec>[]
+          : _supportedServices(services.state.value!),
     );
-    final currentThreadLabel = selectedThreadPath == null ? "New thread" : (_selectedThreadLabelForAgentKey(agentKey) ?? "New thread");
+    final currentThreadLabel = selectedThreadPath == null
+        ? "New thread"
+        : (_selectedThreadLabelForAgentKey(agentKey) ?? "New thread");
     final chatView = Padding(
-      padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
+      padding: EdgeInsets.fromLTRB(
+        chatHorizontalInset,
+        0,
+        chatHorizontalInset,
+        chatBottomInset,
+      ),
       child: MeshagentThreadView(
         agentName: agentName,
         threadDisplayMode: threadDisplayMode,
         threadListPath: resolvedThreadListPath,
         newThreadResetVersion: _newThreadResetVersion,
-        key: ValueKey("thread-view-$documentPath-${selectedThreadPath ?? "composer"}"),
+        key: ValueKey(
+          "thread-view-$documentPath-${selectedThreadPath ?? "composer"}",
+        ),
         client: widget.room,
         documentPath: documentPath,
         selectedThreadPath: selectedThreadPath,
         onSelectedThreadPathChanged: onSelectedThreadPathChanged,
         participantNames: [
           if (userEmail is String && userEmail.isNotEmpty) userEmail,
-          if (agentName case final String agentParticipantName) agentParticipantName,
+          if (agentName case final String agentParticipantName)
+            agentParticipantName,
         ],
         newThreadEmptyStateVerticalOffset: newThreadEmptyStateVerticalOffset,
         joinMeeting: _joinMeeting,
@@ -2181,13 +2667,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       color: isMobile ? cs.card : Colors.transparent,
       child: Column(
         children: [
-          if ((showMobileThreadActions || showInlineThreadList) && selectedThreadPath != null && resolvedThreadListPath != null)
+          if ((showMobileThreadActions || showInlineThreadList) &&
+              selectedThreadPath != null &&
+              resolvedThreadListPath != null)
             _MobileSelectedThreadLabelResolver(
-              key: ValueKey("mobile-thread-label-$agentKey-$selectedThreadPath"),
+              key: ValueKey(
+                "mobile-thread-label-$agentKey-$selectedThreadPath",
+              ),
               client: widget.room,
               threadListPath: resolvedThreadListPath,
               selectedThreadPath: selectedThreadPath,
-              onResolved: (displayName) => _setSelectedThreadPath(agentKey, selectedThreadPath, displayName: displayName),
+              onResolved: (displayName) => _setSelectedThreadPath(
+                agentKey,
+                selectedThreadPath,
+                displayName: displayName,
+              ),
             ),
           if (!isMobile || embedMobileChrome) ...[
             ActionsRow(actions: chatActions),
@@ -2197,12 +2691,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               mobileBelowDropdown: showMobileThreadActions
                   ? _buildMobileThreadGetStartedActions(
                       context,
-                      onNewThread: () => onSelectedThreadPathChanged?.call(null),
+                      onNewThread: () =>
+                          onSelectedThreadPathChanged?.call(null),
                       isNewThreadSelected: selectedThreadPath == null,
                       currentThreadLabel: currentThreadLabel,
                       onManage: resolvedThreadListPath == null
                           ? null
-                          : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
+                          : () => _showMobileThreadPicker(
+                              threadListPath: resolvedThreadListPath,
+                              agentKey: agentKey,
+                              agentName: agentName,
+                            ),
                     )
                   : null,
             ),
@@ -2217,7 +2716,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   currentThreadLabel: currentThreadLabel,
                   onManage: resolvedThreadListPath == null
                       ? null
-                      : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
+                      : () => _showMobileThreadPicker(
+                          threadListPath: resolvedThreadListPath,
+                          agentKey: agentKey,
+                          agentName: agentName,
+                        ),
                 ),
               ),
             ),
@@ -2260,15 +2763,25 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           return chatView;
         }
 
-        final railMaxWidth = math.min(360.0, math.max(260.0, totalWidth - 440.0));
-        final railWidth = (totalWidth * 0.28).clamp(260.0, railMaxWidth).toDouble();
+        final railMaxWidth = math.min(
+          360.0,
+          math.max(260.0, totalWidth - 440.0),
+        );
+        final railWidth = (totalWidth * 0.28)
+            .clamp(260.0, railMaxWidth)
+            .toDouble();
 
         return Row(
           children: [
             Expanded(child: chatView),
             SizedBox(
               width: railWidth,
-              child: _buildDesktopThreadRail(context, threadListPath: threadListPath, agentKey: agentKey, agentName: agentName),
+              child: _buildDesktopThreadRail(
+                context,
+                threadListPath: threadListPath,
+                agentKey: agentKey,
+                agentName: agentName,
+              ),
             ),
           ],
         );
@@ -2308,14 +2821,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildVoiceArea(BuildContext context, String agentName, List<Widget> actions, {bool embedMobileChrome = true}) {
+  Widget _buildVoiceArea(
+    BuildContext context,
+    String agentName,
+    List<Widget> actions, {
+    bool embedMobileChrome = true,
+  }) {
     final meetingSessionActive = _isMeetingSessionActive(context);
     final isMobile = _usesMobileRoomLayout(context);
 
     return Column(
       children: [
         if (!isMobile || embedMobileChrome) ActionsRow(actions: actions),
-        if (!isMobile || embedMobileChrome) _buildDesktopChatViewportCutoffSpacer(context),
+        if (!isMobile || embedMobileChrome)
+          _buildDesktopChatViewportCutoffSpacer(context),
         if (!isMobile || embedMobileChrome) _buildAgentsActionRow(context),
         Expanded(
           child: LayoutBuilder(
@@ -2330,18 +2849,24 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       child: participant == null
                           ? ShadButton(child: Text("Start Voice Session"))
                           : ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
+                              constraints: const BoxConstraints(
+                                maxWidth: 500,
+                                maxHeight: 560,
+                              ),
                               child: VoiceAgentCaller(
                                 meeting: MeetingController.of(context),
                                 participant: participant,
                                 showDisconnectedAction: !meetingSessionActive,
                                 allowToggleTranscribe: !meetingSessionActive,
-                                emptyStateTitle: meetingSessionActive ? "This voice agent is private" : "Start an audio session",
+                                emptyStateTitle: meetingSessionActive
+                                    ? "This voice agent is private"
+                                    : "Start an audio session",
                                 emptyStateDescription: meetingSessionActive
                                     ? "Start an audio session after this meeting to ask questions, or get hands free help."
                                     : "Connect with this agent using your microphone.",
                                 emptyStateAvailableWidth: constraints.maxWidth,
-                                connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
+                                connectedControlsBuilder: (context, meeting) =>
+                                    VoiceMeetingControls(controller: meeting),
                               ),
                             ),
                     ),
@@ -2355,7 +2880,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildMeetingTranscriberArea(BuildContext context, String agentName, List<Widget> actions, {bool embedMobileChrome = true}) {
+  Widget _buildMeetingTranscriberArea(
+    BuildContext context,
+    String agentName,
+    List<Widget> actions, {
+    bool embedMobileChrome = true,
+  }) {
     final meetingIsActive = _isMeetingSessionActive(context);
     final isMobile = _usesMobileRoomLayout(context);
 
@@ -2375,11 +2905,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       builder: (context, participant) => Column(
         children: [
           if (!isMobile || embedMobileChrome) ActionsRow(actions: actions),
-          if (!isMobile || embedMobileChrome) _buildDesktopPaneContentSpacer(context),
+          if (!isMobile || embedMobileChrome)
+            _buildDesktopPaneContentSpacer(context),
           if (!isMobile || embedMobileChrome) _buildAgentsActionRow(context),
           Expanded(
             child: participant == null
-                ? _buildRoomLoading(context, title: "Waiting for transcriber agent to join room")
+                ? _buildRoomLoading(
+                    context,
+                    title: "Waiting for transcriber agent to join room",
+                  )
                 : controller.inMeeting
                 ? _buildChatArea(
                     context,
@@ -2387,15 +2921,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     [],
                     emptyState: !meetingIsActive
                         ? _buildMeetingTranscriberPreMeetingChatEmptyState()
-                        : _buildMeetingTranscriberTitleOnlyEmptyState("Transcribe your meeting"),
+                        : _buildMeetingTranscriberTitleOnlyEmptyState(
+                            "Transcribe your meeting",
+                          ),
                     hideChatInput: true,
                     embedMobileChrome: embedMobileChrome,
                   )
                 : _buildAudioAgentEmptyState(
                     title: "Transcribe your meeting",
                     description: "Meet with this agent and include your team.",
-                    action: isMobile && meetingIsActive ? null : startMeetingAction(),
-                    verticalOffset: AudioAgentEmptyState.defaultVerticalOffset - 20,
+                    action: isMobile && meetingIsActive
+                        ? null
+                        : startMeetingAction(),
+                    verticalOffset:
+                        AudioAgentEmptyState.defaultVerticalOffset - 20,
                   ),
           ),
         ],
@@ -2403,14 +2942,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildFilesArea(BuildContext context, List<Widget> actions, {bool embedMobileChrome = true}) {
+  Widget _buildFilesArea(
+    BuildContext context,
+    List<Widget> actions, {
+    bool embedMobileChrome = true,
+  }) {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = _usesMobileRoomLayout(context);
     final mobileFilesLocation = isMobile ? _mobileFilesLocation(context) : null;
     final hasOpenedFile = mobileFilesLocation?.openedFile != null;
     final horizontalInset = isMobile ? 0.0 : 20.0;
     final topInset = 0.0;
-    final bottomInset = isMobile ? (hasOpenedFile ? 0.0 : 8.0) : desktopPaneBottomInset;
+    final bottomInset = isMobile
+        ? (hasOpenedFile ? 0.0 : 8.0)
+        : desktopPaneBottomInset;
     final meetingSessionActive = _isMeetingSessionActive(context);
 
     return ColoredBox(
@@ -2420,16 +2965,27 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           if (isMobile && embedMobileChrome) ActionsRow(actions: actions),
           Expanded(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(horizontalInset, topInset, horizontalInset, bottomInset),
+              padding: EdgeInsets.fromLTRB(
+                horizontalInset,
+                topInset,
+                horizontalInset,
+                bottomInset,
+              ),
               child: FileManagerView(
                 client: widget.room,
                 services: services,
                 hideSystem: true,
                 mobileShellOwnsHeader: isMobile && !embedMobileChrome,
                 desktopHeaderActions: isMobile ? const [] : actions,
-                desktopHeaderActionLeadingWidthFloor: meetingSessionActive ? _meetingActivePaneActionLeadingWidthFloor : 0,
-                desktopHeaderActionMinimumLeadingWidth: meetingSessionActive ? 160 : 0,
-                desktopHeaderActionReserve: meetingSessionActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
+                desktopHeaderActionLeadingWidthFloor: meetingSessionActive
+                    ? _meetingActivePaneActionLeadingWidthFloor
+                    : 0,
+                desktopHeaderActionMinimumLeadingWidth: meetingSessionActive
+                    ? 160
+                    : 0,
+                desktopHeaderActionReserve: meetingSessionActive
+                    ? desktopPaneHeaderActionReserve + 32
+                    : desktopPaneHeaderActionReserve,
               ),
             ),
           ),
@@ -2438,7 +2994,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildMeeting(BuildContext context, String? agentName, List<Widget> actions, {bool embedMobileChrome = true}) {
+  Widget _buildMeeting(
+    BuildContext context,
+    String? agentName,
+    List<Widget> actions, {
+    bool embedMobileChrome = true,
+  }) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
 
@@ -2450,23 +3011,36 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       child: Column(
         children: [
           if (isMobile)
-            if (embedMobileChrome) ActionsRow(actions: actions) else const SizedBox.shrink()
+            if (embedMobileChrome)
+              ActionsRow(actions: actions)
+            else
+              const SizedBox.shrink()
           else
             LayoutBuilder(
               builder: (context, constraints) {
                 final leadingWidth = meetingIsActive
                     ? _measureActiveMeetingHeaderWidth(constraints.maxWidth)
-                    : _measureMeetingHeaderTitleWidth(context, constraints.maxWidth);
+                    : _measureMeetingHeaderTitleWidth(
+                        context,
+                        constraints.maxWidth,
+                      );
                 final localActionState = resolvePaneHeaderActionState(
                   constraints,
                   leadingWidth: leadingWidth,
-                  minimumLeadingWidth: meetingIsActive ? _meetingToolbarPreferredCompactWidth : 120,
-                  reserve: meetingIsActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
+                  minimumLeadingWidth: meetingIsActive
+                      ? _meetingToolbarPreferredCompactWidth
+                      : 120,
+                  reserve: meetingIsActive
+                      ? desktopPaneHeaderActionReserve + 32
+                      : desktopPaneHeaderActionReserve,
                   actions: actions,
                   preferCompactBeforeOverflow: meetingIsActive,
                 );
                 final actionState = localActionState;
-                final visibleActions = visiblePaneHeaderActions(actions, overflowCollapsed: actionState.overflowCollapsed);
+                final visibleActions = visiblePaneHeaderActions(
+                  actions,
+                  overflowCollapsed: actionState.overflowCollapsed,
+                );
                 return CompactHeaderActions(
                   state: actionState,
                   child: SizedBox(
@@ -2476,20 +3050,28 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             child: SizedBox(
                               height: desktopPaneHeaderContentHeight,
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                ),
                                 child: Row(
                                   spacing: desktopPaneHeaderButtonGap,
                                   children: [
                                     Expanded(
                                       child: LayoutBuilder(
                                         builder: (context, toolbarConstraints) {
-                                          final compactControls = toolbarConstraints.maxWidth < _meetingToolbarCompactThreshold;
+                                          final compactControls =
+                                              toolbarConstraints.maxWidth <
+                                              _meetingToolbarCompactThreshold;
                                           return SingleChildScrollView(
                                             scrollDirection: Axis.horizontal,
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
-                                              spacing: desktopPaneHeaderButtonGap,
-                                              children: _meetingToolbarControls(context, compact: compactControls),
+                                              spacing:
+                                                  desktopPaneHeaderButtonGap,
+                                              children: _meetingToolbarControls(
+                                                context,
+                                                compact: compactControls,
+                                              ),
                                             ),
                                           );
                                         },
@@ -2513,7 +3095,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             child: SizedBox(
                               height: desktopPaneHeaderContentHeight,
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                ),
                                 child: Row(
                                   spacing: desktopPaneHeaderButtonGap,
                                   children: [
@@ -2561,7 +3145,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _leaveMeeting() {
-    final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    final meetingViewController = Controller.ofType<MeetingViewController>(
+      context,
+    );
     final navController = Controller.ofType<NavController>(context);
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     context.findAncestorStateOfType<room.VideoChatConnectionState>()?.hangup();
@@ -2577,7 +3163,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _endMeeting() {
-    final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    final meetingViewController = Controller.ofType<MeetingViewController>(
+      context,
+    );
     final navController = Controller.ofType<NavController>(context);
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     context.findAncestorStateOfType<room.VideoChatConnectionState>()?.hangup();
@@ -2591,7 +3179,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _joinMeeting() {
-    final meetingViewController = Controller.ofType<MeetingViewController>(context);
+    final meetingViewController = Controller.ofType<MeetingViewController>(
+      context,
+    );
 
     meetingViewController.resetToLobby();
     _showMeetingPane(context);
@@ -2601,11 +3191,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _showChatPane(context);
   }
 
-  Future<void> _showMobileThreadPicker({required String threadListPath, required String? agentKey, required String? agentName}) async {
+  Future<void> _showMobileThreadPicker({
+    required String threadListPath,
+    required String? agentKey,
+    required String? agentName,
+  }) async {
     await showShadDialog<void>(
       context: context,
       builder: (dialogContext) {
-        Widget footerButton({required VoidCallback onPressed, required Widget child, bool primary = false}) {
+        Widget footerButton({
+          required VoidCallback onPressed,
+          required Widget child,
+          bool primary = false,
+        }) {
           final button = primary ? ShadButton.new : ShadButton.outline;
           return SizedBox(
             width: double.infinity,
@@ -2617,7 +3215,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           title: const Text("All threads"),
           description: const Text("Select a thread to view."),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360.0, maxHeight: 520.0),
+            constraints: const BoxConstraints(
+              maxWidth: 360.0,
+              maxHeight: 520.0,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2630,7 +3231,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       client: widget.room,
                       agentName: agentName,
                       threadListPath: threadListPath,
-                      selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
+                      selectedThreadPath: _selectedThreadPathForAgentKey(
+                        agentKey,
+                      ),
                       newThreadResetVersion: _newThreadResetVersion,
                       mobileListTopPadding: 0,
                       mobileListBottomPadding: 0,
@@ -2642,7 +3245,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                         Navigator.of(dialogContext).pop();
                       },
                       onSelectedThreadResolved: (path, displayName) {
-                        _setSelectedThreadPath(agentKey, path, displayName: displayName);
+                        _setSelectedThreadPath(
+                          agentKey,
+                          path,
+                          displayName: displayName,
+                        );
                       },
                     ),
                   ),
@@ -2660,7 +3267,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       child: const Text("New Thread"),
                     ),
                     const SizedBox(height: 12),
-                    footerButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close")),
+                    footerButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text("Close"),
+                    ),
                   ],
                 ),
               ],
@@ -2690,7 +3300,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             threadListPath: threadListPath,
             selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
             newThreadResetVersion: _newThreadResetVersion,
-            onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
+            onSelectedThreadPathChanged: (path) =>
+                _setSelectedThreadPath(agentKey, path),
           ),
         ),
       ),
@@ -2704,7 +3315,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required double horizontalInset,
   }) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(horizontalInset, 0, horizontalInset, desktopPaneBottomInset),
+      padding: EdgeInsets.fromLTRB(
+        horizontalInset,
+        0,
+        horizontalInset,
+        desktopPaneBottomInset,
+      ),
       child: MeshagentInlineThreadCreatePrompt(
         key: ValueKey("inline-thread-create-${agentKey ?? "none"}"),
         createItemTopPadding: 0,
@@ -2743,7 +3359,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return const SizedBox(height: desktopPaneSecondaryControlTopOffset);
   }
 
-  Widget _buildAgentArea(BuildContext context, List<Widget> actions, {bool showEmbeddedThreadList = true, bool embedMobileChrome = true}) {
+  Widget _buildAgentArea(
+    BuildContext context,
+    List<Widget> actions, {
+    bool showEmbeddedThreadList = true,
+    bool embedMobileChrome = true,
+  }) {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = _usesMobileRoomLayout(context);
 
@@ -2773,11 +3394,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
             if (service == null && developmentParticipant == null) {
               final requestedRouteId = widget.service;
-              final requestedDevelopmentParticipantName = requestedRouteId == null ? null : developmentAgentNameFromRoute(requestedRouteId);
-              final requestedLegacyDevelopmentParticipantId = requestedRouteId == null
+              final requestedDevelopmentParticipantName =
+                  requestedRouteId == null
                   ? null
-                  : legacyDevelopmentAgentParticipantIdFromRoute(requestedRouteId);
-              if (requestedDevelopmentParticipantName != null || requestedLegacyDevelopmentParticipantId != null) {
+                  : developmentAgentNameFromRoute(requestedRouteId);
+              final requestedLegacyDevelopmentParticipantId =
+                  requestedRouteId == null
+                  ? null
+                  : legacyDevelopmentAgentParticipantIdFromRoute(
+                      requestedRouteId,
+                    );
+              if (requestedDevelopmentParticipantName != null ||
+                  requestedLegacyDevelopmentParticipantId != null) {
                 return _buildErrorArea(
                   context,
                   "Development mode agent is not currently online",
@@ -2787,22 +3415,43 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               }
 
               if (supported.isEmpty) {
-                return _buildErrorArea(context, "No supported agents installed", actions, embedMobileChrome: embedMobileChrome);
+                return _buildErrorArea(
+                  context,
+                  "No supported agents installed",
+                  actions,
+                  embedMobileChrome: embedMobileChrome,
+                );
               }
 
-              return _buildErrorArea(context, "Agent is not installed ${widget.service}", actions, embedMobileChrome: embedMobileChrome);
+              return _buildErrorArea(
+                context,
+                "Agent is not installed ${widget.service}",
+                actions,
+                embedMobileChrome: embedMobileChrome,
+              );
             }
 
             if (developmentParticipant != null) {
               final name = participantDisplayName(developmentParticipant);
               if (name == null) {
-                return _buildErrorArea(context, "Development mode agent is missing a name", actions);
+                return _buildErrorArea(
+                  context,
+                  "Development mode agent is missing a name",
+                  actions,
+                );
               }
 
-              final descriptor = participantConversationDescriptor(developmentParticipant);
+              final descriptor = participantConversationDescriptor(
+                developmentParticipant,
+              );
               final agentKey = selected.routeId;
               if (descriptor?.isVoiceOnly == true) {
-                return _buildVoiceArea(context, name, actions, embedMobileChrome: embedMobileChrome);
+                return _buildVoiceArea(
+                  context,
+                  name,
+                  actions,
+                  embedMobileChrome: embedMobileChrome,
+                );
               }
 
               if (descriptor?.isChat == true) {
@@ -2815,7 +3464,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   threadDir: descriptor.threadDir,
                   threadListPath: descriptor.threadListPath,
                   selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
-                  onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
+                  onSelectedThreadPathChanged: (path) =>
+                      _setSelectedThreadPath(agentKey, path),
                   embedMobileChrome: embedMobileChrome,
                 );
               }
@@ -2828,7 +3478,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               );
             }
 
-            final descriptor = serviceConversationDescriptor(service!, remoteParticipants: widget.room.messaging.remoteParticipants);
+            final descriptor = serviceConversationDescriptor(
+              service!,
+              remoteParticipants: widget.room.messaging.remoteParticipants,
+            );
             final type = _serviceType(service);
             final agentKey = selected.routeId;
             if (descriptor?.isChat == true) {
@@ -2841,17 +3494,40 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 threadDir: descriptor.threadDir,
                 threadListPath: descriptor.threadListPath,
                 selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
-                onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
+                onSelectedThreadPathChanged: (path) =>
+                    _setSelectedThreadPath(agentKey, path),
                 embedMobileChrome: embedMobileChrome,
               );
             } else if (descriptor?.isMeeting == true) {
-              return _buildMeetingTranscriberArea(context, service.agents[0].name, actions, embedMobileChrome: embedMobileChrome);
+              return _buildMeetingTranscriberArea(
+                context,
+                service.agents[0].name,
+                actions,
+                embedMobileChrome: embedMobileChrome,
+              );
             } else if (descriptor?.isVoiceOnly == true) {
-              return _buildVoiceArea(context, service.agents[0].name, actions, embedMobileChrome: embedMobileChrome);
+              return _buildVoiceArea(
+                context,
+                service.agents[0].name,
+                actions,
+                embedMobileChrome: embedMobileChrome,
+              );
             } else if (type == "Shell") {
-              return _buildShellArea(context, service, actions, embedMobileChrome: embedMobileChrome);
-            } else if (service.metadata.annotations["meshagent.service.readme"] != null) {
-              return MarkdownViewer(markdown: service.metadata.annotations["meshagent.service.readme"] ?? "");
+              return _buildShellArea(
+                context,
+                service,
+                actions,
+                embedMobileChrome: embedMobileChrome,
+              );
+            } else if (service
+                    .metadata
+                    .annotations["meshagent.service.readme"] !=
+                null) {
+              return MarkdownViewer(
+                markdown:
+                    service.metadata.annotations["meshagent.service.readme"] ??
+                    "",
+              );
             } else {
               return _buildErrorArea(
                 context,
@@ -2866,7 +3542,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  double _measureMeetingHeaderTitleWidth(BuildContext context, double maxWidth) {
+  double _measureMeetingHeaderTitleWidth(
+    BuildContext context,
+    double maxWidth,
+  ) {
     final painter = TextPainter(
       text: TextSpan(text: "Get ready to meet", style: meetingHeaderTitleStyle),
       maxLines: 1,
@@ -2888,7 +3567,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   bool _usesMobileRoomLayout(BuildContext context) {
-    return ResponsiveBreakpoints.of(context).isMobile || _isLandscapePhoneViewport(context);
+    return ResponsiveBreakpoints.of(context).isMobile ||
+        _isLandscapePhoneViewport(context);
   }
 
   @override
@@ -2906,17 +3586,30 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             builder: (context, _) {
               if (!services.state.isReady) {
                 if (services.state.hasError) {
-                  return _buildRoomInitializationError(context, title: "Unable to load room services", error: services.state.error);
+                  return _buildRoomInitializationError(
+                    context,
+                    title: "Unable to load room services",
+                    error: services.state.error,
+                  );
                 }
 
-                final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
+                final actions = _emptyRoomHeaderActions(
+                  isSmallDisplay: isSmallDisplay,
+                  isMobile: isMobile,
+                );
                 if (isMobile) {
                   return _buildMobileRoomScaffold(
                     context,
                     leadingAction: BackButton(projectId: widget.projectId),
-                    title: Text(widget.room.roomName ?? "Room", style: meetingHeaderTitleStyle),
+                    title: Text(
+                      widget.room.roomName ?? "Room",
+                      style: meetingHeaderTitleStyle,
+                    ),
                     trailingActions: const [],
-                    body: _buildRoomLoading(context, title: "Loading room services"),
+                    body: _buildRoomLoading(
+                      context,
+                      title: "Loading room services",
+                    ),
                   );
                 }
 
@@ -2924,7 +3617,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   child: Column(
                     children: [
                       ActionsRow(actions: actions),
-                      Expanded(child: _buildRoomLoading(context, title: "Loading room services")),
+                      Expanded(
+                        child: _buildRoomLoading(
+                          context,
+                          title: "Loading room services",
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -2940,29 +3638,51 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       builder: (context) {
                         return SignalBuilder(
                           builder: (context, _) {
-                            final canViewStorageAllowed = canViewStorage.state.value == true;
-                            final filesVisible = canViewStorageAllowed && controller.isFilesShown;
-                            final supported = _supportedServices(services.state.value!);
+                            final canViewStorageAllowed =
+                                canViewStorage.state.value == true;
+                            final filesVisible =
+                                canViewStorageAllowed &&
+                                controller.isFilesShown;
+                            final supported = _supportedServices(
+                              services.state.value!,
+                            );
                             final selected = _resolveSelectedAgent(supported);
-                            final meetingSessionActive = _isMeetingSessionActive(context);
-                            final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;
-                            final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
+                            final meetingSessionActive =
+                                _isMeetingSessionActive(context);
+                            final useLandscapePhoneMeetingPane =
+                                _isLandscapePhoneViewport(context) &&
+                                controller.inMeeting;
+                            final split =
+                                filesVisible ||
+                                (controller.inMeeting &&
+                                    !useLandscapePhoneMeetingPane);
 
                             if (!_hasVisibleAgents(supported)) {
-                              final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
+                              final actions = _emptyRoomHeaderActions(
+                                isSmallDisplay: isSmallDisplay,
+                                isMobile: isMobile,
+                              );
                               final cs = ShadTheme.of(context).colorScheme;
                               final emptyStateBody = SignalBuilder(
                                 builder: (context, _) {
-                                  final ownerResolved = isOwner.state.isReady || isOwner.state.hasError;
-                                  final canInstallAgent = isOwner.state.value == true;
+                                  final ownerResolved =
+                                      isOwner.state.isReady ||
+                                      isOwner.state.hasError;
+                                  final canInstallAgent =
+                                      isOwner.state.value == true;
 
                                   if (!ownerResolved) {
-                                    return _buildRoomLoading(context, title: "Loading room permissions");
+                                    return _buildRoomLoading(
+                                      context,
+                                      title: "Loading room permissions",
+                                    );
                                   }
 
                                   return Center(
                                     child: ConstrainedBox(
-                                      constraints: const BoxConstraints(maxWidth: 520),
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 520,
+                                      ),
                                       child: Padding(
                                         padding: const EdgeInsets.all(16),
                                         child: Column(
@@ -2970,14 +3690,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           children: [
                                             Text(
                                               "Welcome to your room",
-                                              style: ShadTheme.of(context).textTheme.h1,
+                                              style: ShadTheme.of(
+                                                context,
+                                              ).textTheme.h1,
                                               textAlign: TextAlign.center,
                                             ),
                                             if (canInstallAgent) ...[
                                               SizedBox(height: 8),
                                               Text(
                                                 "Install an agent in this room to get started",
-                                                style: ShadTheme.of(context).textTheme.p,
+                                                style: ShadTheme.of(
+                                                  context,
+                                                ).textTheme.p,
                                                 textAlign: TextAlign.center,
                                               ),
                                               SizedBox(height: 20),
@@ -2985,13 +3709,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                 onPressed: () async {
                                                   await showShadDialog(
                                                     context: context,
-                                                    builder: (context) => ManageAgentsDialog(
-                                                      room: widget.room,
-                                                      projectId: widget.projectId,
-                                                      onServiceChanged: () {
-                                                        services.refresh();
-                                                      },
-                                                    ),
+                                                    builder: (context) =>
+                                                        ManageAgentsDialog(
+                                                          room: widget.room,
+                                                          projectId:
+                                                              widget.projectId,
+                                                          onServiceChanged: () {
+                                                            services.refresh();
+                                                          },
+                                                        ),
                                                   );
                                                 },
                                                 child: Text("Install an Agent"),
@@ -3010,12 +3736,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   color: cs.card,
                                   child: _buildMobileRoomScaffold(
                                     context,
-                                    leadingAction: BackButton(projectId: widget.projectId),
-                                    title: const SizedBox.shrink(),
-                                    trailingActions: _buildMobileEmptyRoomHeaderActions(
-                                      context,
-                                      canManageAgents: isOwner.state.value == true,
+                                    leadingAction: BackButton(
+                                      projectId: widget.projectId,
                                     ),
+                                    title: const SizedBox.shrink(),
+                                    trailingActions:
+                                        _buildMobileEmptyRoomHeaderActions(
+                                          context,
+                                          canManageAgents:
+                                              isOwner.state.value == true,
+                                        ),
                                     body: emptyStateBody,
                                   ),
                                 );
@@ -3036,15 +3766,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
                             return ToolConnectionScope(
                               room: widget.room,
-                              tools: [UIToolkit(context: context, room: widget.room)],
+                              tools: [UIToolkit(context: context)],
                               builder: (context, error) {
                                 final cs = ShadTheme.of(context).colorScheme;
 
                                 if (isMobile) {
-                                  final activePane = _mobileActivePane(filesVisible: filesVisible);
+                                  final activePane = _mobileActivePane(
+                                    filesVisible: filesVisible,
+                                  );
                                   final useMobileMeetingHeaderControls =
-                                      activePane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
-                                  final centerMobileHeaderTitle = activePane == _MobileRoomPane.meeting && !useMobileMeetingHeaderControls;
+                                      activePane == _MobileRoomPane.meeting &&
+                                      _isMeetingSessionActive(context);
+                                  final centerMobileHeaderTitle =
+                                      activePane == _MobileRoomPane.meeting &&
+                                      !useMobileMeetingHeaderControls;
                                   final headerTitle = switch (activePane) {
                                     _MobileRoomPane.chat => AgentsDropdown(
                                       projectId: widget.projectId,
@@ -3053,41 +3788,79 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                       selectedAgentRouteId: selected.routeId,
                                       services: supported,
                                       onOpen: services.refresh,
-                                      onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+                                      onManageAgents:
+                                          isOwner.state.value != true
+                                          ? null
+                                          : showManageAgents,
                                     ),
-                                    _MobileRoomPane.files => _buildMobilePlainHeaderTitle(_mobileFilesLocation(context).title),
+                                    _MobileRoomPane.files =>
+                                      _buildMobilePlainHeaderTitle(
+                                        _mobileFilesLocation(context).title,
+                                      ),
                                     _MobileRoomPane.meeting =>
                                       useMobileMeetingHeaderControls
-                                          ? _buildMobileMeetingHeaderTitle(context)
-                                          : Text("Get ready to meet", style: meetingHeaderTitleStyle),
+                                          ? _buildMobileMeetingHeaderTitle(
+                                              context,
+                                            )
+                                          : Text(
+                                              "Get ready to meet",
+                                              style: meetingHeaderTitleStyle,
+                                            ),
                                   };
 
                                   final mobileBody = controller.inMeeting
-                                      ? _buildMeeting(context, null, const [], embedMobileChrome: false)
+                                      ? _buildMeeting(
+                                          context,
+                                          null,
+                                          const [],
+                                          embedMobileChrome: false,
+                                        )
                                       : filesVisible
-                                      ? _buildFilesArea(context, const [], embedMobileChrome: false)
-                                      : _buildAgentArea(context, const [], embedMobileChrome: false);
+                                      ? _buildFilesArea(
+                                          context,
+                                          const [],
+                                          embedMobileChrome: false,
+                                        )
+                                      : _buildAgentArea(
+                                          context,
+                                          const [],
+                                          embedMobileChrome: false,
+                                        );
 
                                   return _buildMobileRoomScaffold(
                                     context,
-                                    leadingAction: useMobileMeetingHeaderControls
+                                    leadingAction:
+                                        useMobileMeetingHeaderControls
                                         ? const SizedBox.shrink()
-                                        : _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
+                                        : _buildMobileRoomLeadingAction(
+                                            context,
+                                            filesVisible: filesVisible,
+                                          ),
                                     title: headerTitle,
-                                    trailingActions: _buildMobileRoomHeaderActions(
-                                      context,
-                                      canViewStorageAllowed: canViewStorageAllowed,
-                                      filesVisible: filesVisible,
-                                    ),
-                                    titleAlignment: centerMobileHeaderTitle ? Alignment.center : Alignment.centerLeft,
+                                    trailingActions:
+                                        _buildMobileRoomHeaderActions(
+                                          context,
+                                          canViewStorageAllowed:
+                                              canViewStorageAllowed,
+                                          filesVisible: filesVisible,
+                                        ),
+                                    titleAlignment: centerMobileHeaderTitle
+                                        ? Alignment.center
+                                        : Alignment.centerLeft,
                                     body: mobileBody,
-                                    bottomActions: useMobileMeetingHeaderControls
+                                    bottomActions:
+                                        useMobileMeetingHeaderControls
                                         ? const []
-                                        : (controller.inMeeting ? meetingActions(context) : const []),
+                                        : (controller.inMeeting
+                                              ? meetingActions(context)
+                                              : const []),
                                   );
                                 }
 
-                                final actions = _meetingPaneActions(context, canViewStorageAllowed: canViewStorageAllowed);
+                                final actions = _meetingPaneActions(
+                                  context,
+                                  canViewStorageAllowed: canViewStorageAllowed,
+                                );
 
                                 return RoomDeveloperLogsListener(
                                   events: events,
@@ -3101,13 +3874,22 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                         defaultSize: 1 - defaultDebugSize,
                                         child: ResizableSplitView(
                                           allowCollapse: meetingSessionActive,
-                                          minArea1Width: meetingSessionActive ? 58 : 360,
+                                          minArea1Width: meetingSessionActive
+                                              ? 58
+                                              : 360,
                                           minArea2Width: 440,
-                                          preferredArea2Fraction: meetingSessionActive ? 0.75 : null,
-                                          minArea2Fraction: meetingSessionActive ? 0.5 : null,
+                                          preferredArea2Fraction:
+                                              meetingSessionActive
+                                              ? 0.75
+                                              : null,
+                                          minArea2Fraction: meetingSessionActive
+                                              ? 0.5
+                                              : null,
                                           maxArea2Fraction: null,
-                                          collapseArea1Width: meetingSessionActive ? 300 : null,
-                                          controller: _meetingSplitViewController,
+                                          collapseArea1Width:
+                                              meetingSessionActive ? 300 : null,
+                                          controller:
+                                              _meetingSplitViewController,
                                           onCollapsedChanged: (_) {
                                             if (!mounted) {
                                               return;
@@ -3117,37 +3899,74 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           },
                                           split: split,
                                           area1: useLandscapePhoneMeetingPane
-                                              ? _buildMeeting(context, null, actions)
+                                              ? _buildMeeting(
+                                                  context,
+                                                  null,
+                                                  actions,
+                                                )
                                               : ColoredBox(
                                                   color: cs.card,
-                                                  child: _buildAgentArea(context, [
-                                                    if (isSmallDisplay) BackButton(projectId: widget.projectId),
+                                                  child: _buildAgentArea(
+                                                    context,
+                                                    [
+                                                      if (isSmallDisplay)
+                                                        BackButton(
+                                                          projectId:
+                                                              widget.projectId,
+                                                        ),
 
-                                                    AgentsDropdown(
-                                                      projectId: widget.projectId,
-                                                      room: widget.room,
-                                                      selectedService: selected.service,
-                                                      selectedAgentRouteId: selected.routeId,
-                                                      services: supported,
-                                                      onOpen: services.refresh,
-                                                      onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-                                                    ),
+                                                      AgentsDropdown(
+                                                        projectId:
+                                                            widget.projectId,
+                                                        room: widget.room,
+                                                        selectedService:
+                                                            selected.service,
+                                                        selectedAgentRouteId:
+                                                            selected.routeId,
+                                                        services: supported,
+                                                        onOpen:
+                                                            services.refresh,
+                                                        onManageAgents:
+                                                            isOwner
+                                                                    .state
+                                                                    .value !=
+                                                                true
+                                                            ? null
+                                                            : showManageAgents,
+                                                      ),
 
-                                                    ParticipantsButton(
-                                                      participants: participants,
-                                                      localParticipant: widget.room.localParticipant,
-                                                    ),
+                                                      ParticipantsButton(
+                                                        participants:
+                                                            participants,
+                                                        localParticipant: widget
+                                                            .room
+                                                            .localParticipant,
+                                                      ),
 
-                                                    if (!split) ...actions,
-                                                  ], showEmbeddedThreadList: !split),
+                                                      if (!split) ...actions,
+                                                    ],
+                                                    showEmbeddedThreadList:
+                                                        !split,
+                                                  ),
                                                 ),
                                           area2: !split
                                               ? Container()
                                               : filesVisible
-                                              ? _buildFilesArea(context, actions)
+                                              ? _buildFilesArea(
+                                                  context,
+                                                  actions,
+                                                )
                                               : controller.inMeeting
-                                              ? _buildMeeting(context, null, actions)
-                                              : _buildAgentArea(context, actions, showEmbeddedThreadList: false),
+                                              ? _buildMeeting(
+                                                  context,
+                                                  null,
+                                                  actions,
+                                                )
+                                              : _buildAgentArea(
+                                                  context,
+                                                  actions,
+                                                  showEmbeddedThreadList: false,
+                                                ),
                                         ),
                                       ),
 
@@ -3160,7 +3979,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                             pricing: null,
                                             events: events,
                                             room: widget.room,
-                                            shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}-esgz",
+                                            shellImage:
+                                                "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}-esgz",
                                           ),
                                         ),
                                     ],
@@ -3184,7 +4004,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 }
 
 class _ResourceFetcher<T> extends StatefulWidget {
-  const _ResourceFetcher({super.key, required this.uri, required this.builder, required this.mapper});
+  const _ResourceFetcher({
+    super.key,
+    required this.uri,
+    required this.builder,
+    required this.mapper,
+  });
 
   final T Function(Uint8List data) mapper;
   final Widget Function(BuildContext context, T? data, Object? error) builder;

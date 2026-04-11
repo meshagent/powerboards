@@ -6,8 +6,8 @@ import 'package:powerboards/meshagent/tools/display_document.dart';
 import 'package:powerboards/meshagent/tools/show_alert.dart';
 import 'package:powerboards/meshagent/tools/toast.dart';
 
-class UIToolkit extends RemoteToolkit {
-  UIToolkit({required BuildContext context, required super.room})
+class UIToolkit extends Toolkit {
+  UIToolkit({required BuildContext context})
     : super(
         name: "ui",
         title: "ui tools",
