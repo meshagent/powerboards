@@ -127,6 +127,27 @@ void main() {
     expect(scrollView.physics, isA<NeverScrollableScrollPhysics>());
   });
 
+  testWidgets('mobile compact alert dialog shows the primary action first', (tester) async {
+    await _pumpDialog(
+      tester,
+      PowerboardsShadDialog.compactAlert(
+        title: const Text('Secret requested'),
+        description: const Text('Provide a secret value.'),
+        actions: [
+          ShadButton.secondary(onPressed: () {}, child: const Text('Cancel')),
+          ShadButton(onPressed: () {}, child: const Text('Provide')),
+        ],
+        child: const SizedBox(height: 40, child: Text('Body')),
+      ),
+    );
+
+    final provideRect = tester.getRect(find.widgetWithText(ShadButton, 'Provide'));
+    final cancelRect = tester.getRect(find.widgetWithText(ShadButton, 'Cancel'));
+    final isPrimaryFirst = provideRect.top < cancelRect.top || (provideRect.top == cancelRect.top && provideRect.left < cancelRect.left);
+
+    expect(isPrimaryFirst, isTrue);
+  });
+
   testWidgets('mobile flow dialog caps growth and scrolls inside the body for long content', (tester) async {
     const dialogKey = ValueKey('scrolling-flow-dialog');
 

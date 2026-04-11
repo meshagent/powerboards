@@ -418,6 +418,7 @@ class PowerboardsShadDialog extends StatelessWidget {
     final effectiveActions = _buildDialogActions(
       actions,
       isMobile: isMobile,
+      usesMobileFlowPresentation: usesMobileFlowPresentation,
       isCompactDesktopDialog: isCompactDesktopDialog,
       expandDesktopActions: expandDesktopActions ?? false,
       effectiveDialogMaxWidth: effectiveDialogMaxWidth,
@@ -657,6 +658,7 @@ Widget? _resolveFlowDialogDescription(
 List<Widget> _buildDialogActions(
   List<Widget> actions, {
   required bool isMobile,
+  required bool usesMobileFlowPresentation,
   required bool isCompactDesktopDialog,
   required bool expandDesktopActions,
   required double effectiveDialogMaxWidth,
@@ -668,7 +670,7 @@ List<Widget> _buildDialogActions(
   }
 
   if (isMobile) {
-    final mobileActions = stackActionsOnMobile ? actions.reversed.toList(growable: false) : actions;
+    final mobileActions = stackActionsOnMobile && usesMobileFlowPresentation ? actions.reversed.toList(growable: false) : actions;
 
     if (!stackActionsOnMobile) {
       return mobileActions.map(_wrapDialogAction).toList(growable: false);
