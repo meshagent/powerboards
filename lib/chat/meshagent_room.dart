@@ -3036,7 +3036,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
                             return ToolConnectionScope(
                               room: widget.room,
-                              tools: [UIToolkit(context)],
+                              tools: [UIToolkit(context: context, room: widget.room)],
                               builder: (context, error) {
                                 final cs = ShadTheme.of(context).colorScheme;
 

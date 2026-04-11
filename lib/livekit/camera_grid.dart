@@ -27,7 +27,11 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   bool _collapseScheduled = false;
 
   bool _participantHasShare(Participant participant) {
-    return activeVideoPublicationForSource(participant, TrackSource.screenShareVideo) != null;
+    return activeVideoPublicationForSource(
+          participant,
+          TrackSource.screenShareVideo,
+        ) !=
+        null;
   }
 
   int _getNumberOfShares(List<Participant> participants) {
@@ -35,7 +39,8 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 
   bool _participantHasCamera(Participant participant) {
-    return activeVideoPublicationForSource(participant, TrackSource.camera) != null;
+    return activeVideoPublicationForSource(participant, TrackSource.camera) !=
+        null;
   }
 
   int _getNumberOfVideos(List<Participant> participants) {
@@ -43,11 +48,19 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 
   bool _expandedCameraStillAvailable(List<Participant> participants) {
-    return participants.any((p) => _expandedController.isExpanded(p.identity) && _participantHasCamera(p));
+    return participants.any(
+      (p) =>
+          _expandedController.isExpanded(p.identity) &&
+          _participantHasCamera(p),
+    );
   }
 
   bool _expandedVideoStillAvailable(List<Participant> participants) {
-    return participants.any((p) => _expandedController.isExpanded(p.identity) && (_participantHasShare(p) || _participantHasCamera(p)));
+    return participants.any(
+      (p) =>
+          _expandedController.isExpanded(p.identity) &&
+          (_participantHasShare(p) || _participantHasCamera(p)),
+    );
   }
 
   bool _shouldCollapseExpandedParticipant(List<Participant> participants) {
@@ -101,7 +114,9 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    _expandedController = Controller.ofType<ExpandParticipantController>(context);
+    _expandedController = Controller.ofType<ExpandParticipantController>(
+      context,
+    );
   }
 
   @override
@@ -115,7 +130,9 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final participants = _expandedController.hasExpanded
-        ? widget.participants.where((p) => _expandedController.isExpanded(p.identity)).toList(growable: false)
+        ? widget.participants
+              .where((p) => _expandedController.isExpanded(p.identity))
+              .toList(growable: false)
         : widget.participants;
 
     return cameraGridBuilder(
@@ -123,14 +140,17 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
       participants,
       spacing: 12.0,
       frameBuilder: (context, participant, publication, trackWidget, showName) {
-        final isScreenShare = publication?.source == TrackSource.screenShareVideo;
+        final isScreenShare =
+            publication?.source == TrackSource.screenShareVideo;
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: HoverBuilder(
             cursor: SystemMouseCursors.basic,
             builder: (hovered) {
-              final alwaysShowName = isMobile && _expandedController.isExpanded(participant.identity);
+              final alwaysShowName =
+                  isMobile &&
+                  _expandedController.isExpanded(participant.identity);
               return ParticipantTrack(
                 participant: participant,
                 track: trackWidget,
@@ -146,7 +166,11 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   }
 }
 
-List<int> _layoutCameras(List<TrackPublication?> cameras, double width, double height) {
+List<int> _layoutCameras(
+  List<TrackPublication?> cameras,
+  double width,
+  double height,
+) {
   int N = cameras.length;
   List<int> bestLayout = [];
   double minWaste = double.infinity;
@@ -163,11 +187,14 @@ List<int> _layoutCameras(List<TrackPublication?> cameras, double width, double h
     for (int i = 0; i < N; i++) {
       final cam = cameras[i];
 
-      final dims = cam == null ? const VideoDimensions(640, 480) : cam.dimensions;
+      final dims = cam == null
+          ? const VideoDimensions(640, 480)
+          : cam.dimensions;
 
       if (dims == null) {
       } else {
-        double cameraAspectRatio = dims.width.toDouble() / dims.height.toDouble();
+        double cameraAspectRatio =
+            dims.width.toDouble() / dims.height.toDouble();
 
         // Calculate the ideal aspect ratio for the grid layout
         double gridAspectRatio = (width / cols) / (height / rows);
@@ -199,7 +226,13 @@ Widget cameraGridBuilder(
   int rowsDesired = 0,
   int columnsDesired = 0,
   bool tryFill = true,
-  required Widget Function(BuildContext context, Participant participant, TrackPublication? publication, Widget trackWidget, bool showName)
+  required Widget Function(
+    BuildContext context,
+    Participant participant,
+    TrackPublication? publication,
+    Widget trackWidget,
+    bool showName,
+  )
   frameBuilder,
 }) {
   final room = VideoRoomModel.maybeOf(context)?.room;
@@ -215,14 +248,23 @@ Widget cameraGridBuilder(
       final trackParticipants = <Participant>[];
       final trackPublications = <TrackPublication?>[];
 
-      final hasShare = participants.any((p) => activeVideoPublicationForSource(p, TrackSource.screenShareVideo) != null);
+      final hasShare = participants.any(
+        (p) =>
+            activeVideoPublicationForSource(p, TrackSource.screenShareVideo) !=
+            null,
+      );
 
       for (var p in participants) {
         bool added = false;
 
         final publications = showAllVideos
             ? activeVideoPublications(p)
-            : activeVideoPublications(p, source: hasShare ? TrackSource.screenShareVideo : TrackSource.camera);
+            : activeVideoPublications(
+                p,
+                source: hasShare
+                    ? TrackSource.screenShareVideo
+                    : TrackSource.camera,
+              );
 
         for (final publication in publications) {
           final track = publication.track;
@@ -237,7 +279,9 @@ Widget cameraGridBuilder(
             IgnorePointer(
               child: VideoTrackRenderer(
                 track,
-                fit: publication.source == TrackSource.screenShareVideo ? VideoViewFit.contain : VideoViewFit.cover,
+                fit: publication.source == TrackSource.screenShareVideo
+                    ? VideoViewFit.contain
+                    : VideoViewFit.cover,
               ),
             ),
           );
@@ -250,7 +294,9 @@ Widget cameraGridBuilder(
             Container(
               color: const Color(0xFF222222),
               alignment: .center,
-              child: p.identity.contains(".agent") ? AudioStats(room: room, participant: p) : const SizedBox.shrink(),
+              child: p.identity.contains(".agent")
+                  ? AudioStats(room: room, participant: p)
+                  : const SizedBox.shrink(),
             ),
           );
         }
@@ -264,14 +310,24 @@ Widget cameraGridBuilder(
       return LayoutBuilder(
         builder: (context, constraints) {
           if (rowsDesired == 0 && columnsDesired == 0) {
-            final layout = _layoutCameras(trackPublications, constraints.maxWidth, constraints.maxHeight);
+            final layout = _layoutCameras(
+              trackPublications,
+              constraints.maxWidth,
+              constraints.maxHeight,
+            );
             List<Widget> cams = [];
 
             final rows = layout[0];
             final cols = layout[1];
 
-            final availableWidth = constraints.maxWidth - spacing * (cols - 1);
-            final availableHeight = constraints.maxHeight - spacing * (rows - 1);
+            final availableWidth = max(
+              constraints.maxWidth - spacing * (cols - 1),
+              0.0,
+            );
+            final availableHeight = max(
+              constraints.maxHeight - spacing * (rows - 1),
+              0.0,
+            );
             final w = availableWidth / cols;
             final h = availableHeight / rows;
             for (var r = 0; r < rows; r++) {
@@ -289,7 +345,17 @@ Widget cameraGridBuilder(
                   Positioned(
                     left: c * (w + spacing),
                     top: r * (h + spacing),
-                    child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, publication, track, showNames)),
+                    child: SizedBox(
+                      width: w,
+                      height: h,
+                      child: frameBuilder(
+                        context,
+                        participant,
+                        publication,
+                        track,
+                        showNames,
+                      ),
+                    ),
                   ),
                 );
               }
@@ -306,16 +372,31 @@ Widget cameraGridBuilder(
 
           if (rowsDesired > 0 ||
               columnsDesired > 0 ||
-              min(objectWidth / objectHeight, objectHeight / objectWidth) > .5 ||
+              min(objectWidth / objectHeight, objectHeight / objectWidth) >
+                  .5 ||
               slots < 4 && tryFill) {
             int rows;
             int cols;
 
             if (objectWidth < objectHeight) {
-              rows = (rowsDesired > 0 ? rowsDesired : (columnsDesired > 0 ? slots / columnsDesired : (sqrt(slots)).ceil())).toInt();
-              cols = columnsDesired > 0 ? columnsDesired : (slots / (rows)).ceil();
+              rows =
+                  (rowsDesired > 0
+                          ? rowsDesired
+                          : (columnsDesired > 0
+                                ? slots / columnsDesired
+                                : (sqrt(slots)).ceil()))
+                      .toInt();
+              cols = columnsDesired > 0
+                  ? columnsDesired
+                  : (slots / (rows)).ceil();
             } else {
-              cols = (columnsDesired > 0 ? columnsDesired : (rowsDesired > 0 ? slots / rowsDesired : (sqrt(slots)).ceil())).toInt();
+              cols =
+                  (columnsDesired > 0
+                          ? columnsDesired
+                          : (rowsDesired > 0
+                                ? slots / rowsDesired
+                                : (sqrt(slots)).ceil()))
+                      .toInt();
               rows = rowsDesired > 0 ? rowsDesired : (slots / (cols)).ceil();
             }
 
@@ -336,7 +417,17 @@ Widget cameraGridBuilder(
                   Positioned(
                     left: c * w + spacing * c,
                     top: r * h + spacing * r,
-                    child: SizedBox(width: w, height: h, child: frameBuilder(context, participant, publication, track, showNames)),
+                    child: SizedBox(
+                      width: w,
+                      height: h,
+                      child: frameBuilder(
+                        context,
+                        participant,
+                        publication,
+                        track,
+                        showNames,
+                      ),
+                    ),
                   ),
                 );
               }
@@ -395,7 +486,13 @@ Widget cameraGridBuilder(
                     child: SizedBox(
                       width: itemSize,
                       height: itemSize,
-                      child: frameBuilder(context, participant, publication, track, showNames),
+                      child: frameBuilder(
+                        context,
+                        participant,
+                        publication,
+                        track,
+                        showNames,
+                      ),
                     ),
                   ),
                 );
@@ -430,7 +527,13 @@ Widget cameraGridBuilder(
                     child: SizedBox(
                       width: itemSize,
                       height: itemSize,
-                      child: frameBuilder(context, participant, publication, track, showNames),
+                      child: frameBuilder(
+                        context,
+                        participant,
+                        publication,
+                        track,
+                        showNames,
+                      ),
                     ),
                   ),
                 );
