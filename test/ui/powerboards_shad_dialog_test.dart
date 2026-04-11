@@ -98,8 +98,8 @@ void main() {
     final dialogBottom = tester.getBottomLeft(dialogFinder).dy;
     final saveBottom = tester.getBottomLeft(find.widgetWithText(ShadButton, 'Save')).dy;
 
-    expect(dialogSize.height, greaterThan(260));
-    expect(dialogSize.height, lessThan(360));
+    expect(dialogSize.height, greaterThan(320));
+    expect(dialogSize.height, lessThan(420));
     expect(dialogBottom - saveBottom, lessThan(110));
   });
 
@@ -121,8 +121,8 @@ void main() {
     final emptyStateCenterY = emptyStateRect.center.dy;
     final scrollView = tester.widget<SingleChildScrollView>(find.byType(SingleChildScrollView));
 
-    expect(dialogRect.height, greaterThan(250));
-    expect(dialogRect.height, lessThan(360));
+    expect(dialogRect.height, greaterThan(280));
+    expect(dialogRect.height, lessThan(390));
     expect(_distanceFromCenter(emptyStateCenterY, contentAreaCenterY), lessThan(80));
     expect(scrollView.physics, isA<NeverScrollableScrollPhysics>());
   });

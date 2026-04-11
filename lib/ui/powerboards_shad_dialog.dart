@@ -9,7 +9,7 @@ const BoxConstraints powerboardsCompactDesktopDialogConstraints = BoxConstraints
 const double powerboardsMobileDialogEdgeInset = 16;
 const double powerboardsDialogScrollViewportVerticalInset = 18;
 const EdgeInsets powerboardsDialogScrollViewportPadding = EdgeInsets.symmetric(vertical: powerboardsDialogScrollViewportVerticalInset);
-const EdgeInsets powerboardsDialogScrollableListPadding = powerboardsDialogScrollViewportPadding;
+const EdgeInsets powerboardsDialogScrollableListPadding = EdgeInsets.only(bottom: powerboardsDialogScrollViewportVerticalInset);
 
 const double _desktopDialogCloseButtonSize = 32;
 const double _desktopDialogCloseIconSize = 24;
@@ -941,16 +941,21 @@ class _PowerboardsMobileFlowDialogFrame extends StatelessWidget {
         : Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: _buildVerticalSection(headerChildren),
+            children: _buildVerticalSection(headerChildren, spacing: gap),
           );
 
-    final bodySection = expandBody ? Expanded(child: body ?? const SizedBox.shrink()) : (body ?? const SizedBox.shrink());
+    final bodyContent = body ?? const SizedBox.shrink();
+    final bodySection = expandBody ? Expanded(child: bodyContent) : bodyContent;
 
     final contentSections = <Widget>[
       if (headerSection != null) headerSection,
       bodySection,
       if (actions.isNotEmpty)
-        Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: _buildVerticalSection(actions)),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: _buildVerticalSection(actions, spacing: gap),
+        ),
     ];
 
     return SizedBox(
@@ -958,16 +963,16 @@ class _PowerboardsMobileFlowDialogFrame extends StatelessWidget {
       child: Column(
         mainAxisSize: expandBody ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _buildVerticalSection(contentSections),
+        children: _buildVerticalSection(contentSections, spacing: gap * 2),
       ),
     );
   }
 
-  List<Widget> _buildVerticalSection(List<Widget> children) {
+  List<Widget> _buildVerticalSection(List<Widget> children, {required double spacing}) {
     final built = <Widget>[];
     for (var i = 0; i < children.length; i++) {
       if (i > 0) {
-        built.add(SizedBox(height: gap));
+        built.add(SizedBox(height: spacing));
       }
       built.add(children[i]);
     }
@@ -1056,6 +1061,22 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
         ? maxHeight
         : ((_measuredContentHeight ?? (minHeight - resolvedPadding.vertical).clamp(0.0, minHeight).toDouble()) + resolvedPadding.vertical);
     final targetHeight = measuredHeight.clamp(minHeight, maxHeight).toDouble();
+    final visibleFrame = _PowerboardsMobileFlowDialogFrame(
+      title: widget.title,
+      description: widget.description,
+      body: _buildVisibleBody(),
+      actions: widget.actions,
+      gap: widget.gap,
+      expandBody: true,
+    );
+    final provisionalFrame = _PowerboardsMobileFlowDialogFrame(
+      title: widget.title,
+      description: widget.description,
+      body: _buildMeasuredBody(includeMeasureKey: false),
+      actions: widget.actions,
+      gap: widget.gap,
+      expandBody: false,
+    );
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -1104,14 +1125,7 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
                   height: targetHeight,
                   child: Padding(
                     padding: widget.padding,
-                    child: _PowerboardsMobileFlowDialogFrame(
-                      title: widget.title,
-                      description: widget.description,
-                      body: _buildVisibleBody(),
-                      actions: widget.actions,
-                      gap: widget.gap,
-                      expandBody: true,
-                    ),
+                    child: _measuredContentHeight == null ? SingleChildScrollView(child: provisionalFrame) : visibleFrame,
                   ),
                 ),
               ),
@@ -1141,13 +1155,13 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
     }
   }
 
-  Widget _buildMeasuredBody() {
+  Widget _buildMeasuredBody({bool includeMeasureKey = true}) {
     final body = widget.body;
     if (body == null) {
       return const SizedBox.shrink();
     }
 
-    Widget content = KeyedSubtree(key: _measureBodyKey, child: body);
+    Widget content = includeMeasureKey ? KeyedSubtree(key: _measureBodyKey, child: body) : body;
     if (widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.scrollable) {
       content = Padding(padding: powerboardsDialogScrollableListPadding, child: content);
     }
