@@ -6,7 +6,7 @@ class ToolConnectionScope extends StatefulWidget {
   const ToolConnectionScope({super.key, required this.room, required this.tools, required this.builder});
 
   final RoomClient room;
-  final List<Toolkit> tools;
+  final List<RemoteToolkit> tools;
 
   final Widget Function(BuildContext context, Object? error) builder;
 
