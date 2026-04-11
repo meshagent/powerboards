@@ -306,7 +306,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
       return;
     }
 
-    await showShadDialog<void>(
+    await showPowerboardsFlowDialog<void>(
       context: context,
       builder: (dialogContext) {
         return _ChangeDeviceDialog(
@@ -594,6 +594,7 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final usesMobileDialogLayout = powerboardsUsesNativeMobileDialogLayout(context);
     final videoInput = widget.selectedVideoInputDeviceId?.call() ?? widget.preferences.getString("videoInput");
     final audioInput = widget.selectedAudioInputDeviceId?.call() ?? widget.preferences.getString("audioInput");
     final audioOutput = widget.selectedAudioOutputDeviceId?.call() ?? widget.preferences.getString("audioOutput");
@@ -626,7 +627,7 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
         ),
       ],
       child: Padding(
-        padding: powerboardsDialogScrollableListPadding,
+        padding: usesMobileDialogLayout ? EdgeInsets.zero : powerboardsDialogScrollableListPadding,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

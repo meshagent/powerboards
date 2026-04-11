@@ -14,7 +14,7 @@ Future<void> showSwitchProjectDialog({
 }) {
   projects.refresh();
 
-  return showShadDialog<void>(
+  return showPowerboardsFlowDialog<void>(
     context: context,
     builder: (context) =>
         SwitchProjectDialog(currentProjectId: currentProjectId, projects: projects, onSwitch: onSwitch, onNewProject: onNewProject),
@@ -64,10 +64,11 @@ class SwitchProjectDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
     final actions = [
       ShadButton.outline(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
       ShadButton(
-        leading: const Icon(LucideIcons.clipboardPlus),
+        leading: isMobile ? null : const Icon(LucideIcons.clipboardPlus),
         onPressed: () {
           Navigator.of(context).pop();
           onNewProject();
@@ -79,33 +80,30 @@ class SwitchProjectDialog extends StatelessWidget {
     return PowerboardsShadDialog.listPicker(
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
-      mobilePresentation: PowerboardsDialogMobilePresentation.fullScreen,
       actions: actions,
-      child: Padding(
-        padding: powerboardsDialogScrollableListPadding,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320, maxHeight: 420),
-          child: SignalBuilder(
-            builder: (context, _) {
-              final items = projects.state.value;
+      child: SignalBuilder(
+        builder: (context, _) {
+          final items = projects.state.value;
 
-              if (items == null) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          if (items == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-              return ScrollConfiguration(
-                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: _buildProjectItems(context, items),
-                  ),
+          return ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: _buildProjectItems(context, items),
                 ),
-              );
-            },
-          ),
-        ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

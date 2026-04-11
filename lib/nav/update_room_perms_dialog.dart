@@ -20,6 +20,8 @@ enum _View { permissions, addUser }
 
 enum _LoadingState { loading, loaded }
 
+bool _usesMobileDialogLayout(BuildContext context) => powerboardsUsesNativeMobileDialogLayout(context);
+
 double _desktopTaskDialogHeight(BoxConstraints constraints) {
   final maxHeight = constraints.maxHeight;
   if (!maxHeight.isFinite) {
@@ -27,6 +29,15 @@ double _desktopTaskDialogHeight(BoxConstraints constraints) {
   }
 
   return (maxHeight - 100.0).clamp(0.0, 600.0).toDouble();
+}
+
+BoxConstraints? _desktopTaskDialogConstraints(BuildContext context, BoxConstraints constraints) {
+  if (_usesMobileDialogLayout(context)) {
+    return null;
+  }
+
+  final height = _desktopTaskDialogHeight(constraints);
+  return BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height);
 }
 
 class _UserSettingsMenuButton extends StatefulWidget {
@@ -171,6 +182,7 @@ class _UserGrantRow extends StatelessWidget {
 
 class _PermissionDialog extends StatefulWidget {
   const _PermissionDialog({
+    super.key,
     required this.projectId,
     required this.room,
     required this.title,
@@ -311,43 +323,47 @@ class _PermissionDialogState extends State<_PermissionDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = _desktopTaskDialogHeight(constraints);
+        final isMobile = _usesMobileDialogLayout(context);
+        final permissionsList = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [if (myGrant != null) _userRowBuilder(context, myGrant!), ...sortedGrants.map((g) => _userRowBuilder(context, g))],
+        );
 
         return PowerboardsShadDialog.task(
           scrollable: false,
-          constraints: BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height),
+          constraints: _desktopTaskDialogConstraints(context, constraints),
           title: Text(widget.title),
           description: Text(widget.description),
           actions: [
             ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Close')),
             if (canEdit)
-              ShadButton(onPressed: widget.onAddUser, leading: const Icon(LucideIcons.userPlus, size: 16), child: const Text('Add user')),
-          ],
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
-              Expanded(
-                child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                  child: (state == _LoadingState.loading)
-                      ? const Center(child: CircularProgressIndicator())
-                      : SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: .min,
-                            crossAxisAlignment: .stretch,
-                            children: [
-                              if (myGrant != null) _userRowBuilder(context, myGrant!),
-
-                              ...sortedGrants.map((g) => _userRowBuilder(context, g)),
-                            ],
-                          ),
-                        ),
-                ),
+              ShadButton(
+                onPressed: widget.onAddUser,
+                leading: isMobile ? null : const Icon(LucideIcons.userPlus, size: 16),
+                child: const Text('Add user'),
               ),
-              const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
-            ],
-          ),
+          ],
+          child: isMobile
+              ? ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: (state == _LoadingState.loading) ? const Center(child: CircularProgressIndicator()) : permissionsList,
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+                    Expanded(
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                        child: (state == _LoadingState.loading)
+                            ? const Center(child: CircularProgressIndicator())
+                            : SingleChildScrollView(child: permissionsList),
+                      ),
+                    ),
+                    const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+                  ],
+                ),
         );
       },
     );
@@ -572,16 +588,127 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = _desktopTaskDialogHeight(constraints);
+        final isMobile = _usesMobileDialogLayout(context);
+
+        final formBody = SignalBuilder(
+          builder: (context, _) {
+            final selected = selectedUsers.value;
+
+            final roomGrants = grants.state.value ?? {};
+            final projUsersMap = projectUsersMap.state.value ?? {};
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Enter email address', style: inputLabelStyle),
+                const SizedBox(height: 8),
+                SelectUsers(
+                  autofocus: true,
+                  projectUsers: projUsersMap.values.toList(),
+                  controller: controller,
+                  textController: textController,
+                  onChanged: (value) {
+                    final updated = <AddedUser>[];
+
+                    for (final email in value) {
+                      final lcEmail = email.toLowerCase().trim();
+
+                      final user = selectedUsers.value.firstWhereOrNull((u) => u.email.toLowerCase() == lcEmail);
+                      if (user != null) {
+                        updated.add(user);
+                        continue;
+                      }
+
+                      final projectUser = projUsersMap[lcEmail];
+                      final inProject = projectUser != null;
+
+                      if (inProject) {
+                        final grants = roomGrants[projectUser.id];
+                        final role = grants != null ? grants.role : GrantRole.nonOwner;
+
+                        updated.add(AddedUser(email: email, role: role));
+                      } else {
+                        updated.add(AddedUser(email: email, role: GrantRole.nonOwner));
+                      }
+                    }
+
+                    selectedUsers.value = updated;
+                  },
+                ),
+                const SizedBox(height: 30),
+                ValueListenableBuilder(
+                  valueListenable: textController,
+                  builder: (context, textEditingValue, _) {
+                    final text = textEditingValue.text.trim();
+                    final isEmail = SelectUsersController.emailRegex.hasMatch(text);
+                    final items = isEmail ? [...selected, AddedUser(email: text, role: GrantRole.nonOwner)] : selected;
+                    final usersNotInProject = items
+                        .where((u) => !projUsersMap.containsKey(u.email.toLowerCase()))
+                        .map((u) => u.email)
+                        .join(', ');
+
+                    if (usersNotInProject.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+
+                    const textColor = Color(0xFFE65100);
+                    const backgroundColor = Color(0xFFFCEBEB);
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 30.0,
+                      children: [
+                        ShadAlert(
+                          icon: Icon(LucideIcons.triangleAlert),
+                          iconColor: textColor,
+                          iconSize: 24,
+                          description: RichText(
+                            text: TextSpan(
+                              style: TextStyle(color: textColor),
+                              children: [
+                                TextSpan(
+                                  text: 'The following email addresses',
+                                  style: TextStyle(color: textColor, height: 1.4),
+                                ),
+                                TextSpan(
+                                  text: ' ($usersNotInProject) ',
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: textColor, height: 1.4),
+                                ),
+                                TextSpan(
+                                  text: 'are not project members. Adding them to the room will add them as members to the project.',
+                                  style: TextStyle(color: textColor, height: 1.4),
+                                ),
+                              ],
+                            ),
+                          ),
+                          decoration: ShadDecoration(
+                            color: backgroundColor,
+                            border: ShadBorder.all(color: textColor),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 30),
+              ],
+            );
+          },
+        );
 
         return PowerboardsShadDialog.task(
           scrollable: false,
-          constraints: BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height),
+          constraints: _desktopTaskDialogConstraints(context, constraints),
           title: Text(widget.title),
           description: Padding(padding: .only(bottom: 15.0), child: Text(widget.description)),
           actions: [
             if (widget.onBack != null)
-              ShadButton.outline(onPressed: widget.onBack, leading: const Icon(LucideIcons.arrowLeft, size: 16), child: const Text('Back')),
+              ShadButton.outline(
+                onPressed: widget.onBack,
+                leading: isMobile ? null : const Icon(LucideIcons.arrowLeft, size: 16),
+                child: const Text('Back'),
+              ),
             ShadButton(
               onPressed: onAdded,
               enabled: !submitting,
@@ -591,172 +718,95 @@ class _AddUserDialogState extends State<AddUserDialog> {
               ),
             ),
           ],
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 415),
-                    child: SignalBuilder(
-                      builder: (context, _) {
-                        final selected = selectedUsers.value;
-
-                        final roomGrants = grants.state.value ?? {};
-                        final projUsersMap = projectUsersMap.state.value ?? {};
-
-                        return Column(
-                          mainAxisSize: .min,
-                          crossAxisAlignment: .stretch,
-                          children: [
-                            Text('Enter email address', style: inputLabelStyle),
-                            const SizedBox(height: 8),
-                            SelectUsers(
-                              autofocus: true,
-                              projectUsers: projUsersMap.values.toList(),
-                              controller: controller,
-                              textController: textController,
-                              onChanged: (value) {
-                                final updated = <AddedUser>[];
-
-                                for (final email in value) {
-                                  final lcEmail = email.toLowerCase().trim();
-
-                                  final user = selectedUsers.value.firstWhereOrNull((u) => u.email.toLowerCase() == lcEmail);
-                                  if (user != null) {
-                                    updated.add(user);
-                                    continue;
-                                  }
-
-                                  final projectUser = projUsersMap[lcEmail];
-                                  final inProject = projectUser != null;
-
-                                  if (inProject) {
-                                    final grants = roomGrants[projectUser.id];
-                                    final role = grants != null ? grants.role : GrantRole.nonOwner;
-
-                                    updated.add(AddedUser(email: email, role: role));
-                                  } else {
-                                    updated.add(AddedUser(email: email, role: GrantRole.nonOwner));
-                                  }
-                                }
-
-                                selectedUsers.value = updated;
-                              },
-                            ),
-                            const SizedBox(height: 30),
-                            ValueListenableBuilder(
-                              valueListenable: textController,
-                              builder: (context, textEditingValue, _) {
-                                final text = textEditingValue.text.trim();
-                                final isEmail = SelectUsersController.emailRegex.hasMatch(text);
-                                final items = isEmail ? [...selected, AddedUser(email: text, role: GrantRole.nonOwner)] : selected;
-                                final usersNotInProject = items
-                                    .where((u) => !projUsersMap.containsKey(u.email.toLowerCase()))
-                                    .map((u) => u.email)
-                                    .join(', ');
-
-                                if (usersNotInProject.isEmpty) {
-                                  return const SizedBox.shrink();
-                                }
-
-                                const textColor = Color(0xFFE65100);
-                                const backgroundColor = Color(0xFFFCEBEB);
-
-                                return Column(
-                                  crossAxisAlignment: .start,
-                                  spacing: 30.0,
-                                  children: [
-                                    ShadAlert(
-                                      icon: Icon(LucideIcons.triangleAlert),
-                                      iconColor: textColor,
-                                      iconSize: 24,
-                                      description: RichText(
-                                        text: TextSpan(
-                                          style: TextStyle(color: textColor),
-                                          children: [
-                                            TextSpan(
-                                              text: 'The following email addresses',
-                                              style: TextStyle(color: textColor, height: 1.4),
-                                            ),
-                                            TextSpan(
-                                              text: ' ($usersNotInProject) ',
-                                              style: TextStyle(fontWeight: .bold, color: textColor, height: 1.4),
-                                            ),
-                                            TextSpan(
-                                              text:
-                                                  'are not project members. Adding them to the room will add them as members to the project.',
-                                              style: TextStyle(color: textColor, height: 1.4),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      decoration: ShadDecoration(
-                                        color: backgroundColor,
-                                        border: .all(color: textColor),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 30),
-                          ],
-                        );
-                      },
+          child: isMobile
+              ? formBody
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 415), child: formBody),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         );
       },
     );
   }
 }
 
+class _UpdateRoomPermsFlow extends StatefulWidget {
+  const _UpdateRoomPermsFlow({required this.projectId, required this.room});
+
+  final String projectId;
+  final Room room;
+
+  @override
+  State<_UpdateRoomPermsFlow> createState() => _UpdateRoomPermsFlowState();
+}
+
+class _UpdateRoomPermsFlowState extends State<_UpdateRoomPermsFlow> {
+  _View view = _View.permissions;
+  int permissionsVersion = 0;
+
+  void _showPermissions() {
+    setState(() {
+      view = _View.permissions;
+    });
+  }
+
+  void _showAddUser() {
+    setState(() {
+      view = _View.addUser;
+    });
+  }
+
+  void _refreshPermissions() {
+    setState(() {
+      permissionsVersion += 1;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    switch (view) {
+      case _View.permissions:
+        return _PermissionDialog(
+          key: ValueKey('permissions-$permissionsVersion'),
+          room: widget.room,
+          projectId: widget.projectId,
+          title: 'Update room permissions',
+          description: 'Adjust who can manage settings and members for this room.',
+          onAddUser: _showAddUser,
+        );
+      case _View.addUser:
+        return AddUserDialog(
+          projectId: widget.projectId,
+          room: widget.room,
+          title: 'Invite user',
+          description: 'Invite someone by email to join this room.',
+          onBack: _showPermissions,
+          onSaved: _refreshPermissions,
+        );
+    }
+  }
+}
+
 Future<void> showUpdateRoomPermsDialog(BuildContext context, {required String projectId, required Room room}) async {
   if (context.mounted == false) return;
 
-  return showShadDialog<void>(
+  return showPowerboardsFlowDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (context) {
-      final mode = ValueNotifier<_View>(_View.permissions);
-
-      return ValueListenableBuilder<_View>(
-        valueListenable: mode,
-        builder: (context, view, _) {
-          switch (view) {
-            case _View.permissions:
-              return _PermissionDialog(
-                room: room,
-                projectId: projectId,
-                title: 'Update room permissions',
-                description:
-                    'Owners control room setup, members, and permissions. Members can only collaborate, share ideas, and create content with agents.',
-                onAddUser: () => mode.value = _View.addUser,
-              );
-            case _View.addUser:
-              return AddUserDialog(
-                projectId: projectId,
-                room: room,
-                title: 'Invite user',
-                description: 'Invite someone by email to join this room.',
-                onBack: () => mode.value = _View.permissions,
-              );
-          }
-        },
-      );
-    },
+    builder: (context) => _UpdateRoomPermsFlow(projectId: projectId, room: room),
   );
 }
 
 Future<void> showAddUserToRoomDialog(BuildContext context, {required String projectId, required Room room}) async {
   if (context.mounted == false) return;
 
-  return showShadDialog<void>(
+  return showPowerboardsFlowDialog<void>(
     context: context,
     barrierDismissible: false,
     builder: (context) {

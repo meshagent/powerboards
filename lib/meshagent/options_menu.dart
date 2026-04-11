@@ -9,6 +9,7 @@ import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'agent_option.dart';
@@ -57,7 +58,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
   }
 
   Future<void> _addAgent() async {
-    await showShadDialog<void>(
+    await showPowerboardsFlowDialog<void>(
       context: context,
       builder: (context) => ManageAgentsDialog(projectId: widget.projectId, room: widget.room),
     );

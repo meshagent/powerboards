@@ -776,12 +776,18 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   @override
   Widget build(BuildContext context) {
     final entries = _threadListEntries();
+    final isMobileDialogList = ResponsiveBreakpoints.of(context).isMobile && widget.mobileUseDialogListStyle;
+    final surface = _buildThreadListSurface(entries);
+
+    if (isMobileDialogList) {
+      return ColoredBox(color: Colors.transparent, child: surface);
+    }
 
     return ColoredBox(
       color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [Expanded(child: _buildThreadListSurface(entries))],
+        children: [Expanded(child: surface)],
       ),
     );
   }

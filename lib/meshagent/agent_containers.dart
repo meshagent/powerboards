@@ -13,6 +13,16 @@ import 'package:powerboards/meshagent/meshagent.dart';
 
 typedef ConfigureServiceTemplateDone = void Function(BuildContext context, String serviceId);
 
+BoxConstraints? _desktopConfigureAgentDialogConstraints(BuildContext context, BoxConstraints constraints) {
+  if (powerboardsUsesNativeMobileDialogLayout(context)) {
+    return null;
+  }
+
+  final maxHeight = constraints.maxHeight;
+  final height = !maxHeight.isFinite ? 500.0 : (maxHeight - 100.0).clamp(0.0, 500.0).toDouble();
+  return BoxConstraints(minWidth: 600.0, maxWidth: 600.0, minHeight: height, maxHeight: height);
+}
+
 class ConfigureServiceTemplateDialog extends StatelessWidget {
   const ConfigureServiceTemplateDialog({
     super.key,
@@ -40,36 +50,52 @@ class ConfigureServiceTemplateDialog extends StatelessWidget {
     final isInstalled = serviceId != null;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxHeight = constraints.maxHeight;
-        final height = !maxHeight.isFinite ? 500.0 : (maxHeight - 100.0).clamp(0.0, 500.0).toDouble();
+        final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
 
         return PowerboardsShadDialog.task(
           scrollable: false,
-          constraints: BoxConstraints(minWidth: 600.0, maxWidth: 600.0, minHeight: height, maxHeight: height),
+          constraints: _desktopConfigureAgentDialogConstraints(context, constraints),
           title: Text(isInstalled ? 'Edit agent' : 'Install agent'),
           description: Text(
             isInstalled
                 ? 'Update variables or uninstall this agent.'
                 : 'Installing this agent will grant it access to your room. Review the details before continuing.',
           ),
-          child: SizedBox.expand(
-            child: ConfigureServiceTemplate(
-              template: template,
-              header: [
-                const SizedBox(height: 8),
-                dev.ServiceNameCard(manifest: manifest),
-                if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: manifest)],
-              ],
-              projectId: projectId,
-              serviceId: serviceId,
-              manifest: manifest,
-              roomName: roomName,
-              prefilledVars: prefilledVars,
-              onDone: (context, _) {
-                Navigator.of(context).pop(true);
-              },
-            ),
-          ),
+          child: isMobile
+              ? ConfigureServiceTemplate(
+                  template: template,
+                  header: [
+                    const SizedBox(height: 8),
+                    dev.ServiceNameCard(manifest: manifest),
+                    if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: manifest)],
+                  ],
+                  projectId: projectId,
+                  serviceId: serviceId,
+                  manifest: manifest,
+                  roomName: roomName,
+                  prefilledVars: prefilledVars,
+                  onDone: (context, _) {
+                    Navigator.of(context).pop(true);
+                  },
+                )
+              : SizedBox.expand(
+                  child: ConfigureServiceTemplate(
+                    template: template,
+                    header: [
+                      const SizedBox(height: 8),
+                      dev.ServiceNameCard(manifest: manifest),
+                      if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: manifest)],
+                    ],
+                    projectId: projectId,
+                    serviceId: serviceId,
+                    manifest: manifest,
+                    roomName: roomName,
+                    prefilledVars: prefilledVars,
+                    onDone: (context, _) {
+                      Navigator.of(context).pop(true);
+                    },
+                  ),
+                ),
         );
       },
     );

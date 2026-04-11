@@ -1405,7 +1405,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Future<void> showManageAgents() async {
-    await showShadDialog(
+    await showPowerboardsFlowDialog(
       context: context,
       builder: (context) => ManageAgentsDialog(projectId: widget.projectId, room: widget.room),
     );
@@ -2642,13 +2642,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Future<void> _showMobileThreadPicker({required String threadListPath, required String? agentKey, required String? agentName}) async {
-    await showShadDialog<void>(
+    await showPowerboardsFlowDialog<void>(
       context: context,
       builder: (dialogContext) {
         return PowerboardsShadDialog.listPicker(
           title: const Text("All threads"),
           description: const Text("Select a thread to view."),
-          mobilePresentation: PowerboardsDialogMobilePresentation.fullScreen,
           actions: [
             ShadButton.outline(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close")),
             ShadButton(
@@ -2659,8 +2658,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               child: const Text("New Thread"),
             ),
           ],
-          child: Padding(
-            padding: powerboardsDialogScrollableListPadding,
+          child: Align(
+            alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 360.0),
               child: MeshagentThreadListPane(
@@ -3006,7 +3005,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                               SizedBox(height: 20),
                                               ShadButton(
                                                 onPressed: () async {
-                                                  await showShadDialog(
+                                                  await showPowerboardsFlowDialog(
                                                     context: context,
                                                     builder: (context) => ManageAgentsDialog(
                                                       room: widget.room,

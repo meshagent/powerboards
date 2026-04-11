@@ -243,15 +243,19 @@ class _AgentInstaller extends State<AgentInstaller> {
     return ShadButton(trailing: const Icon(LucideIcons.arrowRight), onPressed: onPressed, child: Text(label));
   }
 
+  bool get _usesMobileFlowLayout => powerboardsUsesNativeMobileDialogLayout(context);
+
   Widget _urlStep() {
     final title = _mcpOnly ? "Enter the URL of an MCP server" : "Enter the URL of an agent or MCP server";
     final description = _mcpOnly
         ? "The link must point to a valid MCP server URL."
         : "The link must point to a valid service template YAML or an MCP server URL.";
+    final usesMobileFlowLayout = _usesMobileFlowLayout;
     return Padding(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
         spacing: 16,
         children: [
           Text(title, style: _labelStyle, textAlign: TextAlign.center),
@@ -262,7 +266,6 @@ class _AgentInstaller extends State<AgentInstaller> {
             style: ShadTheme.of(context).textTheme.small.copyWith(color: ShadTheme.of(context).colorScheme.mutedForeground),
           ),
           if (_urlError != null) ShadAlert.destructive(description: Text(_urlError!)),
-          const Spacer(),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [_continueButton(onPressed: _onUrlContinue)],
@@ -274,13 +277,14 @@ class _AgentInstaller extends State<AgentInstaller> {
 
   Widget _specError(String message) {
     final subject = _mcpOnly ? "MCP service" : "agent";
+    final usesMobileFlowLayout = _usesMobileFlowLayout;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
       spacing: 16,
       children: [
         Text("Unable to load $subject spec", style: _labelStyle, textAlign: TextAlign.center),
         ShadAlert.destructive(description: Text(message)),
-        const Spacer(),
         Row(
           mainAxisAlignment: MainAxisAlignment.start,
           children: [_backButton(onPressed: _backToUrlInput, label: "Change URL")],
@@ -290,22 +294,41 @@ class _AgentInstaller extends State<AgentInstaller> {
   }
 
   Widget _reviewStep() {
+    final usesMobileFlowLayout = _usesMobileFlowLayout;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
       spacing: 16,
       children: [
-        Expanded(
-          child: ListView(
-            padding: EdgeInsets.all(15),
-            children: [
-              Text("Review details", style: _labelStyle, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              dev.ServiceNameCard(manifest: _spec.state.value!),
-              const SizedBox(height: 20),
-              dev.ServiceInfoCard(manifest: _spec.state.value!),
-            ],
+        if (usesMobileFlowLayout)
+          Padding(
+            padding: const EdgeInsets.all(15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text("Review details", style: _labelStyle, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                dev.ServiceNameCard(manifest: _spec.state.value!),
+                const SizedBox(height: 20),
+                dev.ServiceInfoCard(manifest: _spec.state.value!),
+              ],
+            ),
+          )
+        else
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(15),
+              children: [
+                Text("Review details", style: _labelStyle, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                dev.ServiceNameCard(manifest: _spec.state.value!),
+                const SizedBox(height: 20),
+                dev.ServiceInfoCard(manifest: _spec.state.value!),
+              ],
+            ),
           ),
-        ),
         Row(
           children: [
             _backButton(onPressed: _backToUrlInput, label: "Change URL"),
@@ -324,6 +347,7 @@ class _AgentInstaller extends State<AgentInstaller> {
   }
 
   Widget _projectStep() {
+    final usesMobileFlowLayout = _usesMobileFlowLayout;
     final state = _projects.state;
 
     Widget body;
@@ -333,44 +357,49 @@ class _AgentInstaller extends State<AgentInstaller> {
       body = const Center(child: CircularProgressIndicator());
     } else {
       final list = state.value ?? const <Project>[];
-      body = ListView(
-        padding: EdgeInsets.all(15),
-        children: [
-          for (final p in list)
-            ShadButton.ghost(
-              onPressed: () {
-                setState(() {
-                  _projectId = p.id;
-                  _roomName = null;
-                });
-                _rooms.refresh();
-                _services.refresh();
-              },
-              child: Text(p.name),
-            ),
+      final children = <Widget>[
+        for (final p in list)
           ShadButton.ghost(
-            onPressed: () async {
-              try {
-                final p = await createMeshagentProject(context);
-                if (!mounted) return;
-                if (p != null) {
-                  _projects.refresh();
-                  _rooms.refresh();
-                }
-              } catch (e) {
-                if (!mounted) return;
-                ShadToaster.of(context).show(ShadToast.destructive(description: Text('Failed to create project: $e')));
-              }
+            onPressed: () {
+              setState(() {
+                _projectId = p.id;
+                _roomName = null;
+              });
+              _rooms.refresh();
+              _services.refresh();
             },
-            leading: const Icon(LucideIcons.plus, size: 16),
-            child: const Text("New Project"),
+            child: Text(p.name),
           ),
-        ],
-      );
+        ShadButton.ghost(
+          onPressed: () async {
+            try {
+              final p = await createMeshagentProject(context);
+              if (!mounted) return;
+              if (p != null) {
+                _projects.refresh();
+                _rooms.refresh();
+              }
+            } catch (e) {
+              if (!mounted) return;
+              ShadToaster.of(context).show(ShadToast.destructive(description: Text('Failed to create project: $e')));
+            }
+          },
+          leading: const Icon(LucideIcons.plus, size: 16),
+          child: const Text("New Project"),
+        ),
+      ];
+
+      body = usesMobileFlowLayout
+          ? Padding(
+              padding: const EdgeInsets.all(15),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: children),
+            )
+          : ListView(padding: const EdgeInsets.all(15), children: children);
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
       spacing: 16,
       children: [
         Text(
@@ -379,7 +408,7 @@ class _AgentInstaller extends State<AgentInstaller> {
           textAlign: TextAlign.center,
         ),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
-        Expanded(child: body),
+        if (usesMobileFlowLayout) body else Expanded(child: body),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
         Row(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -400,6 +429,7 @@ class _AgentInstaller extends State<AgentInstaller> {
   String? _roomDisplayName;
 
   Widget _roomStep() {
+    final usesMobileFlowLayout = _usesMobileFlowLayout;
     final state = _rooms.state;
 
     Widget body;
@@ -409,44 +439,49 @@ class _AgentInstaller extends State<AgentInstaller> {
       body = const Center(child: CircularProgressIndicator());
     } else {
       final list = state.value ?? const <ProjectRoomGrant>[];
-      body = ListView(
-        padding: EdgeInsets.all(15),
-        children: [
-          for (final room in list)
-            ShadButton.ghost(
-              onPressed: () {
-                setState(() {
-                  _roomName = room.room.name;
-                  _roomDisplayName = room.room.metadata["displayName"];
-                });
-                _services.refresh();
-              },
-              child: Text(room.room.metadata["displayName"] ?? room.room.name),
-            ),
+      final children = <Widget>[
+        for (final room in list)
           ShadButton.ghost(
-            onPressed: () async {
-              try {
-                final room = await createMeshagentRoom(context, _projectId!);
-                if (room != null) {
-                  _roomName = room.name;
-                  _roomDisplayName = room.metadata["displayName"];
-                  if (!mounted) return;
-                  _rooms.refresh();
-                }
-              } catch (e) {
-                if (!mounted) return;
-                ShadToaster.of(context).show(ShadToast.destructive(description: Text('Failed to create room: $e')));
-              }
+            onPressed: () {
+              setState(() {
+                _roomName = room.room.name;
+                _roomDisplayName = room.room.metadata["displayName"];
+              });
+              _services.refresh();
             },
-            leading: const Icon(LucideIcons.plus, size: 16),
-            child: const Text("New Room"),
+            child: Text(room.room.metadata["displayName"] ?? room.room.name),
           ),
-        ],
-      );
+        ShadButton.ghost(
+          onPressed: () async {
+            try {
+              final room = await createMeshagentRoom(context, _projectId!);
+              if (room != null) {
+                _roomName = room.name;
+                _roomDisplayName = room.metadata["displayName"];
+                if (!mounted) return;
+                _rooms.refresh();
+              }
+            } catch (e) {
+              if (!mounted) return;
+              ShadToaster.of(context).show(ShadToast.destructive(description: Text('Failed to create room: $e')));
+            }
+          },
+          leading: const Icon(LucideIcons.plus, size: 16),
+          child: const Text("New Room"),
+        ),
+      ];
+
+      body = usesMobileFlowLayout
+          ? Padding(
+              padding: const EdgeInsets.all(15),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: children),
+            )
+          : ListView(padding: const EdgeInsets.all(15), children: children);
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
       spacing: 16,
       children: [
         Text(
@@ -455,7 +490,7 @@ class _AgentInstaller extends State<AgentInstaller> {
           textAlign: TextAlign.center,
         ),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
-        Expanded(child: body),
+        if (usesMobileFlowLayout) body else Expanded(child: body),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
         Row(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -476,6 +511,7 @@ class _AgentInstaller extends State<AgentInstaller> {
   }
 
   Widget _confirmStep() {
+    final usesMobileFlowLayout = _usesMobileFlowLayout;
     final servicesState = _services.state;
 
     if ((!servicesState.isReady || servicesState.isRefreshing) && !servicesState.hasError) {
@@ -499,10 +535,11 @@ class _AgentInstaller extends State<AgentInstaller> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
       spacing: 16,
       children: [
-        Expanded(
-          child: ConfigureServiceTemplate(
+        if (usesMobileFlowLayout)
+          ConfigureServiceTemplate(
             template: _template!,
             header: [
               Text(
@@ -513,7 +550,7 @@ class _AgentInstaller extends State<AgentInstaller> {
                 textAlign: TextAlign.center,
               ),
               dev.ServiceNameCard(manifest: _spec.state.value!),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
             ],
             serviceId: existingServiceId,
             projectId: _projectId!,
@@ -525,12 +562,10 @@ class _AgentInstaller extends State<AgentInstaller> {
               _backButton(
                 onPressed: () {
                   if (widget.initialRoomName != null) {
-                    // If we started with a room, go back to review step
                     setState(() {
                       _confirmed = false;
                     });
                   } else {
-                    // Otherwise go back to room selection
                     setState(() {
                       _roomName = null;
                     });
@@ -539,8 +574,40 @@ class _AgentInstaller extends State<AgentInstaller> {
                 },
               ),
             ],
+          )
+        else
+          Expanded(
+            child: ConfigureServiceTemplate(
+              template: _template!,
+              header: [
+                Text("Confirm and Install into ${_roomName ?? _roomDisplayName}", style: _labelStyle, textAlign: TextAlign.center),
+                dev.ServiceNameCard(manifest: _spec.state.value!),
+                const SizedBox(height: 8),
+              ],
+              serviceId: existingServiceId,
+              projectId: _projectId!,
+              roomName: _roomName,
+              manifest: _spec.state.value!,
+              prefilledVars: prefill,
+              onDone: _handleInstalled,
+              customActions: [
+                _backButton(
+                  onPressed: () {
+                    if (widget.initialRoomName != null) {
+                      setState(() {
+                        _confirmed = false;
+                      });
+                    } else {
+                      setState(() {
+                        _roomName = null;
+                      });
+                      _services.refresh();
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
