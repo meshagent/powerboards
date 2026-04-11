@@ -1289,72 +1289,6 @@ class MeetingCard extends StatelessWidget {
   }
 }
 
-final webSearch = StaticToolkitBuilderOption(
-  icon: LucideIcons.search,
-  config: WebSearchConfig(),
-  text: "Web search",
-  selectedText: "Search",
-);
-
-final shell = StaticToolkitBuilderOption(icon: LucideIcons.terminal, config: ShellConfig(), text: "Shell", selectedText: "Shell");
-
-final imageGen = StaticToolkitBuilderOption(
-  icon: LucideIcons.image,
-  config: ImageGenerationConfig(),
-  text: "Image generation",
-  selectedText: "Images",
-);
-final mcp = ConnectorToolkitBuilderOption(icon: LucideIcons.plug, connectors: [], text: "MCP", selectedText: "MCP");
-final storage = StaticToolkitBuilderOption(
-  icon: LucideIcons.file,
-  config: StorageConfig(),
-  text: "Allow file access",
-  selectedText: "Files",
-);
-
-String? getBaseUrl(ServiceSpec s, PortSpec p, EndpointSpec e) {
-  final rawPath = e.path.trim();
-  final endpointPath = rawPath.isEmpty ? "" : (rawPath.startsWith('/') ? rawPath : '/$rawPath');
-  final port = p.num.value;
-
-  if (s.external == null) {
-    if (port == null) {
-      return Uri(scheme: 'http', host: 'localhost', path: endpointPath).toString();
-    }
-    return Uri(scheme: 'http', host: 'localhost', port: port, path: endpointPath).toString();
-  }
-
-  final externalUrl = s.external?.url;
-  if (externalUrl == null || externalUrl.isEmpty) {
-    return null;
-  }
-
-  var baseUri = Uri.tryParse(externalUrl);
-  if (baseUri == null) {
-    return null;
-  }
-  if (!baseUri.hasScheme) {
-    final withDefaultScheme = Uri.tryParse('https://$externalUrl');
-    if (withDefaultScheme == null) {
-      return null;
-    }
-    baseUri = withDefaultScheme;
-  }
-  if (!baseUri.hasAuthority) {
-    return null;
-  }
-
-  final normalizedBasePath = baseUri.path.endsWith('/') ? baseUri.path.substring(0, baseUri.path.length - 1) : baseUri.path;
-  final joinedPath = normalizedBasePath.isEmpty || normalizedBasePath == '/' ? endpointPath : '$normalizedBasePath$endpointPath';
-
-  final baseWithPath = baseUri.replace(path: joinedPath);
-  if (port == null) {
-    return baseWithPath.toString();
-  }
-
-  return baseWithPath.replace(port: port).toString();
-}
-
 Widget buildTools(
   BuildContext context,
   String projectId,
@@ -1375,52 +1309,9 @@ Widget buildTools(
   }
 
   return ChatThreadAttachButton(
-    agentName: agentName,
-    alwaysShowAttachFiles: true, // agentName == null ? true : null,
+    alwaysShowAttachFiles: true,
     controller: controller,
     availableRooms: () => listMeshagentRooms(projectId),
     connectRoomClient: connectRoomClient,
-    onConnectorSetup: (connector) async {
-      await connector.authenticate(
-        room,
-        room.messaging.remoteParticipants.firstWhereOrNull((agent) {
-              return agent.getAttribute('name') == agentName;
-            })
-            as RemoteParticipant,
-        Uri.parse("${MeshagentConfig.current?.appUrl}/oauth2/callback"),
-      );
-    },
-    availableConnectors: () async {
-      final services = await room.services.list();
-      return [
-        for (final s in services)
-          if (s.metadata.annotations["meshagent.service.filter.agent"] == null ||
-              s.metadata.annotations["meshagent.service.filter.agent"] == agentName)
-            for (final p in s.ports)
-              for (final e in p.endpoints)
-                if (e.mcp != null)
-                  Connector(
-                    name: e.mcp!.label,
-                    server: MCPServer(
-                      serverLabel: e.mcp!.label,
-                      serverUrl: getBaseUrl(s, p, e),
-                      headers: e.mcp!.headers == null
-                          ? null
-                          : [for (final header in e.mcp!.headers!.entries) MCPHeader(name: header.key, value: header.value)],
-                      openaiConnectorId: e.mcp!.openaiConnectorId,
-                    ),
-                    oauth: e.mcp!.oauth,
-                  ),
-      ];
-    },
-    toolkits: [
-      for (final tool in state.availableTools) ...[
-        if (tool.name == "storage") storage,
-        if (tool.name == "web_search") webSearch,
-        if (tool.name == "shell") shell,
-        if (tool.name == "image_generation") imageGen,
-        if (tool.name == "mcp") mcp,
-      ],
-    ],
   );
 }
