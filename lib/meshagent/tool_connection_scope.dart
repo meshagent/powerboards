@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:meshagent/agent.dart';
+import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_flutter/meshagent_flutter.dart';
 
 class ToolConnectionScope extends StatefulWidget {
-  const ToolConnectionScope({super.key, required this.tools, required this.builder});
+  const ToolConnectionScope({super.key, required this.room, required this.tools, required this.builder});
 
-  final List<RemoteToolkit> tools;
+  final RoomClient room;
+  final List<Toolkit> tools;
 
   final Widget Function(BuildContext context, Object? error) builder;
 
@@ -13,28 +15,13 @@ class ToolConnectionScope extends StatefulWidget {
 }
 
 class _ToolConnectionScope extends State<ToolConnectionScope> {
-  Object? error;
-
-  @override
-  void initState() {
-    super.initState();
-
-    for (var tool in widget.tools) {
-      tool.start(public: false);
-    }
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-
-    for (var tool in widget.tools) {
-      tool.stop();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return widget.builder(context, error);
+    return ClientToolkits(
+      room: widget.room,
+      toolkits: widget.tools,
+      public: false,
+      child: Builder(builder: (context) => widget.builder(context, null)),
+    );
   }
 }

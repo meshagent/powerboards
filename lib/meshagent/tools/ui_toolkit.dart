@@ -6,8 +6,8 @@ import 'package:powerboards/meshagent/tools/display_document.dart';
 import 'package:powerboards/meshagent/tools/show_alert.dart';
 import 'package:powerboards/meshagent/tools/toast.dart';
 
-class UIToolkit extends RemoteToolkit {
-  UIToolkit(BuildContext context, {required super.room})
+class UIToolkit extends Toolkit {
+  UIToolkit(BuildContext context)
     : super(
         name: "ui",
         title: "ui tools",
@@ -20,5 +20,6 @@ class UIToolkit extends RemoteToolkit {
           Toast(context: context),
           DisplayDocument(context: context),
         ],
+        rules: const [],
       );
 }
