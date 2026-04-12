@@ -3,12 +3,7 @@ import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
 
 class ToolConnectionScope extends StatefulWidget {
-  const ToolConnectionScope({
-    super.key,
-    required this.room,
-    required this.tools,
-    required this.builder,
-  });
+  const ToolConnectionScope({super.key, required this.room, required this.tools, required this.builder});
 
   final RoomClient room;
   final List<Toolkit> tools;
