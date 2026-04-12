@@ -9,6 +9,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
+import 'package:meshagent_flutter_shadcn/web_context_menu_manager.dart';
 import 'package:powerboards/ui/error_states.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:screenshot/screenshot.dart';
@@ -33,7 +34,6 @@ import 'ui/meeting_view.dart';
 import 'ui/powerboards_shad_dialog.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
-import 'web_context_menu_manager/web_context_menu_manager.dart';
 
 final uiRoot = GlobalKey();
 

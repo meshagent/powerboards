@@ -22,9 +22,9 @@ import 'package:meshagent_flutter_shadcn/chat_bubble_markdown_config.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/agent_participants.dart';
+import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
-import 'package:powerboards/web_context_menu_manager/enable_web_context_menu.dart';
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
   MeshagentRoomChatThreadController({required super.room});
@@ -232,7 +232,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
               return const SizedBox.shrink();
             }
 
-            return EnableWebContextMenu(child: inputBox);
+            return inputBox;
           },
         ),
         participantNames: widget.participantNames,
@@ -1307,10 +1307,64 @@ Widget buildTools(
     return roomClient;
   }
 
-  return ChatThreadAttachButton(
-    alwaysShowAttachFiles: true,
-    controller: controller,
-    availableRooms: () => listMeshagentRooms(projectId),
-    connectRoomClient: connectRoomClient,
+  final normalizedAgentName = agentName?.trim();
+  RemoteParticipant? agent;
+  if (normalizedAgentName != null && normalizedAgentName.isNotEmpty) {
+    for (final participant in room.messaging.remoteParticipants) {
+      if (participant.getAttribute("name") == normalizedAgentName) {
+        agent = participant;
+        break;
+      }
+    }
+  }
+
+  final callbackBaseUrl = MeshagentConfig.current?.appUrl;
+  final showMcpConnectors = state.agentOnline && state.supportsMcp && agent != null && callbackBaseUrl != null;
+  final canAddMcpServices = showMcpConnectors && room.apiGrant?.admin != null;
+  final availableConnectors = !showMcpConnectors
+      ? null
+      : () async {
+          return mcpConnectorsFromRoomServices(services: await room.services.list(), agentName: normalizedAgentName);
+        };
+  final onConnectorSetup = !showMcpConnectors
+      ? null
+      : (Connector connector) async {
+          await connector.authenticate(room, agent!, Uri.parse("$callbackBaseUrl/oauth2/callback"));
+        };
+  final onAddMcpConnector = !canAddMcpServices
+      ? null
+      : () async {
+          await showShadDialog<bool?>(
+            context: context,
+            builder: (context) => InstallServiceDialog(
+              type: ServiceType.mcp,
+              projectId: projectId,
+              roomName: room.roomName,
+              onInstalled: (ctx, projectId, roomName, serviceId) {
+                Navigator.of(ctx).pop(true);
+              },
+            ),
+          );
+        };
+
+  return ChatThreadToolArea(
+    leading: ChatThreadAttachButton(
+      alwaysShowAttachFiles: true,
+      controller: controller,
+      availableRooms: () => listMeshagentRooms(projectId),
+      connectRoomClient: connectRoomClient,
+      agentName: normalizedAgentName,
+      showMcpConnectors: showMcpConnectors,
+    ),
+    footer: showMcpConnectors && controller.isToolkitEnabled("mcp")
+        ? ChatThreadMcpFooter(
+            controller: controller,
+            agentName: normalizedAgentName,
+            showMcpConnectors: showMcpConnectors,
+            availableConnectors: availableConnectors,
+            onConnectorSetup: onConnectorSetup,
+            onAddMcpConnector: onAddMcpConnector,
+          )
+        : null,
   );
 }

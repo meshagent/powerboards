@@ -10,15 +10,77 @@ import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 enum _InstallerStep { url, review, selectProject, selectRoom, confirm }
 
+enum ServiceType { any, mcp }
+
+double _desktopTaskDialogHeight(BoxConstraints constraints, {required double preferredHeight, required double verticalInset}) {
+  final maxHeight = constraints.maxHeight;
+  if (!maxHeight.isFinite) {
+    return preferredHeight;
+  }
+
+  return (maxHeight - verticalInset).clamp(0.0, preferredHeight).toDouble();
+}
+
+class InstallServiceDialog extends StatelessWidget {
+  const InstallServiceDialog({
+    super.key,
+    this.template,
+    this.type = ServiceType.any,
+    required this.projectId,
+    required this.roomName,
+    this.onInstalled,
+  });
+
+  final String? template;
+  final ServiceType type;
+  final String projectId;
+  final String? roomName;
+  final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = _desktopTaskDialogHeight(constraints, preferredHeight: 620.0, verticalInset: 140.0);
+
+        return PowerboardsShadDialog.task(
+          scrollable: false,
+          constraints: BoxConstraints(maxWidth: 800.0, minHeight: height, maxHeight: height),
+          title: Text(type == ServiceType.mcp ? "Add MCP Service" : "Install"),
+          child: SizedBox.expand(
+            child: AgentInstaller(
+              template: template,
+              type: type,
+              initialProjectId: projectId,
+              initialRoomName: roomName,
+              onInstalled: onInstalled,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class AgentInstaller extends StatefulWidget {
-  const AgentInstaller({super.key, this.initialUrl, this.template, this.initialProjectId, this.initialRoomName, this.onInstalled});
+  const AgentInstaller({
+    super.key,
+    this.initialUrl,
+    this.template,
+    this.type = ServiceType.any,
+    this.initialProjectId,
+    this.initialRoomName,
+    this.onInstalled,
+  });
 
   final Uri? initialUrl;
   final String? template;
+  final ServiceType type;
   final String? initialProjectId;
   final String? initialRoomName;
   final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
@@ -43,6 +105,7 @@ class _AgentInstaller extends State<AgentInstaller> {
   String? _urlError;
 
   bool get _hasValidUrl => _url != null && _url!.host.isNotEmpty;
+  bool get _mcpOnly => widget.type == ServiceType.mcp;
 
   _InstallerStep get _step {
     if (_collectingUrl && widget.template == null) return _InstallerStep.url;
@@ -71,6 +134,11 @@ class _AgentInstaller extends State<AgentInstaller> {
         ? Resource<ServiceTemplateSpec?>(() async {
             if (!_hasValidUrl) return null;
             final client = getMeshagentClient();
+            if (_mcpOnly) {
+              final discovered = await client.discoverMcpServiceTemplate(url: _url.toString());
+              _template = jsonEncode(discovered.toJson());
+              return discovered;
+            }
             try {
               final res = await get(_url!);
               if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -176,16 +244,20 @@ class _AgentInstaller extends State<AgentInstaller> {
   }
 
   Widget _urlStep() {
+    final title = _mcpOnly ? "Enter the URL of an MCP server" : "Enter the URL of an agent or MCP server";
+    final description = _mcpOnly
+        ? "The link must point to a valid MCP server URL."
+        : "The link must point to a valid service template YAML or an MCP server URL.";
     return Padding(
       padding: EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: 16,
         children: [
-          Text("Enter the URL of an agent or MCP server", style: _labelStyle, textAlign: TextAlign.center),
+          Text(title, style: _labelStyle, textAlign: TextAlign.center),
           ShadInput(controller: _urlController, placeholder: const Text("https://mcp.notion.com/mcp")),
           Text(
-            "The link must point to a valid service template YAML or an MCP server URL.",
+            description,
             textAlign: TextAlign.left,
             style: ShadTheme.of(context).textTheme.small.copyWith(color: ShadTheme.of(context).colorScheme.mutedForeground),
           ),
@@ -201,11 +273,12 @@ class _AgentInstaller extends State<AgentInstaller> {
   }
 
   Widget _specError(String message) {
+    final subject = _mcpOnly ? "MCP service" : "agent";
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 16,
       children: [
-        Text("Unable to load agent spec", style: _labelStyle, textAlign: TextAlign.center),
+        Text("Unable to load $subject spec", style: _labelStyle, textAlign: TextAlign.center),
         ShadAlert.destructive(description: Text(message)),
         const Spacer(),
         Row(
@@ -300,7 +373,11 @@ class _AgentInstaller extends State<AgentInstaller> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 16,
       children: [
-        Text("Select a project to install this agent into", style: _labelStyle, textAlign: TextAlign.center),
+        Text(
+          _mcpOnly ? "Select a project to add this MCP service to" : "Select a project to install this agent into",
+          style: _labelStyle,
+          textAlign: TextAlign.center,
+        ),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
         Expanded(child: body),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
@@ -372,7 +449,11 @@ class _AgentInstaller extends State<AgentInstaller> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 16,
       children: [
-        Text("Pick a room to install this agent into", style: _labelStyle, textAlign: TextAlign.center),
+        Text(
+          _mcpOnly ? "Pick a room to add this MCP service to" : "Pick a room to install this agent into",
+          style: _labelStyle,
+          textAlign: TextAlign.center,
+        ),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
         Expanded(child: body),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
@@ -424,7 +505,13 @@ class _AgentInstaller extends State<AgentInstaller> {
           child: ConfigureServiceTemplate(
             template: _template!,
             header: [
-              Text("Confirm and Install into ${_roomName ?? _roomDisplayName}", style: _labelStyle, textAlign: TextAlign.center),
+              Text(
+                _mcpOnly
+                    ? "Confirm and Add to ${_roomName ?? _roomDisplayName}"
+                    : "Confirm and Install into ${_roomName ?? _roomDisplayName}",
+                style: _labelStyle,
+                textAlign: TextAlign.center,
+              ),
               dev.ServiceNameCard(manifest: _spec.state.value!),
               SizedBox(height: 8),
             ],

@@ -2160,7 +2160,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         threadDisplayMode: threadDisplayMode,
         threadListPath: resolvedThreadListPath,
         newThreadResetVersion: _newThreadResetVersion,
-        key: ValueKey("thread-view-$documentPath-${selectedThreadPath ?? "composer"}"),
         client: widget.room,
         documentPath: documentPath,
         selectedThreadPath: selectedThreadPath,

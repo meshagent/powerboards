@@ -245,15 +245,6 @@ AgentRuntimeStatus parseStatus(dynamic raw) {
   return AgentRuntimeStatus.unknown;
 }
 
-double _desktopTaskDialogHeight(BoxConstraints constraints, {required double preferredHeight, required double verticalInset}) {
-  final maxHeight = constraints.maxHeight;
-  if (!maxHeight.isFinite) {
-    return preferredHeight;
-  }
-
-  return (maxHeight - verticalInset).clamp(0.0, preferredHeight).toDouble();
-}
-
 class _InstallAgentDialog extends StatelessWidget {
   const _InstallAgentDialog({this.template, required this.projectId, required this.roomName});
 
@@ -263,25 +254,12 @@ class _InstallAgentDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final height = _desktopTaskDialogHeight(constraints, preferredHeight: 620.0, verticalInset: 140.0);
-
-        return PowerboardsShadDialog.task(
-          scrollable: false,
-          constraints: BoxConstraints(maxWidth: 800.0, minHeight: height, maxHeight: height),
-          title: const Text("Install"),
-          child: SizedBox.expand(
-            child: AgentInstaller(
-              template: template,
-              initialProjectId: projectId,
-              initialRoomName: roomName,
-              onInstalled: (ctx, projectId, roomName, serviceId) {
-                Navigator.of(ctx).pop(true);
-              },
-            ),
-          ),
-        );
+    return InstallServiceDialog(
+      template: template,
+      projectId: projectId,
+      roomName: roomName,
+      onInstalled: (ctx, projectId, roomName, serviceId) {
+        Navigator.of(ctx).pop(true);
       },
     );
   }
