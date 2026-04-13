@@ -96,11 +96,15 @@ void main() {
     final dialogFinder = _flowDialogSurface();
     final dialogSize = tester.getSize(dialogFinder);
     final dialogBottom = tester.getBottomLeft(dialogFinder).dy;
+    final cancelRect = tester.getRect(find.widgetWithText(ShadButton, 'Cancel'));
+    final saveRect = tester.getRect(find.widgetWithText(ShadButton, 'Save'));
     final saveBottom = tester.getBottomLeft(find.widgetWithText(ShadButton, 'Save')).dy;
 
-    expect(dialogSize.height, greaterThan(320));
+    expect(dialogSize.height, greaterThan(300));
     expect(dialogSize.height, lessThan(420));
     expect(dialogBottom - saveBottom, lessThan(110));
+    expect((saveRect.top - cancelRect.top).abs(), lessThan(1));
+    expect(saveRect.left, greaterThan(cancelRect.left));
   });
 
   testWidgets('mobile flow dialog centers sparse content inside the compact shell', (tester) async {
@@ -127,7 +131,7 @@ void main() {
     expect(scrollView.physics, isA<NeverScrollableScrollPhysics>());
   });
 
-  testWidgets('mobile compact alert dialog shows the primary action first', (tester) async {
+  testWidgets('mobile compact alert dialog shows a horizontal secondary-then-primary action row', (tester) async {
     await _pumpDialog(
       tester,
       PowerboardsShadDialog.compactAlert(
@@ -143,9 +147,30 @@ void main() {
 
     final provideRect = tester.getRect(find.widgetWithText(ShadButton, 'Provide'));
     final cancelRect = tester.getRect(find.widgetWithText(ShadButton, 'Cancel'));
-    final isPrimaryFirst = provideRect.top < cancelRect.top || (provideRect.top == cancelRect.top && provideRect.left < cancelRect.left);
 
-    expect(isPrimaryFirst, isTrue);
+    expect((provideRect.top - cancelRect.top).abs(), lessThan(1));
+    expect(provideRect.left, greaterThan(cancelRect.left));
+  });
+
+  testWidgets('mobile alert dialog shows a horizontal secondary-then-primary action row', (tester) async {
+    await _pumpDialog(
+      tester,
+      PowerboardsShadDialog.alert(
+        title: const Text('Secret requested'),
+        description: const Text('Provide a secret value.'),
+        actions: [
+          ShadButton.secondary(onPressed: () {}, child: const Text('Cancel')),
+          ShadButton(onPressed: () {}, child: const Text('Provide')),
+        ],
+        child: const SizedBox(height: 40, child: Text('Body')),
+      ),
+    );
+
+    final provideRect = tester.getRect(find.widgetWithText(ShadButton, 'Provide'));
+    final cancelRect = tester.getRect(find.widgetWithText(ShadButton, 'Cancel'));
+
+    expect((provideRect.top - cancelRect.top).abs(), lessThan(1));
+    expect(provideRect.left, greaterThan(cancelRect.left));
   });
 
   testWidgets('mobile flow dialog caps growth and scrolls inside the body for long content', (tester) async {

@@ -415,27 +415,33 @@ class PowerboardsShadDialog extends StatelessWidget {
     final effectiveScrollable = _resolveDialogScrollable(scrollable, usesMobileFlowPresentation: usesMobileFlowPresentation);
     final effectiveUseSafeArea = _resolveDialogUseSafeArea(useSafeArea, usesMobileFlowPresentation: usesMobileFlowPresentation);
     final effectivePadding = _resolveDialogPadding(padding, usesMobileFlowPresentation: usesMobileFlowPresentation);
+    final useHorizontalMobileActionRow = _usesHorizontalMobileActionRow(isMobile: isMobile, actions: actions);
     final effectiveActions = _buildDialogActions(
       actions,
       isMobile: isMobile,
-      usesMobileFlowPresentation: usesMobileFlowPresentation,
+      usesHorizontalMobileActionRow: useHorizontalMobileActionRow,
       isCompactDesktopDialog: isCompactDesktopDialog,
       expandDesktopActions: expandDesktopActions ?? false,
       effectiveDialogMaxWidth: effectiveDialogMaxWidth,
       actionsGap: actionsGap ?? 8,
       stackActionsOnMobile: stackActionsOnMobile,
     );
-    final effectiveActionsAxis = actionsAxis ?? (isMobile && stackActionsOnMobile ? Axis.vertical : null);
+    final effectiveActionsAxis =
+        actionsAxis ?? (useHorizontalMobileActionRow ? Axis.horizontal : (isMobile && stackActionsOnMobile ? Axis.vertical : null));
     final effectiveActionsMainAxisSize =
         actionsMainAxisSize ??
-        (isMobile && stackActionsOnMobile
+        (useHorizontalMobileActionRow
             ? MainAxisSize.max
-            : ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisSize.max : MainAxisSize.min));
+            : (isMobile && stackActionsOnMobile
+                  ? MainAxisSize.max
+                  : ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisSize.max : MainAxisSize.min)));
     final effectiveActionsMainAxisAlignment =
         actionsMainAxisAlignment ??
-        (isMobile && stackActionsOnMobile
+        (useHorizontalMobileActionRow
             ? MainAxisAlignment.start
-            : ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisAlignment.start : MainAxisAlignment.end));
+            : (isMobile && stackActionsOnMobile
+                  ? MainAxisAlignment.start
+                  : ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisAlignment.start : MainAxisAlignment.end)));
     final effectiveTitleTextAlign = titleTextAlign ?? TextAlign.left;
     final effectiveDescriptionTextAlign = descriptionTextAlign ?? TextAlign.left;
     final effectiveGap = gap ?? theme.sheetTheme.gap ?? 16.0;
@@ -474,7 +480,9 @@ class PowerboardsShadDialog extends StatelessWidget {
             body: child,
             actions: effectiveActions,
             gap: effectiveGap,
+            actionsGap: actionsGap ?? 8,
             bodyBehavior: mobileFlowBodyBehavior,
+            usesHorizontalActionRow: useHorizontalMobileActionRow,
           )
         : ShadDialog.raw(
             key: key,
@@ -658,7 +666,7 @@ Widget? _resolveFlowDialogDescription(
 List<Widget> _buildDialogActions(
   List<Widget> actions, {
   required bool isMobile,
-  required bool usesMobileFlowPresentation,
+  required bool usesHorizontalMobileActionRow,
   required bool isCompactDesktopDialog,
   required bool expandDesktopActions,
   required double effectiveDialogMaxWidth,
@@ -670,13 +678,15 @@ List<Widget> _buildDialogActions(
   }
 
   if (isMobile) {
-    final mobileActions = stackActionsOnMobile && usesMobileFlowPresentation ? actions.reversed.toList(growable: false) : actions;
-
-    if (!stackActionsOnMobile) {
-      return mobileActions.map(_wrapDialogAction).toList(growable: false);
+    if (usesHorizontalMobileActionRow) {
+      return actions.map((action) => Expanded(child: _wrapDialogAction(action))).toList(growable: false);
     }
 
-    return mobileActions
+    if (!stackActionsOnMobile) {
+      return actions.map(_wrapDialogAction).toList(growable: false);
+    }
+
+    return actions
         .map((action) => SizedBox(width: double.infinity, height: powerboardsFooterActionButtonHeight, child: action))
         .toList(growable: false);
   }
@@ -699,6 +709,10 @@ List<Widget> _buildDialogActions(
 
 Widget _wrapDialogAction(Widget action) {
   return SizedBox(height: powerboardsFooterActionButtonHeight, child: action);
+}
+
+bool _usesHorizontalMobileActionRow({required bool isMobile, required List<Widget> actions}) {
+  return isMobile && actions.isNotEmpty && actions.length <= 2;
 }
 
 BoxConstraints? _resolveDialogConstraints(
@@ -925,7 +939,9 @@ class _PowerboardsMobileFlowDialogFrame extends StatelessWidget {
     required this.body,
     required this.actions,
     required this.gap,
+    required this.actionsGap,
     required this.expandBody,
+    required this.usesHorizontalActionRow,
   });
 
   final Widget? title;
@@ -933,7 +949,9 @@ class _PowerboardsMobileFlowDialogFrame extends StatelessWidget {
   final Widget? body;
   final List<Widget> actions;
   final double gap;
+  final double actionsGap;
   final bool expandBody;
+  final bool usesHorizontalActionRow;
 
   @override
   Widget build(BuildContext context) {
@@ -953,11 +971,16 @@ class _PowerboardsMobileFlowDialogFrame extends StatelessWidget {
       if (headerSection != null) headerSection,
       bodySection,
       if (actions.isNotEmpty)
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: _buildVerticalSection(actions, spacing: gap),
-        ),
+        usesHorizontalActionRow
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: _buildHorizontalSection(actions, spacing: actionsGap),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _buildVerticalSection(actions, spacing: actionsGap),
+              ),
     ];
 
     return SizedBox(
@@ -980,6 +1003,17 @@ class _PowerboardsMobileFlowDialogFrame extends StatelessWidget {
     }
     return built;
   }
+
+  List<Widget> _buildHorizontalSection(List<Widget> children, {required double spacing}) {
+    final built = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      if (i > 0) {
+        built.add(SizedBox(width: spacing));
+      }
+      built.add(children[i]);
+    }
+    return built;
+  }
 }
 
 class _PowerboardsMobileFlowDialogSurface extends StatefulWidget {
@@ -996,7 +1030,9 @@ class _PowerboardsMobileFlowDialogSurface extends StatefulWidget {
     required this.body,
     required this.actions,
     required this.gap,
+    required this.actionsGap,
     required this.bodyBehavior,
+    required this.usesHorizontalActionRow,
   });
 
   final BoxConstraints? constraints;
@@ -1010,7 +1046,9 @@ class _PowerboardsMobileFlowDialogSurface extends StatefulWidget {
   final Widget? body;
   final List<Widget> actions;
   final double gap;
+  final double actionsGap;
   final PowerboardsDialogMobileFlowBodyBehavior bodyBehavior;
+  final bool usesHorizontalActionRow;
 
   @override
   State<_PowerboardsMobileFlowDialogSurface> createState() => _PowerboardsMobileFlowDialogSurfaceState();
@@ -1069,7 +1107,9 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
       body: _buildVisibleBody(),
       actions: widget.actions,
       gap: widget.gap,
+      actionsGap: widget.actionsGap,
       expandBody: true,
+      usesHorizontalActionRow: widget.usesHorizontalActionRow,
     );
     final provisionalFrame = _PowerboardsMobileFlowDialogFrame(
       title: widget.title,
@@ -1077,7 +1117,9 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
       body: _buildMeasuredBody(includeMeasureKey: false),
       actions: widget.actions,
       gap: widget.gap,
+      actionsGap: widget.actionsGap,
       expandBody: false,
+      usesHorizontalActionRow: widget.usesHorizontalActionRow,
     );
 
     return Align(
@@ -1102,7 +1144,9 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
                       body: _buildMeasuredBody(),
                       actions: widget.actions,
                       gap: widget.gap,
+                      actionsGap: widget.actionsGap,
                       expandBody: false,
+                      usesHorizontalActionRow: widget.usesHorizontalActionRow,
                     ),
                   ),
                 ),
