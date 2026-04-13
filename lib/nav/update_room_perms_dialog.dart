@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
@@ -14,6 +17,7 @@ import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 
+import 'package:powerboards/widgets/email_address.dart';
 import 'package:powerboards/widgets/select_users.dart';
 
 enum _View { permissions, addUser }
@@ -377,6 +381,134 @@ class AddedUser {
   final GrantRole role;
 }
 
+class _InviteUserSuggestion {
+  const _InviteUserSuggestion({required this.email, required this.label, required this.description, required this.isProjectUser});
+
+  final String email;
+  final String label;
+  final String description;
+  final bool isProjectUser;
+}
+
+class _InviteUserProjectWarning extends StatelessWidget {
+  const _InviteUserProjectWarning({required this.usersNotInProject});
+
+  final String usersNotInProject;
+
+  @override
+  Widget build(BuildContext context) {
+    const textColor = Color(0xFFE65100);
+    const backgroundColor = Color(0xFFFCEBEB);
+
+    return ShadAlert(
+      icon: const Icon(LucideIcons.triangleAlert),
+      iconColor: textColor,
+      iconSize: 24,
+      description: RichText(
+        text: TextSpan(
+          style: const TextStyle(color: textColor),
+          children: [
+            const TextSpan(
+              text: 'The following email addresses',
+              style: TextStyle(color: textColor, height: 1.4),
+            ),
+            TextSpan(
+              text: ' ($usersNotInProject) ',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: textColor, height: 1.4),
+            ),
+            const TextSpan(
+              text: 'are not project members. Adding them to the room will add them as members to the project.',
+              style: TextStyle(color: textColor, height: 1.4),
+            ),
+          ],
+        ),
+      ),
+      decoration: ShadDecoration(
+        color: backgroundColor,
+        border: ShadBorder.all(color: textColor),
+      ),
+    );
+  }
+}
+
+class _InviteUserMobileContextMenu extends StatefulWidget {
+  const _InviteUserMobileContextMenu({required this.editableTextState});
+
+  final EditableTextState editableTextState;
+
+  @override
+  State<_InviteUserMobileContextMenu> createState() => _InviteUserMobileContextMenuState();
+}
+
+class _InviteUserMobileContextMenuState extends State<_InviteUserMobileContextMenu> {
+  bool _clipboardChecked = false;
+  bool _hasClipboardText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshClipboard();
+  }
+
+  @override
+  void didUpdateWidget(covariant _InviteUserMobileContextMenu oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.editableTextState != widget.editableTextState) {
+      _refreshClipboard();
+    }
+  }
+
+  Future<void> _refreshClipboard() async {
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _clipboardChecked = true;
+      _hasClipboardText = (clipboardData?.text?.trim().isNotEmpty ?? false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selection = widget.editableTextState.textEditingValue.selection;
+    final hasSelection = selection.isValid && !selection.isCollapsed;
+
+    if (!_clipboardChecked) {
+      return const SizedBox.shrink();
+    }
+
+    final buttonItems = widget.editableTextState.contextMenuButtonItems
+        .where((item) {
+          return switch (item.type) {
+            ContextMenuButtonType.cut || ContextMenuButtonType.copy => hasSelection,
+            ContextMenuButtonType.paste => _hasClipboardText,
+            ContextMenuButtonType.selectAll => false,
+            _ => false,
+          };
+        })
+        .toList(growable: false);
+
+    if (buttonItems.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final fieldRenderBox = widget.editableTextState.context.findRenderObject() as RenderBox?;
+    final fieldHeight = fieldRenderBox?.size.height ?? 44.0;
+    final baseAnchor = widget.editableTextState.contextMenuAnchors.primaryAnchor;
+    final belowFieldAnchor = Offset(baseAnchor.dx, baseAnchor.dy + fieldHeight + 12.0);
+
+    return FocusScope(
+      canRequestFocus: false,
+      child: AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: TextSelectionToolbarAnchors(primaryAnchor: belowFieldAnchor, secondaryAnchor: belowFieldAnchor),
+        buttonItems: buttonItems,
+      ),
+    );
+  }
+}
+
 class AddUserDialog extends StatefulWidget {
   const AddUserDialog({
     super.key,
@@ -400,10 +532,16 @@ class AddUserDialog extends StatefulWidget {
 }
 
 class _AddUserDialogState extends State<AddUserDialog> {
+  static const double _mobileSuggestionListMaxHeight = 224.0;
+  static const int _initialMobileFocusMaxAttempts = 12;
+
   bool submitting = false;
   final selectedUsers = Signal<List<AddedUser>>([]);
   final controller = SelectUsersController();
   final textController = TextEditingController();
+  final _mobileEmailFocusNode = FocusNode();
+  int _initialMobileFocusRequestId = 0;
+  bool _initialMobileFocusScheduled = false;
 
   late final projectUsersMap = Resource<Map<String, User>>(lazy: false, () async {
     final client = getMeshagentClient();
@@ -417,6 +555,71 @@ class _AddUserDialogState extends State<AddUserDialog> {
   late final grants = Resource<Map<String, GrantSummary>>(lazy: false, () {
     return roomGrantSummaries(projectId: widget.projectId, roomName: widget.room.name);
   });
+
+  void _scheduleInitialMobileFocus() {
+    if (_initialMobileFocusScheduled) {
+      return;
+    }
+
+    _initialMobileFocusScheduled = true;
+    final requestId = ++_initialMobileFocusRequestId;
+    unawaited(_requestInitialMobileFocusUntilFocused(requestId, remainingAttempts: _initialMobileFocusMaxAttempts));
+  }
+
+  Future<void> _requestInitialMobileFocusUntilFocused(int requestId, {required int remainingAttempts}) async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || requestId != _initialMobileFocusRequestId || !_usesMobileDialogLayout(context) || _mobileEmailFocusNode.hasFocus) {
+      return;
+    }
+
+    final editableTextState = _findEditableTextState(_mobileEmailFocusNode.context);
+    if (editableTextState != null && _mobileEmailFocusNode.canRequestFocus) {
+      editableTextState.requestKeyboard();
+    }
+
+    final focusContext = _mobileEmailFocusNode.context;
+    if (!_mobileEmailFocusNode.hasFocus && focusContext != null && focusContext.mounted && _mobileEmailFocusNode.canRequestFocus) {
+      FocusScope.of(focusContext).requestFocus(_mobileEmailFocusNode);
+    }
+
+    if (_mobileEmailFocusNode.hasFocus || remainingAttempts <= 1) {
+      return;
+    }
+
+    unawaited(_requestInitialMobileFocusUntilFocused(requestId, remainingAttempts: remainingAttempts - 1));
+  }
+
+  EditableTextState? _findEditableTextState(BuildContext? rootContext) {
+    if (rootContext == null) {
+      return null;
+    }
+
+    EditableTextState? result;
+
+    void visit(Element element) {
+      if (result != null) {
+        return;
+      }
+
+      if (element case StatefulElement(state: final EditableTextState editableTextState)) {
+        result = editableTextState;
+        return;
+      }
+
+      element.visitChildElements(visit);
+    }
+
+    rootContext.visitChildElements(visit);
+    return result;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_usesMobileDialogLayout(context)) {
+      _scheduleInitialMobileFocus();
+    }
+  }
 
   @override
   void didUpdateWidget(covariant AddUserDialog oldWidget) {
@@ -437,8 +640,140 @@ class _AddUserDialogState extends State<AddUserDialog> {
     grants.dispose();
     controller.dispose();
     textController.dispose();
+    _mobileEmailFocusNode.dispose();
 
     super.dispose();
+  }
+
+  List<AddedUser> _updatedSelectedUsers(
+    Iterable<String> emails, {
+    required Map<String, User> projectUsersMap,
+    required Map<String, GrantSummary> roomGrants,
+  }) {
+    final existingUsers = {for (final user in selectedUsers.value) user.email.toLowerCase(): user};
+    final dedupedEmails = <String>[];
+    final seenEmails = <String>{};
+
+    for (final rawEmail in emails) {
+      final email = rawEmail.trim();
+      final normalizedEmail = email.toLowerCase();
+      if (email.isEmpty || !seenEmails.add(normalizedEmail)) {
+        continue;
+      }
+      dedupedEmails.add(email);
+    }
+
+    return dedupedEmails
+        .map((email) {
+          final normalizedEmail = email.toLowerCase();
+          final existingUser = existingUsers[normalizedEmail];
+          if (existingUser != null) {
+            return existingUser;
+          }
+
+          final projectUser = projectUsersMap[normalizedEmail];
+          if (projectUser == null) {
+            return AddedUser(email: email, role: GrantRole.nonOwner);
+          }
+
+          final currentGrant = roomGrants[projectUser.id];
+          return AddedUser(email: email, role: currentGrant?.role ?? GrantRole.nonOwner);
+        })
+        .toList(growable: false);
+  }
+
+  void _setSelectedUsersFromEmails(
+    Iterable<String> emails, {
+    required Map<String, User> projectUsersMap,
+    required Map<String, GrantSummary> roomGrants,
+  }) {
+    selectedUsers.value = _updatedSelectedUsers(emails, projectUsersMap: projectUsersMap, roomGrants: roomGrants);
+  }
+
+  void _addEmailToSelection(String email, {required Map<String, User> projectUsersMap, required Map<String, GrantSummary> roomGrants}) {
+    _setSelectedUsersFromEmails(
+      [...selectedUsers.value.map((user) => user.email), email],
+      projectUsersMap: projectUsersMap,
+      roomGrants: roomGrants,
+    );
+    textController.clear();
+    if (mounted) {
+      _mobileEmailFocusNode.requestFocus();
+    }
+  }
+
+  void _removeEmailFromSelection(
+    String email, {
+    required Map<String, User> projectUsersMap,
+    required Map<String, GrantSummary> roomGrants,
+  }) {
+    _setSelectedUsersFromEmails(
+      selectedUsers.value.where((user) => user.email.toLowerCase() != email.toLowerCase()).map((user) => user.email),
+      projectUsersMap: projectUsersMap,
+      roomGrants: roomGrants,
+    );
+    if (mounted) {
+      _mobileEmailFocusNode.requestFocus();
+    }
+  }
+
+  bool _submitEmailsFromText(String rawText, {required Map<String, User> projectUsersMap, required Map<String, GrantSummary> roomGrants}) {
+    final parsedEmails = parseEmailList(
+      rawText,
+    ).map((address) => address.sanitizedAddress.trim()).where(SelectUsersController.emailRegex.hasMatch).toList(growable: false);
+    if (parsedEmails.isEmpty) {
+      return false;
+    }
+
+    _setSelectedUsersFromEmails(
+      [...selectedUsers.value.map((user) => user.email), ...parsedEmails],
+      projectUsersMap: projectUsersMap,
+      roomGrants: roomGrants,
+    );
+    textController.clear();
+    if (mounted) {
+      _mobileEmailFocusNode.requestFocus();
+    }
+    return true;
+  }
+
+  List<_InviteUserSuggestion> _mobileSuggestions(Map<String, User> projectUsersMap) {
+    final query = textController.text.trim();
+    if (query.isEmpty) {
+      return const [];
+    }
+
+    final selectedEmails = selectedUsers.value.map((user) => user.email.toLowerCase()).toSet();
+    final queryLower = query.toLowerCase();
+    final suggestions = <_InviteUserSuggestion>[];
+
+    for (final projectUser in projectUsersMap.values) {
+      final email = projectUser.email;
+      final emailLower = email.toLowerCase();
+      if (selectedEmails.contains(emailLower) || !emailLower.contains(queryLower)) {
+        continue;
+      }
+
+      suggestions.add(_InviteUserSuggestion(email: email, label: email, description: 'Project member', isProjectUser: true));
+    }
+
+    suggestions.sort((a, b) => a.email.toLowerCase().compareTo(b.email.toLowerCase()));
+
+    if (SelectUsersController.emailRegex.hasMatch(query) &&
+        !selectedEmails.contains(queryLower) &&
+        suggestions.every((suggestion) => suggestion.email.toLowerCase() != queryLower)) {
+      suggestions.insert(
+        0,
+        _InviteUserSuggestion(
+          email: query,
+          label: query,
+          description: projectUsersMap.containsKey(queryLower) ? 'Project member' : 'Invite to the project and room',
+          isProjectUser: projectUsersMap.containsKey(queryLower),
+        ),
+      );
+    }
+
+    return suggestions.take(6).toList(growable: false);
   }
 
   Future<void> onAdded() async {
@@ -590,7 +925,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       builder: (context, constraints) {
         final isMobile = _usesMobileDialogLayout(context);
 
-        final formBody = SignalBuilder(
+        final desktopFormBody = SignalBuilder(
           builder: (context, _) {
             final selected = selectedUsers.value;
 
@@ -697,7 +1032,176 @@ class _AddUserDialogState extends State<AddUserDialog> {
           },
         );
 
-        return PowerboardsShadDialog.task(
+        final mobileFormBody = SignalBuilder(
+          builder: (context, _) {
+            final selected = selectedUsers.value;
+            final roomGrants = grants.state.value ?? {};
+            final projUsersMap = projectUsersMap.state.value ?? {};
+
+            final mobileSelectionContent = ValueListenableBuilder<TextEditingValue>(
+              valueListenable: textController,
+              builder: (context, textEditingValue, _) {
+                final typedText = textEditingValue.text.trim();
+                final suggestions = _mobileSuggestions(projUsersMap);
+                final pendingItems = SelectUsersController.emailRegex.hasMatch(typedText)
+                    ? [...selected, AddedUser(email: typedText, role: GrantRole.nonOwner)]
+                    : selected;
+                final usersNotInProject = pendingItems
+                    .where((user) => !projUsersMap.containsKey(user.email.toLowerCase()))
+                    .map((user) => user.email)
+                    .join(', ');
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (suggestions.isNotEmpty) ...[
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.card,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: theme.colorScheme.border),
+                          boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 18, offset: Offset(0, 8))],
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: _mobileSuggestionListMaxHeight),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              children: [
+                                for (var i = 0; i < suggestions.length; i++) ...[
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: i == 0
+                                          ? (suggestions.length == 1
+                                                ? BorderRadius.circular(16)
+                                                : const BorderRadius.vertical(top: Radius.circular(16)))
+                                          : (i == suggestions.length - 1
+                                                ? const BorderRadius.vertical(bottom: Radius.circular(16))
+                                                : BorderRadius.zero),
+                                      onTap: () =>
+                                          _addEmailToSelection(suggestions[i].email, projectUsersMap: projUsersMap, roomGrants: roomGrants),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Icon(
+                                              suggestions[i].isProjectUser ? LucideIcons.userRoundCheck : LucideIcons.userRoundPlus,
+                                              size: 18,
+                                              color: theme.colorScheme.foreground.withValues(alpha: .74),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    suggestions[i].label,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    maxLines: 1,
+                                                    style: TextStyle(color: theme.colorScheme.foreground, fontWeight: FontWeight.w600),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    suggestions[i].description,
+                                                    style: TextStyle(color: theme.colorScheme.mutedForeground),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (i != suggestions.length - 1) Divider(height: 1, color: theme.colorScheme.border),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+                    if (selected.isNotEmpty) ...[
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final user in selected)
+                            ShadBadge(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(child: Text(user.email, overflow: TextOverflow.ellipsis)),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () =>
+                                        _removeEmailFromSelection(user.email, projectUsersMap: projUsersMap, roomGrants: roomGrants),
+                                    child: Icon(LucideIcons.x, size: 14, color: theme.colorScheme.background),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+                    if (usersNotInProject.isNotEmpty) ...[
+                      _InviteUserProjectWarning(usersNotInProject: usersNotInProject),
+                      const SizedBox(height: 18),
+                    ],
+                  ],
+                );
+              },
+            );
+
+            Widget buildTopSection() {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Enter email address', style: inputLabelStyle),
+                  const SizedBox(height: 8),
+                  ShadInput(
+                    controller: textController,
+                    focusNode: _mobileEmailFocusNode,
+                    autofocus: true,
+                    textInputAction: TextInputAction.done,
+                    keyboardType: TextInputType.emailAddress,
+                    autocorrect: false,
+                    enableSuggestions: true,
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                    placeholder: const Text('Type an email'),
+                    contextMenuBuilder: (context, editableTextState) => _InviteUserMobileContextMenu(editableTextState: editableTextState),
+                    onPressedOutside: (_) {
+                      _mobileEmailFocusNode.unfocus();
+                    },
+                    onChanged: (value) {
+                      final shouldCommitParsedEmails =
+                          value.contains(',') || value.contains(';') || value.endsWith(' ') || value.endsWith('\n');
+                      if (shouldCommitParsedEmails) {
+                        _submitEmailsFromText(value, projectUsersMap: projUsersMap, roomGrants: roomGrants);
+                      }
+                    },
+                    onSubmitted: (value) {
+                      _submitEmailsFromText(value, projectUsersMap: projUsersMap, roomGrants: roomGrants);
+                    },
+                  ),
+                ],
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [buildTopSection(), const SizedBox(height: 12), mobileSelectionContent],
+            );
+          },
+        );
+
+        final dialog = PowerboardsShadDialog.formTask(
           scrollable: false,
           constraints: _desktopTaskDialogConstraints(context, constraints),
           title: Text(widget.title),
@@ -714,23 +1218,31 @@ class _AddUserDialogState extends State<AddUserDialog> {
               enabled: !submitting,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
-                children: submitting ? [Icon(Icons.hourglass_top, size: 16), SizedBox(width: 6), Text('Saving...')] : [Text('Save')],
+                children: submitting
+                    ? [const Icon(Icons.hourglass_top, size: 16), const SizedBox(width: 6), const Text('Saving...')]
+                    : [const Text('Save')],
               ),
             ),
           ],
+          mobilePresentation: isMobile ? PowerboardsDialogMobilePresentation.fullScreen : PowerboardsDialogMobilePresentation.flowSheet,
+          mobileFlowBodyBehavior: isMobile
+              ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
+              : PowerboardsDialogMobileFlowBodyBehavior.fill,
           child: isMobile
-              ? formBody
+              ? Padding(padding: const EdgeInsets.only(bottom: 12), child: mobileFormBody)
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(
                       child: SingleChildScrollView(
-                        child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 415), child: formBody),
+                        child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 415), child: desktopFormBody),
                       ),
                     ),
                   ],
                 ),
         );
+
+        return dialog;
       },
     );
   }
@@ -757,6 +1269,7 @@ class _UpdateRoomPermsFlowState extends State<_UpdateRoomPermsFlow> {
   }
 
   void _showAddUser() {
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       view = _View.addUser;
     });

@@ -31,7 +31,7 @@ const double _mobileFlowDialogBottomPadding = 39;
 
 enum PowerboardsDialogMobilePresentation { inherit, inset, flowSheet, fullScreen }
 
-enum PowerboardsDialogMobileFlowBodyBehavior { inherit, scrollable, fill }
+enum PowerboardsDialogMobileFlowBodyBehavior { inherit, scrollable, formScrollable, fill }
 
 Future<T?> showPowerboardsFlowDialog<T>({
   required BuildContext context,
@@ -71,6 +71,7 @@ Future<T?> showPowerboardsFlowDialog<T>({
     enableDrag: true,
     isScrollControlled: true,
     useSafeArea: false,
+    requestFocus: true,
     routeSettings: routeSettings,
     anchorPoint: anchorPoint,
   );
@@ -335,6 +336,49 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
 
+  const PowerboardsShadDialog.formTask({
+    super.key,
+    this.title,
+    this.description,
+    this.child,
+    this.actions = const [],
+    this.closeIcon,
+    this.closeIconData,
+    this.closeIconPosition,
+    this.radius,
+    this.backgroundColor,
+    this.expandActionsWhenTiny,
+    this.padding,
+    this.gap,
+    this.constraints,
+    this.border,
+    this.shadows,
+    this.removeBorderRadiusWhenTiny,
+    this.actionsAxis,
+    this.actionsMainAxisSize,
+    this.actionsMainAxisAlignment,
+    this.actionsVerticalDirection,
+    this.titleStyle,
+    this.descriptionStyle,
+    this.titleTextAlign,
+    this.descriptionTextAlign,
+    this.alignment,
+    this.mainAxisAlignment,
+    this.crossAxisAlignment,
+    this.scrollable,
+    this.scrollPadding,
+    this.actionsGap,
+    this.useSafeArea = false,
+    this.titlePinned,
+    this.descriptionPinned,
+    this.actionsPinned,
+    this.expandDesktopActions = true,
+    this.mobilePresentation = PowerboardsDialogMobilePresentation.fullScreen,
+    this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.formScrollable,
+    this.stackActionsOnMobile = true,
+    this.onBack,
+  }) : variant = ShadDialogVariant.primary;
+
   final Widget? title;
   final Widget? description;
   final Widget? child;
@@ -383,10 +427,12 @@ class PowerboardsShadDialog extends StatelessWidget {
     final screenSize = mediaQuery?.size ?? const Size(1024.0, 768.0);
     final isMobile = _usesNativeMobileDialogLayout(screenSize.width);
     final usesMobileFlowPresentation = isMobile && _usesMobileFlowPresentation(mobilePresentation);
+    final usesKeyboardAvoidance = _usesMobileFlowKeyboardAvoidance(mobileFlowBodyBehavior);
+    final mobileKeyboardInset = usesMobileFlowPresentation && usesKeyboardAvoidance ? (mediaQuery?.viewInsets.bottom ?? 0.0) : 0.0;
     final mobileTopInset = usesMobileFlowPresentation
         ? (powerboardsMobileScreenTopInset + powerboardsMobileScreenBottomInset + _mobileFlowDialogTopGap)
         : (isMobile ? powerboardsMobileScreenTopInset : 0.0);
-    final mobileBottomInset = usesMobileFlowPresentation ? 0.0 : (isMobile ? powerboardsMobileScreenBottomInset : 0.0);
+    final mobileBottomInset = usesMobileFlowPresentation ? mobileKeyboardInset : (isMobile ? powerboardsMobileScreenBottomInset : 0.0);
     final effectiveConstraints = _resolveDialogConstraints(
       constraints,
       screenSize: screenSize,
@@ -483,6 +529,7 @@ class PowerboardsShadDialog extends StatelessWidget {
             actionsGap: actionsGap ?? 8,
             bodyBehavior: mobileFlowBodyBehavior,
             usesHorizontalActionRow: useHorizontalMobileActionRow,
+            keyboardInset: mobileKeyboardInset,
           )
         : ShadDialog.raw(
             key: key,
@@ -523,10 +570,14 @@ class PowerboardsShadDialog extends StatelessWidget {
             child: child,
           );
 
+    final wrappedDialog = usesMobileFlowPresentation && !usesKeyboardAvoidance
+        ? MediaQuery.removeViewInsets(context: context, removeBottom: true, child: dialog)
+        : dialog;
+
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-      child: dialog,
+      child: wrappedDialog,
     );
   }
 }
@@ -552,6 +603,10 @@ bool _usesNativeMobileDialogLayout(double screenWidth) {
 bool _usesMobileFlowPresentation(PowerboardsDialogMobilePresentation mobilePresentation) {
   return mobilePresentation == PowerboardsDialogMobilePresentation.flowSheet ||
       mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen;
+}
+
+bool _usesMobileFlowKeyboardAvoidance(PowerboardsDialogMobileFlowBodyBehavior bodyBehavior) {
+  return bodyBehavior != PowerboardsDialogMobileFlowBodyBehavior.formScrollable;
 }
 
 bool? _resolveDialogScrollable(bool? scrollable, {required bool usesMobileFlowPresentation}) {
@@ -1033,6 +1088,7 @@ class _PowerboardsMobileFlowDialogSurface extends StatefulWidget {
     required this.actionsGap,
     required this.bodyBehavior,
     required this.usesHorizontalActionRow,
+    required this.keyboardInset,
   });
 
   final BoxConstraints? constraints;
@@ -1049,6 +1105,7 @@ class _PowerboardsMobileFlowDialogSurface extends StatefulWidget {
   final double actionsGap;
   final PowerboardsDialogMobileFlowBodyBehavior bodyBehavior;
   final bool usesHorizontalActionRow;
+  final double keyboardInset;
 
   @override
   State<_PowerboardsMobileFlowDialogSurface> createState() => _PowerboardsMobileFlowDialogSurfaceState();
@@ -1061,6 +1118,10 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
   double? _measuredBodyHeight;
 
   void _scheduleMeasurement() {
+    if (widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.fill) {
+      return;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -1091,15 +1152,20 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
 
   @override
   Widget build(BuildContext context) {
-    _scheduleMeasurement();
-
     final heightConstraints = widget.constraints ?? const BoxConstraints();
+    final hasFixedHeight =
+        heightConstraints.hasBoundedHeight && (heightConstraints.maxHeight - heightConstraints.minHeight).abs() < precisionErrorTolerance;
+    final requiresMeasurement = widget.bodyBehavior != PowerboardsDialogMobileFlowBodyBehavior.fill && !hasFixedHeight;
+    if (requiresMeasurement) {
+      _scheduleMeasurement();
+    }
+
     final resolvedPadding = widget.padding.resolve(Directionality.of(context));
     final minHeight = heightConstraints.hasBoundedHeight ? heightConstraints.minHeight : 0.0;
     final maxHeight = heightConstraints.hasBoundedHeight ? heightConstraints.maxHeight : double.infinity;
-    final measuredHeight = widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.fill
-        ? maxHeight
-        : ((_measuredContentHeight ?? (minHeight - resolvedPadding.vertical).clamp(0.0, minHeight).toDouble()) + resolvedPadding.vertical);
+    final measuredHeight = requiresMeasurement
+        ? ((_measuredContentHeight ?? (minHeight - resolvedPadding.vertical).clamp(0.0, minHeight).toDouble()) + resolvedPadding.vertical)
+        : maxHeight;
     final targetHeight = measuredHeight.clamp(minHeight, maxHeight).toDouble();
     final visibleFrame = _PowerboardsMobileFlowDialogFrame(
       title: widget.title,
@@ -1111,73 +1177,85 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
       expandBody: true,
       usesHorizontalActionRow: widget.usesHorizontalActionRow,
     );
-    final provisionalFrame = _PowerboardsMobileFlowDialogFrame(
-      title: widget.title,
-      description: widget.description,
-      body: _buildMeasuredBody(includeMeasureKey: false),
-      actions: widget.actions,
-      gap: widget.gap,
-      actionsGap: widget.actionsGap,
-      expandBody: false,
-      usesHorizontalActionRow: widget.usesHorizontalActionRow,
-    );
+    final provisionalFrame = requiresMeasurement
+        ? _PowerboardsMobileFlowDialogFrame(
+            title: widget.title,
+            description: widget.description,
+            body: _buildMeasuredBody(includeMeasureKey: false),
+            actions: widget.actions,
+            gap: widget.gap,
+            actionsGap: widget.actionsGap,
+            expandBody: false,
+            usesHorizontalActionRow: widget.usesHorizontalActionRow,
+          )
+        : null;
 
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Stack(
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: widget.keyboardInset),
+      child: Align(
         alignment: Alignment.bottomCenter,
-        children: [
-          Offstage(
-            child: IgnorePointer(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: widget.constraints?.minWidth ?? 0.0,
-                  maxWidth: widget.constraints?.maxWidth ?? double.infinity,
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            if (requiresMeasurement)
+              Offstage(
+                child: IgnorePointer(
+                  child: ExcludeFocus(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minWidth: widget.constraints?.minWidth ?? 0.0,
+                        maxWidth: widget.constraints?.maxWidth ?? double.infinity,
+                      ),
+                      child: Padding(
+                        padding: widget.padding,
+                        child: KeyedSubtree(
+                          key: _measureKey,
+                          child: _PowerboardsMobileFlowDialogFrame(
+                            title: widget.title,
+                            description: widget.description,
+                            body: _buildMeasuredBody(),
+                            actions: widget.actions,
+                            gap: widget.gap,
+                            actionsGap: widget.actionsGap,
+                            expandBody: false,
+                            usesHorizontalActionRow: widget.usesHorizontalActionRow,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                child: Padding(
-                  padding: widget.padding,
-                  child: KeyedSubtree(
-                    key: _measureKey,
-                    child: _PowerboardsMobileFlowDialogFrame(
-                      title: widget.title,
-                      description: widget.description,
-                      body: _buildMeasuredBody(),
-                      actions: widget.actions,
-                      gap: widget.gap,
-                      actionsGap: widget.actionsGap,
-                      expandBody: false,
-                      usesHorizontalActionRow: widget.usesHorizontalActionRow,
+              ),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: widget.constraints?.minWidth ?? 0.0,
+                maxWidth: widget.constraints?.maxWidth ?? double.infinity,
+              ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: widget.backgroundColor,
+                  borderRadius: widget.radius,
+                  border: widget.border,
+                  boxShadow: widget.shadows,
+                ),
+                child: ClipRRect(
+                  borderRadius: widget.radius,
+                  child: SizedBox(
+                    height: targetHeight,
+                    child: Padding(
+                      padding: widget.padding,
+                      child: !requiresMeasurement || _measuredContentHeight != null
+                          ? visibleFrame
+                          : SingleChildScrollView(child: provisionalFrame!),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: widget.constraints?.minWidth ?? 0.0,
-              maxWidth: widget.constraints?.maxWidth ?? double.infinity,
-            ),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: widget.backgroundColor,
-                borderRadius: widget.radius,
-                border: widget.border,
-                boxShadow: widget.shadows,
-              ),
-              child: ClipRRect(
-                borderRadius: widget.radius,
-                child: SizedBox(
-                  height: targetHeight,
-                  child: Padding(
-                    padding: widget.padding,
-                    child: _measuredContentHeight == null ? SingleChildScrollView(child: provisionalFrame) : visibleFrame,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1192,6 +1270,7 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
         return null;
       case PowerboardsDialogMobileFlowBodyBehavior.inherit:
       case PowerboardsDialogMobileFlowBodyBehavior.scrollable:
+      case PowerboardsDialogMobileFlowBodyBehavior.formScrollable:
         final bodyContext = _measureBodyKey.currentContext;
         final renderBox = bodyContext?.findRenderObject() as RenderBox?;
         if (renderBox == null || !renderBox.hasSize) {
@@ -1208,7 +1287,8 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
     }
 
     Widget content = includeMeasureKey ? KeyedSubtree(key: _measureBodyKey, child: body) : body;
-    if (widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.scrollable) {
+    if (widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.scrollable ||
+        widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.formScrollable) {
       content = Padding(padding: powerboardsDialogScrollableListPadding, child: content);
     }
     return content;
@@ -1225,6 +1305,11 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
       PowerboardsDialogMobileFlowBodyBehavior.scrollable => PowerboardsFlowDialogScrollableBody(
         contentHeight: _measuredBodyHeight,
         centerSparseContent: true,
+        child: body,
+      ),
+      PowerboardsDialogMobileFlowBodyBehavior.formScrollable => PowerboardsFlowDialogScrollableBody(
+        contentHeight: _measuredBodyHeight,
+        centerSparseContent: false,
         child: body,
       ),
       PowerboardsDialogMobileFlowBodyBehavior.fill => PowerboardsFlowDialogFillBody(child: body),

@@ -97,6 +97,7 @@ class _MultiSelectAutocompleteState extends State<MultiSelectAutocomplete> {
 
   Timer? debounceTimer;
   TextSelection? lastSelection;
+  bool _isOffstageMeasurement = false;
 
   int seq = 0;
 
@@ -218,6 +219,13 @@ class _MultiSelectAutocompleteState extends State<MultiSelectAutocomplete> {
   }
 
   void onTextChanged() {
+    if (_isOffstageMeasurement) {
+      if (popoverController.isOpen) {
+        popoverController.hide();
+      }
+      return;
+    }
+
     lastSelection = textController.selection;
 
     debounceTimer?.cancel();
@@ -235,6 +243,13 @@ class _MultiSelectAutocompleteState extends State<MultiSelectAutocomplete> {
   }
 
   Future<void> invokeSearch(String query) async {
+    if (_isOffstageMeasurement) {
+      if (popoverController.isOpen) {
+        popoverController.hide();
+      }
+      return;
+    }
+
     final mySeq = ++seq;
     final results = await widget.search(query);
 
@@ -313,6 +328,21 @@ class _MultiSelectAutocompleteState extends State<MultiSelectAutocomplete> {
     selectedOption.dispose();
 
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final nextIsOffstageMeasurement = context.findAncestorWidgetOfExactType<Offstage>() != null;
+    if (_isOffstageMeasurement == nextIsOffstageMeasurement) {
+      return;
+    }
+
+    _isOffstageMeasurement = nextIsOffstageMeasurement;
+    if (_isOffstageMeasurement && popoverController.isOpen) {
+      popoverController.hide();
+    }
   }
 
   @override
@@ -460,7 +490,7 @@ class _MultiSelectAutocompleteState extends State<MultiSelectAutocomplete> {
                                             actions: actions,
                                             child: EditableText(
                                               key: editableTextKey,
-                                              autofocus: widget.autofocus ?? false,
+                                              autofocus: _isOffstageMeasurement ? false : (widget.autofocus ?? false),
                                               backgroundCursorColor: const Color(0xFF9E9E9E),
                                               cursorColor: cursorColor,
                                               style: effectiveTextStyle,
