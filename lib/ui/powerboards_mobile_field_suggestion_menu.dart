@@ -11,6 +11,7 @@ class PowerboardsMobileFieldSuggestionMenu<T> extends StatelessWidget {
     this.decoration,
     this.padding = EdgeInsets.zero,
     this.separatorBuilder,
+    this.physics = const ClampingScrollPhysics(),
   });
 
   final List<T> items;
@@ -21,6 +22,7 @@ class PowerboardsMobileFieldSuggestionMenu<T> extends StatelessWidget {
   final BoxDecoration? decoration;
   final EdgeInsetsGeometry padding;
   final Widget Function(BuildContext context, int index)? separatorBuilder;
+  final ScrollPhysics physics;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +37,7 @@ class PowerboardsMobileFieldSuggestionMenu<T> extends StatelessWidget {
             child: ListView.separated(
               primary: false,
               shrinkWrap: true,
+              physics: physics,
               padding: padding.resolve(Directionality.of(context)),
               itemCount: items.length,
               itemBuilder: (context, index) => itemBuilder(context, items[index], index),

@@ -191,7 +191,7 @@ class _InviteSuggestionsOverlayHostState extends State<_InviteSuggestionsOverlay
                 LayoutBuilder(
                   builder: (context, constraints) {
                     return ShadPortal(
-                      visible: suggestions.isNotEmpty,
+                      visible: suggestions.isNotEmpty && _focusNode.hasFocus,
                       anchor: const ShadAnchor(
                         childAlignment: Alignment.topLeft,
                         overlayAlignment: Alignment.bottomLeft,
@@ -203,6 +203,7 @@ class _InviteSuggestionsOverlayHostState extends State<_InviteSuggestionsOverlay
                           items: suggestions,
                           groupId: _tapRegionGroupId,
                           maxHeight: 168,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
@@ -215,6 +216,7 @@ class _InviteSuggestionsOverlayHostState extends State<_InviteSuggestionsOverlay
                                 setState(() {
                                   _selectedEmail = email;
                                 });
+                                _focusNode.unfocus();
                               },
                               child: Padding(padding: const EdgeInsets.all(16), child: Text(email)),
                             );
@@ -286,6 +288,43 @@ class _AsyncGrowingListBodyState extends State<_AsyncGrowingListBody> {
 }
 
 void main() {
+  testWidgets('mobile field suggestion menu does not drag when content fits', (tester) async {
+    const firstLabel = 'alpha@mail.meshagent.com';
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Scaffold(
+          body: Center(
+            child: PowerboardsMobileFieldSuggestionMenu<String>(
+              width: 320,
+              maxHeight: 260,
+              groupId: Object(),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              items: const [firstLabel, 'bravo@mail.meshagent.com', 'charlie@mail.meshagent.com'],
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFD9D9D9)),
+              ),
+              itemBuilder: (context, email, index) => Padding(padding: const EdgeInsets.all(16), child: Text(email)),
+              separatorBuilder: (context, index) => const Divider(height: 1),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    final firstRectBefore = tester.getRect(find.text(firstLabel));
+    await tester.drag(find.byType(ListView), const Offset(0, -120));
+    await tester.pumpAndSettle();
+    final firstRectAfter = tester.getRect(find.text(firstLabel));
+
+    expect(firstRectAfter.top, closeTo(firstRectBefore.top, 0.01));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('mobile flow dialog can be dismissed with a downward swipe', (tester) async {
     tester.view.devicePixelRatio = 1.0;
     tester.view.physicalSize = const Size(390, 844);
@@ -651,6 +690,27 @@ void main() {
     await tester.pump();
 
     expect(find.text('Selected: prb-01@mail.meshagent.com'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile invite suggestion selection dismisses input focus', (tester) async {
+    await _pumpDialog(tester, const _InviteSuggestionsOverlayHost(), resizeToAvoidBottomInset: false);
+
+    final inputFinder = find.byType(EditableText);
+
+    await tester.tap(inputFinder);
+    await tester.enterText(inputFinder, 'prb');
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.widget<EditableText>(inputFinder).focusNode.hasFocus, isTrue);
+
+    await tester.tap(find.text('prb-01@mail.meshagent.com'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(tester.widget<EditableText>(inputFinder).focusNode.hasFocus, isFalse);
+    expect(find.byType(PowerboardsMobileFieldSuggestionMenu<String>), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

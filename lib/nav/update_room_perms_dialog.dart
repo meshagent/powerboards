@@ -506,6 +506,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
   static const double _mobileSuggestionMenuGap = 12.0;
   static const double _mobileSuggestionMenuViewportPadding = 12.0;
   static const double _mobileSuggestionMenuMinHeight = 72.0;
+  static const double _mobileSuggestionTitleLineHeight = 24.0;
   static const int _initialMobileFocusMaxAttempts = 12;
 
   bool submitting = false;
@@ -665,6 +666,19 @@ class _AddUserDialogState extends State<AddUserDialog> {
     selectedUsers.value = _updatedSelectedUsers(emails, projectUsersMap: projectUsersMap, roomGrants: roomGrants);
   }
 
+  void _updateInputFocusAfterSelectionChange() {
+    if (!mounted) {
+      return;
+    }
+
+    if (_usesMobileDialogLayout(context)) {
+      _mobileEmailFocusNode.unfocus();
+      return;
+    }
+
+    _mobileEmailFocusNode.requestFocus();
+  }
+
   void _addEmailToSelection(String email, {required Map<String, User> projectUsersMap, required Map<String, GrantSummary> roomGrants}) {
     _setSelectedUsersFromEmails(
       [...selectedUsers.value.map((user) => user.email), email],
@@ -672,9 +686,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       roomGrants: roomGrants,
     );
     textController.clear();
-    if (mounted) {
-      _mobileEmailFocusNode.requestFocus();
-    }
+    _updateInputFocusAfterSelectionChange();
   }
 
   void _removeEmailFromSelection(
@@ -706,9 +718,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       roomGrants: roomGrants,
     );
     textController.clear();
-    if (mounted) {
-      _mobileEmailFocusNode.requestFocus();
-    }
+    _updateInputFocusAfterSelectionChange();
     return true;
   }
 
@@ -776,6 +786,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
     Widget buildSuggestionRow(int index) {
       final suggestion = suggestions[index];
+      final primaryTextStyle = TextStyle(color: theme.colorScheme.foreground, fontWeight: FontWeight.w600, height: 1.15);
 
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -787,21 +798,27 @@ class _AddUserDialogState extends State<AddUserDialog> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                suggestion.isProjectUser ? LucideIcons.userRoundCheck : LucideIcons.userRoundPlus,
-                size: 18,
-                color: theme.colorScheme.foreground.withValues(alpha: .74),
+              SizedBox(
+                height: _mobileSuggestionTitleLineHeight,
+                child: Center(
+                  child: Icon(
+                    suggestion.isProjectUser ? LucideIcons.userRoundCheck : LucideIcons.userRoundPlus,
+                    size: 18,
+                    color: theme.colorScheme.foreground.withValues(alpha: .74),
+                  ),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      suggestion.label,
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                      style: TextStyle(color: theme.colorScheme.foreground, fontWeight: FontWeight.w600),
+                    SizedBox(
+                      height: _mobileSuggestionTitleLineHeight,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(suggestion.label, overflow: TextOverflow.ellipsis, maxLines: 1, style: primaryTextStyle),
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -830,6 +847,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       items: suggestions,
       groupId: _mobileSuggestionsGroupId,
       maxHeight: maxHeight,
+      padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: menuDecoration,
       itemBuilder: (context, suggestion, index) => buildSuggestionRow(index),
       separatorBuilder: (context, index) => Padding(
