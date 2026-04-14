@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_mobile_field_suggestion_menu.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
@@ -23,6 +24,8 @@ import 'package:powerboards/widgets/select_users.dart';
 enum _View { permissions, addUser }
 
 enum _LoadingState { loading, loaded }
+
+enum _MobileSuggestionMenuDirection { above, below }
 
 bool _usesMobileDialogLayout(BuildContext context) => powerboardsUsesNativeMobileDialogLayout(context);
 
@@ -500,6 +503,9 @@ class AddUserDialog extends StatefulWidget {
 
 class _AddUserDialogState extends State<AddUserDialog> {
   static const double _mobileSuggestionListMaxHeight = 224.0;
+  static const double _mobileSuggestionMenuGap = 12.0;
+  static const double _mobileSuggestionMenuViewportPadding = 12.0;
+  static const double _mobileSuggestionMenuMinHeight = 72.0;
   static const int _initialMobileFocusMaxAttempts = 12;
 
   bool submitting = false;
@@ -507,6 +513,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
   final controller = SelectUsersController();
   final textController = TextEditingController();
   final _mobileEmailFocusNode = FocusNode();
+  final _mobileSuggestionsAnchorKey = GlobalKey();
   final _mobileSuggestionsGroupId = Object();
   int _initialMobileFocusRequestId = 0;
   bool _initialMobileFocusScheduled = false;
@@ -743,7 +750,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       );
     }
 
-    return suggestions.take(6).toList(growable: false);
+    return suggestions;
   }
 
   Widget _buildMobileSuggestionsMenu(
@@ -752,6 +759,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
     required Map<String, User> projectUsersMap,
     required Map<String, GrantSummary> roomGrants,
     required double width,
+    required double maxHeight,
   }) {
     const menuBorderRadius = BorderRadius.all(Radius.circular(16));
     final theme = ShadTheme.of(context);
@@ -769,78 +777,90 @@ class _AddUserDialogState extends State<AddUserDialog> {
     Widget buildSuggestionRow(int index) {
       final suggestion = suggestions[index];
 
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (_) {
-              _addEmailToSelection(suggestion.email, projectUsersMap: projectUsersMap, roomGrants: roomGrants);
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    suggestion.isProjectUser ? LucideIcons.userRoundCheck : LucideIcons.userRoundPlus,
-                    size: 18,
-                    color: theme.colorScheme.foreground.withValues(alpha: .74),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          suggestion.label,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                          style: TextStyle(color: theme.colorScheme.foreground, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          suggestion.description,
-                          style: TextStyle(
-                            color: suggestion.isProjectUser ? theme.colorScheme.mutedForeground : destructiveTextColor,
-                            fontWeight: suggestion.isProjectUser ? FontWeight.w400 : FontWeight.w600,
-                            height: 1.25,
-                          ),
-                        ),
-                        if (suggestion.supportingText case final supportingText?) ...[
-                          const SizedBox(height: 4),
-                          Text(supportingText, style: TextStyle(color: destructiveSupportingColor, fontSize: 12, height: 1.3)),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          _addEmailToSelection(suggestion.email, projectUsersMap: projectUsersMap, roomGrants: roomGrants);
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                suggestion.isProjectUser ? LucideIcons.userRoundCheck : LucideIcons.userRoundPlus,
+                size: 18,
+                color: theme.colorScheme.foreground.withValues(alpha: .74),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      suggestion.label,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: TextStyle(color: theme.colorScheme.foreground, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      suggestion.description,
+                      style: TextStyle(
+                        color: suggestion.isProjectUser ? theme.colorScheme.mutedForeground : destructiveTextColor,
+                        fontWeight: suggestion.isProjectUser ? FontWeight.w400 : FontWeight.w600,
+                        height: 1.25,
+                      ),
+                    ),
+                    if (suggestion.supportingText case final supportingText?) ...[
+                      const SizedBox(height: 4),
+                      Text(supportingText, style: TextStyle(color: destructiveSupportingColor, fontSize: 12, height: 1.3)),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
-          if (index != suggestions.length - 1)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Divider(height: 1, color: theme.colorScheme.border),
-            ),
-        ],
+        ),
       );
     }
 
-    return SizedBox(
+    return PowerboardsMobileFieldSuggestionMenu<_InviteUserSuggestion>(
       width: width,
-      child: TextFieldTapRegion(
-        groupId: _mobileSuggestionsGroupId,
-        child: DecoratedBox(
-          decoration: menuDecoration,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: _mobileSuggestionListMaxHeight),
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: List.generate(suggestions.length, buildSuggestionRow)),
-            ),
-          ),
-        ),
+      items: suggestions,
+      groupId: _mobileSuggestionsGroupId,
+      maxHeight: maxHeight,
+      decoration: menuDecoration,
+      itemBuilder: (context, suggestion, index) => buildSuggestionRow(index),
+      separatorBuilder: (context, index) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Divider(height: 1, color: theme.colorScheme.border),
       ),
+    );
+  }
+
+  (_MobileSuggestionMenuDirection, double) _mobileSuggestionMenuLayout() {
+    final mediaQuery = MediaQuery.maybeOf(context);
+    final anchorContext = _mobileSuggestionsAnchorKey.currentContext;
+    final anchorRenderBox = anchorContext?.findRenderObject() as RenderBox?;
+    if (mediaQuery == null || anchorRenderBox == null || !anchorRenderBox.hasSize) {
+      return (_MobileSuggestionMenuDirection.below, _mobileSuggestionListMaxHeight);
+    }
+
+    final screenHeight = mediaQuery.size.height;
+    final safeTop = mediaQuery.padding.top + _mobileSuggestionMenuViewportPadding;
+    final visibleBottom = (screenHeight - mediaQuery.viewInsets.bottom - _mobileSuggestionMenuViewportPadding).clamp(0.0, screenHeight);
+    final anchorOffset = anchorRenderBox.localToGlobal(Offset.zero);
+    final anchorTop = anchorOffset.dy;
+    final anchorBottom = anchorTop + anchorRenderBox.size.height;
+    final spaceBelow = (visibleBottom - anchorBottom - _mobileSuggestionMenuGap).clamp(0.0, screenHeight).toDouble();
+    final spaceAbove = (anchorTop - safeTop - _mobileSuggestionMenuGap).clamp(0.0, screenHeight).toDouble();
+    final preferAbove = spaceBelow < _mobileSuggestionMenuMinHeight && spaceAbove > spaceBelow;
+    final availableHeight = preferAbove ? spaceAbove : spaceBelow;
+
+    return (
+      preferAbove ? _MobileSuggestionMenuDirection.above : _MobileSuggestionMenuDirection.below,
+      availableHeight.clamp(0.0, _mobileSuggestionListMaxHeight).toDouble(),
     );
   }
 
@@ -1167,13 +1187,23 @@ class _AddUserDialogState extends State<AddUserDialog> {
                       const SizedBox(height: 8),
                       LayoutBuilder(
                         builder: (context, constraints) {
-                          return ShadPortal(
-                            visible: showsSuggestionsMenu,
-                            anchor: const ShadAnchor(
+                          final (menuDirection, menuMaxHeight) = _mobileSuggestionMenuLayout();
+                          final menuAnchor = switch (menuDirection) {
+                            _MobileSuggestionMenuDirection.below => ShadAnchor(
                               childAlignment: Alignment.topLeft,
                               overlayAlignment: Alignment.bottomLeft,
-                              offset: Offset(0, 12),
+                              offset: Offset(0, _mobileSuggestionMenuGap),
                             ),
+                            _MobileSuggestionMenuDirection.above => ShadAnchor(
+                              childAlignment: Alignment.bottomLeft,
+                              overlayAlignment: Alignment.topLeft,
+                              offset: Offset(0, -_mobileSuggestionMenuGap),
+                            ),
+                          };
+
+                          return ShadPortal(
+                            visible: showsSuggestionsMenu && menuMaxHeight > 0,
+                            anchor: menuAnchor,
                             portalBuilder: (context) {
                               return _buildMobileSuggestionsMenu(
                                 context,
@@ -1181,13 +1211,16 @@ class _AddUserDialogState extends State<AddUserDialog> {
                                 projectUsersMap: projUsersMap,
                                 roomGrants: roomGrants,
                                 width: constraints.maxWidth,
+                                maxHeight: menuMaxHeight,
                               );
                             },
                             child: TextFieldTapRegion(
+                              key: _mobileSuggestionsAnchorKey,
                               groupId: _mobileSuggestionsGroupId,
                               child: ShadInput(
                                 controller: textController,
                                 focusNode: _mobileEmailFocusNode,
+                                groupId: _mobileSuggestionsGroupId,
                                 autofocus: true,
                                 textInputAction: TextInputAction.done,
                                 keyboardType: TextInputType.emailAddress,

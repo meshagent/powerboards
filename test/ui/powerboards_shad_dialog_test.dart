@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:powerboards/ui/powerboards_mobile_field_suggestion_menu.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:powerboards/widgets/multi_select_autocomplete.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -146,6 +147,20 @@ class _InviteSuggestionsOverlayHostState extends State<_InviteSuggestionsOverlay
   final _focusNode = FocusNode();
   final _tapRegionGroupId = Object();
   String? _selectedEmail;
+  static const _suggestions = [
+    'prb-01@mail.meshagent.com',
+    'prb-02@mail.meshagent.com',
+    'prb-03@mail.meshagent.com',
+    'prb-04@mail.meshagent.com',
+    'prb-05@mail.meshagent.com',
+    'prb-06@mail.meshagent.com',
+    'prb-07@mail.meshagent.com',
+    'prb-08@mail.meshagent.com',
+    'prb-09@mail.meshagent.com',
+    'prb-10@mail.meshagent.com',
+    'prb-11@mail.meshagent.com',
+    'prb-12@mail.meshagent.com',
+  ];
 
   @override
   void dispose() {
@@ -168,7 +183,7 @@ class _InviteSuggestionsOverlayHostState extends State<_InviteSuggestionsOverlay
         child: AnimatedBuilder(
           animation: Listenable.merge([_textController, _focusNode]),
           builder: (context, _) {
-            final suggestions = _textController.text.trim().isEmpty ? const <String>[] : const ['prb@mail.meshagent.com'];
+            final suggestions = _textController.text.trim().isEmpty ? const <String>[] : _suggestions;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -183,32 +198,41 @@ class _InviteSuggestionsOverlayHostState extends State<_InviteSuggestionsOverlay
                         offset: Offset(0, 12),
                       ),
                       portalBuilder: (_) {
-                        return SizedBox(
+                        return PowerboardsMobileFieldSuggestionMenu<String>(
                           width: constraints.maxWidth,
-                          child: TextFieldTapRegion(
-                            groupId: _tapRegionGroupId,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: const Color(0xFFD9D9D9)),
-                              ),
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTapDown: (_) {
-                                  setState(() {
-                                    _selectedEmail = suggestions.single;
-                                  });
-                                },
-                                child: Padding(padding: const EdgeInsets.all(16), child: Text(suggestions.single)),
-                              ),
-                            ),
+                          items: suggestions,
+                          groupId: _tapRegionGroupId,
+                          maxHeight: 168,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFD9D9D9)),
                           ),
+                          itemBuilder: (context, email, index) {
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                setState(() {
+                                  _selectedEmail = email;
+                                });
+                              },
+                              child: Padding(padding: const EdgeInsets.all(16), child: Text(email)),
+                            );
+                          },
+                          separatorBuilder: (context, index) => const Divider(height: 1),
                         );
                       },
                       child: TextFieldTapRegion(
                         groupId: _tapRegionGroupId,
-                        child: ShadInput(controller: _textController, focusNode: _focusNode, placeholder: const Text('Type an email')),
+                        child: ShadInput(
+                          controller: _textController,
+                          focusNode: _focusNode,
+                          groupId: _tapRegionGroupId,
+                          placeholder: const Text('Type an email'),
+                          onPressedOutside: (_) {
+                            _focusNode.unfocus();
+                          },
+                        ),
                       ),
                     );
                   },
@@ -606,7 +630,7 @@ void main() {
     await tester.pump();
 
     final bodyRectAfter = tester.getRect(find.text('Body content'));
-    final suggestionRect = tester.getRect(find.text('prb@mail.meshagent.com'));
+    final suggestionRect = tester.getRect(find.text('prb-01@mail.meshagent.com'));
 
     expect(bodyRectAfter.top, closeTo(bodyRectBefore.top, 0.01));
     expect(suggestionRect.top, greaterThanOrEqualTo(inputRect.bottom));
@@ -623,10 +647,53 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    await tester.tap(find.text('prb@mail.meshagent.com'));
+    await tester.tap(find.text('prb-01@mail.meshagent.com'));
     await tester.pump();
 
-    expect(find.text('Selected: prb@mail.meshagent.com'), findsOneWidget);
+    expect(find.text('Selected: prb-01@mail.meshagent.com'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile invite suggestion overlay scrolls through larger result sets', (tester) async {
+    await _pumpDialog(tester, const _InviteSuggestionsOverlayHost(), resizeToAvoidBottomInset: false);
+
+    final inputFinder = find.byType(EditableText);
+
+    await tester.tap(inputFinder);
+    await tester.enterText(inputFinder, 'prb');
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('prb-12@mail.meshagent.com'), findsNothing);
+
+    await tester.dragUntilVisible(find.text('prb-12@mail.meshagent.com'), find.byType(ListView).last, const Offset(0, -200));
+    await tester.pumpAndSettle();
+
+    expect(find.text('prb-12@mail.meshagent.com'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile invite suggestion overlay stays above the keyboard and remains scrollable', (tester) async {
+    const bottomInset = 320.0;
+    await _pumpDialog(tester, const _InviteSuggestionsOverlayHost(), bottomInset: bottomInset, resizeToAvoidBottomInset: false);
+
+    final inputFinder = find.byType(EditableText);
+
+    await tester.tap(inputFinder);
+    await tester.enterText(inputFinder, 'prb');
+    await tester.pump();
+    await tester.pump();
+
+    final keyboardTop = tester.view.physicalSize.height - bottomInset;
+    final menuRect = tester.getRect(find.byType(PowerboardsMobileFieldSuggestionMenu<String>));
+
+    expect(menuRect.bottom, lessThanOrEqualTo(keyboardTop + 0.01));
+    expect(find.text('prb-12@mail.meshagent.com'), findsNothing);
+
+    await tester.dragUntilVisible(find.text('prb-12@mail.meshagent.com'), find.byType(ListView).last, const Offset(0, -160));
+    await tester.pumpAndSettle();
+
+    expect(find.text('prb-12@mail.meshagent.com'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
