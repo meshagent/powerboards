@@ -382,53 +382,19 @@ class AddedUser {
 }
 
 class _InviteUserSuggestion {
-  const _InviteUserSuggestion({required this.email, required this.label, required this.description, required this.isProjectUser});
+  const _InviteUserSuggestion({
+    required this.email,
+    required this.label,
+    required this.description,
+    required this.isProjectUser,
+    this.supportingText,
+  });
 
   final String email;
   final String label;
   final String description;
   final bool isProjectUser;
-}
-
-class _InviteUserProjectWarning extends StatelessWidget {
-  const _InviteUserProjectWarning({required this.usersNotInProject});
-
-  final String usersNotInProject;
-
-  @override
-  Widget build(BuildContext context) {
-    const textColor = Color(0xFFE65100);
-    const backgroundColor = Color(0xFFFCEBEB);
-
-    return ShadAlert(
-      icon: const Icon(LucideIcons.triangleAlert),
-      iconColor: textColor,
-      iconSize: 24,
-      description: RichText(
-        text: TextSpan(
-          style: const TextStyle(color: textColor),
-          children: [
-            const TextSpan(
-              text: 'The following email addresses',
-              style: TextStyle(color: textColor, height: 1.4),
-            ),
-            TextSpan(
-              text: ' ($usersNotInProject) ',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: textColor, height: 1.4),
-            ),
-            const TextSpan(
-              text: 'are not project members. Adding them to the room will add them as members to the project.',
-              style: TextStyle(color: textColor, height: 1.4),
-            ),
-          ],
-        ),
-      ),
-      decoration: ShadDecoration(
-        color: backgroundColor,
-        border: ShadBorder.all(color: textColor),
-      ),
-    );
-  }
+  final String? supportingText;
 }
 
 class _InviteUserMobileContextMenu extends StatefulWidget {
@@ -540,6 +506,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
   final controller = SelectUsersController();
   final textController = TextEditingController();
   final _mobileEmailFocusNode = FocusNode();
+  final _mobileSuggestionsGroupId = Object();
   int _initialMobileFocusRequestId = 0;
   bool _initialMobileFocusScheduled = false;
 
@@ -762,18 +729,118 @@ class _AddUserDialogState extends State<AddUserDialog> {
     if (SelectUsersController.emailRegex.hasMatch(query) &&
         !selectedEmails.contains(queryLower) &&
         suggestions.every((suggestion) => suggestion.email.toLowerCase() != queryLower)) {
+      final isProjectUser = projectUsersMap.containsKey(queryLower);
       suggestions.insert(
         0,
         _InviteUserSuggestion(
           email: query,
           label: query,
-          description: projectUsersMap.containsKey(queryLower) ? 'Project member' : 'Invite to the project and room',
-          isProjectUser: projectUsersMap.containsKey(queryLower),
+          description: isProjectUser ? 'Project member' : 'Invite to project and room',
+          supportingText: isProjectUser ? null : 'Not in this room yet. Will be added to project as well.',
+          isProjectUser: isProjectUser,
         ),
       );
     }
 
     return suggestions.take(6).toList(growable: false);
+  }
+
+  Widget _buildMobileSuggestionsMenu(
+    BuildContext context, {
+    required List<_InviteUserSuggestion> suggestions,
+    required Map<String, User> projectUsersMap,
+    required Map<String, GrantSummary> roomGrants,
+    required double width,
+  }) {
+    const menuBorderRadius = BorderRadius.all(Radius.circular(16));
+    final theme = ShadTheme.of(context);
+    final destructiveTextColor = theme.colorScheme.destructive;
+    final destructiveSupportingColor = theme.colorScheme.destructive.withValues(alpha: .78);
+    final showsInviteSuggestion = suggestions.any((suggestion) => !suggestion.isProjectUser);
+    final menuBorderColor = showsInviteSuggestion ? destructiveTextColor.withValues(alpha: .6) : theme.colorScheme.border;
+    final menuDecoration = BoxDecoration(
+      color: theme.colorScheme.card,
+      borderRadius: menuBorderRadius,
+      border: Border.all(color: menuBorderColor),
+      boxShadow: showsInviteSuggestion ? null : const [BoxShadow(color: Color(0x11000000), blurRadius: 18, offset: Offset(0, 8))],
+    );
+
+    Widget buildSuggestionRow(int index) {
+      final suggestion = suggestions[index];
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (_) {
+              _addEmailToSelection(suggestion.email, projectUsersMap: projectUsersMap, roomGrants: roomGrants);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    suggestion.isProjectUser ? LucideIcons.userRoundCheck : LucideIcons.userRoundPlus,
+                    size: 18,
+                    color: theme.colorScheme.foreground.withValues(alpha: .74),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          suggestion.label,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: TextStyle(color: theme.colorScheme.foreground, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          suggestion.description,
+                          style: TextStyle(
+                            color: suggestion.isProjectUser ? theme.colorScheme.mutedForeground : destructiveTextColor,
+                            fontWeight: suggestion.isProjectUser ? FontWeight.w400 : FontWeight.w600,
+                            height: 1.25,
+                          ),
+                        ),
+                        if (suggestion.supportingText case final supportingText?) ...[
+                          const SizedBox(height: 4),
+                          Text(supportingText, style: TextStyle(color: destructiveSupportingColor, fontSize: 12, height: 1.3)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (index != suggestions.length - 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Divider(height: 1, color: theme.colorScheme.border),
+            ),
+        ],
+      );
+    }
+
+    return SizedBox(
+      width: width,
+      child: TextFieldTapRegion(
+        groupId: _mobileSuggestionsGroupId,
+        child: DecoratedBox(
+          decoration: menuDecoration,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: _mobileSuggestionListMaxHeight),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: List.generate(suggestions.length, buildSuggestionRow)),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> onAdded() async {
@@ -1038,158 +1105,102 @@ class _AddUserDialogState extends State<AddUserDialog> {
             final roomGrants = grants.state.value ?? {};
             final projUsersMap = projectUsersMap.state.value ?? {};
 
-            final mobileSelectionContent = ValueListenableBuilder<TextEditingValue>(
-              valueListenable: textController,
-              builder: (context, textEditingValue, _) {
-                final typedText = textEditingValue.text.trim();
-                final suggestions = _mobileSuggestions(projUsersMap);
-                final pendingItems = SelectUsersController.emailRegex.hasMatch(typedText)
-                    ? [...selected, AddedUser(email: typedText, role: GrantRole.nonOwner)]
-                    : selected;
-                final usersNotInProject = pendingItems
-                    .where((user) => !projUsersMap.containsKey(user.email.toLowerCase()))
-                    .map((user) => user.email)
-                    .join(', ');
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (suggestions.isNotEmpty) ...[
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.card,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: theme.colorScheme.border),
-                          boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 18, offset: Offset(0, 8))],
-                        ),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: _mobileSuggestionListMaxHeight),
-                          child: SingleChildScrollView(
-                            child: Column(
-                              children: [
-                                for (var i = 0; i < suggestions.length; i++) ...[
-                                  Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: i == 0
-                                          ? (suggestions.length == 1
-                                                ? BorderRadius.circular(16)
-                                                : const BorderRadius.vertical(top: Radius.circular(16)))
-                                          : (i == suggestions.length - 1
-                                                ? const BorderRadius.vertical(bottom: Radius.circular(16))
-                                                : BorderRadius.zero),
-                                      onTap: () =>
-                                          _addEmailToSelection(suggestions[i].email, projectUsersMap: projUsersMap, roomGrants: roomGrants),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                        child: Row(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Icon(
-                                              suggestions[i].isProjectUser ? LucideIcons.userRoundCheck : LucideIcons.userRoundPlus,
-                                              size: 18,
-                                              color: theme.colorScheme.foreground.withValues(alpha: .74),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    suggestions[i].label,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    maxLines: 1,
-                                                    style: TextStyle(color: theme.colorScheme.foreground, fontWeight: FontWeight.w600),
-                                                  ),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    suggestions[i].description,
-                                                    style: TextStyle(color: theme.colorScheme.mutedForeground),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  if (i != suggestions.length - 1) Divider(height: 1, color: theme.colorScheme.border),
-                                ],
-                              ],
-                            ),
+            final mobileSelectionContent = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (selected.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final user in selected)
+                        ShadBadge(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(child: Text(user.email, overflow: TextOverflow.ellipsis)),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => _removeEmailFromSelection(user.email, projectUsersMap: projUsersMap, roomGrants: roomGrants),
+                                child: Icon(LucideIcons.x, size: 14, color: theme.colorScheme.background),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 18),
                     ],
-                    if (selected.isNotEmpty) ...[
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final user in selected)
-                            ShadBadge(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Flexible(child: Text(user.email, overflow: TextOverflow.ellipsis)),
-                                  const SizedBox(width: 8),
-                                  GestureDetector(
-                                    onTap: () =>
-                                        _removeEmailFromSelection(user.email, projectUsersMap: projUsersMap, roomGrants: roomGrants),
-                                    child: Icon(LucideIcons.x, size: 14, color: theme.colorScheme.background),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                    ],
-                    if (usersNotInProject.isNotEmpty) ...[
-                      _InviteUserProjectWarning(usersNotInProject: usersNotInProject),
-                      const SizedBox(height: 18),
-                    ],
-                  ],
-                );
-              },
+                  ),
+                  const SizedBox(height: 18),
+                ],
+              ],
             );
 
             Widget buildTopSection() {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Enter email address', style: inputLabelStyle),
-                  const SizedBox(height: 8),
-                  ShadInput(
-                    controller: textController,
-                    focusNode: _mobileEmailFocusNode,
-                    autofocus: true,
-                    textInputAction: TextInputAction.done,
-                    keyboardType: TextInputType.emailAddress,
-                    autocorrect: false,
-                    enableSuggestions: true,
-                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
-                    placeholder: const Text('Type an email'),
-                    contextMenuBuilder: (context, editableTextState) => _InviteUserMobileContextMenu(editableTextState: editableTextState),
-                    onPressedOutside: (_) {
-                      _mobileEmailFocusNode.unfocus();
-                    },
-                    onChanged: (value) {
-                      final shouldCommitParsedEmails =
-                          value.contains(',') || value.contains(';') || value.endsWith(' ') || value.endsWith('\n');
-                      if (shouldCommitParsedEmails) {
-                        _submitEmailsFromText(value, projectUsersMap: projUsersMap, roomGrants: roomGrants);
-                      }
-                    },
-                    onSubmitted: (value) {
-                      _submitEmailsFromText(value, projectUsersMap: projUsersMap, roomGrants: roomGrants);
-                    },
-                  ),
-                ],
+              return AnimatedBuilder(
+                animation: Listenable.merge([textController, _mobileEmailFocusNode]),
+                builder: (context, _) {
+                  final suggestions = _mobileSuggestions(projUsersMap);
+                  final showsSuggestionsMenu = _mobileEmailFocusNode.hasFocus && suggestions.isNotEmpty;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Enter email address', style: inputLabelStyle),
+                      const SizedBox(height: 8),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          return ShadPortal(
+                            visible: showsSuggestionsMenu,
+                            anchor: const ShadAnchor(
+                              childAlignment: Alignment.topLeft,
+                              overlayAlignment: Alignment.bottomLeft,
+                              offset: Offset(0, 12),
+                            ),
+                            portalBuilder: (context) {
+                              return _buildMobileSuggestionsMenu(
+                                context,
+                                suggestions: suggestions,
+                                projectUsersMap: projUsersMap,
+                                roomGrants: roomGrants,
+                                width: constraints.maxWidth,
+                              );
+                            },
+                            child: TextFieldTapRegion(
+                              groupId: _mobileSuggestionsGroupId,
+                              child: ShadInput(
+                                controller: textController,
+                                focusNode: _mobileEmailFocusNode,
+                                autofocus: true,
+                                textInputAction: TextInputAction.done,
+                                keyboardType: TextInputType.emailAddress,
+                                autocorrect: false,
+                                enableSuggestions: true,
+                                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                                placeholder: const Text('Type an email'),
+                                contextMenuBuilder: (context, editableTextState) =>
+                                    _InviteUserMobileContextMenu(editableTextState: editableTextState),
+                                onPressedOutside: (_) {
+                                  _mobileEmailFocusNode.unfocus();
+                                },
+                                onChanged: (value) {
+                                  final shouldCommitParsedEmails =
+                                      value.contains(',') || value.contains(';') || value.endsWith(' ') || value.endsWith('\n');
+                                  if (shouldCommitParsedEmails) {
+                                    _submitEmailsFromText(value, projectUsersMap: projUsersMap, roomGrants: roomGrants);
+                                  }
+                                },
+                                onSubmitted: (value) {
+                                  _submitEmailsFromText(value, projectUsersMap: projUsersMap, roomGrants: roomGrants);
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
               );
             }
 

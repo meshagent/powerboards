@@ -134,6 +134,97 @@ class _InviteStepFormState extends State<_InviteStepForm> {
   }
 }
 
+class _InviteSuggestionsOverlayHost extends StatefulWidget {
+  const _InviteSuggestionsOverlayHost();
+
+  @override
+  State<_InviteSuggestionsOverlayHost> createState() => _InviteSuggestionsOverlayHostState();
+}
+
+class _InviteSuggestionsOverlayHostState extends State<_InviteSuggestionsOverlayHost> {
+  final _textController = TextEditingController();
+  final _focusNode = FocusNode();
+  final _tapRegionGroupId = Object();
+  String? _selectedEmail;
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PowerboardsShadDialog.formTask(
+      title: const Text('Invite user'),
+      description: const Text('Invite someone by email to join this room.'),
+      actions: [
+        ShadButton.outline(onPressed: () {}, child: const Text('Back')),
+        ShadButton(onPressed: () {}, child: const Text('Save')),
+      ],
+      child: SizedBox(
+        height: 220,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([_textController, _focusNode]),
+          builder: (context, _) {
+            final suggestions = _textController.text.trim().isEmpty ? const <String>[] : const ['prb@mail.meshagent.com'];
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return ShadPortal(
+                      visible: suggestions.isNotEmpty,
+                      anchor: const ShadAnchor(
+                        childAlignment: Alignment.topLeft,
+                        overlayAlignment: Alignment.bottomLeft,
+                        offset: Offset(0, 12),
+                      ),
+                      portalBuilder: (_) {
+                        return SizedBox(
+                          width: constraints.maxWidth,
+                          child: TextFieldTapRegion(
+                            groupId: _tapRegionGroupId,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFD9D9D9)),
+                              ),
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTapDown: (_) {
+                                  setState(() {
+                                    _selectedEmail = suggestions.single;
+                                  });
+                                },
+                                child: Padding(padding: const EdgeInsets.all(16), child: Text(suggestions.single)),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      child: TextFieldTapRegion(
+                        groupId: _tapRegionGroupId,
+                        child: ShadInput(controller: _textController, focusNode: _focusNode, placeholder: const Text('Type an email')),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                if (_selectedEmail != null) Text('Selected: $_selectedEmail'),
+                const Text('Body content'),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 void main() {
   testWidgets('mobile flow dialog can be dismissed with a downward swipe', (tester) async {
     tester.view.devicePixelRatio = 1.0;
@@ -341,6 +432,43 @@ void main() {
 
     expect(find.text('Invite user'), findsOneWidget);
     expect(focusNode.hasFocus, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile invite suggestions open below the field without moving body content', (tester) async {
+    await _pumpDialog(tester, const _InviteSuggestionsOverlayHost(), resizeToAvoidBottomInset: false);
+
+    final bodyRectBefore = tester.getRect(find.text('Body content'));
+    final inputFinder = find.byType(EditableText);
+    final inputRect = tester.getRect(inputFinder);
+
+    await tester.tap(inputFinder);
+    await tester.enterText(inputFinder, 'prb');
+    await tester.pump();
+    await tester.pump();
+
+    final bodyRectAfter = tester.getRect(find.text('Body content'));
+    final suggestionRect = tester.getRect(find.text('prb@mail.meshagent.com'));
+
+    expect(bodyRectAfter.top, closeTo(bodyRectBefore.top, 0.01));
+    expect(suggestionRect.top, greaterThanOrEqualTo(inputRect.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile invite suggestion overlay remains selectable', (tester) async {
+    await _pumpDialog(tester, const _InviteSuggestionsOverlayHost(), resizeToAvoidBottomInset: false);
+
+    final inputFinder = find.byType(EditableText);
+
+    await tester.tap(inputFinder);
+    await tester.enterText(inputFinder, 'prb');
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('prb@mail.meshagent.com'));
+    await tester.pump();
+
+    expect(find.text('Selected: prb@mail.meshagent.com'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
