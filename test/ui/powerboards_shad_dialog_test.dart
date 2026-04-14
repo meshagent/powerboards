@@ -225,6 +225,42 @@ class _InviteSuggestionsOverlayHostState extends State<_InviteSuggestionsOverlay
   }
 }
 
+class _AsyncGrowingListBody extends StatefulWidget {
+  const _AsyncGrowingListBody();
+
+  @override
+  State<_AsyncGrowingListBody> createState() => _AsyncGrowingListBodyState();
+}
+
+class _AsyncGrowingListBodyState extends State<_AsyncGrowingListBody> {
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _expanded = true;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_expanded) {
+      return const SizedBox(height: 48, child: Center(child: Text('Loading threads')));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: List.generate(8, (index) => const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Text('Thread item'))),
+    );
+  }
+}
+
 void main() {
   testWidgets('mobile flow dialog can be dismissed with a downward swipe', (tester) async {
     tester.view.devicePixelRatio = 1.0;
@@ -266,6 +302,53 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Swipe me'), findsNothing);
+  });
+
+  testWidgets('mobile flow dialog waits for background keyboard insets to clear before presenting', (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            resizeToAvoidBottomInset: false,
+            body: Center(
+              child: ShadButton(
+                onPressed: () {
+                  showPowerboardsFlowDialog<void>(
+                    context: context,
+                    builder: (_) => PowerboardsShadDialog.task(
+                      title: const Text('Permissions'),
+                      description: const Text('Adjust room access.'),
+                      mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.ignore,
+                      actions: [ShadButton(onPressed: () {}, child: const Text('Done'))],
+                      child: const SizedBox(height: 40, child: Text('Body')),
+                    ),
+                  );
+                },
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+
+    expect(find.text('Permissions'), findsNothing);
+
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Permissions'), findsOneWidget);
   });
 
   testWidgets('mobile flow dialog uses a compact floor and actions stay anchored near the bottom', (tester) async {
@@ -321,6 +404,81 @@ void main() {
     expect(dialogRect.height, lessThan(390));
     expect(_distanceFromCenter(emptyStateCenterY, contentAreaCenterY), lessThan(80));
     expect(scrollView.physics, isA<NeverScrollableScrollPhysics>());
+  });
+
+  testWidgets('mobile list picker flow dialog stays anchored to the screen when a background keyboard inset exists', (tester) async {
+    await _pumpDialog(
+      tester,
+      PowerboardsShadDialog.listPicker(
+        title: const Text('All threads'),
+        description: const Text('Select a thread to view.'),
+        actions: [ShadButton(onPressed: () {}, child: const Text('Done'))],
+        child: const SizedBox(height: 48, child: Center(child: Text('Thread list'))),
+      ),
+      bottomInset: 320,
+      resizeToAvoidBottomInset: false,
+    );
+
+    final dialogBottom = tester.getBottomLeft(_flowDialogSurface()).dy;
+
+    expect(dialogBottom, greaterThan(820));
+  });
+
+  testWidgets('mobile task flow dialog can stay anchored to the screen when keyboard avoidance is disabled', (tester) async {
+    await _pumpDialog(
+      tester,
+      PowerboardsShadDialog.task(
+        title: const Text('Permissions'),
+        description: const Text('Adjust room access.'),
+        mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.ignore,
+        actions: [ShadButton(onPressed: () {}, child: const Text('Done'))],
+        child: const SizedBox(height: 60, child: Text('Permissions body')),
+      ),
+      bottomInset: 320,
+      resizeToAvoidBottomInset: false,
+    );
+
+    final dialogBottom = tester.getBottomLeft(_flowDialogSurface()).dy;
+
+    expect(dialogBottom, greaterThan(820));
+  });
+
+  testWidgets('mobile list picker flow dialog remeasures when async body content grows after open', (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Scaffold(
+          resizeToAvoidBottomInset: false,
+          body: Align(
+            alignment: Alignment.bottomCenter,
+            child: PowerboardsShadDialog.listPicker(
+              title: const Text('All threads'),
+              description: const Text('Select a thread to view.'),
+              actions: [ShadButton(onPressed: () {}, child: const Text('Done'))],
+              child: const _AsyncGrowingListBody(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final dialogFinder = _flowDialogSurface();
+    final initialHeight = tester.getSize(dialogFinder).height;
+    expect(find.text('Loading threads'), findsOneWidget);
+
+    await tester.pump();
+    await tester.pump();
+
+    final expandedHeight = tester.getSize(dialogFinder).height;
+
+    expect(expandedHeight, greaterThan(initialHeight));
+    expect(find.text('Thread item'), findsNWidgets(8));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('mobile form flow dialog uses a full-height shell with footer actions anchored at the bottom', (tester) async {

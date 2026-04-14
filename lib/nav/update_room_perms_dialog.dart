@@ -339,6 +339,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
           constraints: _desktopTaskDialogConstraints(context, constraints),
           title: Text(widget.title),
           description: Text(widget.description),
+          mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.ignore,
           actions: [
             ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Close')),
             if (canEdit)

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/theme/theme.dart';
@@ -33,6 +34,8 @@ enum PowerboardsDialogMobilePresentation { inherit, inset, flowSheet, fullScreen
 
 enum PowerboardsDialogMobileFlowBodyBehavior { inherit, scrollable, formScrollable, fill }
 
+enum PowerboardsDialogMobileKeyboardBehavior { inherit, avoid, ignore }
+
 Future<T?> showPowerboardsFlowDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -42,10 +45,21 @@ Future<T?> showPowerboardsFlowDialog<T>({
   bool useRootNavigator = true,
   RouteSettings? routeSettings,
   Offset? anchorPoint,
-}) {
+}) async {
   final mediaQuery = MediaQuery.maybeOf(context);
   final screenWidth = mediaQuery?.size.width ?? 1024.0;
   final isMobile = _usesNativeMobileDialogLayout(screenWidth);
+
+  if (isMobile) {
+    await _dismissBackgroundKeyboardBeforeFlowDialog(context);
+  } else {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  if (!context.mounted) {
+    return null;
+  }
 
   if (!isMobile) {
     return showShadDialog<T>(
@@ -71,10 +85,43 @@ Future<T?> showPowerboardsFlowDialog<T>({
     enableDrag: true,
     isScrollControlled: true,
     useSafeArea: false,
-    requestFocus: true,
+    requestFocus: false,
     routeSettings: routeSettings,
     anchorPoint: anchorPoint,
   );
+}
+
+Future<void> _dismissBackgroundKeyboardBeforeFlowDialog(BuildContext context) async {
+  final initialBottomInset = MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0.0;
+  if (initialBottomInset > 0.0) {
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+  }
+
+  FocusManager.instance.primaryFocus?.unfocus();
+  await WidgetsBinding.instance.endOfFrame;
+  if (!context.mounted) {
+    return;
+  }
+
+  for (var attempt = 0; attempt < 12; attempt++) {
+    final bottomInset = MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0.0;
+    if (bottomInset <= 0.0) {
+      return;
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) {
+      return;
+    }
+  }
+
+  if (initialBottomInset > 0.0) {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!context.mounted) {
+      return;
+    }
+    await WidgetsBinding.instance.endOfFrame;
+  }
 }
 
 class PowerboardsShadDialog extends StatelessWidget {
@@ -117,6 +164,7 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.expandDesktopActions,
     this.mobilePresentation = PowerboardsDialogMobilePresentation.inherit,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.inherit,
+    this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.inherit,
     this.stackActionsOnMobile = false,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -160,6 +208,7 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.expandDesktopActions,
     this.mobilePresentation = PowerboardsDialogMobilePresentation.inset,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.inherit,
+    this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.inherit,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -203,6 +252,7 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.expandDesktopActions,
     this.mobilePresentation = PowerboardsDialogMobilePresentation.flowSheet,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.scrollable,
+    this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.ignore,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -246,6 +296,7 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.expandDesktopActions,
     this.mobilePresentation = PowerboardsDialogMobilePresentation.inherit,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.inherit,
+    this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.inherit,
     this.stackActionsOnMobile = false,
     this.onBack,
   }) : variant = ShadDialogVariant.alert;
@@ -289,6 +340,7 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.expandDesktopActions,
     this.mobilePresentation = PowerboardsDialogMobilePresentation.inset,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.inherit,
+    this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.inherit,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.alert;
@@ -332,6 +384,7 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.expandDesktopActions = true,
     this.mobilePresentation = PowerboardsDialogMobilePresentation.flowSheet,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.scrollable,
+    this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.avoid,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -375,6 +428,7 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.expandDesktopActions = true,
     this.mobilePresentation = PowerboardsDialogMobilePresentation.fullScreen,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.formScrollable,
+    this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.ignore,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -417,6 +471,7 @@ class PowerboardsShadDialog extends StatelessWidget {
   final bool? expandDesktopActions;
   final PowerboardsDialogMobilePresentation mobilePresentation;
   final PowerboardsDialogMobileFlowBodyBehavior mobileFlowBodyBehavior;
+  final PowerboardsDialogMobileKeyboardBehavior mobileKeyboardBehavior;
   final bool stackActionsOnMobile;
   final VoidCallback? onBack;
 
@@ -427,7 +482,10 @@ class PowerboardsShadDialog extends StatelessWidget {
     final screenSize = mediaQuery?.size ?? const Size(1024.0, 768.0);
     final isMobile = _usesNativeMobileDialogLayout(screenSize.width);
     final usesMobileFlowPresentation = isMobile && _usesMobileFlowPresentation(mobilePresentation);
-    final usesKeyboardAvoidance = _usesMobileFlowKeyboardAvoidance(mobileFlowBodyBehavior);
+    final usesKeyboardAvoidance = _usesMobileFlowKeyboardAvoidance(
+      mobileKeyboardBehavior: mobileKeyboardBehavior,
+      bodyBehavior: mobileFlowBodyBehavior,
+    );
     final mobileKeyboardInset = usesMobileFlowPresentation && usesKeyboardAvoidance ? (mediaQuery?.viewInsets.bottom ?? 0.0) : 0.0;
     final mobileTopInset = usesMobileFlowPresentation
         ? (powerboardsMobileScreenTopInset + powerboardsMobileScreenBottomInset + _mobileFlowDialogTopGap)
@@ -605,8 +663,15 @@ bool _usesMobileFlowPresentation(PowerboardsDialogMobilePresentation mobilePrese
       mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen;
 }
 
-bool _usesMobileFlowKeyboardAvoidance(PowerboardsDialogMobileFlowBodyBehavior bodyBehavior) {
-  return bodyBehavior != PowerboardsDialogMobileFlowBodyBehavior.formScrollable;
+bool _usesMobileFlowKeyboardAvoidance({
+  required PowerboardsDialogMobileKeyboardBehavior mobileKeyboardBehavior,
+  required PowerboardsDialogMobileFlowBodyBehavior bodyBehavior,
+}) {
+  return switch (mobileKeyboardBehavior) {
+    PowerboardsDialogMobileKeyboardBehavior.avoid => true,
+    PowerboardsDialogMobileKeyboardBehavior.ignore => false,
+    PowerboardsDialogMobileKeyboardBehavior.inherit => bodyBehavior != PowerboardsDialogMobileFlowBodyBehavior.formScrollable,
+  };
 }
 
 bool? _resolveDialogScrollable(bool? scrollable, {required bool usesMobileFlowPresentation}) {
@@ -1123,30 +1188,34 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
+      _updateMeasurement();
+    });
+  }
 
-      final measureContext = _measureKey.currentContext;
-      if (measureContext == null) {
-        return;
-      }
+  void _updateMeasurement() {
+    if (!mounted) {
+      return;
+    }
 
-      final renderBox = measureContext.findRenderObject() as RenderBox?;
-      if (renderBox == null || !renderBox.hasSize) {
-        return;
-      }
+    final measureContext = _measureKey.currentContext;
+    if (measureContext == null) {
+      return;
+    }
 
-      final nextContentHeight = renderBox.size.height;
-      final nextBodyHeight = _naturalBodyHeightForBehavior();
-      if ((_measuredContentHeight == nextContentHeight) && (_measuredBodyHeight == nextBodyHeight)) {
-        return;
-      }
+    final renderBox = measureContext.findRenderObject() as RenderBox?;
+    if (renderBox == null || !renderBox.hasSize) {
+      return;
+    }
 
-      setState(() {
-        _measuredContentHeight = nextContentHeight;
-        _measuredBodyHeight = nextBodyHeight;
-      });
+    final nextContentHeight = renderBox.size.height;
+    final nextBodyHeight = _naturalBodyHeightForBehavior();
+    if ((_measuredContentHeight == nextContentHeight) && (_measuredBodyHeight == nextBodyHeight)) {
+      return;
+    }
+
+    setState(() {
+      _measuredContentHeight = nextContentHeight;
+      _measuredBodyHeight = nextBodyHeight;
     });
   }
 
@@ -1210,17 +1279,25 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
                       ),
                       child: Padding(
                         padding: widget.padding,
-                        child: KeyedSubtree(
-                          key: _measureKey,
-                          child: _PowerboardsMobileFlowDialogFrame(
-                            title: widget.title,
-                            description: widget.description,
-                            body: _buildMeasuredBody(),
-                            actions: widget.actions,
-                            gap: widget.gap,
-                            actionsGap: widget.actionsGap,
-                            expandBody: false,
-                            usesHorizontalActionRow: widget.usesHorizontalActionRow,
+                        child: NotificationListener<SizeChangedLayoutNotification>(
+                          onNotification: (_) {
+                            _scheduleMeasurement();
+                            return false;
+                          },
+                          child: SizeChangedLayoutNotifier(
+                            child: KeyedSubtree(
+                              key: _measureKey,
+                              child: _PowerboardsMobileFlowDialogFrame(
+                                title: widget.title,
+                                description: widget.description,
+                                body: _buildMeasuredBody(),
+                                actions: widget.actions,
+                                gap: widget.gap,
+                                actionsGap: widget.actionsGap,
+                                expandBody: false,
+                                usesHorizontalActionRow: widget.usesHorizontalActionRow,
+                              ),
+                            ),
                           ),
                         ),
                       ),
