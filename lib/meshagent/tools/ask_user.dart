@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:meshagent/agent.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
@@ -199,11 +200,11 @@ class JsonForm extends StatefulWidget {
 
 class _JsonFormState extends State<JsonForm> {
   Widget buildFilePathInput(BuildContext context, Map<String, dynamic> field) {
-    return ShadInputFormField(id: field["name"], label: Text(field["name"]), description: Text(field["description"]));
+    return PowerboardsAdaptiveInputFormField(id: field["name"], label: Text(field["name"]), description: Text(field["description"]));
   }
 
   Widget buildInputField(BuildContext context, Map<String, dynamic> field) {
-    return ShadInputFormField(
+    return PowerboardsAdaptiveInputFormField(
       initialValue: field["default_value"] ?? "",
       id: field["name"],
       label: Text(field["name"]),

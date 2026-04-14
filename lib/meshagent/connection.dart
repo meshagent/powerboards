@@ -6,6 +6,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -243,8 +244,12 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
                   children: [
                     Text("An agent requested credentials for ${request.url}"),
                     SizedBox(height: 8),
-                    ShadInputFormField(label: Text("Username"), obscureText: false, onChanged: (value) => secretValue["username"] = value),
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
+                      label: Text("Username"),
+                      obscureText: false,
+                      onChanged: (value) => secretValue["username"] = value,
+                    ),
+                    PowerboardsAdaptiveInputFormField(
                       label: Text("Password / Personal Access Token"),
                       obscureText: true,
                       onChanged: (value) => secretValue["password"] = value,
@@ -278,7 +283,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
                     Text("Key: ${request.url}"),
                     Text("Type: ${request.type}"),
                     SizedBox(height: 16),
-                    ShadInputFormField(label: Text("Secret"), obscureText: true, onChanged: (value) => secretValue = value),
+                    PowerboardsAdaptiveInputFormField(label: Text("Secret"), obscureText: true, onChanged: (value) => secretValue = value),
                   ],
                 ),
                 actions: [

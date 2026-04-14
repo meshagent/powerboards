@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 typedef AsyncSearch = Future<List<String>> Function(String query);
@@ -350,6 +351,7 @@ class _MultiSelectAutocompleteState extends State<MultiSelectAutocomplete> {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
     final hoveredBackgroundColor = theme.optionTheme.hoveredBackgroundColor;
+    final usesSystemAdaptiveToolbar = powerboardsUsesSystemAdaptiveTextSelectionToolbar();
 
     final effectiveTextStyle = theme.textTheme.muted
         .copyWith(color: theme.colorScheme.foreground)
@@ -497,6 +499,10 @@ class _MultiSelectAutocompleteState extends State<MultiSelectAutocomplete> {
                                               controller: textController,
                                               focusNode: focusNode,
                                               groupId: tapRegionGroupId,
+                                              contextMenuBuilder: usesSystemAdaptiveToolbar
+                                                  ? powerboardsAdaptiveInputContextMenuBuilder
+                                                  : null,
+                                              onTapOutside: usesSystemAdaptiveToolbar ? powerboardsAdaptiveInputOnPressedOutside() : null,
                                               selectionColor: focusNode.hasFocus ? theme.colorScheme.selection : null,
                                             ),
                                           ),

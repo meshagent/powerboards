@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:meshagent/client.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class RoomNameResult {
@@ -48,7 +49,7 @@ Future<RoomNameResult?> showRoomNameDialog(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ShadInputFormField(
+                PowerboardsAdaptiveInputFormField(
                   id: 'name',
                   label: Text('Name', style: labelStyle),
                   placeholder: Text(placeholder),

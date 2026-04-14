@@ -76,42 +76,52 @@ class _UserSettingsMenuButtonState extends State<_UserSettingsMenuButton> {
   @override
   Widget build(BuildContext context) {
     final cs = ShadTheme.of(context).colorScheme;
+    final items = [
+      if (widget.role == GrantRole.owner)
+        ShadContextMenuItem(
+          height: 40.0,
+          leading: Icon(LucideIcons.user, size: 16),
+          onPressed: widget.onSetNonOwner,
+          child: const Text('Set as Member'),
+        ),
+      if (widget.role == GrantRole.nonOwner)
+        ShadContextMenuItem(
+          height: 40.0,
+          leading: Icon(LucideIcons.user, size: 16),
+          onPressed: widget.onSetOwner,
+          child: const Text('Set as Owner'),
+        ),
+      ShadContextMenuItem(
+        height: 40.0,
+        leading: Icon(LucideIcons.trash2, size: 16, color: cs.destructive),
+        onPressed: widget.onRemove,
+        textStyle: TextStyle(color: cs.destructive),
+        child: const Text('Remove'),
+      ),
+    ];
+
+    final triggerButton = ShadButton.ghost(
+      onPressed: _usesMobileDialogLayout(context) ? controller.toggle : controller.show,
+      padding: EdgeInsets.zero,
+      child: const SizedBox(width: 40, height: 30, child: Icon(LucideIcons.settings, size: 16)),
+    );
+
+    if (!_usesMobileDialogLayout(context)) {
+      return ShadContextMenuRegion(
+        controller: controller,
+        constraints: const BoxConstraints(minWidth: 220),
+        items: items,
+        child: triggerButton,
+      );
+    }
 
     return AdaptiveShadContextMenu(
       controller: controller,
       constraints: const BoxConstraints(minWidth: 220),
       estimatedMenuWidth: 220,
       estimatedMenuHeight: (widget.role == GrantRole.owner || widget.role == GrantRole.nonOwner) ? 88 : 48,
-      items: [
-        if (widget.role == GrantRole.owner)
-          ShadContextMenuItem(
-            height: 40.0,
-            leading: Icon(LucideIcons.user, size: 16),
-            onPressed: widget.onSetNonOwner,
-            child: const Text('Set as Member'),
-          ),
-
-        if (widget.role == GrantRole.nonOwner)
-          ShadContextMenuItem(
-            height: 40.0,
-            leading: Icon(LucideIcons.user, size: 16),
-            onPressed: widget.onSetOwner,
-            child: const Text('Set as Owner'),
-          ),
-
-        ShadContextMenuItem(
-          height: 40.0,
-          leading: Icon(LucideIcons.trash2, size: 16, color: cs.destructive),
-          onPressed: widget.onRemove,
-          textStyle: TextStyle(color: cs.destructive),
-          child: const Text('Remove'),
-        ),
-      ],
-      child: ShadButton.ghost(
-        onPressed: controller.toggle,
-        padding: EdgeInsets.zero,
-        child: const SizedBox(width: 40, height: 30, child: Icon(LucideIcons.settings, size: 16)),
-      ),
+      items: items,
+      child: triggerButton,
     );
   }
 }

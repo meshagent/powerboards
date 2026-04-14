@@ -10,6 +10,7 @@ import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -259,7 +260,7 @@ class _AgentInstaller extends State<AgentInstaller> {
         spacing: 16,
         children: [
           Text(title, style: _labelStyle, textAlign: TextAlign.center),
-          ShadInput(controller: _urlController, placeholder: const Text("https://mcp.notion.com/mcp")),
+          PowerboardsAdaptiveInput(controller: _urlController, placeholder: const Text("https://mcp.notion.com/mcp")),
           Text(
             description,
             textAlign: TextAlign.left,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class NewProjectDialog extends StatelessWidget {
@@ -36,7 +37,7 @@ class NewProjectDialog extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ShadInputFormField(
+              PowerboardsAdaptiveInputFormField(
                 id: 'name',
                 label: Text('Name', style: labelStyle),
                 placeholder: Text('e.g. General'),

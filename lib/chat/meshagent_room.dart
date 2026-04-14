@@ -11,6 +11,7 @@ import 'package:meshagent_flutter_shadcn/file_preview/markdown.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/shell/shell_agent.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
@@ -1734,7 +1735,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
                   children: [
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
                       initialValue: "",
                       validator: TextValidators.folder,
                       id: "name",
@@ -1814,7 +1815,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
                   children: [
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
                       id: "name",
                       initialValue: "",
                       validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,

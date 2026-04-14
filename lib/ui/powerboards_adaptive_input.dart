@@ -3,6 +3,22 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
 
+EditableTextContextMenuBuilder? _defaultAdaptiveContextMenuBuilder(EditableTextContextMenuBuilder? contextMenuBuilder) {
+  if (!powerboardsUsesSystemAdaptiveTextSelectionToolbar()) {
+    return contextMenuBuilder;
+  }
+
+  return contextMenuBuilder ?? powerboardsAdaptiveInputContextMenuBuilder;
+}
+
+TapRegionCallback? _defaultAdaptiveOnPressedOutside(TapRegionCallback? onPressedOutside) {
+  if (!powerboardsUsesSystemAdaptiveTextSelectionToolbar()) {
+    return onPressedOutside;
+  }
+
+  return onPressedOutside ?? powerboardsAdaptiveInputOnPressedOutside();
+}
+
 class PowerboardsAdaptiveInput extends ShadInput {
   PowerboardsAdaptiveInput({
     super.key,
@@ -88,8 +104,8 @@ class PowerboardsAdaptiveInput extends ShadInput {
     super.editableTextSize,
     super.verticalGap,
   }) : super(
-         contextMenuBuilder: contextMenuBuilder ?? powerboardsAdaptiveInputContextMenuBuilder,
-         onPressedOutside: onPressedOutside ?? powerboardsAdaptiveInputOnPressedOutside(),
+         contextMenuBuilder: _defaultAdaptiveContextMenuBuilder(contextMenuBuilder),
+         onPressedOutside: _defaultAdaptiveOnPressedOutside(onPressedOutside),
        );
 }
 
@@ -187,7 +203,7 @@ class PowerboardsAdaptiveInputFormField extends ShadInputFormField {
     super.onLineCountChange,
     super.editableTextSize,
   }) : super(
-         contextMenuBuilder: contextMenuBuilder ?? powerboardsAdaptiveInputContextMenuBuilder,
-         onPressedOutside: onPressedOutside ?? powerboardsAdaptiveInputOnPressedOutside(),
+         contextMenuBuilder: _defaultAdaptiveContextMenuBuilder(contextMenuBuilder),
+         onPressedOutside: _defaultAdaptiveOnPressedOutside(onPressedOutside),
        );
 }

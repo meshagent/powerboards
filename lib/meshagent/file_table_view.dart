@@ -37,6 +37,7 @@ import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/text_validators.dart';
 
 import 'file_upload.dart';
@@ -888,7 +889,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
                   children: [
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
                       id: "name",
                       initialValue: currentName,
                       validator: _validateRenameInput,
@@ -1081,7 +1082,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
                   children: [
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
                       initialValue: "",
                       validator: TextValidators.folder,
                       id: "name",
@@ -1313,7 +1314,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
                   children: [
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
                       id: "name",
                       initialValue: "",
                       validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,

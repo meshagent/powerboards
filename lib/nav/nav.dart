@@ -23,6 +23,7 @@ import 'package:powerboards/nav/switch_project_dialog.dart';
 import 'package:powerboards/ui/empty_states.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 
 import 'package:meshagent/meshagent.dart';
 
@@ -696,7 +697,7 @@ class _NavBar extends StatelessWidget {
             padding: horizontalPadding,
             child: Builder(
               builder: (context) {
-                final filterInput = ShadInput(
+                final filterInput = PowerboardsAdaptiveInput(
                   decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.input),
                   key: const Key('room-list-search-field'),
                   onChanged: setFilter,

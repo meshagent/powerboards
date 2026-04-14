@@ -67,9 +67,13 @@ class SwitchProjectDialog extends StatelessWidget {
     final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
     final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(context);
     final actions = [
-      ShadButton.outline(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+      ShadButton.outline(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
       ShadButton(
-        leading: isMobile ? null : const Icon(LucideIcons.clipboardPlus),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         onPressed: () {
           Navigator.of(context).pop();
           onNewProject();
@@ -81,6 +85,7 @@ class SwitchProjectDialog extends StatelessWidget {
     return PowerboardsShadDialog.listPicker(
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
+      constraints: isMobile ? powerboardsCompactDesktopDialogConstraints : const BoxConstraints(maxWidth: 421),
       actions: actions,
       child: SignalBuilder(
         builder: (context, _) {
@@ -90,22 +95,35 @@ class SwitchProjectDialog extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
+          final projectList = Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _buildProjectItems(context, items),
+          );
+
           return ScrollConfiguration(
             behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: SizedBox(
-                width: double.infinity,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 320),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: _buildProjectItems(context, items),
+            child: isMobile
+                ? Align(
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 320),
+                        child: projectList,
+                      ),
+                    ),
+                  )
+                : Padding(
+                    padding: powerboardsDialogScrollableListPadding,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 320, maxHeight: 420),
+                        child: SingleChildScrollView(child: projectList),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
           );
         },
       ),
