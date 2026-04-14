@@ -4,7 +4,10 @@ import app_links
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
-    
+  private func isShareMediaUrl(_ url: URL) -> Bool {
+    return url.scheme?.lowercased().hasPrefix("sharemedia-") == true
+  }
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -12,6 +15,10 @@ import app_links
     GeneratedPluginRegistrant.register(with: self)
 
     if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
+      if isShareMediaUrl(url) {
+        return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+      }
+
       AppLinks.shared.handleLink(url: url)
       return true
     }
@@ -40,8 +47,12 @@ import app_links
     open url: URL,
     options: [UIApplication.OpenURLOptionsKey : Any] = [:]
   ) -> Bool {
+    let isShareMediaUrl = isShareMediaUrl(url)
+    if !isShareMediaUrl {
+      AppLinks.shared.handleLink(url: url)
+    }
 
-    AppLinks.shared.handleLink(url: url)
-    return true
+    let handledBySuper = super.application(application, open: url, options: options)
+    return handledBySuper || !isShareMediaUrl
   }
 }

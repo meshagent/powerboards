@@ -8,6 +8,10 @@ import 'package:app_links/app_links.dart';
 
 final appLinks = AppLinks();
 
+bool isShareMediaUri(Uri uri) {
+  return uri.scheme.toLowerCase().startsWith('sharemedia-');
+}
+
 class LinksWatcher extends StatefulWidget {
   const LinksWatcher({super.key, required this.navigatorKey, required this.child});
 
@@ -30,6 +34,7 @@ class _LinksWatcherState extends State<LinksWatcher> {
     sub = appLinks.uriLinkStream.listen(
       (Uri? uri) {
         if (uri == null) return;
+        if (isShareMediaUri(uri)) return;
 
         final pathAndQuery = uri.path + (uri.query.isNotEmpty ? "?${uri.query}" : "");
 
