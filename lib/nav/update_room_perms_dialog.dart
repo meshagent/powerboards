@@ -736,7 +736,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
           email: query,
           label: query,
           description: isProjectUser ? 'Project member' : 'Invite to project and room',
-          supportingText: isProjectUser ? null : 'Not in this room yet. Will be added to project as well.',
+          supportingText: isProjectUser ? null : 'Not a member of this project yet. Adding them to the room also adds them to the project.',
           isProjectUser: isProjectUser,
         ),
       );
@@ -762,7 +762,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
       color: theme.colorScheme.card,
       borderRadius: menuBorderRadius,
       border: Border.all(color: menuBorderColor),
-      boxShadow: showsInviteSuggestion ? null : const [BoxShadow(color: Color(0x11000000), blurRadius: 18, offset: Offset(0, 8))],
+      boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 18, offset: Offset(0, 8))],
     );
 
     Widget buildSuggestionRow(int index) {
