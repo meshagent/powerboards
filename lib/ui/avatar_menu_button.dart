@@ -1,3 +1,5 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -35,12 +37,36 @@ enum UserAvatarVariant { header, standard, menu }
 const double userAvatarHeaderDiameter = 40;
 const double userAvatarStandardDiameter = 32;
 const double userAvatarMenuDiameter = 24;
+const double _userAvatarHeaderFontSize = 13;
+const double _userAvatarStandardFontSize = 11;
+const double _userAvatarMenuFontSize = 8.5;
+const double _userAvatarLargeFontSize = 14.5;
 
 double userAvatarDiameter(UserAvatarVariant variant) => switch (variant) {
   UserAvatarVariant.header => userAvatarHeaderDiameter,
   UserAvatarVariant.standard => userAvatarStandardDiameter,
   UserAvatarVariant.menu => userAvatarMenuDiameter,
 };
+
+double userAvatarInitialsFontSize(double diameter) {
+  if (diameter <= userAvatarMenuDiameter) {
+    return _userAvatarMenuFontSize;
+  }
+
+  if (diameter <= userAvatarStandardDiameter) {
+    final t = (diameter - userAvatarMenuDiameter) / (userAvatarStandardDiameter - userAvatarMenuDiameter);
+    return lerpDouble(_userAvatarMenuFontSize, _userAvatarStandardFontSize, t) ?? _userAvatarStandardFontSize;
+  }
+
+  if (diameter <= userAvatarHeaderDiameter) {
+    final t = (diameter - userAvatarStandardDiameter) / (userAvatarHeaderDiameter - userAvatarStandardDiameter);
+    return lerpDouble(_userAvatarStandardFontSize, _userAvatarHeaderFontSize, t) ?? _userAvatarHeaderFontSize;
+  }
+
+  final largeDiameter = diameter.clamp(userAvatarHeaderDiameter, 48.0);
+  final t = (largeDiameter - userAvatarHeaderDiameter) / (48.0 - userAvatarHeaderDiameter);
+  return lerpDouble(_userAvatarHeaderFontSize, _userAvatarLargeFontSize, t) ?? _userAvatarLargeFontSize;
+}
 
 class UserAvatarMenuButton extends StatefulWidget {
   const UserAvatarMenuButton({super.key, required this.projectId, required this.projects, this.boundaryContext, this.avatarSize = 40});
@@ -210,13 +236,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
 }
 
 class UserAvatarCircle extends StatelessWidget {
-  const UserAvatarCircle({
-    super.key,
-    required this.initials,
-    this.variant = UserAvatarVariant.standard,
-    this.size,
-    this.hovered = false,
-  });
+  const UserAvatarCircle({super.key, required this.initials, this.variant = UserAvatarVariant.standard, this.size, this.hovered = false});
 
   final String initials;
   final UserAvatarVariant variant;
@@ -233,8 +253,7 @@ class UserAvatarCircle extends StatelessWidget {
     final hoverBackgroundColor = buttonTheme.hoverBackgroundColor ?? avatarAccent;
     final backgroundColor = avatarAccent;
     final diameter = size ?? userAvatarDiameter(variant);
-    final baseFontSize = tt.small.fontSize ?? 14;
-    final fontSize = baseFontSize * (diameter / userAvatarHeaderDiameter);
+    final fontSize = userAvatarInitialsFontSize(diameter);
 
     return Container(
       width: diameter,
@@ -247,7 +266,7 @@ class UserAvatarCircle extends StatelessWidget {
       ),
       child: Text(
         initials,
-        style: tt.small.copyWith(fontWeight: .w700, color: cs.foreground, fontSize: fontSize),
+        style: tt.small.copyWith(fontWeight: .w700, color: cs.foreground, fontSize: fontSize, height: 1.0),
       ),
     );
   }
