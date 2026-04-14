@@ -865,10 +865,10 @@ class _AddUserDialogState extends State<AddUserDialog> {
     );
 
     if (isProjectMember) {
-      return ShadBadge(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), child: child);
+      return ShadBadge(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: child);
     }
 
-    return ShadBadge.destructive(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), child: child);
+    return ShadBadge.destructive(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: child);
   }
 
   Future<void> onAdded() async {
@@ -1156,6 +1156,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                 builder: (context, _) {
                   final suggestions = _mobileSuggestions(projUsersMap);
                   final showsSuggestionsMenu = _mobileEmailFocusNode.hasFocus && suggestions.isNotEmpty;
+                  final helperTextStyle = theme.textTheme.muted.copyWith(color: theme.colorScheme.mutedForeground);
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1213,6 +1214,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                           );
                         },
                       ),
+                      if (selected.isEmpty) ...[const SizedBox(height: 24), Text(widget.description, style: helperTextStyle)],
                     ],
                   );
                 },
@@ -1222,7 +1224,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
-              children: [buildTopSection(), const SizedBox(height: 12), mobileSelectionContent],
+              children: [buildTopSection(), const SizedBox(height: 24), mobileSelectionContent],
             );
           },
         );
@@ -1231,7 +1233,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
           scrollable: false,
           constraints: _desktopTaskDialogConstraints(context, constraints),
           title: Text(widget.title),
-          description: Padding(padding: .only(bottom: 15.0), child: Text(widget.description)),
+          description: isMobile ? null : Padding(padding: .only(bottom: 15.0), child: Text(widget.description)),
           actions: [
             if (widget.onBack != null)
               ShadButton.outline(

@@ -158,6 +158,8 @@ ShadTextTheme powerboardsShadTextTheme() {
   );
 }
 
+const EdgeInsets powerboardsBadgePadding = EdgeInsets.symmetric(horizontal: 16, vertical: 2);
+
 const filledButtonColor = shadPrimary;
 const agentBackgroundColor = Colors.grey;
 const toolIconColor = Color(0xFF47484A);

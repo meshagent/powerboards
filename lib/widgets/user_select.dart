@@ -145,7 +145,7 @@ class _UserSelectState extends State<UserSelect> {
                     child: ShadBadge(
                       padding: const EdgeInsets.all(4),
                       child: Padding(
-                        padding: const EdgeInsets.only(left: 10, right: 6),
+                        padding: const EdgeInsets.only(left: 16, right: 6),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           spacing: 8,

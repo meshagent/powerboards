@@ -250,6 +250,10 @@ class MyApp extends StatelessWidget {
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
         textTheme: powerboardsShadTextTheme(),
+        primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        outlineBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         primaryToastTheme: _powerboardsToastThemeForContext(context),
         destructiveToastTheme: _powerboardsToastThemeForContext(context),
         selectTheme: ShadSelectTheme(
@@ -369,6 +373,10 @@ class _RootProvidersState extends State<_RootProviders> {
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
         textTheme: powerboardsShadTextTheme(),
+        primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        outlineBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         primaryToastTheme: _powerboardsToastThemeForContext(context),
         destructiveToastTheme: _powerboardsToastThemeForContext(context),
         selectTheme: ShadSelectTheme(
