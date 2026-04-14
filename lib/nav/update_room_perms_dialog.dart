@@ -843,6 +843,34 @@ class _AddUserDialogState extends State<AddUserDialog> {
     );
   }
 
+  Widget _buildMobileSelectedUserBadge(
+    BuildContext context,
+    AddedUser user, {
+    required Map<String, User> projectUsersMap,
+    required Map<String, GrantSummary> roomGrants,
+  }) {
+    final theme = ShadTheme.of(context);
+    final isProjectMember = projectUsersMap.containsKey(user.email.toLowerCase());
+    final removeIconColor = isProjectMember ? theme.colorScheme.background : theme.colorScheme.destructiveForeground;
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(child: Text(user.email, overflow: TextOverflow.ellipsis)),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: () => _removeEmailFromSelection(user.email, projectUsersMap: projectUsersMap, roomGrants: roomGrants),
+          child: Icon(LucideIcons.x, size: 14, color: removeIconColor),
+        ),
+      ],
+    );
+
+    if (isProjectMember) {
+      return ShadBadge(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), child: child);
+    }
+
+    return ShadBadge.destructive(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), child: child);
+  }
+
   Future<void> onAdded() async {
     setState(() => submitting = true);
 
@@ -1114,20 +1142,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                     runSpacing: 8,
                     children: [
                       for (final user in selected)
-                        ShadBadge(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(child: Text(user.email, overflow: TextOverflow.ellipsis)),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => _removeEmailFromSelection(user.email, projectUsersMap: projUsersMap, roomGrants: roomGrants),
-                                child: Icon(LucideIcons.x, size: 14, color: theme.colorScheme.background),
-                              ),
-                            ],
-                          ),
-                        ),
+                        _buildMobileSelectedUserBadge(context, user, projectUsersMap: projUsersMap, roomGrants: roomGrants),
                     ],
                   ),
                   const SizedBox(height: 18),
