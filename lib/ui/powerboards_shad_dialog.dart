@@ -25,9 +25,11 @@ const double _compactDesktopDialogWidthThreshold = 420;
 const double _desktopDialogActionMinWidth = 152;
 const double _desktopDialogActionMaxWidth = 220;
 const double _mobileFlowDialogTopGap = 20;
+const double _mobileLandscapeFlowDialogTopGap = 8;
 const double _mobileFlowDialogFloorHeightFactor = 0.34;
 const double _mobileFlowDialogCornerRadius = 28;
 const double _mobileFlowDialogTopPadding = 30;
+const double _mobileLandscapeFlowDialogTopPadding = 24;
 const double _mobileFlowDialogBottomPadding = 39;
 
 enum PowerboardsDialogMobilePresentation { inherit, inset, flowSheet, fullScreen }
@@ -47,8 +49,8 @@ Future<T?> showPowerboardsFlowDialog<T>({
   Offset? anchorPoint,
 }) async {
   final mediaQuery = MediaQuery.maybeOf(context);
-  final screenWidth = mediaQuery?.size.width ?? 1024.0;
-  final isMobile = _usesNativeMobileDialogLayout(screenWidth);
+  final screenSize = mediaQuery?.size ?? const Size(1024.0, 768.0);
+  final isMobile = _usesNativeMobileDialogLayout(screenSize);
 
   if (isMobile) {
     await _dismissBackgroundKeyboardBeforeFlowDialog(context);
@@ -480,15 +482,19 @@ class PowerboardsShadDialog extends StatelessWidget {
     final theme = ShadTheme.of(context);
     final mediaQuery = MediaQuery.maybeOf(context);
     final screenSize = mediaQuery?.size ?? const Size(1024.0, 768.0);
-    final isMobile = _usesNativeMobileDialogLayout(screenSize.width);
+    final isMobile = _usesNativeMobileDialogLayout(screenSize);
     final usesMobileFlowPresentation = isMobile && _usesMobileFlowPresentation(mobilePresentation);
+    final usesLandscapeMobileFlowPresentation = usesMobileFlowPresentation && _usesLandscapeMobileDialogLayout(screenSize);
     final usesKeyboardAvoidance = _usesMobileFlowKeyboardAvoidance(
       mobileKeyboardBehavior: mobileKeyboardBehavior,
       bodyBehavior: mobileFlowBodyBehavior,
     );
     final mobileKeyboardInset = usesMobileFlowPresentation && usesKeyboardAvoidance ? (mediaQuery?.viewInsets.bottom ?? 0.0) : 0.0;
     final mobileTopInset = usesMobileFlowPresentation
-        ? (powerboardsMobileScreenTopInset + powerboardsMobileScreenBottomInset + _mobileFlowDialogTopGap)
+        ? (powerboardsMobileScreenTopInset +
+              (usesLandscapeMobileFlowPresentation
+                  ? _mobileLandscapeFlowDialogTopGap
+                  : powerboardsMobileScreenBottomInset + _mobileFlowDialogTopGap))
         : (isMobile ? powerboardsMobileScreenTopInset : 0.0);
     final mobileBottomInset = usesMobileFlowPresentation ? mobileKeyboardInset : (isMobile ? powerboardsMobileScreenBottomInset : 0.0);
     final effectiveConstraints = _resolveDialogConstraints(
@@ -518,7 +524,11 @@ class PowerboardsShadDialog extends StatelessWidget {
             : const ShadPosition(top: _desktopDialogCloseButtonTop, right: _desktopDialogCloseButtonInset));
     final effectiveScrollable = _resolveDialogScrollable(scrollable, usesMobileFlowPresentation: usesMobileFlowPresentation);
     final effectiveUseSafeArea = _resolveDialogUseSafeArea(useSafeArea, usesMobileFlowPresentation: usesMobileFlowPresentation);
-    final effectivePadding = _resolveDialogPadding(padding, usesMobileFlowPresentation: usesMobileFlowPresentation);
+    final effectivePadding = _resolveDialogPaddingForSize(
+      padding,
+      usesMobileFlowPresentation: usesMobileFlowPresentation,
+      screenSize: usesMobileFlowPresentation ? screenSize : null,
+    );
     final useHorizontalMobileActionRow = _usesHorizontalMobileActionRow(isMobile: isMobile, actions: actions);
     final effectiveActions = _buildDialogActions(
       actions,
@@ -565,6 +575,7 @@ class PowerboardsShadDialog extends StatelessWidget {
       descriptionStyle: descriptionStyle,
       descriptionTextAlign: effectiveDescriptionTextAlign,
       usesMobileFlowPresentation: usesMobileFlowPresentation,
+      usesLandscapeMobileFlowPresentation: usesLandscapeMobileFlowPresentation,
     );
     final effectiveRemoveBorderRadiusWhenTiny = _resolveRemoveBorderRadiusWhenTiny(
       removeBorderRadiusWhenTiny,
@@ -641,11 +652,16 @@ class PowerboardsShadDialog extends StatelessWidget {
 }
 
 bool powerboardsUsesNativeMobileDialogLayout(BuildContext context) {
-  final screenWidth = MediaQuery.maybeOf(context)?.size.width ?? 1024.0;
-  return _usesNativeMobileDialogLayout(screenWidth);
+  final screenSize = MediaQuery.maybeOf(context)?.size ?? const Size(1024.0, 768.0);
+  return _usesNativeMobileDialogLayout(screenSize);
 }
 
-bool _usesNativeMobileDialogLayout(double screenWidth) {
+bool powerboardsUsesLandscapeMobileDialogLayout(BuildContext context) {
+  final screenSize = MediaQuery.maybeOf(context)?.size ?? const Size(1024.0, 768.0);
+  return _usesLandscapeMobileDialogLayout(screenSize);
+}
+
+bool _usesNativeMobileDialogLayout(Size screenSize) {
   if (kIsWeb) {
     return false;
   }
@@ -655,7 +671,11 @@ bool _usesNativeMobileDialogLayout(double screenWidth) {
     TargetPlatform.fuchsia || TargetPlatform.linux || TargetPlatform.macOS || TargetPlatform.windows => false,
   };
 
-  return isMobilePlatform && screenWidth < 600;
+  return isMobilePlatform && screenSize.shortestSide < 600;
+}
+
+bool _usesLandscapeMobileDialogLayout(Size screenSize) {
+  return _usesNativeMobileDialogLayout(screenSize) && screenSize.width > screenSize.height;
 }
 
 bool _usesMobileFlowPresentation(PowerboardsDialogMobilePresentation mobilePresentation) {
@@ -690,7 +710,11 @@ bool? _resolveDialogUseSafeArea(bool? useSafeArea, {required bool usesMobileFlow
   return useSafeArea;
 }
 
-EdgeInsetsGeometry? _resolveDialogPadding(EdgeInsetsGeometry? padding, {required bool usesMobileFlowPresentation}) {
+EdgeInsetsGeometry? _resolveDialogPaddingForSize(
+  EdgeInsetsGeometry? padding, {
+  required bool usesMobileFlowPresentation,
+  required Size? screenSize,
+}) {
   if (padding != null) {
     return padding;
   }
@@ -699,12 +723,14 @@ EdgeInsetsGeometry? _resolveDialogPadding(EdgeInsetsGeometry? padding, {required
     return null;
   }
 
+  final usesLandscapeMobileFlowPresentation = screenSize != null && _usesLandscapeMobileDialogLayout(screenSize);
+
   return const EdgeInsets.fromLTRB(
     _mobileFullScreenDialogHorizontalPadding,
-    _mobileFlowDialogTopPadding,
+    0,
     _mobileFullScreenDialogHorizontalPadding,
     _mobileFlowDialogBottomPadding,
-  );
+  ).copyWith(top: usesLandscapeMobileFlowPresentation ? _mobileLandscapeFlowDialogTopPadding : _mobileFlowDialogTopPadding);
 }
 
 BorderRadius? _resolveDialogRadius(BorderRadius? radius, {required bool usesMobileFlowPresentation}) {
@@ -772,9 +798,14 @@ Widget? _resolveFlowDialogDescription(
   required TextStyle? descriptionStyle,
   required TextAlign descriptionTextAlign,
   required bool usesMobileFlowPresentation,
+  required bool usesLandscapeMobileFlowPresentation,
 }) {
   if (!usesMobileFlowPresentation || description == null) {
     return description;
+  }
+
+  if (usesLandscapeMobileFlowPresentation) {
+    return null;
   }
 
   final theme = ShadTheme.of(context);

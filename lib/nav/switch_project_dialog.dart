@@ -65,6 +65,7 @@ class SwitchProjectDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+    final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(context);
     final actions = [
       ShadButton.outline(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
       ShadButton(
@@ -93,12 +94,15 @@ class SwitchProjectDialog extends StatelessWidget {
             behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
             child: Align(
               alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 320),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: _buildProjectItems(context, items),
+              child: SizedBox(
+                width: double.infinity,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 320),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _buildProjectItems(context, items),
+                  ),
                 ),
               ),
             ),

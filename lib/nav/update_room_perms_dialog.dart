@@ -29,6 +29,8 @@ enum _MobileSuggestionMenuDirection { above, below }
 
 bool _usesMobileDialogLayout(BuildContext context) => powerboardsUsesNativeMobileDialogLayout(context);
 
+bool _usesMobileLandscapeDialogLayout(BuildContext context) => powerboardsUsesLandscapeMobileDialogLayout(context);
+
 double _desktopTaskDialogHeight(BoxConstraints constraints) {
   final maxHeight = constraints.maxHeight;
   if (!maxHeight.isFinite) {
@@ -1171,6 +1173,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
             final selected = selectedUsers.value;
             final roomGrants = grants.state.value ?? {};
             final projUsersMap = projectUsersMap.state.value ?? {};
+            final showsLandscapeRotatePrompt = _usesMobileLandscapeDialogLayout(context);
 
             final mobileSelectionContent = Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1189,7 +1192,26 @@ class _AddUserDialogState extends State<AddUserDialog> {
               ],
             );
 
+            Widget buildLandscapeRotatePrompt() {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(LucideIcons.smartphone, size: 22, color: theme.colorScheme.foreground.withValues(alpha: .78)),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Rotate to portrait to add users comfortably.',
+                    style: theme.textTheme.large.copyWith(color: theme.colorScheme.foreground, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              );
+            }
+
             Widget buildTopSection() {
+              if (showsLandscapeRotatePrompt) {
+                return buildLandscapeRotatePrompt();
+              }
+
               return AnimatedBuilder(
                 animation: Listenable.merge([textController, _mobileEmailFocusNode]),
                 builder: (context, _) {
@@ -1295,7 +1317,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
               ),
             ShadButton(
               onPressed: onAdded,
-              enabled: !submitting,
+              enabled: !submitting && (!(_usesMobileLandscapeDialogLayout(context)) || selectedUsers.value.isNotEmpty),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: submitting

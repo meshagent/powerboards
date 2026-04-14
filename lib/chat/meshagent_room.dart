@@ -2645,6 +2645,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     await showPowerboardsFlowDialog<void>(
       context: context,
       builder: (dialogContext) {
+        final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(dialogContext);
         return PowerboardsShadDialog.listPicker(
           title: const Text("All threads"),
           description: const Text("Select a thread to view."),
@@ -2660,27 +2661,30 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           ],
           child: Align(
             alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 360.0),
-              child: MeshagentThreadListPane(
-                key: ValueKey("mobile-threads-${agentKey ?? "none"}"),
-                client: widget.room,
-                agentName: agentName,
-                threadListPath: threadListPath,
-                selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
-                newThreadResetVersion: _newThreadResetVersion,
-                mobileListTopPadding: 0,
-                mobileListBottomPadding: 0,
-                mobileRowVerticalPadding: 16,
-                mobileUseDialogListStyle: true,
-                showCreateItem: false,
-                onSelectedThreadPathChanged: (path) {
-                  _setSelectedThreadPath(agentKey, path);
-                  Navigator.of(dialogContext).pop();
-                },
-                onSelectedThreadResolved: (path, displayName) {
-                  _setSelectedThreadPath(agentKey, path, displayName: displayName);
-                },
+            child: SizedBox(
+              width: double.infinity,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 360.0),
+                child: MeshagentThreadListPane(
+                  key: ValueKey("mobile-threads-${agentKey ?? "none"}"),
+                  client: widget.room,
+                  agentName: agentName,
+                  threadListPath: threadListPath,
+                  selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
+                  newThreadResetVersion: _newThreadResetVersion,
+                  mobileListTopPadding: 0,
+                  mobileListBottomPadding: 0,
+                  mobileRowVerticalPadding: 16,
+                  mobileUseDialogListStyle: true,
+                  showCreateItem: false,
+                  onSelectedThreadPathChanged: (path) {
+                    _setSelectedThreadPath(agentKey, path);
+                    Navigator.of(dialogContext).pop();
+                  },
+                  onSelectedThreadResolved: (path, displayName) {
+                    _setSelectedThreadPath(agentKey, path, displayName: displayName);
+                  },
+                ),
               ),
             ),
           ),

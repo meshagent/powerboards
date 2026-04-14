@@ -5,9 +5,15 @@ import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:powerboards/widgets/multi_select_autocomplete.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
-Future<void> _pumpDialog(WidgetTester tester, Widget dialog, {double bottomInset = 0, bool resizeToAvoidBottomInset = true}) async {
+Future<void> _pumpDialog(
+  WidgetTester tester,
+  Widget dialog, {
+  Size physicalSize = const Size(390, 844),
+  double bottomInset = 0,
+  bool resizeToAvoidBottomInset = true,
+}) async {
   tester.view.devicePixelRatio = 1.0;
-  tester.view.physicalSize = const Size(390, 844);
+  tester.view.physicalSize = physicalSize;
   tester.view.viewInsets = FakeViewPadding(bottom: bottomInset);
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.view.resetPhysicalSize);
@@ -566,6 +572,47 @@ void main() {
 
     expect(dialogHeight, greaterThan(700));
     expect(dialogBottom - saveBottom, lessThan(110));
+  });
+
+  testWidgets('mobile landscape form flow dialog stays bottom-anchored and hides the description', (tester) async {
+    await _pumpDialog(
+      tester,
+      PowerboardsShadDialog.formTask(
+        title: const Text('Invite user'),
+        description: const Text('Invite someone by email to join this room.'),
+        actions: [
+          ShadButton.outline(onPressed: () {}, child: const Text('Back')),
+          ShadButton(onPressed: () {}, child: const Text('Save')),
+        ],
+        child: const SizedBox(height: 140, child: Text('Form body')),
+      ),
+      physicalSize: const Size(844, 390),
+      resizeToAvoidBottomInset: false,
+    );
+
+    final dialogRect = tester.getRect(_flowDialogSurface());
+
+    expect(find.text('Invite someone by email to join this room.'), findsNothing);
+    expect(dialogRect.bottom, closeTo(390, 0.01));
+    expect(dialogRect.top, lessThan(24));
+  });
+
+  testWidgets('mobile landscape task flow dialog still uses the mobile flow surface', (tester) async {
+    await _pumpDialog(
+      tester,
+      PowerboardsShadDialog.task(
+        title: const Text('Permissions'),
+        description: const Text('Adjust room access.'),
+        actions: [ShadButton(onPressed: () {}, child: const Text('Done'))],
+        child: const SizedBox(height: 60, child: Text('Permissions body')),
+      ),
+      physicalSize: const Size(844, 390),
+      resizeToAvoidBottomInset: false,
+    );
+
+    expect(_flowDialogSurface(), findsOneWidget);
+    expect(find.text('Adjust room access.'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('mobile form flow dialog does not lift above the keyboard inset', (tester) async {
