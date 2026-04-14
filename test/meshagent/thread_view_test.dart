@@ -3,8 +3,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/new_chat_thread.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
+import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -49,6 +51,26 @@ class _ThreadViewHarnessState extends State<_ThreadViewHarness> {
   }
 }
 
+ChatThreadSnapshot _emptySnapshot({bool supportsMcp = false, bool agentOnline = false}) {
+  return ChatThreadSnapshot(
+    messages: const [],
+    online: const [],
+    offline: const [],
+    typing: const [],
+    listening: const [],
+    agentOnline: agentOnline,
+    threadStatus: null,
+    threadStatusStartedAt: null,
+    threadStatusMode: null,
+    supportsAgentMessages: false,
+    supportsMcp: supportsMcp,
+    toolkits: const <String, AgentToolkitCapabilities>{},
+    threadTurnId: null,
+    pendingMessages: const [],
+    pendingItemId: null,
+  );
+}
+
 void main() {
   testWidgets('keeps the same new thread view mounted when the created thread becomes selected', (tester) async {
     final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
@@ -73,5 +95,62 @@ void main() {
     expect(newThreadFinder, findsOneWidget);
     final stateAfter = tester.state<State<StatefulWidget>>(newThreadFinder);
     expect(identical(stateAfter, stateBefore), isTrue);
+  });
+
+  testWidgets('uses the mobile attach flow dialog entry point only on native mobile layouts', (tester) async {
+    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final controller = ChatThreadController(room: room);
+    addTearDown(controller.dispose);
+
+    Future<void> pumpToolArea(Size size) {
+      return tester.pumpWidget(
+        ShadApp(
+          home: MediaQuery(
+            data: MediaQueryData(size: size),
+            child: Builder(
+              builder: (context) => Material(child: buildTools(context, 'project', room, 'assistant', controller, _emptySnapshot())),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpToolArea(const Size(390, 844));
+    expect(find.byType(PowerboardsMobileChatAttachButton), findsOneWidget);
+    expect(find.byType(ChatThreadAttachButton), findsNothing);
+
+    await pumpToolArea(const Size(1024, 768));
+    expect(find.byType(PowerboardsMobileChatAttachButton), findsNothing);
+    expect(find.byType(ChatThreadAttachButton), findsOneWidget);
+  });
+
+  testWidgets('mobile attach chooser uses the migrated flow dialog list without MCP', (tester) async {
+    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final controller = ChatThreadController(room: room);
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(390, 844)),
+          child: Scaffold(
+            body: Center(child: PowerboardsMobileChatAttachButton(controller: controller)),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(LucideIcons.plus));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add to thread'), findsOneWidget);
+    expect(find.text('Upload a photo...'), findsOneWidget);
+    expect(find.text('Upload a file...'), findsOneWidget);
+    expect(find.text('Add from room...'), findsOneWidget);
+    expect(find.text('MCP'), findsNothing);
   });
 }

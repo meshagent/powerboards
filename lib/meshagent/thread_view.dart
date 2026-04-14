@@ -12,6 +12,7 @@ import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:uuid/uuid.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -24,6 +25,7 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 
@@ -1344,6 +1346,8 @@ Widget buildTools(
   ChatThreadController controller,
   ChatThreadSnapshot state,
 ) {
+  final usesNativeMobileAttachMenu = powerboardsUsesNativeMobileDialogLayout(context);
+
   Future<RoomClient> connectRoomClient(String roomName) async {
     final client = getMeshagentClient();
     final conn = await client.connectRoom(projectId: projectId, roomName: roomName);
@@ -1396,15 +1400,22 @@ Widget buildTools(
         };
 
   return ChatThreadToolArea(
-    leading: ChatThreadAttachButton(
-      alwaysShowAttachFiles: true,
-      controller: controller,
-      availableRooms: () => listMeshagentRooms(projectId),
-      connectRoomClient: connectRoomClient,
-      agentName: normalizedAgentName,
-      showMcpConnectors: showMcpConnectors,
-    ),
-    footer: showMcpConnectors && controller.isToolkitEnabled("mcp")
+    leading: usesNativeMobileAttachMenu
+        ? PowerboardsMobileChatAttachButton(
+            alwaysShowAttachFiles: true,
+            controller: controller,
+            availableRooms: () => listMeshagentRooms(projectId),
+            connectRoomClient: connectRoomClient,
+          )
+        : ChatThreadAttachButton(
+            alwaysShowAttachFiles: true,
+            controller: controller,
+            availableRooms: () => listMeshagentRooms(projectId),
+            connectRoomClient: connectRoomClient,
+            agentName: normalizedAgentName,
+            showMcpConnectors: showMcpConnectors,
+          ),
+    footer: !usesNativeMobileAttachMenu && showMcpConnectors && controller.isToolkitEnabled("mcp")
         ? ChatThreadMcpFooter(
             controller: controller,
             agentName: normalizedAgentName,
