@@ -1,9 +1,11 @@
 import 'dart:core';
+import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -15,7 +17,13 @@ import 'room.dart';
 class DevicePreview extends StatelessWidget {
   const DevicePreview({super.key, this.onJoin, this.onCancel});
 
-  final Function(bool enableVideo, bool enableAudio)? onJoin;
+  final void Function({
+    required bool enableVideo,
+    required bool enableAudio,
+    required bool videoUnavailable,
+    required bool audioUnavailable,
+  })?
+  onJoin;
   final VoidCallback? onCancel;
 
   @override
@@ -29,7 +37,13 @@ class DevicePreview extends StatelessWidget {
 class _DeviceSettings extends StatefulWidget {
   const _DeviceSettings({this.onJoin, this.onCancel});
 
-  final Function(bool enableVideo, bool enableAudio)? onJoin;
+  final void Function({
+    required bool enableVideo,
+    required bool enableAudio,
+    required bool videoUnavailable,
+    required bool audioUnavailable,
+  })?
+  onJoin;
   final VoidCallback? onCancel;
 
   @override
@@ -43,6 +57,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   bool _videoOn = false;
   bool _audioProcessing = false;
   bool _videoProcessing = false;
+  bool _audioUnavailable = false;
+  bool _videoUnavailable = false;
   String? _audioDeviceId;
   String? _audioOutputDeviceId;
   String? _videoDeviceId;
@@ -240,6 +256,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         if (mounted) {
           setState(() {
             _audio = track;
+            _audioUnavailable = false;
           });
         } else {
           await track.dispose();
@@ -249,6 +266,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           setState(() {
             _audioOn = false;
             _audio = null;
+            _audioUnavailable = true;
           });
           if (showErrors) {
             ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeAudioToggleError(error))));
@@ -279,6 +297,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         if (mounted) {
           setState(() {
             _video = track;
+            _videoUnavailable = false;
           });
         } else {
           await track.dispose();
@@ -288,6 +307,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           setState(() {
             _videoOn = false;
             _video = null;
+            _videoUnavailable = true;
           });
           if (showErrors) {
             ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeVideoToggleError(error))));
@@ -332,14 +352,16 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
   String get title {
     final deviceManager = DeviceManagerProvider.of(context);
-    final cameraState = deviceManager.canTurnOnCamera
+    final cameraAvailable = deviceManager.canTurnOnCamera && !_videoUnavailable;
+    final microphoneAvailable = deviceManager.canTurnOnMicrophone && !_audioUnavailable;
+    final cameraState = cameraAvailable
         ? _videoPending
               ? "starting"
               : _video != null
               ? "on"
               : "off"
         : "disabled";
-    final microphoneState = deviceManager.canTurnOnMicrophone
+    final microphoneState = microphoneAvailable
         ? _audioPending
               ? "starting"
               : _audio != null
@@ -357,10 +379,12 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   @override
   Widget build(BuildContext context) {
     final deviceManager = DeviceManagerProvider.of(context);
-    final videoOn = _video != null && deviceManager.canTurnOnCamera;
-    final audioOn = _audio != null && deviceManager.canTurnOnMicrophone;
-    final videoPending = _videoPending && deviceManager.canTurnOnCamera;
-    final audioPending = _audioPending && deviceManager.canTurnOnMicrophone;
+    final cameraAvailable = deviceManager.canTurnOnCamera && !_videoUnavailable;
+    final microphoneAvailable = deviceManager.canTurnOnMicrophone && !_audioUnavailable;
+    final videoOn = _video != null && cameraAvailable;
+    final audioOn = _audio != null && microphoneAvailable;
+    final videoPending = _videoPending && cameraAvailable;
+    final audioPending = _audioPending && microphoneAvailable;
 
     final aspectRatio = 3 / 2;
 
@@ -374,8 +398,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         : audioOn
         ? "Turn off microphone"
         : "Turn on microphone";
-    final cameraTooltipText = deviceManager.canTurnOnCamera ? cameraStatusText : "Camera disabled";
-    final audioTooltipText = deviceManager.canTurnOnMicrophone ? audioStatusText : "Microphone disabled";
+    final cameraTooltipText = cameraAvailable ? cameraStatusText : "Camera disabled";
+    final audioTooltipText = microphoneAvailable ? audioStatusText : "Microphone disabled";
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -385,10 +409,16 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final useMobileLobbyLayout = isMobile || isLandscapePhone;
         final statusTextStyle = GoogleFonts.inter(fontSize: useMobileLobbyLayout ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
+        final contentHorizontalInset = switch (maxWidth) {
+          >= 850 => 0.0,
+          >= 520 => 48.0,
+          _ => 24.0,
+        };
+        final contentMaxWidth = math.max(0.0, maxWidth - (contentHorizontalInset * 2));
         final maxHeight = constraints.hasBoundedHeight ? constraints.maxHeight - (useMobileLobbyLayout ? 190 : 150) : double.infinity;
 
         // Cap the width to 800px - large monitors preview overwhelming
-        double width = maxWidth > 800 ? 800 : maxWidth;
+        double width = contentMaxWidth > 800 ? 800 : contentMaxWidth;
         double height = width / aspectRatio;
 
         if (height > maxHeight) {
@@ -404,6 +434,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             selectedVideoInputDeviceId: () => _videoDeviceId,
             selectedAudioInputDeviceId: () => _audioDeviceId,
             selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
+            cameraUnavailable: _videoUnavailable,
+            microphoneUnavailable: _audioUnavailable,
             presentation: ChangeDeviceButtonPresentation.dialog,
             renderButton: (onPressed) {
               if (showLabel) {
@@ -422,14 +454,21 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           );
         }
 
+        final availableToggleColor = ShadTheme.of(context).colorScheme.greenCustom;
+        final availableToggleForeground = ShadTheme.of(context).colorScheme.greenCustomForeground;
+        final unavailableToggleColor = ShadTheme.of(context).colorScheme.destructive;
+        final unavailableToggleForeground = ShadTheme.of(context).colorScheme.destructiveForeground;
+        final meetNowButtonColor = microphoneAvailable ? availableToggleColor : unavailableToggleColor;
+        final meetNowButtonForeground = microphoneAvailable ? availableToggleForeground : unavailableToggleForeground;
+
         final previewControls = <Widget>[
           RoomToolbarButton(
             text: audioTooltipText,
             on: audioOn || audioPending,
-            onColor: ShadTheme.of(context).colorScheme.foreground,
-            onForeground: ShadTheme.of(context).colorScheme.background,
-            offColor: ShadTheme.of(context).colorScheme.destructive,
-            offForeground: Colors.white,
+            onColor: availableToggleColor,
+            onForeground: availableToggleForeground,
+            offColor: microphoneAvailable ? availableToggleColor : unavailableToggleColor,
+            offForeground: microphoneAvailable ? availableToggleForeground : unavailableToggleForeground,
             loading: audioPending,
             onPressed: !audioPending
                 ? () {
@@ -445,10 +484,10 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           RoomToolbarButton(
             text: cameraTooltipText,
             on: videoOn || videoPending,
-            onColor: ShadTheme.of(context).colorScheme.foreground,
-            onForeground: ShadTheme.of(context).colorScheme.background,
-            offColor: ShadTheme.of(context).colorScheme.destructive,
-            offForeground: Colors.white,
+            onColor: availableToggleColor,
+            onForeground: availableToggleForeground,
+            offColor: cameraAvailable ? availableToggleColor : unavailableToggleColor,
+            offForeground: cameraAvailable ? availableToggleForeground : unavailableToggleForeground,
             loading: videoPending,
             onPressed: !videoPending
                 ? () {
@@ -530,12 +569,23 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                 }
 
                 Widget buildJoinButton() {
-                  final button = ShadButton.destructive(
+                  final button = ShadButton(
                     padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                    backgroundColor: meetNowButtonColor,
+                    hoverBackgroundColor: meetNowButtonColor,
+                    pressedBackgroundColor: meetNowButtonColor,
+                    foregroundColor: meetNowButtonForeground,
+                    hoverForegroundColor: meetNowButtonForeground,
+                    pressedForegroundColor: meetNowButtonForeground,
                     onPressed: audioPending || videoPending
                         ? null
                         : () {
-                            widget.onJoin?.call(videoOn, audioOn);
+                            widget.onJoin?.call(
+                              enableVideo: videoOn,
+                              enableAudio: audioOn,
+                              videoUnavailable: _videoUnavailable || !cameraAvailable,
+                              audioUnavailable: _audioUnavailable || !microphoneAvailable,
+                            );
                           },
                     child: const Text("Meet Now"),
                   );
@@ -576,132 +626,160 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             );
           }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: Center(child: previewSection)),
-              Padding(
-                padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + 12),
-                child: isLandscapePhone
-                    ? buildLandscapePhoneFooter()
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        spacing: 12,
-                        children: [
-                          if (widget.onJoin != null)
-                            ShadButton.destructive(
-                              onPressed: audioPending || videoPending
-                                  ? null
-                                  : () {
-                                      widget.onJoin?.call(videoOn, audioOn);
-                                    },
-                              child: const Text("Meet Now"),
-                            ),
-                          if (widget.onCancel != null)
-                            ShadButton.outline(
-                              onPressed: () {
-                                widget.onCancel?.call();
-                              },
-                              child: const Text("Cancel"),
-                            ),
-                        ],
-                      ),
-              ),
-            ],
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: contentHorizontalInset),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: Center(child: previewSection)),
+                Padding(
+                  padding: EdgeInsets.only(bottom: MediaQuery.viewPaddingOf(context).bottom + 12),
+                  child: isLandscapePhone
+                      ? buildLandscapePhoneFooter()
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          spacing: 12,
+                          children: [
+                            if (widget.onJoin != null)
+                              ShadButton(
+                                backgroundColor: meetNowButtonColor,
+                                hoverBackgroundColor: meetNowButtonColor,
+                                pressedBackgroundColor: meetNowButtonColor,
+                                foregroundColor: meetNowButtonForeground,
+                                hoverForegroundColor: meetNowButtonForeground,
+                                pressedForegroundColor: meetNowButtonForeground,
+                                onPressed: audioPending || videoPending
+                                    ? null
+                                    : () {
+                                        widget.onJoin?.call(
+                                          enableVideo: videoOn,
+                                          enableAudio: audioOn,
+                                          videoUnavailable: _videoUnavailable || !cameraAvailable,
+                                          audioUnavailable: _audioUnavailable || !microphoneAvailable,
+                                        );
+                                      },
+                                child: const Text("Meet Now"),
+                              ),
+                            if (widget.onCancel != null)
+                              ShadButton.outline(
+                                onPressed: () {
+                                  widget.onCancel?.call();
+                                },
+                                child: const Text("Cancel"),
+                              ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
           );
         }
 
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          spacing: 20,
-          children: [
-            Container(
-              child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
-            ),
-            SizedBox(
-              height: height,
-              width: width,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(5),
-                child: Container(
-                  color: const Color(0xFF222222),
-                  foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
-                  child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: contentHorizontalInset),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            spacing: 20,
+            children: [
+              Container(
+                child: _loaded ? Text(title, style: statusTextStyle, textAlign: TextAlign.center) : null,
+              ),
+              SizedBox(
+                height: height,
+                width: width,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: Container(
+                    color: const Color(0xFF222222),
+                    foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+                    child: _video != null ? VideoTrackRenderer(_video!, fit: VideoViewFit.cover) : null,
+                  ),
                 ),
               ),
-            ),
-            SizedBox(
-              width: width,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final compactActionButtons = constraints.maxWidth < 560;
-                  final actionButtonSpacing = compactActionButtons ? 6.0 : 8.0;
-                  final showDesktopDeviceSettingsLabel = !compactActionButtons;
-                  final footerControls = [...previewControls, buildDeviceSettingsButton(showLabel: showDesktopDeviceSettingsLabel)];
+              SizedBox(
+                width: width,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compactActionButtons = constraints.maxWidth < 560;
+                    final actionButtonSpacing = compactActionButtons ? 6.0 : 8.0;
+                    final showDesktopDeviceSettingsLabel = !compactActionButtons;
+                    final footerControls = [...previewControls, buildDeviceSettingsButton(showLabel: showDesktopDeviceSettingsLabel)];
 
-                  Widget buildCancelButton() {
-                    final button = ShadButton.outline(
-                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
-                      onPressed: () {
-                        widget.onCancel?.call();
-                      },
-                      child: const Text("Cancel"),
-                    );
+                    Widget buildCancelButton() {
+                      final button = ShadButton.outline(
+                        padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                        onPressed: () {
+                          widget.onCancel?.call();
+                        },
+                        child: const Text("Cancel"),
+                      );
 
-                    if (compactActionButtons) {
-                      return Expanded(child: button);
+                      if (compactActionButtons) {
+                        return Expanded(child: button);
+                      }
+
+                      return SizedBox(width: 120, child: button);
                     }
 
-                    return SizedBox(width: 120, child: button);
-                  }
+                    Widget buildJoinButton() {
+                      final button = ShadButton(
+                        padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
+                        backgroundColor: meetNowButtonColor,
+                        hoverBackgroundColor: meetNowButtonColor,
+                        pressedBackgroundColor: meetNowButtonColor,
+                        foregroundColor: meetNowButtonForeground,
+                        hoverForegroundColor: meetNowButtonForeground,
+                        pressedForegroundColor: meetNowButtonForeground,
+                        onPressed: audioPending || videoPending
+                            ? null
+                            : () {
+                                widget.onJoin?.call(
+                                  enableVideo: videoOn,
+                                  enableAudio: audioOn,
+                                  videoUnavailable: _videoUnavailable || !cameraAvailable,
+                                  audioUnavailable: _audioUnavailable || !microphoneAvailable,
+                                );
+                              },
+                        child: const Text("Meet Now"),
+                      );
 
-                  Widget buildJoinButton() {
-                    final button = ShadButton.destructive(
-                      padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
-                      onPressed: audioPending || videoPending
-                          ? null
-                          : () {
-                              widget.onJoin?.call(videoOn, audioOn);
-                            },
-                      child: const Text("Meet Now"),
-                    );
+                      if (compactActionButtons) {
+                        return Expanded(child: button);
+                      }
 
-                    if (compactActionButtons) {
-                      return Expanded(child: button);
+                      return SizedBox(width: 120, child: button);
                     }
 
-                    return SizedBox(width: 120, child: button);
-                  }
-
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Wrap(
-                        alignment: WrapAlignment.start,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: footerControls,
-                      ),
-                      if (widget.onCancel != null || widget.onJoin != null) SizedBox(width: compactActionButtons ? 8 : 12),
-                      if (widget.onCancel != null || widget.onJoin != null)
-                        Expanded(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              if (widget.onCancel != null) buildCancelButton(),
-                              if (widget.onCancel != null && widget.onJoin != null) SizedBox(width: actionButtonSpacing),
-                              if (widget.onJoin != null) buildJoinButton(),
-                            ],
-                          ),
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Wrap(
+                          alignment: WrapAlignment.start,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: footerControls,
                         ),
-                      if (widget.onCancel == null && widget.onJoin == null) const Spacer(),
-                    ],
-                  );
-                },
+                        if (widget.onCancel != null || widget.onJoin != null) SizedBox(width: compactActionButtons ? 8 : 12),
+                        if (widget.onCancel != null || widget.onJoin != null)
+                          Expanded(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                if (widget.onCancel != null) buildCancelButton(),
+                                if (widget.onCancel != null && widget.onJoin != null) SizedBox(width: actionButtonSpacing),
+                                if (widget.onJoin != null) buildJoinButton(),
+                              ],
+                            ),
+                          ),
+                        if (widget.onCancel == null && widget.onJoin == null) const Spacer(),
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

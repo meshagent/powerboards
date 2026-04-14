@@ -20,6 +20,8 @@ import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:meshagent_flutter_dev/developer_console.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
+import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
+import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
@@ -31,6 +33,7 @@ import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
+import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/grant.dart' as grant;
 import 'package:powerboards/meshagent/loader.dart';
@@ -48,6 +51,7 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
@@ -82,7 +86,18 @@ class _MobileFilesLocation {
       return "Files";
     }
 
-    return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? "Files";
+    final fileName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull;
+    if (fileName == null) {
+      return "Files";
+    }
+
+    if (openedFile == null) {
+      return fileName;
+    }
+    if (isThreadPath(path)) {
+      return threadFileDisplayNameFromPath(path);
+    }
+    return formatTranscriptFileNameForDisplay(fileName);
   }
 
   String? get backFolderPath {
@@ -168,11 +183,10 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
 
   String? _displayNameForSelectedThread() {
     final document = _document;
-    if (document == null) {
-      return null;
-    }
-
     final selectedThreadPath = _normalizedSelectedThreadPath();
+    if (document == null) {
+      return defaultThreadDisplayNameFromPath(selectedThreadPath);
+    }
     for (final node in document.root.getChildren()) {
       if (node is! MeshElement || node.tagName != "thread") {
         continue;
@@ -185,14 +199,14 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
 
       final rawName = node.getAttribute("name");
       if (rawName is! String) {
-        return null;
+        return defaultThreadDisplayNameFromPath(selectedThreadPath);
       }
 
       final trimmedName = rawName.trim();
-      return trimmedName.isEmpty ? null : trimmedName;
+      return trimmedName.isEmpty ? defaultThreadDisplayNameFromPath(selectedThreadPath) : trimmedName;
     }
 
-    return null;
+    return defaultThreadDisplayNameFromPath(selectedThreadPath);
   }
 
   void _emitResolved() {
@@ -305,16 +319,20 @@ Widget _buildPaneHeaderIconButton({
   required VoidCallback? onPressed,
   ShadButtonVariant variant = ShadButtonVariant.outline,
   Color? iconColor,
+  Color? backgroundColor,
+  Color? foregroundColor,
 }) {
   final iconWidget = Icon(icon, size: paneHeaderIconButtonIconSize, color: iconColor);
 
-  final button = switch (variant) {
-    ShadButtonVariant.primary => ShadIconButton(icon: iconWidget, onPressed: onPressed),
-    ShadButtonVariant.destructive => ShadIconButton.destructive(icon: iconWidget, onPressed: onPressed),
-    ShadButtonVariant.secondary => ShadIconButton.secondary(icon: iconWidget, onPressed: onPressed),
-    ShadButtonVariant.ghost => ShadIconButton.ghost(icon: iconWidget, onPressed: onPressed),
-    _ => ShadIconButton.outline(icon: iconWidget, onPressed: onPressed),
-  };
+  final button = backgroundColor != null || foregroundColor != null
+      ? ShadIconButton(icon: iconWidget, onPressed: onPressed, backgroundColor: backgroundColor, foregroundColor: foregroundColor)
+      : switch (variant) {
+          ShadButtonVariant.primary => ShadIconButton(icon: iconWidget, onPressed: onPressed),
+          ShadButtonVariant.destructive => ShadIconButton.destructive(icon: iconWidget, onPressed: onPressed),
+          ShadButtonVariant.secondary => ShadIconButton.secondary(icon: iconWidget, onPressed: onPressed),
+          ShadButtonVariant.ghost => ShadIconButton.ghost(icon: iconWidget, onPressed: onPressed),
+          _ => ShadIconButton.outline(icon: iconWidget, onPressed: onPressed),
+        };
 
   return Tooltip(message: tooltip, child: button);
 }
@@ -334,8 +352,11 @@ class ParticipantsButton extends StatefulWidget {
 }
 
 class _ParticipantsButtonState extends State<ParticipantsButton> {
-  late final popoverController = ShadPopoverController();
+  late final popoverController = ShadContextMenuController();
   final statesController = ShadStatesController();
+  static const double _menuWidth = 320;
+  static const double _menuHeaderHeight = 53;
+  static const double _menuRowHeight = 40;
 
   String _initialFromText(String value) {
     final trimmed = value.trim();
@@ -349,7 +370,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
     if (trimmed.isEmpty) return "U";
 
     final localPart = trimmed.split("@").first;
-    final parts = localPart.split(RegExp(r"[._\- ]+")).where((part) => part.isNotEmpty).toList();
+    final parts = localPart.split(RegExp(r"[-._ ]+")).where((part) => part.isNotEmpty).toList();
 
     if (parts.length >= 2) {
       return "${_initialFromText(parts[0])}${_initialFromText(parts[1])}";
@@ -363,7 +384,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
   }
 
   Widget _buildOverlapAvatars(List<String> names, Set<ShadState> states) {
-    const avatarSize = 38.0;
+    const avatarSize = userAvatarStandardDiameter;
     const overlapOffset = 24.0;
     final width = avatarSize + (names.length - 1) * overlapOffset;
     final hovered = states.contains(ShadState.hovered);
@@ -378,7 +399,7 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
             left: index * overlapOffset,
             child: Tooltip(
               message: name,
-              child: UserAvatarCircle(initials: _initialsFromName(name), size: avatarSize, hovered: hovered),
+              child: UserAvatarCircle(initials: _initialsFromName(name), variant: UserAvatarVariant.standard, hovered: hovered),
             ),
           );
         }),
@@ -389,13 +410,13 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
   @override
   void dispose() {
     popoverController.dispose();
+    statesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
-    final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final nameSet = <String>{};
     final myName = (widget.localParticipant?.getAttribute("name") as String?)?.trim().toLowerCase();
@@ -419,52 +440,44 @@ class _ParticipantsButtonState extends State<ParticipantsButton> {
             builder: (BuildContext context, Set<ShadState> states, Widget? child) {
               return ShadButton.ghost(
                 statesController: statesController,
-                hoverBackgroundColor: cs.background,
+                backgroundColor: Colors.transparent,
+                hoverBackgroundColor: Colors.transparent,
                 padding: .zero,
                 onPressed: popoverController.toggle,
-                decoration: ShadDecoration(shape: .circle),
+                decoration: ShadDecoration.none,
                 child: _buildOverlapAvatars(sortedNames, states),
               );
             },
           )
         : ShadButton.outline(leading: Icon(LucideIcons.users), onPressed: popoverController.toggle, child: Text("+${nameSet.length}"));
 
-    return ShadPopover(
+    return AdaptiveShadContextMenu(
       controller: popoverController,
-      popover: (context) => Container(
-        width: 250,
-        padding: const .symmetric(vertical: 8),
-        child: Column(
-          spacing: 16,
-          mainAxisSize: .min,
-          mainAxisAlignment: .start,
-          crossAxisAlignment: .start,
+      constraints: const BoxConstraints(minWidth: _menuWidth, maxWidth: _menuWidth),
+      estimatedMenuWidth: _menuWidth,
+      estimatedMenuHeight: _menuHeaderHeight + sortedNames.length * _menuRowHeight,
+      items: [
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text("People here right now", style: tt.large),
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              child: Text(
+                "People here right now",
+                style: tt.large.copyWith(fontWeight: FontWeight.w700, color: theme.colorScheme.foreground, fontSize: tt.p.fontSize),
+              ),
             ),
-            Column(
-              spacing: 8,
-              mainAxisSize: .min,
-              mainAxisAlignment: .start,
-              crossAxisAlignment: .start,
-              children: sortedNames.map((name) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.user, size: 16),
-                      SizedBox(width: 8),
-                      Flexible(child: Text(name, overflow: .ellipsis)),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
+            for (final name in sortedNames)
+              ShadContextMenuItem(
+                height: _menuRowHeight,
+                leading: UserAvatarCircle(initials: _initialsFromName(name), variant: UserAvatarVariant.menu),
+                onPressed: popoverController.hide,
+                child: Text(name, overflow: TextOverflow.ellipsis),
+              ),
           ],
         ),
-      ),
+      ],
       child: trigger,
     );
   }
@@ -528,37 +541,63 @@ class MeetButton extends StatelessWidget {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final compact = CompactHeaderActions.compactOf(context);
     final theme = ShadTheme.of(context);
-    final buttonVariant = controller.inMeeting
-        ? ShadButtonVariant.primary
-        : meetingSessionActive
-        ? ShadButtonVariant.destructive
-        : ShadButtonVariant.outline;
-    final iconData = meetingSessionActive ? LucideIcons.circleDot : LucideIcons.video;
-    final iconColor = controller.inMeeting && meetingSessionActive ? theme.colorScheme.destructive : null;
+    final model = room.VideoRoomModel.maybeOf(context);
+    final pendingLocalMedia = model?.pendingLocalMedia;
 
-    if (isMobile || compact) {
-      return _buildPaneHeaderIconButton(
-        tooltip: "Meet",
-        icon: iconData,
-        iconColor: iconColor,
-        onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
-        variant: buttonVariant,
+    Widget buildMeetButton() {
+      final microphoneAvailable = !(pendingLocalMedia?.microphoneUnavailable ?? false);
+      final activeMeetingColor = microphoneAvailable ? theme.colorScheme.greenCustom : theme.colorScheme.destructive;
+      final activeMeetingForeground = microphoneAvailable
+          ? theme.colorScheme.greenCustomForeground
+          : theme.colorScheme.destructiveForeground;
+      final buttonVariant = controller.inMeeting
+          ? ShadButtonVariant.primary
+          : meetingSessionActive
+          ? ShadButtonVariant.primary
+          : ShadButtonVariant.outline;
+      final iconData = meetingSessionActive ? LucideIcons.circleDot : LucideIcons.video;
+      final iconColor = controller.inMeeting && meetingSessionActive ? activeMeetingColor : null;
+      final customBackgroundColor = !controller.inMeeting && meetingSessionActive ? activeMeetingColor : null;
+      final customForegroundColor = !controller.inMeeting && meetingSessionActive ? activeMeetingForeground : null;
+
+      if (isMobile || compact) {
+        return _buildPaneHeaderIconButton(
+          tooltip: "Meet",
+          icon: iconData,
+          iconColor: iconColor,
+          backgroundColor: customBackgroundColor,
+          foregroundColor: customForegroundColor,
+          onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
+          variant: buttonVariant,
+        );
+      }
+
+      return Tooltip(
+        message: "Meet",
+        child: SizedBox(
+          width: desktopPaneHeaderMeetButtonWidth,
+          child: ShadButton.raw(
+            variant: buttonVariant,
+            padding: _paneHeaderButtonPadding(compact: false),
+            backgroundColor: customBackgroundColor,
+            foregroundColor: customForegroundColor,
+            hoverBackgroundColor: customBackgroundColor,
+            hoverForegroundColor: customForegroundColor,
+            pressedBackgroundColor: customBackgroundColor,
+            pressedForegroundColor: customForegroundColor,
+            leading: Icon(iconData, color: iconColor),
+            onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
+            child: Text("Meet"),
+          ),
+        ),
       );
     }
 
-    return Tooltip(
-      message: "Meet",
-      child: SizedBox(
-        width: desktopPaneHeaderMeetButtonWidth,
-        child: ShadButton.raw(
-          variant: buttonVariant,
-          padding: _paneHeaderButtonPadding(compact: false),
-          leading: Icon(iconData, color: iconColor),
-          onPressed: onPressed ?? () => controller.selectMeetingTab(isMobile: isMobile),
-          child: Text("Meet"),
-        ),
-      ),
-    );
+    if (pendingLocalMedia == null) {
+      return buildMeetButton();
+    }
+
+    return ListenableBuilder(listenable: pendingLocalMedia, builder: (context, _) => buildMeetButton());
   }
 }
 
@@ -2152,7 +2191,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final agentKey = _selectedThreadAgentKey(
       services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!),
     );
-    final currentThreadLabel = selectedThreadPath == null ? "New thread" : (_selectedThreadLabelForAgentKey(agentKey) ?? "New thread");
+    final currentThreadLabel = selectedThreadPath == null
+        ? "New thread"
+        : (_selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
     final chatView = Padding(
       padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
       child: MeshagentThreadView(
@@ -2909,6 +2950,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 }
 
                 final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
+                final cs = ShadTheme.of(context).colorScheme;
                 if (isMobile) {
                   return _buildMobileRoomScaffold(
                     context,
@@ -2920,11 +2962,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 }
 
                 return SafeArea(
-                  child: Column(
-                    children: [
-                      ActionsRow(actions: actions),
-                      Expanded(child: _buildRoomLoading(context, title: "Loading room services")),
-                    ],
+                  child: ColoredBox(
+                    color: cs.card,
+                    child: Column(
+                      children: [
+                        ActionsRow(actions: actions),
+                        Expanded(child: _buildRoomLoading(context, title: "Loading room services")),
+                      ],
+                    ),
                   ),
                 );
               }

@@ -126,6 +126,8 @@ class ChangeDeviceButton extends StatefulWidget {
     this.selectedVideoInputDeviceId,
     this.selectedAudioInputDeviceId,
     this.selectedAudioOutputDeviceId,
+    this.cameraUnavailable = false,
+    this.microphoneUnavailable = false,
   });
 
   final String? kind;
@@ -138,6 +140,8 @@ class ChangeDeviceButton extends StatefulWidget {
   final String? Function()? selectedVideoInputDeviceId;
   final String? Function()? selectedAudioInputDeviceId;
   final String? Function()? selectedAudioOutputDeviceId;
+  final bool cameraUnavailable;
+  final bool microphoneUnavailable;
 
   @override
   ChangeDeviceButtonState createState() => ChangeDeviceButtonState();
@@ -316,6 +320,8 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
           selectedVideoInputDeviceId: widget.selectedVideoInputDeviceId,
           selectedAudioInputDeviceId: widget.selectedAudioInputDeviceId,
           selectedAudioOutputDeviceId: widget.selectedAudioOutputDeviceId,
+          cameraUnavailable: widget.cameraUnavailable,
+          microphoneUnavailable: widget.microphoneUnavailable,
           syncUnavailableSelections: _syncUnavailableSelections,
           dialogConstraints: _desktopDialogConstraints,
         );
@@ -386,6 +392,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
             disabledIcon: LucideIcons.videoOff,
             disabledLabel: "Camera disabled",
             disabledDescription: _disabledDeviceDescription,
+            unavailable: widget.cameraUnavailable,
           ),
         if (widget.kind == null || widget.kind == "mic")
           _buildDeviceMenuItem(
@@ -398,6 +405,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
             disabledIcon: LucideIcons.micOff,
             disabledLabel: "Microphone disabled",
             disabledDescription: _disabledDeviceDescription,
+            unavailable: widget.microphoneUnavailable,
           ),
         if ((kIsWeb && widget.kind == null) || widget.kind == "mic")
           _buildDeviceMenuItem(
@@ -410,6 +418,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
             disabledIcon: LucideIcons.volumeOff,
             disabledLabel: "Speakers disabled",
             disabledDescription: _disabledDeviceDescription,
+            unavailable: false,
           ),
       ],
       child: widget.renderButton(_handlePressed),
@@ -431,6 +440,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
     required IconData disabledIcon,
     required String disabledLabel,
     required String disabledDescription,
+    required bool unavailable,
   }) {
     final theme = ShadTheme.of(context);
     final selectedLabel = _deviceLabel(selectedDevice, label);
@@ -445,7 +455,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
         )
         .toList(growable: false);
 
-    if (selectedDevice == null) {
+    if (selectedDevice == null || unavailable) {
       return ShadContextMenuItem(
         enabled: true,
         closeOnTap: false,
@@ -523,6 +533,8 @@ class _ChangeDeviceDialog extends StatefulWidget {
     this.selectedVideoInputDeviceId,
     this.selectedAudioInputDeviceId,
     this.selectedAudioOutputDeviceId,
+    this.cameraUnavailable = false,
+    this.microphoneUnavailable = false,
   });
 
   final BuildContext boundaryContext;
@@ -537,6 +549,8 @@ class _ChangeDeviceDialog extends StatefulWidget {
   final String? Function()? selectedVideoInputDeviceId;
   final String? Function()? selectedAudioInputDeviceId;
   final String? Function()? selectedAudioOutputDeviceId;
+  final bool cameraUnavailable;
+  final bool microphoneUnavailable;
 
   @override
   State<_ChangeDeviceDialog> createState() => _ChangeDeviceDialogState();
@@ -630,6 +644,7 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
                 disabledIcon: LucideIcons.videoOff,
                 disabledLabel: "Camera disabled",
                 disabledDescription: _disabledDeviceDescription,
+                unavailable: widget.cameraUnavailable,
               ),
               if (widget.kind == null || widget.kind == "mic") rowSeparator(),
             ],
@@ -647,6 +662,7 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
                 disabledIcon: LucideIcons.micOff,
                 disabledLabel: "Microphone disabled",
                 disabledDescription: _disabledDeviceDescription,
+                unavailable: widget.microphoneUnavailable,
               ),
               if ((kIsWeb && widget.kind == null) || widget.kind == "mic") rowSeparator(),
             ],
@@ -683,6 +699,7 @@ class _DeviceSettingsRow extends StatefulWidget {
     required this.disabledIcon,
     required this.disabledLabel,
     required this.disabledDescription,
+    this.unavailable = false,
   });
 
   final BuildContext boundaryContext;
@@ -694,6 +711,7 @@ class _DeviceSettingsRow extends StatefulWidget {
   final IconData disabledIcon;
   final String disabledLabel;
   final String disabledDescription;
+  final bool unavailable;
 
   @override
   State<_DeviceSettingsRow> createState() => _DeviceSettingsRowState();
@@ -713,9 +731,9 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
   @override
   Widget build(BuildContext context) {
     final selectedLabel = _deviceLabel(widget.selectedDevice, widget.label);
-    final hasOptions = widget.selectedDevice != null && widget.devices.isNotEmpty;
+    final hasOptions = !widget.unavailable && widget.selectedDevice != null && widget.devices.isNotEmpty;
     final theme = ShadTheme.of(context);
-    final isDisabled = widget.selectedDevice == null;
+    final isDisabled = widget.selectedDevice == null || widget.unavailable;
     final disabledColor = theme.colorScheme.destructive;
 
     return AdaptiveShadContextMenu(

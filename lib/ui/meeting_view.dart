@@ -10,6 +10,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
+import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 
 import 'package:powerboards/livekit/camera_grid.dart';
 import 'package:powerboards/livekit/camera_strip.dart';
@@ -129,12 +130,21 @@ class _MeetingViewState extends State<MeetingView> {
         return Padding(
           padding: const .symmetric(horizontal: 20.0),
           child: DevicePreview(
-            onJoin: (enableVideo, enableAudio) {
+            onJoin: ({required enableVideo, required enableAudio, required videoUnavailable, required audioUnavailable}) {
               final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
               final navController = Controller.ofType<NavController>(context);
 
               if (videoChatConnection != null) {
-                videoChatConnection.setRoomFromDoc("", widget.room, "", video: enableVideo, audio: enableAudio, agentID: null);
+                videoChatConnection.setRoomFromDoc(
+                  "",
+                  widget.room,
+                  "",
+                  video: enableVideo,
+                  audio: enableAudio,
+                  videoUnavailable: videoUnavailable,
+                  audioUnavailable: audioUnavailable,
+                  agentID: null,
+                );
               }
 
               meetingViewController.enterMeeting();
@@ -427,7 +437,7 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
                           await _invokeTranscriptionTool(
                             transcription: transcription!,
                             toolName: startRecording.name,
-                            input: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                            input: {"breakout_room": "", "path": "transcripts/meetings/${buildTranscriptFileName()}"},
                             successMessage: "Transcription started",
                             showToast: useCompressedPresentation,
                           );
@@ -442,7 +452,7 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
                             await _invokeTranscriptionTool(
                               transcription: transcription!,
                               toolName: startRecording.name,
-                              input: {"breakout_room": "", "path": "transcripts/meetings/${DateTime.now().toIso8601String()}.transcript"},
+                              input: {"breakout_room": "", "path": "transcripts/meetings/${buildTranscriptFileName()}"},
                               successMessage: "Transcription started",
                               showToast: useCompressedPresentation,
                             );

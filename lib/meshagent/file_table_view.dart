@@ -15,17 +15,20 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:file_icon/file_icon.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
+import 'package:meshagent/document.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
+import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/path.dart';
+import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
@@ -45,6 +48,10 @@ const double filePaneTableHeaderHeight = 48;
 bool _usesAdaptiveMobileLayout(BuildContext context) {
   final size = MediaQuery.sizeOf(context);
   return ResponsiveBreakpoints.of(context).isMobile || (size.width > size.height && size.shortestSide < 600);
+}
+
+String _displayFileName(String fileName) {
+  return formatTranscriptFileNameForDisplay(fileName);
 }
 
 enum FileSortField { name, modified }
@@ -150,12 +157,6 @@ class _FilePathKey {
   }
 
   static bool isFolderKey(String key) => key.endsWith('/');
-
-  static String displayNameFromKey(String key) {
-    final trimmed = pathFromKey(key);
-    final last = trimmed.split('/').where((s) => s.isNotEmpty).lastOrNull ?? trimmed;
-    return isFolderKey(key) ? '$last/' : last;
-  }
 }
 
 class FileManagerView extends StatefulWidget {
@@ -186,9 +187,12 @@ class FileManagerView extends StatefulWidget {
 
 class _FileManagerViewState extends State<FileManagerView> {
   static TextStyle breadcrumbLinkStyle = GoogleFonts.inter(fontSize: 16, fontWeight: .w600);
+  static const String _threadIndexFileName = 'index.threadl';
 
   _FileLocation _location = const _FileLocation(folder: "", openedFile: null);
   String? get _openedFile => _location.openedFile;
+  bool _isDisposing = false;
+  bool get _canUpdateUi => mounted && !_isDisposing;
 
   bool _forceShowSelect = false;
   String _tab = 'preview';
@@ -197,6 +201,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   final CodePreviewController _codePreviewController = CodePreviewController();
   late final uploadNotifications = UploadProgressNotifications(popoverController: popoverController);
   final Set<String> _optimisticEmptyTextFiles = <String>{};
+  final Set<String> _threadTitleResolutionsInFlight = <String>{};
+  MeshDocument? _threadIndexDocument;
+  String? _threadIndexPath;
+  Map<String, String> _threadDisplayNamesByPath = const <String, String>{};
 
   late StreamSubscription<RoomEvent> roomSub;
 
@@ -243,6 +251,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   void initState() {
     super.initState();
     roomSub = widget.client.listen(_onRoomEvent);
+    unawaited(_rebindThreadIndexDocument());
   }
 
   @override
@@ -253,6 +262,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   @override
   void dispose() {
+    _isDisposing = true;
     roomSub.cancel();
 
     uploadNotifications.dispose();
@@ -269,6 +279,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     _sortSig.dispose();
     _selectedSig.dispose();
     _folderSig.dispose();
+    unawaited(_closeThreadIndexDocument(refreshUi: false));
 
     widget.client.localParticipant?.setAttribute("current_file", null);
     super.dispose();
@@ -286,6 +297,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       _folderSig.value = next.folder;
       _selectedSig.value = <String>{};
       _forceShowSelect = false;
+      unawaited(_rebindThreadIndexDocument());
     }
 
     if (openedFileChanged) {
@@ -403,9 +415,44 @@ class _FileManagerViewState extends State<FileManagerView> {
       ..addAll(movedPaths);
   }
 
+  void _moveThreadDisplayNameState(String sourcePath, String destinationPath) {
+    if (_threadDisplayNamesByPath.isEmpty && _threadTitleResolutionsInFlight.isEmpty) {
+      return;
+    }
+
+    String relocate(String path) => _relocatePathForMove(path, sourcePath, destinationPath);
+
+    final nextDisplayNames = <String, String>{for (final entry in _threadDisplayNamesByPath.entries) relocate(entry.key): entry.value};
+    final nextInFlight = _threadTitleResolutionsInFlight.map(relocate).toSet();
+
+    if (!_canUpdateUi) {
+      _threadDisplayNamesByPath = nextDisplayNames;
+      _threadTitleResolutionsInFlight
+        ..clear()
+        ..addAll(nextInFlight);
+      return;
+    }
+
+    final displayNamesChanged = !mapEquals(_threadDisplayNamesByPath, nextDisplayNames);
+    final inFlightChanged =
+        _threadTitleResolutionsInFlight.length != nextInFlight.length || !_threadTitleResolutionsInFlight.containsAll(nextInFlight);
+
+    if (!displayNamesChanged && !inFlightChanged) {
+      return;
+    }
+
+    setState(() {
+      _threadDisplayNamesByPath = nextDisplayNames;
+    });
+    _threadTitleResolutionsInFlight
+      ..clear()
+      ..addAll(nextInFlight);
+  }
+
   void _onFileMoved(String sourcePath, String destinationPath) {
     _moveSelectedPaths(sourcePath, destinationPath);
     _moveOptimisticPaths(sourcePath, destinationPath);
+    _moveThreadDisplayNameState(sourcePath, destinationPath);
 
     if (_replaceLocationForMove(sourcePath, destinationPath)) {
       return;
@@ -414,6 +461,214 @@ class _FileManagerViewState extends State<FileManagerView> {
     final currentFolder = _folderSig.value;
     if (parentPath(sourcePath) == currentFolder || parentPath(destinationPath) == currentFolder) {
       unawaited(_refreshCurrentFolder());
+    }
+  }
+
+  String? _threadIndexPathForFolder(String folder) {
+    final trimmed = folder.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    return joinPaths(trimmed, _threadIndexFileName);
+  }
+
+  String _displayNameForPath(String path) {
+    final fileName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+    if (isThreadPath(path)) {
+      return threadFileDisplayNameFromPath(path, threadDisplayName: _threadDisplayNamesByPath[path]);
+    }
+    return _displayFileName(fileName);
+  }
+
+  String _displayNameForEntry(StorageEntry entry) {
+    final path = joinPaths(_folderSig.value, entry.name);
+    return entry.isFolder ? entry.name : _displayNameForPath(path);
+  }
+
+  Future<void> _closeThreadIndexDocument({bool refreshUi = true}) async {
+    final document = _threadIndexDocument;
+    final threadIndexPath = _threadIndexPath;
+    if (document != null) {
+      document.removeListener(_onThreadIndexChanged);
+    }
+    _threadIndexDocument = null;
+    _threadIndexPath = null;
+    _threadDisplayNamesByPath = const <String, String>{};
+    _threadTitleResolutionsInFlight.clear();
+
+    if (threadIndexPath != null) {
+      try {
+        await widget.client.sync.close(threadIndexPath);
+      } catch (_) {}
+    }
+
+    if (refreshUi && _canUpdateUi) {
+      setState(() {});
+    }
+  }
+
+  void _onThreadIndexChanged() {
+    if (!_canUpdateUi) {
+      return;
+    }
+    _refreshThreadDisplayNames();
+    unawaited(_backfillThreadDisplayNames());
+  }
+
+  Future<void> _rebindThreadIndexDocument() async {
+    final nextThreadIndexPath = _threadIndexPathForFolder(_folderSig.value);
+    if (_threadIndexPath == nextThreadIndexPath && _threadIndexDocument != null) {
+      _refreshThreadDisplayNames();
+      unawaited(_backfillThreadDisplayNames());
+      return;
+    }
+
+    await _closeThreadIndexDocument();
+    if (!_canUpdateUi) {
+      return;
+    }
+    if (nextThreadIndexPath == null) {
+      return;
+    }
+
+    try {
+      final exists = await widget.client.storage.exists(nextThreadIndexPath);
+      if (!_canUpdateUi || !exists) {
+        return;
+      }
+
+      final document = await widget.client.sync.open(nextThreadIndexPath);
+      if (!_canUpdateUi || _threadIndexPathForFolder(_folderSig.value) != nextThreadIndexPath) {
+        try {
+          await widget.client.sync.close(nextThreadIndexPath);
+        } catch (_) {}
+        return;
+      }
+
+      document.addListener(_onThreadIndexChanged);
+      _threadIndexDocument = document;
+      _threadIndexPath = nextThreadIndexPath;
+      _refreshThreadDisplayNames();
+      unawaited(_backfillThreadDisplayNames());
+    } catch (_) {
+      if (!_canUpdateUi) {
+        return;
+      }
+      setState(() {
+        _threadDisplayNamesByPath = const <String, String>{};
+      });
+    }
+  }
+
+  void _refreshThreadDisplayNames() {
+    final document = _threadIndexDocument;
+    final next = <String, String>{};
+    if (document != null) {
+      for (final node in document.root.getChildren().whereType<MeshElement>()) {
+        if (node.tagName != 'thread') {
+          continue;
+        }
+
+        final rawPath = node.getAttribute('path');
+        if (rawPath is! String) {
+          continue;
+        }
+        final path = rawPath.trim();
+        if (path.isEmpty) {
+          continue;
+        }
+
+        final rawName = node.getAttribute('name');
+        if (rawName is! String) {
+          continue;
+        }
+        final displayName = rawName.trim();
+        if (displayName.isEmpty) {
+          continue;
+        }
+
+        next[path] = displayName;
+      }
+    }
+
+    if (!mapEquals(_threadDisplayNamesByPath, next)) {
+      if (!_canUpdateUi) {
+        _threadDisplayNamesByPath = next;
+        return;
+      }
+      setState(() {
+        _threadDisplayNamesByPath = next;
+      });
+    }
+  }
+
+  Future<void> _backfillThreadDisplayNames() async {
+    if (!_canUpdateUi) {
+      return;
+    }
+
+    final entries = storageEntries.state.value;
+    if (entries == null) {
+      return;
+    }
+
+    final currentFolder = _folderSig.value;
+    for (final entry in entries) {
+      if (entry.isFolder || !isThreadFileName(entry.name)) {
+        continue;
+      }
+
+      final path = joinPaths(currentFolder, entry.name);
+      if (!shouldReadThreadDocumentForDisplayName(path)) {
+        continue;
+      }
+
+      final currentDisplayName = _threadDisplayNamesByPath[path];
+      if (!shouldBackfillThreadDisplayName(currentDisplayName) || _threadTitleResolutionsInFlight.contains(path)) {
+        continue;
+      }
+
+      _threadTitleResolutionsInFlight.add(path);
+      unawaited(_resolveAndStoreThreadDisplayName(path: path));
+    }
+  }
+
+  MeshElement? _threadNodeForPath(String path) {
+    final document = _threadIndexDocument;
+    if (document == null) {
+      return null;
+    }
+
+    return document.root.getChildren().whereType<MeshElement>().firstWhereOrNull((node) {
+      return node.tagName == 'thread' && node.getAttribute('path') == path;
+    });
+  }
+
+  Future<void> _resolveAndStoreThreadDisplayName({required String path}) async {
+    try {
+      final document = await widget.client.sync.open(path);
+      try {
+        final resolvedName = deriveThreadDisplayNameFromDocument(document);
+        if (!_canUpdateUi || resolvedName == null || resolvedName.trim().isEmpty) {
+          return;
+        }
+
+        final latestNode = _threadNodeForPath(path);
+        if (latestNode != null && shouldBackfillThreadDisplayName(latestNode.getAttribute('name') as String?)) {
+          latestNode.setAttribute('name', resolvedName);
+        }
+        setState(() {
+          _threadDisplayNamesByPath = <String, String>{..._threadDisplayNamesByPath, path: resolvedName};
+        });
+      } finally {
+        try {
+          await widget.client.sync.close(path);
+        } catch (_) {}
+      }
+    } catch (_) {
+      return;
+    } finally {
+      _threadTitleResolutionsInFlight.remove(path);
     }
   }
 
@@ -433,6 +688,14 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _setEntries(List<StorageEntry> entries) {
     storageEntries.state = ResourceState.ready(entries);
+    final hasThreadIndex = entries.any((entry) => !entry.isFolder && entry.name == _threadIndexFileName);
+    final expectedThreadIndexPath = _threadIndexPathForFolder(_folderSig.value);
+    if (hasThreadIndex && _threadIndexDocument == null && expectedThreadIndexPath != null) {
+      unawaited(_rebindThreadIndexDocument());
+    } else if (!hasThreadIndex && _threadIndexPath == expectedThreadIndexPath && _threadIndexDocument != null) {
+      unawaited(_closeThreadIndexDocument());
+    }
+    unawaited(_backfillThreadDisplayNames());
   }
 
   void _setSort(FileSort sort) {
@@ -844,13 +1107,14 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Future<bool> _confirmAndDelete(String fullPath, bool isFolder) async {
     final name = fullPath.split('/').where((s) => s.isNotEmpty).last;
+    final displayName = isFolder ? name : _displayNameForPath(fullPath);
     final bool? confirmDelete = await showShadDialog<bool>(
       context: context,
       builder: (context) => PowerboardsShadDialog.compactAlert(
         title: const Text("Confirm Delete"),
         description: Padding(
           padding: EdgeInsets.only(bottom: 8),
-          child: Text("Are you sure you want to delete ${isFolder ? 'folder $name and all its contents' : name}?"),
+          child: Text("Are you sure you want to delete ${isFolder ? 'folder $displayName and all its contents' : displayName}?"),
         ),
         actions: [
           ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
@@ -878,7 +1142,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     final toaster = ShadToaster.of(context);
     final isMobile = _usesAdaptiveMobileLayout(context);
     final count = selected.length;
-    final names = selected.take(6).map(_FilePathKey.displayNameFromKey).toList();
+    final names = selected.take(6).map((key) {
+      final path = _FilePathKey.pathFromKey(key);
+      if (_FilePathKey.isFolderKey(key)) {
+        final folderName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+        return '$folderName/';
+      }
+      return _displayNameForPath(path);
+    }).toList();
 
     final confirmDelete = await showShadDialog<bool>(
       context: context,
@@ -1375,7 +1646,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return _buildBreadcrumb();
     }
 
-    final fileName = _openedFile!.split('/').last;
+    final fileName = _displayNameForPath(_openedFile!);
 
     return Row(
       spacing: desktopPaneHeaderButtonGap,
@@ -1855,7 +2126,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   double _estimateDesktopHeaderLeadingWidth(BuildContext context, double maxWidth) {
     final openedFile = _openedFile;
     if (openedFile != null) {
-      final fileName = openedFile.split('/').last;
+      final fileName = _displayNameForPath(openedFile);
       final closeActionWidth = 40.0 + desktopPaneHeaderButtonGap;
       final fileNameWidth = _measureBreadcrumbLabelWidth(context, fileName) + 24.0;
       return math.min(closeActionWidth + fileNameWidth, math.min(180.0, maxWidth * 0.24));
@@ -1971,7 +2242,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildFileNameOnly() {
-    final fileName = _openedFile!.split('/').last;
+    final fileName = _displayNameForPath(_openedFile!);
 
     return Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
   }
@@ -2216,7 +2487,6 @@ class _FileManagerViewState extends State<FileManagerView> {
                                     final entries = _visibleSortedEntries.value;
                                     final sort = _sortSig.value;
                                     final folder = _folderSig.value;
-
                                     return FileTableView(
                                       currentPath: folder,
                                       entries: entries,
@@ -2224,6 +2494,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                                       sort: sort,
                                       isRefreshing: storageEntries.state.isRefreshing,
                                       forceShowSelect: _forceShowSelect,
+                                      displayNameBuilder: _displayNameForEntry,
                                       onOpen: _openEntry,
                                       onToggleSelected: _toggleSelected,
                                       onToggleAllSelected: _toggleAllSelected,
@@ -2264,6 +2535,7 @@ class FileTableView extends StatefulWidget {
   final FileSort sort;
   final bool isRefreshing;
   final bool forceShowSelect;
+  final String Function(StorageEntry entry)? displayNameBuilder;
   final void Function(String fullPath, bool isFolder) onOpen;
   final void Function(String key, bool selected) onToggleSelected;
   final void Function(bool selected) onToggleAllSelected;
@@ -2285,6 +2557,7 @@ class FileTableView extends StatefulWidget {
     required this.sort,
     required this.isRefreshing,
     required this.forceShowSelect,
+    this.displayNameBuilder,
     required this.onOpen,
     required this.onToggleSelected,
     required this.onToggleAllSelected,
@@ -2310,6 +2583,10 @@ class _FileTableViewState extends State<FileTableView> {
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
   final GlobalKey _tableCardKey = GlobalKey();
+
+  String _displayNameForEntry(StorageEntry entry) {
+    return widget.displayNameBuilder?.call(entry) ?? entry.name;
+  }
 
   @override
   void initState() {
@@ -2639,6 +2916,7 @@ class _FileTableViewState extends State<FileTableView> {
                 final modifiedLabel = entry.updatedAt?.modified() ?? '';
                 final metadataLabel = <String>[if (sizeLabel != null) sizeLabel, if (modifiedLabel.isNotEmpty) modifiedLabel].join(' • ');
                 final showMetadataLabel = metadataLabel.isNotEmpty;
+                final displayName = _displayNameForEntry(entry);
 
                 return Material(
                   color: isSelected ? const Color(0xFFF2F1FF) : shadCard,
@@ -2673,7 +2951,7 @@ class _FileTableViewState extends State<FileTableView> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(entry.name, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                Text(displayName, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
                                 if (showMetadataLabel) ...[
                                   const SizedBox(height: 4),
                                   Text(metadataLabel, style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -2732,6 +3010,7 @@ class _FileTableViewState extends State<FileTableView> {
           final isSelected = widget.selected.contains(key);
           final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
           final sizeLabel = showSize ? (_formatEntrySize(entry) ?? "") : "";
+          final displayName = _displayNameForEntry(entry);
 
           return DataRow(
             onSelectChanged: (_) {
@@ -2765,7 +3044,7 @@ class _FileTableViewState extends State<FileTableView> {
                       _getIcon(entry),
                       const SizedBox(width: 10),
                       Flexible(
-                        child: Text(entry.name, style: dataStyle, overflow: TextOverflow.ellipsis),
+                        child: Text(displayName, style: dataStyle, overflow: TextOverflow.ellipsis),
                       ),
                     ],
                   ),

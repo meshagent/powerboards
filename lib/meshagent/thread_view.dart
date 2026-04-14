@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:path/path.dart' as p;
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
@@ -24,6 +23,7 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
@@ -518,11 +518,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   }
 
   String _threadNameFromPath(String path) {
-    final filename = p.posix.basename(path);
-    if (filename.endsWith(".thread")) {
-      return filename.substring(0, filename.length - ".thread".length);
-    }
-    return filename;
+    return defaultThreadDisplayNameFromPath(path);
   }
 
   String? _threadDisplayNameFromNode(MeshElement node) {
@@ -863,7 +859,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
           mobileUseDialogListStyle: widget.mobileUseDialogListStyle,
           onOpen: () {
             widget.onSelectedThreadPathChanged(entry.path);
-            widget.onSelectedThreadResolved?.call(entry.path, entry.displayName);
+            widget.onSelectedThreadResolved?.call(entry.path, entry.name);
           },
           onRename: () => _renameThread(entry),
           onDelete: () => _deleteThread(entry),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
+import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/ui/powerboards_menu_row.dart';
@@ -133,7 +134,18 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
   bool _microphoneEnabled = false;
   bool _pending = false;
   bool _processing = false;
+  bool _deviceAvailable = true;
   VoidCallback? _unsubscribe;
+  StreamSubscription<List<lk.MediaDevice>>? _deviceSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refreshDeviceAvailability());
+    _deviceSubscription = lk.Hardware.instance.onDeviceChange.stream.listen((devices) {
+      _updateDeviceAvailability(devices);
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -152,7 +164,24 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
   @override
   void dispose() {
     _unsubscribe?.call();
+    _deviceSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _refreshDeviceAvailability() async {
+    final devices = await lk.Hardware.instance.enumerateDevices();
+    _updateDeviceAvailability(devices);
+  }
+
+  void _updateDeviceAvailability(List<lk.MediaDevice> devices) {
+    final available = devices.any((device) => device.kind == "audioinput" && device.deviceId.isNotEmpty);
+    if (!mounted || _deviceAvailable == available) {
+      return;
+    }
+
+    setState(() {
+      _deviceAvailable = available;
+    });
   }
 
   void _bindListeners() {
@@ -205,7 +234,9 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
 
     try {
       await local.setMicrophoneEnabled(enabled);
+      widget.controller.pendingLocalMedia.setMicrophoneUnavailable(false);
     } catch (error) {
+      widget.controller.pendingLocalMedia.setMicrophoneUnavailable(true);
       toaster?.show(ShadToast.destructive(description: Text(_describeMicrophoneToggleError(error))));
     } finally {
       if (mounted) {
@@ -221,6 +252,11 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
   Widget build(BuildContext context) {
     final local = widget.controller.livekitRoom.localParticipant;
     final showEnabled = _microphoneEnabled || _pending;
+    final unavailable = (widget.controller.pendingLocalMedia.microphoneUnavailable || !_deviceAvailable) && !showEnabled;
+    final toggleColor = unavailable ? ShadTheme.of(context).colorScheme.destructive : ShadTheme.of(context).colorScheme.greenCustom;
+    final toggleForeground = unavailable
+        ? ShadTheme.of(context).colorScheme.destructiveForeground
+        : ShadTheme.of(context).colorScheme.greenCustomForeground;
 
     return RoomToolbarButton(
       text: _pending
@@ -229,10 +265,10 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
           ? "Turn off microphone"
           : "Turn on microphone",
       on: showEnabled,
-      onColor: ShadTheme.of(context).colorScheme.foreground,
-      onForeground: ShadTheme.of(context).colorScheme.background,
-      offColor: ShadTheme.of(context).colorScheme.destructive,
-      offForeground: Colors.white,
+      onColor: toggleColor,
+      onForeground: toggleForeground,
+      offColor: toggleColor,
+      offForeground: toggleForeground,
       icon: showEnabled ? LucideIcons.mic : LucideIcons.micOff,
       loading: _pending,
       onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleMicrophone(local, !_microphoneEnabled)),
@@ -253,7 +289,18 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
   bool _cameraEnabled = false;
   bool _pending = false;
   bool _processing = false;
+  bool _deviceAvailable = true;
   VoidCallback? _unsubscribe;
+  StreamSubscription<List<lk.MediaDevice>>? _deviceSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refreshDeviceAvailability());
+    _deviceSubscription = lk.Hardware.instance.onDeviceChange.stream.listen((devices) {
+      _updateDeviceAvailability(devices);
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -272,7 +319,24 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
   @override
   void dispose() {
     _unsubscribe?.call();
+    _deviceSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _refreshDeviceAvailability() async {
+    final devices = await lk.Hardware.instance.enumerateDevices();
+    _updateDeviceAvailability(devices);
+  }
+
+  void _updateDeviceAvailability(List<lk.MediaDevice> devices) {
+    final available = devices.any((device) => device.kind == "videoinput" && device.deviceId.isNotEmpty);
+    if (!mounted || _deviceAvailable == available) {
+      return;
+    }
+
+    setState(() {
+      _deviceAvailable = available;
+    });
   }
 
   void _bindListeners() {
@@ -325,7 +389,9 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
 
     try {
       await local.setCameraEnabled(enabled);
+      widget.controller.pendingLocalMedia.setCameraUnavailable(false);
     } catch (error) {
+      widget.controller.pendingLocalMedia.setCameraUnavailable(true);
       toaster?.show(ShadToast.destructive(description: Text(_describeCameraToggleError(error))));
     } finally {
       if (mounted) {
@@ -341,6 +407,11 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
   Widget build(BuildContext context) {
     final local = widget.controller.livekitRoom.localParticipant;
     final showEnabled = _cameraEnabled || _pending;
+    final unavailable = (widget.controller.pendingLocalMedia.cameraUnavailable || !_deviceAvailable) && !showEnabled;
+    final toggleColor = unavailable ? ShadTheme.of(context).colorScheme.destructive : ShadTheme.of(context).colorScheme.greenCustom;
+    final toggleForeground = unavailable
+        ? ShadTheme.of(context).colorScheme.destructiveForeground
+        : ShadTheme.of(context).colorScheme.greenCustomForeground;
 
     return RoomToolbarButton(
       text: _pending
@@ -349,10 +420,10 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
           ? "Turn off camera"
           : "Turn on camera",
       on: showEnabled,
-      onColor: ShadTheme.of(context).colorScheme.foreground,
-      onForeground: ShadTheme.of(context).colorScheme.background,
-      offColor: ShadTheme.of(context).colorScheme.destructive,
-      offForeground: Colors.white,
+      onColor: toggleColor,
+      onForeground: toggleForeground,
+      offColor: toggleColor,
+      offForeground: toggleForeground,
       icon: showEnabled ? LucideIcons.video : LucideIcons.videoOff,
       loading: _pending,
       onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleCamera(local, !_cameraEnabled)),
@@ -433,6 +504,8 @@ class _VoiceChangeSettings extends StatelessWidget {
       selectedVideoInputDeviceId: () => controller.livekitRoom.selectedVideoInputDeviceId,
       selectedAudioInputDeviceId: () => controller.livekitRoom.selectedAudioInputDeviceId,
       selectedAudioOutputDeviceId: () => controller.livekitRoom.selectedAudioOutputDeviceId,
+      cameraUnavailable: controller.pendingLocalMedia.cameraUnavailable,
+      microphoneUnavailable: controller.pendingLocalMedia.microphoneUnavailable,
       renderButton: (onPressed) => Tooltip(
         message: "Device settings",
         child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
