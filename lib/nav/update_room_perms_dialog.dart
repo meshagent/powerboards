@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
 import 'package:powerboards/ui/powerboards_mobile_field_suggestion_menu.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
@@ -1257,7 +1259,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                             child: TextFieldTapRegion(
                               key: _mobileSuggestionsAnchorKey,
                               groupId: _mobileSuggestionsGroupId,
-                              child: ShadInput(
+                              child: PowerboardsAdaptiveInput(
                                 controller: textController,
                                 focusNode: _mobileEmailFocusNode,
                                 groupId: _mobileSuggestionsGroupId,
@@ -1268,8 +1270,9 @@ class _AddUserDialogState extends State<AddUserDialog> {
                                 enableSuggestions: true,
                                 scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
                                 placeholder: const Text('Type an email'),
-                                contextMenuBuilder: (context, editableTextState) =>
-                                    _InviteUserMobileContextMenu(editableTextState: editableTextState),
+                                contextMenuBuilder: (context, editableTextState) => powerboardsUsesSystemAdaptiveTextSelectionToolbar()
+                                    ? powerboardsAdaptiveInputContextMenuBuilder(context, editableTextState)
+                                    : _InviteUserMobileContextMenu(editableTextState: editableTextState),
                                 onPressedOutside: (_) {
                                   _mobileEmailFocusNode.unfocus();
                                 },

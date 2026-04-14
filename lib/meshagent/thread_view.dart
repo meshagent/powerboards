@@ -9,6 +9,7 @@ import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
+import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -267,6 +268,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           onVisibleMessagesEmpty: widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
               ? () => _onVisibleMessagesEmpty(path)
               : null,
+          inputContextMenuBuilder: powerboardsAdaptiveInputContextMenuBuilder,
+          inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
           chatInputBoxBuilder: (context, inputBox) {
             if (widget.hideChatInput) {
               return const SizedBox.shrink();
@@ -298,6 +301,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             onThreadPathChanged: _onThreadPathChanged,
             toolsBuilder: (context, controller, snapshot) =>
                 buildTools(context, widget.projectId, widget.client, agentName, controller, snapshot),
+            inputContextMenuBuilder: powerboardsAdaptiveInputContextMenuBuilder,
+            inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
             builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
           )
         : _buildThread(path: threadPath, initialMessageText: null);
