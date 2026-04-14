@@ -95,6 +95,7 @@ class MeshagentThreadView extends StatefulWidget {
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
+  String? _createdThreadPath;
 
   String _chatPlaceholderText(String? agentName) {
     final normalizedAgentName = agentName?.trim();
@@ -122,6 +123,27 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   late final ChatThreadController _chatController;
   late String _documentPath;
   late String? _initialMessageText;
+
+  String? _normalizeSelectedThreadPath(String? path) {
+    final normalizedPath = path?.trim();
+    if (normalizedPath == null || normalizedPath.isEmpty) {
+      return null;
+    }
+    return normalizedPath;
+  }
+
+  void _clearCreatedThreadPathIfStale() {
+    final createdThreadPath = _createdThreadPath;
+    if (createdThreadPath == null) {
+      return;
+    }
+
+    final selectedThreadPath = _normalizeSelectedThreadPath(widget.selectedThreadPath);
+    if (selectedThreadPath != createdThreadPath) {
+      _createdThreadPath = null;
+    }
+  }
+
   @override
   void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -135,6 +157,18 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     } else if (oldWidget.initialMessageText != widget.initialMessageText &&
         widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer) {
       _initialMessageText = widget.initialMessageText;
+    }
+
+    if (oldWidget.threadDisplayMode != widget.threadDisplayMode ||
+        oldWidget.agentName != widget.agentName ||
+        oldWidget.client != widget.client ||
+        oldWidget.newThreadResetVersion != widget.newThreadResetVersion) {
+      _createdThreadPath = null;
+      return;
+    }
+
+    if (oldWidget.selectedThreadPath != widget.selectedThreadPath) {
+      _clearCreatedThreadPathIfStale();
     }
   }
 
@@ -182,9 +216,15 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   void _onThreadPathChanged(String? path) {
+    final normalizedPath = _normalizeSelectedThreadPath(path);
+    if (_createdThreadPath != normalizedPath) {
+      setState(() {
+        _createdThreadPath = normalizedPath;
+      });
+    }
     final onSelectedThreadPathChanged = widget.onSelectedThreadPathChanged;
     if (onSelectedThreadPathChanged != null) {
-      onSelectedThreadPathChanged(path);
+      onSelectedThreadPathChanged(normalizedPath);
     }
   }
 
@@ -241,8 +281,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   Widget _buildDefaultNewThreadContent(BuildContext context, {required String agentName}) {
-    final threadPath = widget.selectedThreadPath;
-    final threadContent = threadPath == null
+    final threadPath = _normalizeSelectedThreadPath(widget.selectedThreadPath);
+    final isCreatedThreadSelected = threadPath != null && threadPath == _createdThreadPath;
+    final threadContent = threadPath == null || isCreatedThreadSelected
         ? ma.NewChatThread(
             key: ValueKey("new-thread-$agentName-${widget.newThreadResetVersion}"),
             room: widget.client,
