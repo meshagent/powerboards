@@ -473,11 +473,14 @@ class _InviteUserMobileContextMenuState extends State<_InviteUserMobileContextMe
     final baseAnchor = widget.editableTextState.contextMenuAnchors.primaryAnchor;
     final belowFieldAnchor = Offset(baseAnchor.dx, baseAnchor.dy + fieldHeight + 12.0);
 
-    return FocusScope(
-      canRequestFocus: false,
-      child: AdaptiveTextSelectionToolbar.buttonItems(
-        anchors: TextSelectionToolbarAnchors(primaryAnchor: belowFieldAnchor, secondaryAnchor: belowFieldAnchor),
-        buttonItems: buttonItems,
+    return TextFieldTapRegion(
+      groupId: widget.editableTextState.widget.groupId,
+      child: FocusScope(
+        canRequestFocus: false,
+        child: AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: TextSelectionToolbarAnchors(primaryAnchor: belowFieldAnchor, secondaryAnchor: belowFieldAnchor),
+          buttonItems: buttonItems,
+        ),
       ),
     );
   }

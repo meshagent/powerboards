@@ -15,7 +15,10 @@ bool powerboardsUsesSystemAdaptiveTextSelectionToolbar() {
 
 Widget powerboardsAdaptiveInputContextMenuBuilder(BuildContext context, EditableTextState editableTextState) {
   if (powerboardsUsesSystemAdaptiveTextSelectionToolbar()) {
-    return AdaptiveTextSelectionToolbar.editableText(editableTextState: editableTextState);
+    return TextFieldTapRegion(
+      groupId: editableTextState.widget.groupId,
+      child: AdaptiveTextSelectionToolbar.editableText(editableTextState: editableTextState),
+    );
   }
 
   return ShadInputState.defaultContextMenuBuilder(context, editableTextState);
