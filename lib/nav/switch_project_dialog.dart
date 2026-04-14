@@ -66,26 +66,42 @@ class SwitchProjectDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
     final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(context);
-    final actions = [
-      ShadButton.outline(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Cancel'),
-      ),
-      ShadButton(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        onPressed: () {
-          Navigator.of(context).pop();
-          onNewProject();
-        },
-        child: const Text('New Project'),
-      ),
-    ];
+    final actions = isMobile
+        ? [
+            ShadButton.outline(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ShadButton(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              onPressed: () {
+                Navigator.of(context).pop();
+                onNewProject();
+              },
+              child: const Text('New Project'),
+            ),
+          ]
+        : [
+            ShadButton.outline(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ShadButton(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              onPressed: () {
+                Navigator.of(context).pop();
+                onNewProject();
+              },
+              child: const Text('New Project'),
+            ),
+          ];
 
     return PowerboardsShadDialog.listPicker(
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
-      constraints: isMobile ? powerboardsCompactDesktopDialogConstraints : const BoxConstraints(maxWidth: 421),
+      constraints: isMobile ? const BoxConstraints(maxWidth: 421) : const BoxConstraints(maxWidth: 400),
       actions: actions,
       child: SignalBuilder(
         builder: (context, _) {
@@ -115,7 +131,7 @@ class SwitchProjectDialog extends StatelessWidget {
                     ),
                   )
                 : Padding(
-                    padding: powerboardsDialogScrollableListPadding,
+                    padding: powerboardsDialogScrollViewportPadding,
                     child: Align(
                       alignment: Alignment.topCenter,
                       child: ConstrainedBox(

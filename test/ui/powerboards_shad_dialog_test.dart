@@ -990,4 +990,36 @@ void main() {
     expect(editableText.autofocus, isFalse);
     expect(find.text('alpha@example.com'), findsNothing);
   });
+
+  testWidgets('visible autocomplete under Offstage(offstage: false) still opens suggestions', (tester) async {
+    final controller = MultiSelectController();
+    final textController = TextEditingController(text: 'a');
+
+    addTearDown(controller.dispose);
+    addTearDown(textController.dispose);
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Offstage(
+          offstage: false,
+          child: MultiSelectAutocomplete(
+            controller: controller,
+            textController: textController,
+            autofocus: true,
+            minimumSearchLength: 1,
+            debounceDuration: const Duration(milliseconds: 1),
+            placeholder: const Text('Type an email'),
+            search: (_) async => const ['alpha@example.com'],
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pumpAndSettle();
+
+    final editableText = tester.widget<EditableText>(find.byType(EditableText));
+
+    expect(editableText.autofocus, isTrue);
+    expect(find.text('alpha@example.com'), findsOneWidget);
+  });
 }

@@ -335,7 +335,8 @@ class _MultiSelectAutocompleteState extends State<MultiSelectAutocomplete> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    final nextIsOffstageMeasurement = context.findAncestorWidgetOfExactType<Offstage>() != null;
+    final nearestOffstage = context.findAncestorWidgetOfExactType<Offstage>();
+    final nextIsOffstageMeasurement = nearestOffstage?.offstage ?? false;
     if (_isOffstageMeasurement == nextIsOffstageMeasurement) {
       return;
     }
