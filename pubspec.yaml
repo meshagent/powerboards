@@ -84,6 +84,7 @@ dependencies:
   file_icon: ^1.0.0
   re_highlight: ^0.0.3
   re_editor: ^0.7.0
+  receive_sharing_intent: ^1.8.1
   flutter_solidart: ^2.5.0
   flutter_image_compress: ^2.4.0
 

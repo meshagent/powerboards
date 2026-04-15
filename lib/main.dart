@@ -29,6 +29,7 @@ import 'meshagent/meshagent.dart';
 import 'nav/chrome_visibility.dart';
 import 'nav/nav.dart';
 import 'theme/theme.dart';
+import 'ui/incoming_share_watcher.dart';
 import 'ui/link_listener.dart';
 import 'ui/meeting_view.dart';
 import 'ui/powerboards_shad_dialog.dart';
@@ -189,7 +190,8 @@ Future<void> startApp() async {
 
   MeshagentConfig.current = MeshagentConfig.fromEnvironment();
 
-  final uri = kIsWeb ? null : await appLinks.getInitialLink();
+  final initialLink = kIsWeb ? null : await appLinks.getInitialLink();
+  final uri = initialLink != null && isShareMediaUri(initialLink) ? null : initialLink;
   final screenshotController = ScreenshotController();
 
   runApp(
@@ -298,10 +300,15 @@ class MyApp extends StatelessWidget {
             data: media.copyWith(textScaler: const TextScaler.linear(textScale)),
             child: DefaultTextStyle(
               style: GoogleFonts.inter(fontSize: 14),
-              child: _RootProviders(
-                child: LinksWatcher(
-                  navigatorKey: configuration.routerDelegate.navigatorKey,
-                  child: TopBanner(child: child!),
+              child: ShadToaster(
+                child: _RootProviders(
+                  child: IncomingShareWatcher(
+                    navigatorKey: configuration.routerDelegate.navigatorKey,
+                    child: LinksWatcher(
+                      navigatorKey: configuration.routerDelegate.navigatorKey,
+                      child: TopBanner(child: child!),
+                    ),
+                  ),
                 ),
               ),
             ),

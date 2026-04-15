@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:path/path.dart' as p;
 import 'package:powerboards/meshagent/path.dart';
 
 class FileUploadHelper {
@@ -61,6 +62,21 @@ class FileUploadHelper {
     }
 
     await onUpload(Stream<Uint8List>.value(uploadBytes), uploadName, uploadBytes.length);
+  }
+
+  static Future<void> uploadFileSource({
+    required FileSource source,
+    required String path,
+    required Future<void> Function(Stream<Uint8List> stream, String fileName, int size) onUpload,
+  }) async {
+    await upload(
+      stream: source.read(),
+      size: await source.length() ?? 0,
+      name: source.name,
+      extension: source.extension,
+      path: path,
+      onUpload: onUpload,
+    );
   }
 
   static Future<void> pickAndUploadFiles({
@@ -179,4 +195,27 @@ class XFileSource implements FileSource {
   Stream<Uint8List> read() {
     return file.openRead();
   }
+}
+
+class LocalFileSource implements FileSource {
+  LocalFileSource(this.path) : _file = XFile(path);
+
+  final String path;
+  final XFile _file;
+
+  @override
+  String get name => p.basename(path);
+
+  @override
+  String? get extension {
+    final idx = name.lastIndexOf('.');
+    if (idx <= 0) return null;
+    return name.substring(idx + 1).toLowerCase();
+  }
+
+  @override
+  Future<int?> length() => _file.length();
+
+  @override
+  Stream<Uint8List> read() => _file.openRead();
 }
