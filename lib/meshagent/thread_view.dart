@@ -23,6 +23,7 @@ import 'package:meshagent_flutter_shadcn/chat_bubble_markdown_config.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/agent_participants.dart';
+import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
@@ -1407,7 +1408,7 @@ Widget buildTools(
             availableRooms: () => listMeshagentRooms(projectId),
             connectRoomClient: connectRoomClient,
           )
-        : ChatThreadAttachButton(
+        : PowerboardsDesktopChatAttachButton(
             alwaysShowAttachFiles: true,
             controller: controller,
             availableRooms: () => listMeshagentRooms(projectId),

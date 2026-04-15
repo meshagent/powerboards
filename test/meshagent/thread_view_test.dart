@@ -6,6 +6,7 @@ import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/new_chat_thread.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
+import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -119,11 +120,11 @@ void main() {
 
     await pumpToolArea(const Size(390, 844));
     expect(find.byType(PowerboardsMobileChatAttachButton), findsOneWidget);
-    expect(find.byType(ChatThreadAttachButton), findsNothing);
+    expect(find.byType(PowerboardsDesktopChatAttachButton), findsNothing);
 
     await pumpToolArea(const Size(1024, 768));
     expect(find.byType(PowerboardsMobileChatAttachButton), findsNothing);
-    expect(find.byType(ChatThreadAttachButton), findsOneWidget);
+    expect(find.byType(PowerboardsDesktopChatAttachButton), findsOneWidget);
   });
 
   testWidgets('mobile attach chooser uses the migrated flow dialog list without MCP', (tester) async {

@@ -14,6 +14,12 @@ const EdgeInsets powerboardsFileListRowPadding = EdgeInsets.fromLTRB(
   powerboardsMobileSecondaryRowTrailingInset,
   14,
 );
+const EdgeInsets powerboardsCompactFileListRowPadding = EdgeInsets.fromLTRB(
+  powerboardsMobileSecondaryRowLeadingInset / 2,
+  14,
+  powerboardsMobileSecondaryRowTrailingInset / 2,
+  14,
+);
 const double powerboardsFileListLeadingIconSize = 34.0;
 const double powerboardsFileListLeadingGlyphSize = 24.0;
 const double powerboardsFileListRowGap = 12.0;
@@ -54,6 +60,14 @@ Widget buildPowerboardsFileListIcon(BuildContext context, StorageEntry entry) {
 }
 
 Widget buildPowerboardsFileBrowserTitleOnlyRow(BuildContext context, FileBrowserRowViewModel row) {
+  return _buildPowerboardsFileBrowserTitleOnlyRow(context, row, padding: powerboardsFileListRowPadding);
+}
+
+Widget buildPowerboardsCompactFileBrowserTitleOnlyRow(BuildContext context, FileBrowserRowViewModel row) {
+  return _buildPowerboardsFileBrowserTitleOnlyRow(context, row, padding: powerboardsCompactFileListRowPadding);
+}
+
+Widget _buildPowerboardsFileBrowserTitleOnlyRow(BuildContext context, FileBrowserRowViewModel row, {required EdgeInsets padding}) {
   final colorScheme = ShadTheme.of(context).colorScheme;
   final checkboxForeground = colorScheme.primaryForeground;
   final disabledFolder = row.entry.isFolder && !row.canActivate;
@@ -85,7 +99,7 @@ Widget buildPowerboardsFileBrowserTitleOnlyRow(BuildContext context, FileBrowser
     child: InkWell(
       onTap: row.canActivate ? row.onPressed : null,
       child: Padding(
-        padding: powerboardsFileListRowPadding,
+        padding: padding,
         child: Opacity(
           opacity: disabledFolder ? 0.5 : 1,
           child: Row(
