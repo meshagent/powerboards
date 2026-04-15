@@ -11,6 +11,7 @@ import 'package:meshagent/client.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/ui/pane_empty_state.dart';
 
 class EmptyRooms extends StatelessWidget {
   const EmptyRooms({
@@ -198,6 +199,26 @@ class BalanceLowWarning extends StatelessWidget {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+
+    if (isMobile) {
+      final mobileDescription = switch (role) {
+        ProjectRole.admin when kIsWeb => 'Your credit balance is low. Please purchase credits to continue using Powerboards features.',
+        ProjectRole.admin => 'Your credit balance is low. Please use web browser to purchase more credits.',
+        _ => 'Your credit balance is low. Please contact an admin to resolve this issue.',
+      };
+
+      return PaneEmptyState(
+        title: 'Low balance',
+        description: mobileDescription,
+        icon: Container(
+          width: 64.0,
+          height: 64.0,
+          decoration: BoxDecoration(color: cs.destructive, borderRadius: BorderRadius.circular(12)),
+          child: Icon(LucideIcons.triangleAlert, size: 28.0, color: cs.destructiveForeground),
+        ),
+      );
+    }
 
     return Center(
       child: ConstrainedBox(

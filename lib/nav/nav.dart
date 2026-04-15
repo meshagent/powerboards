@@ -498,6 +498,7 @@ class _NavState extends State<Nav> {
     final theme = ShadTheme.of(context);
     final tt = theme.textTheme;
     final cs = theme.colorScheme;
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
     if (userRole == null) {
       return SizedBox.shrink();
@@ -508,23 +509,25 @@ class _NavState extends State<Nav> {
       color: statusError,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
-        child: Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(
-                text: "Out of Credit - ",
-                style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
-              ),
+        child: isMobile
+            ? _buildMobileBalanceBannerText(context)
+            : Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: "Out of Credit - ",
+                      style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
+                    ),
 
-              if (userRole == ProjectRole.admin)
-                TextSpan(text: "Add more credits to re-enable rooms.")
-              else
-                TextSpan(text: "Contact your project admin to add more credits."),
-            ],
-          ),
-          style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
-          textAlign: TextAlign.center,
-        ),
+                    if (userRole == ProjectRole.admin)
+                      TextSpan(text: "Add more credits to re-enable rooms.")
+                    else
+                      TextSpan(text: "Contact your project admin to add more credits."),
+                  ],
+                ),
+                style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
       ),
     );
   }
@@ -533,34 +536,60 @@ class _NavState extends State<Nav> {
     final theme = ShadTheme.of(context);
     final tt = theme.textTheme;
     final cs = theme.colorScheme;
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
 
     return Container(
       constraints: const BoxConstraints(minWidth: double.infinity, minHeight: 48),
       color: statusError,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 16,
-          children: [
-            Text.rich(
-              TextSpan(
+        child: isMobile
+            ? _buildMobileBalanceBannerText(context)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 16,
                 children: [
-                  TextSpan(
-                    text: "Low Balance - ",
-                    style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
-                  ),
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: "Low Balance - ",
+                          style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
+                        ),
 
-                  TextSpan(text: "Add more credits to avoid service interruption."),
+                        TextSpan(text: "Add more credits to avoid service interruption."),
+                      ],
+                    ),
+                    style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
+                    textAlign: TextAlign.center,
+                  ),
+                  ShadButton(key: const Key('add-credits-button'), onPressed: onAddCredits, child: const Text("Add Credits")),
                 ],
               ),
-              style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
-              textAlign: TextAlign.center,
-            ),
-            ShadButton(key: const Key('add-credits-button'), onPressed: onAddCredits, child: const Text("Add Credits")),
-          ],
-        ),
       ),
+    );
+  }
+
+  Widget _buildMobileBalanceBannerText(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final tt = theme.textTheme;
+    final cs = theme.colorScheme;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          "Low balance",
+          style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          "Add more credits to avoid service interruption.",
+          style: tt.small.copyWith(fontSize: 12, color: cs.destructiveForeground, height: 1.5),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
