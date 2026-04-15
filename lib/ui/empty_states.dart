@@ -7,6 +7,7 @@ import 'package:localstorage/localstorage.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent/client.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -198,19 +199,17 @@ class BalanceLowWarning extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
-    final tt = theme.textTheme;
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final desktopDescription = switch (role) {
+      ProjectRole.admin when kIsWeb => 'Your credit balance is low. Please purchase credits to continue using Powerboards features.',
+      ProjectRole.admin => 'Your credit balance is low. Please use web browser to purchase more credits.',
+      _ => 'Your credit balance is low. Please contact an admin to resolve this issue.',
+    };
 
     if (isMobile) {
-      final mobileDescription = switch (role) {
-        ProjectRole.admin when kIsWeb => 'Your credit balance is low. Please purchase credits to continue using Powerboards features.',
-        ProjectRole.admin => 'Your credit balance is low. Please use web browser to purchase more credits.',
-        _ => 'Your credit balance is low. Please contact an admin to resolve this issue.',
-      };
-
       return PaneEmptyState(
         title: 'Low balance',
-        description: mobileDescription,
+        description: desktopDescription,
         icon: Container(
           width: 64.0,
           height: 64.0,
@@ -224,43 +223,34 @@ class BalanceLowWarning extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Padding(
-          padding: const .all(20),
-          child: ShadCard(
-            child: Column(
-              mainAxisSize: .min,
-              children: [
-                Container(
-                  width: 64.0,
-                  height: 64.0,
-                  decoration: BoxDecoration(color: cs.destructiveForeground, borderRadius: .circular(12)),
-                  child: Icon(LucideIcons.triangleAlert, size: 28.0, color: cs.destructive),
-                ),
-                const SizedBox(height: 16),
-
-                // Title & description
-                Text("Low Credit Balance", style: tt.h4, textAlign: .center),
-                const SizedBox(height: 8),
-
-                if (role == ProjectRole.admin && kIsWeb)
-                  Text(
-                    "Your credit balance is low. Please purchase credits to continue using Powerboards features.",
-                    style: tt.muted,
-                    textAlign: .center,
-                  )
-                else if (role == ProjectRole.admin)
-                  Text("Your credit balance is low. Please use web browser to purchase more credits.", style: tt.muted, textAlign: .center)
-                else
-                  Text("Your credit balance is low. Please contact an admin to resolve this issue.", style: tt.muted, textAlign: .center),
-                if (role == ProjectRole.admin && kIsWeb) ...[
-                  const SizedBox(height: 20),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    alignment: .center,
-                    children: [ShadButton(onPressed: onAddCredits, child: Text("Add Credits"))],
+          padding: const EdgeInsets.all(20),
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: cs.background, borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64.0,
+                    height: 64.0,
+                    decoration: BoxDecoration(color: cs.destructive, borderRadius: BorderRadius.circular(12)),
+                    child: Icon(LucideIcons.triangleAlert, size: 28.0, color: cs.destructiveForeground),
                   ),
+                  const SizedBox(height: 16),
+                  const ChatThreadEmptyStateContent(title: "Low balance"),
+                  const SizedBox(height: 8),
+                  Text(
+                    desktopDescription,
+                    style: theme.textTheme.p.copyWith(height: 24 / 16),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (role == ProjectRole.admin && kIsWeb) ...[
+                    const SizedBox(height: 24),
+                    ShadButton(onPressed: onAddCredits, child: const Text("Add Credits")),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

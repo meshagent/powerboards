@@ -298,6 +298,8 @@ class _NavState extends State<Nav> {
   }
 
   Widget desktopBody(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
+    final cs = ShadTheme.of(context).colorScheme;
+
     if (userRole == ProjectRole.none) {
       return forbiddenView(context);
     }
@@ -307,7 +309,10 @@ class _NavState extends State<Nav> {
         return const Center(child: CircularProgressIndicator());
       }
 
-      return BalanceLowWarning(onAddCredits: onAddCredits, role: userRole);
+      return ColoredBox(
+        color: cs.card,
+        child: BalanceLowWarning(onAddCredits: onAddCredits, role: userRole),
+      );
     }
 
     return Container(key: childKey, child: widget.child);
