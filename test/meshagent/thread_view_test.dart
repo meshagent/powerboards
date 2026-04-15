@@ -154,4 +154,54 @@ void main() {
     expect(find.text('Add from room...'), findsOneWidget);
     expect(find.text('MCP'), findsNothing);
   });
+
+  testWidgets('mobile thread empty state keeps descriptive copy when keyboard is down', (tester) async {
+    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.viewInsets = FakeViewPadding.zero;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(390, 844)),
+          child: SizedBox.expand(child: _ThreadViewHarness(room: room)),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Start a new thread'), findsOneWidget);
+    expect(find.text('Connect with this agent and your team'), findsOneWidget);
+  });
+
+  testWidgets('mobile thread empty state uses title-only compact copy when keyboard is up', (tester) async {
+    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(390, 844)),
+          child: SizedBox.expand(child: _ThreadViewHarness(room: room)),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Start a new thread'), findsOneWidget);
+    expect(find.text('Connect with this agent and your team'), findsNothing);
+  });
 }

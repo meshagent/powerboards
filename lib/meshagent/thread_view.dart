@@ -99,7 +99,15 @@ class MeshagentThreadView extends StatefulWidget {
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
+  static const double _mobileThreadEmptyStateWidthMax = 600;
   String? _createdThreadPath;
+
+  bool _usesCompactMobileThreadEmptyState(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final view = View.of(context);
+    final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+    return mediaQuery.size.width < _mobileThreadEmptyStateWidthMax && bottomInset > 0;
+  }
 
   String _chatPlaceholderText(String? agentName) {
     final normalizedAgentName = agentName?.trim();
@@ -110,10 +118,19 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     return "Type a message or @$normalizedAgentName";
   }
 
-  Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description}) {
+  Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description, required bool compact}) {
     final content = Padding(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-      child: ChatThreadEmptyStateContent(title: title, description: description),
+      child: compact
+          ? ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: shadForeground),
+              ),
+            )
+          : ChatThreadEmptyStateContent(title: title, description: description),
     );
 
     final verticalOffset = widget.newThreadEmptyStateVerticalOffset;
@@ -238,7 +255,22 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
   }
 
-  Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
+  Widget _buildThread({
+    required BuildContext context,
+    required String path,
+    required String? initialMessageText,
+    Widget Function(BuildContext)? loadingBuilder,
+  }) {
+    final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
+    final resolvedEmptyState =
+        widget.emptyState ??
+        (usesMobileEmptyState
+            ? Builder(
+                builder: (context) =>
+                    _buildThreadEmptyState(context, title: "Chat to get started", description: _threadEmptyDescription, compact: true),
+              )
+            : null);
+
     return IconTheme(
       data: const IconThemeData(size: 14),
       child: ChatThreadLoader(
@@ -266,8 +298,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
               buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
           agentName: widget.agentName,
           emptyStateTitle: "Chat to get started",
-          emptyStateDescription: _threadEmptyDescription,
-          emptyState: widget.emptyState,
+          emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
+          emptyState: resolvedEmptyState,
           onVisibleMessagesEmpty: widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
               ? () => _onVisibleMessagesEmpty(path)
               : null,
@@ -287,6 +319,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   Widget _buildDefaultNewThreadContent(BuildContext context, {required String agentName}) {
+    final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
     final threadPath = _normalizeSelectedThreadPath(widget.selectedThreadPath);
     final isCreatedThreadSelected = threadPath != null && threadPath == _createdThreadPath;
     final threadContent = threadPath == null || isCreatedThreadSelected
@@ -298,7 +331,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             emptyState:
                 widget.emptyState ??
                 Builder(
-                  builder: (context) => _buildThreadEmptyState(context, title: "Start a new thread", description: _threadEmptyDescription),
+                  builder: (context) => _buildThreadEmptyState(
+                    context,
+                    title: "Start a new thread",
+                    description: _threadEmptyDescription,
+                    compact: usesMobileEmptyState,
+                  ),
                 ),
             controller: _chatController,
             onThreadPathChanged: _onThreadPathChanged,
@@ -306,9 +344,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                 buildTools(context, widget.projectId, widget.client, agentName, controller, snapshot),
             inputContextMenuBuilder: powerboardsAdaptiveInputContextMenuBuilder,
             inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
-            builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
+            builder: (context, path, loadingBuilder) =>
+                _buildThread(context: context, path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
           )
-        : _buildThread(path: threadPath, initialMessageText: null);
+        : _buildThread(context: context, path: threadPath, initialMessageText: null);
 
     return threadContent;
   }
@@ -326,7 +365,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return _buildDefaultNewThreadContent(context, agentName: agentName);
     }
 
-    return _buildThread(path: _documentPath, initialMessageText: _initialMessageText);
+    return _buildThread(context: context, path: _documentPath, initialMessageText: _initialMessageText);
   }
 }
 
