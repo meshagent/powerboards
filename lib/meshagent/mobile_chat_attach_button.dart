@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
+import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -29,6 +30,8 @@ class PowerboardsMobileChatAttachButton extends StatefulWidget {
 }
 
 class _PowerboardsMobileChatAttachButtonState extends State<PowerboardsMobileChatAttachButton> {
+  static const double _flowDialogBodyHorizontalInset = 24.0;
+
   Future<String> _resolveImportedPath(String requestedPath) async {
     String candidate = requestedPath.split('/').last;
     final dotIndex = candidate.lastIndexOf('.');
@@ -143,10 +146,12 @@ class _PowerboardsMobileChatAttachButtonState extends State<PowerboardsMobileCha
                 },
                 child: const Text('Cancel'),
               ),
-              ShadButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop(List<String>.from(picked));
-                },
+              (picked.isEmpty ? ShadButton.secondary : ShadButton.new)(
+                onPressed: picked.isEmpty
+                    ? null
+                    : () {
+                        Navigator.of(dialogContext).pop(List<String>.from(picked));
+                      },
                 child: const Text('Add'),
               ),
             ],
@@ -165,52 +170,55 @@ class _PowerboardsMobileChatAttachButtonState extends State<PowerboardsMobileCha
                         children: [
                           if (roomOptions.length > 1)
                             Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: ShadSelect<String>(
-                                  initialValue: selectedRoomName,
-                                  selectedOptionBuilder: (selectContext, value) => Text(value),
-                                  options: [for (final option in roomOptions) ShadOption<String>(value: option, child: Text(option))],
-                                  onChanged: (value) async {
-                                    if (value == null || value == selectedRoomName || widget.connectRoomClient == null) {
-                                      return;
-                                    }
+                              padding: const EdgeInsets.fromLTRB(0, 4, 0, 16),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: ShadSelect<String>(
+                                    initialValue: selectedRoomName,
+                                    selectedOptionBuilder: (selectContext, value) => Text(value),
+                                    options: [for (final option in roomOptions) ShadOption<String>(value: option, child: Text(option))],
+                                    onChanged: (value) async {
+                                      if (value == null || value == selectedRoomName || widget.connectRoomClient == null) {
+                                        return;
+                                      }
 
-                                    setDialogState(() {
-                                      resolvingRoom = true;
-                                      resolveError = false;
-                                    });
-
-                                    RoomClient? nextRoomClient;
-                                    if (value == currentRoomName) {
-                                      nextRoomClient = widget.controller.room;
-                                    } else {
-                                      try {
-                                        nextRoomClient = await widget.connectRoomClient!(value);
-                                      } catch (_) {}
-                                    }
-
-                                    if (nextRoomClient == null) {
                                       setDialogState(() {
-                                        resolvingRoom = false;
-                                        resolveError = true;
+                                        resolvingRoom = true;
+                                        resolveError = false;
                                       });
-                                      return;
-                                    }
 
-                                    if (!identical(widget.controller.room, selectedRoomClient) &&
-                                        !identical(nextRoomClient, selectedRoomClient)) {
-                                      selectedRoomClient.dispose();
-                                    }
+                                      RoomClient? nextRoomClient;
+                                      if (value == currentRoomName) {
+                                        nextRoomClient = widget.controller.room;
+                                      } else {
+                                        try {
+                                          nextRoomClient = await widget.connectRoomClient!(value);
+                                        } catch (_) {}
+                                      }
 
-                                    setDialogState(() {
-                                      selectedRoomName = value;
-                                      selectedRoomClient = nextRoomClient!;
-                                      picked = [];
-                                      resolvingRoom = false;
-                                    });
-                                  },
+                                      if (nextRoomClient == null) {
+                                        setDialogState(() {
+                                          resolvingRoom = false;
+                                          resolveError = true;
+                                        });
+                                        return;
+                                      }
+
+                                      if (!identical(widget.controller.room, selectedRoomClient) &&
+                                          !identical(nextRoomClient, selectedRoomClient)) {
+                                        selectedRoomClient.dispose();
+                                      }
+
+                                      setDialogState(() {
+                                        selectedRoomName = value;
+                                        selectedRoomClient = nextRoomClient!;
+                                        picked = [];
+                                        resolvingRoom = false;
+                                      });
+                                    },
+                                  ),
                                 ),
                               ),
                             ),
@@ -219,15 +227,40 @@ class _PowerboardsMobileChatAttachButtonState extends State<PowerboardsMobileCha
                                 ? const Center(child: CircularProgressIndicator())
                                 : resolveError
                                 ? const Center(child: Text('Room failed to connect'))
-                                : ShadCard(
-                                    child: FileBrowser(
-                                      key: ValueKey(selectedRoomName),
-                                      onSelectionChanged: (selection) {
-                                        picked = selection;
-                                      },
-                                      room: selectedRoomClient,
-                                      multiple: true,
-                                    ),
+                                : LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final usesNativeMobileLayout = powerboardsUsesNativeMobileDialogLayout(dialogContext);
+                                      final browser = FileBrowser(
+                                        key: ValueKey(selectedRoomName),
+                                        onSelectionChanged: (selection) {
+                                          setDialogState(() {
+                                            picked = selection;
+                                          });
+                                        },
+                                        room: selectedRoomClient,
+                                        multiple: true,
+                                        headerBuilder: (context, model) => buildPowerboardsFileBrowserInsetHeader(
+                                          context,
+                                          model,
+                                          horizontalPadding: _flowDialogBodyHorizontalInset,
+                                        ),
+                                        rowBuilder: buildPowerboardsFileBrowserTitleOnlyRow,
+                                        separatorBuilder: buildPowerboardsFileListDivider,
+                                        emptyBuilder: buildPowerboardsFileBrowserEmptyState,
+                                      );
+
+                                      if (!usesNativeMobileLayout) {
+                                        return browser;
+                                      }
+
+                                      final expandedWidth = constraints.maxWidth + (_flowDialogBodyHorizontalInset * 2);
+                                      return OverflowBox(
+                                        alignment: Alignment.topCenter,
+                                        minWidth: expandedWidth,
+                                        maxWidth: expandedWidth,
+                                        child: SizedBox(width: expandedWidth, child: browser),
+                                      );
+                                    },
                                   ),
                           ),
                         ],

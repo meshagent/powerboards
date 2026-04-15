@@ -12,7 +12,6 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:file_icon/file_icon.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/document.dart';
@@ -27,6 +26,7 @@ import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
+import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
@@ -2578,8 +2578,8 @@ class FileTableView extends StatefulWidget {
 }
 
 class _FileTableViewState extends State<FileTableView> {
-  static TextStyle dataStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x22, 0x22, 0x22));
-  static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x66, 0x66, 0x66));
+  static TextStyle get dataStyle => powerboardsFileListTitleStyle();
+  static TextStyle get headerStyle => powerboardsFileListMetadataStyle();
   static const List<String> _sizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
@@ -2692,33 +2692,8 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
-  IconData? _iconDataFor(StorageEntry entry) {
-    if (entry.isFolder) return LucideIcons.folder;
-    if (entry.name.endsWith('presentation')) return LucideIcons.presentation;
-    if (entry.name.endsWith('document')) return LucideIcons.fileText;
-    if (entry.name.endsWith('gallery')) return LucideIcons.image;
-
-    return null;
-  }
-
   Widget _getIcon(StorageEntry entry) {
-    final iconData = _iconDataFor(entry);
-    const iconSize = 34.0;
-    const paddedIconSize = 24.0;
-
-    return SizedBox(
-      width: iconSize,
-      height: iconSize,
-      child: iconData != null
-          ? Center(
-              child: Icon(
-                iconData,
-                size: paddedIconSize,
-                color: entry.isFolder ? ShadTheme.of(context).colorScheme.secondaryForeground : null,
-              ),
-            )
-          : FileIcon(entry.name, size: iconSize),
-    );
+    return buildPowerboardsFileListIcon(context, entry);
   }
 
   Widget _getLabel(String text) {
@@ -2924,12 +2899,7 @@ class _FileTableViewState extends State<FileTableView> {
                   child: InkWell(
                     onTap: () => widget.onOpen(fullPath, entry.isFolder),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        powerboardsMobileSecondaryRowLeadingInset,
-                        14,
-                        powerboardsMobileSecondaryRowTrailingInset,
-                        14,
-                      ),
+                      padding: powerboardsFileListRowPadding,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
