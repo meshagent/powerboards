@@ -27,6 +27,15 @@ double _desktopTaskDialogHeight(BoxConstraints constraints, {required double pre
   return (maxHeight - verticalInset).clamp(0.0, preferredHeight).toDouble();
 }
 
+BoxConstraints? _desktopInstallServiceDialogConstraints(BuildContext context, BoxConstraints constraints) {
+  if (powerboardsUsesNativeMobileDialogLayout(context)) {
+    return null;
+  }
+
+  final height = _desktopTaskDialogHeight(constraints, preferredHeight: 620.0, verticalInset: 140.0);
+  return BoxConstraints(maxWidth: 800.0, minHeight: height, maxHeight: height);
+}
+
 class InstallServiceDialog extends StatelessWidget {
   const InstallServiceDialog({
     super.key,
@@ -47,21 +56,29 @@ class InstallServiceDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = _desktopTaskDialogHeight(constraints, preferredHeight: 620.0, verticalInset: 140.0);
+        final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
 
         return PowerboardsShadDialog.task(
           scrollable: false,
-          constraints: BoxConstraints(maxWidth: 800.0, minHeight: height, maxHeight: height),
+          constraints: _desktopInstallServiceDialogConstraints(context, constraints),
           title: Text(type == ServiceType.mcp ? "Add MCP Service" : "Install"),
-          child: SizedBox.expand(
-            child: AgentInstaller(
-              template: template,
-              type: type,
-              initialProjectId: projectId,
-              initialRoomName: roomName,
-              onInstalled: onInstalled,
-            ),
-          ),
+          child: isMobile
+              ? AgentInstaller(
+                  template: template,
+                  type: type,
+                  initialProjectId: projectId,
+                  initialRoomName: roomName,
+                  onInstalled: onInstalled,
+                )
+              : SizedBox.expand(
+                  child: AgentInstaller(
+                    template: template,
+                    type: type,
+                    initialProjectId: projectId,
+                    initialRoomName: roomName,
+                    onInstalled: onInstalled,
+                  ),
+                ),
         );
       },
     );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_solidart/flutter_solidart.dart';
+import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/ui/powerboards_mobile_field_suggestion_menu.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:powerboards/widgets/multi_select_autocomplete.dart';
@@ -612,6 +614,21 @@ void main() {
 
     expect(_flowDialogSurface(), findsOneWidget);
     expect(find.text('Adjust room access.'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile install service dialog renders without layout exceptions', (tester) async {
+    final originalAssertSetting = SolidartConfig.assertSignalBuilderWithoutDependencies;
+    SolidartConfig.assertSignalBuilderWithoutDependencies = false;
+    addTearDown(() {
+      SolidartConfig.assertSignalBuilderWithoutDependencies = originalAssertSetting;
+    });
+
+    await _pumpDialog(tester, const InstallServiceDialog(projectId: 'project-id', roomName: 'room-name'), resizeToAvoidBottomInset: false);
+
+    expect(_flowDialogSurface(), findsOneWidget);
+    expect(find.text('Install'), findsOneWidget);
+    expect(find.text('Enter the URL of an agent or MCP server'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
