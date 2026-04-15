@@ -36,7 +36,7 @@ BoxConstraints? _desktopInstallServiceDialogConstraints(BuildContext context, Bo
   return BoxConstraints(maxWidth: 800.0, minHeight: height, maxHeight: height);
 }
 
-class InstallServiceDialog extends StatelessWidget {
+class InstallServiceDialog extends StatefulWidget {
   const InstallServiceDialog({
     super.key,
     this.template,
@@ -53,32 +53,71 @@ class InstallServiceDialog extends StatelessWidget {
   final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
 
   @override
+  State<InstallServiceDialog> createState() => _InstallServiceDialogState();
+}
+
+class _InstallServiceDialogState extends State<InstallServiceDialog> {
+  final ValueNotifier<PowerboardsDialogChrome> _mobileChrome = ValueNotifier((
+    signature: 'initial',
+    actions: const <Widget>[],
+    onBack: null,
+  ));
+
+  @override
+  void dispose() {
+    _mobileChrome.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+        final installer = AgentInstaller(
+          template: widget.template,
+          type: widget.type,
+          initialProjectId: widget.projectId,
+          initialRoomName: widget.roomName,
+          onInstalled: widget.onInstalled,
+          mobileDialogChrome: isMobile ? _mobileChrome : null,
+        );
 
-        return PowerboardsShadDialog.task(
-          scrollable: false,
-          constraints: _desktopInstallServiceDialogConstraints(context, constraints),
-          title: Text(type == ServiceType.mcp ? "Add MCP Service" : "Install"),
-          child: isMobile
-              ? AgentInstaller(
-                  template: template,
-                  type: type,
-                  initialProjectId: projectId,
-                  initialRoomName: roomName,
-                  onInstalled: onInstalled,
-                )
-              : SizedBox.expand(
-                  child: AgentInstaller(
-                    template: template,
-                    type: type,
-                    initialProjectId: projectId,
-                    initialRoomName: roomName,
-                    onInstalled: onInstalled,
-                  ),
-                ),
+        if (!isMobile) {
+          return PowerboardsShadDialog(
+            scrollable: false,
+            constraints: _desktopInstallServiceDialogConstraints(context, constraints),
+            expandDesktopActions: true,
+            stackActionsOnMobile: true,
+            mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
+            mobileFlowBodyBehavior: isMobile
+                ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
+                : PowerboardsDialogMobileFlowBodyBehavior.fill,
+            mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
+            title: Text(widget.type == ServiceType.mcp ? "Add MCP Service" : "Install"),
+            child: SizedBox.expand(child: installer),
+          );
+        }
+
+        return ValueListenableBuilder<PowerboardsDialogChrome>(
+          valueListenable: _mobileChrome,
+          builder: (context, chrome, _) {
+            return PowerboardsShadDialog(
+              scrollable: false,
+              constraints: _desktopInstallServiceDialogConstraints(context, constraints),
+              expandDesktopActions: true,
+              stackActionsOnMobile: true,
+              mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
+              mobileFlowBodyBehavior: isMobile
+                  ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
+                  : PowerboardsDialogMobileFlowBodyBehavior.fill,
+              mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
+              title: Text(widget.type == ServiceType.mcp ? "Add MCP Service" : "Install"),
+              actions: chrome.actions,
+              onBack: chrome.onBack,
+              child: installer,
+            );
+          },
         );
       },
     );
@@ -94,6 +133,7 @@ class AgentInstaller extends StatefulWidget {
     this.initialProjectId,
     this.initialRoomName,
     this.onInstalled,
+    this.mobileDialogChrome,
   });
 
   final Uri? initialUrl;
@@ -102,6 +142,7 @@ class AgentInstaller extends StatefulWidget {
   final String? initialProjectId;
   final String? initialRoomName;
   final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
+  final ValueNotifier<PowerboardsDialogChrome>? mobileDialogChrome;
 
   @override
   State createState() => _AgentInstaller();
@@ -121,6 +162,7 @@ class _AgentInstaller extends State<AgentInstaller> {
 
   late final TextEditingController _urlController;
   String? _urlError;
+  String? _lastPublishedMobileChromeSignature;
 
   bool get _hasValidUrl => _url != null && _url!.host.isNotEmpty;
   bool get _mcpOnly => widget.type == ServiceType.mcp;
@@ -263,6 +305,127 @@ class _AgentInstaller extends State<AgentInstaller> {
 
   bool get _usesMobileFlowLayout => powerboardsUsesNativeMobileDialogLayout(context);
 
+  void _publishMobileDialogChrome(PowerboardsDialogChrome chrome) {
+    final notifier = widget.mobileDialogChrome;
+    if (notifier == null || _lastPublishedMobileChromeSignature == chrome.signature) {
+      return;
+    }
+
+    _lastPublishedMobileChromeSignature = chrome.signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      notifier.value = chrome;
+    });
+  }
+
+  void _clearMobileDialogChrome() {
+    final notifier = widget.mobileDialogChrome;
+    if (notifier == null || _lastPublishedMobileChromeSignature == 'none') {
+      return;
+    }
+
+    _lastPublishedMobileChromeSignature = 'none';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      notifier.value = (signature: 'none', actions: const <Widget>[], onBack: null);
+    });
+  }
+
+  void _publishMobileChromeForStep(_InstallerStep step) {
+    if (!_usesMobileFlowLayout) {
+      _clearMobileDialogChrome();
+      return;
+    }
+
+    final specState = _spec.state;
+    if (step != _InstallerStep.url && !specState.isReady) {
+      _publishMobileDialogChrome((
+        signature: 'loading:$step',
+        actions: const <Widget>[],
+        onBack: widget.template == null ? _backToUrlInput : null,
+      ));
+      return;
+    }
+
+    if (step != _InstallerStep.url && specState.value == null) {
+      _publishMobileDialogChrome((
+        signature: 'error:$step',
+        actions: const <Widget>[],
+        onBack: widget.template == null ? _backToUrlInput : null,
+      ));
+      return;
+    }
+
+    switch (step) {
+      case _InstallerStep.url:
+        _publishMobileDialogChrome((signature: 'url', actions: [_continueButton(onPressed: _onUrlContinue)], onBack: null));
+        return;
+      case _InstallerStep.review:
+        _publishMobileDialogChrome((
+          signature: 'review',
+          actions: [
+            _continueButton(
+              onPressed: () {
+                setState(() {
+                  _confirmed = true;
+                });
+              },
+            ),
+          ],
+          onBack: widget.template == null ? _backToUrlInput : null,
+        ));
+        return;
+      case _InstallerStep.selectProject:
+        _publishMobileDialogChrome((
+          signature: 'project',
+          actions: const <Widget>[],
+          onBack: () {
+            setState(() {
+              _confirmed = false;
+            });
+          },
+        ));
+        return;
+      case _InstallerStep.selectRoom:
+        _publishMobileDialogChrome((
+          signature: 'room',
+          actions: const <Widget>[],
+          onBack: () {
+            setState(() {
+              _roomName = null;
+              _projectId = null;
+            });
+            _services.refresh();
+          },
+        ));
+        return;
+      case _InstallerStep.confirm:
+        _publishMobileDialogChrome((
+          signature: 'confirm',
+          actions: const <Widget>[],
+          onBack: () {
+            if (widget.initialRoomName != null) {
+              setState(() {
+                _confirmed = false;
+              });
+            } else {
+              setState(() {
+                _roomName = null;
+              });
+              _services.refresh();
+            }
+          },
+        ));
+        return;
+    }
+  }
+
   Widget _urlStep() {
     final title = _mcpOnly ? "Enter the URL of an MCP server" : "Enter the URL of an agent or MCP server";
     final description = _mcpOnly
@@ -284,10 +447,11 @@ class _AgentInstaller extends State<AgentInstaller> {
             style: ShadTheme.of(context).textTheme.small.copyWith(color: ShadTheme.of(context).colorScheme.mutedForeground),
           ),
           if (_urlError != null) ShadAlert.destructive(description: Text(_urlError!)),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [_continueButton(onPressed: _onUrlContinue)],
-          ),
+          if (!usesMobileFlowLayout)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [_continueButton(onPressed: _onUrlContinue)],
+            ),
         ],
       ),
     );
@@ -303,10 +467,11 @@ class _AgentInstaller extends State<AgentInstaller> {
       children: [
         Text("Unable to load $subject spec", style: _labelStyle, textAlign: TextAlign.center),
         ShadAlert.destructive(description: Text(message)),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [_backButton(onPressed: _backToUrlInput, label: "Change URL")],
-        ),
+        if (!usesMobileFlowLayout)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [_backButton(onPressed: _backToUrlInput, label: "Change URL")],
+          ),
       ],
     );
   }
@@ -347,19 +512,20 @@ class _AgentInstaller extends State<AgentInstaller> {
               ],
             ),
           ),
-        Row(
-          children: [
-            _backButton(onPressed: _backToUrlInput, label: "Change URL"),
-            const Spacer(),
-            _continueButton(
-              onPressed: () {
-                setState(() {
-                  _confirmed = true;
-                });
-              },
-            ),
-          ],
-        ),
+        if (!usesMobileFlowLayout)
+          Row(
+            children: [
+              _backButton(onPressed: _backToUrlInput, label: "Change URL"),
+              const Spacer(),
+              _continueButton(
+                onPressed: () {
+                  setState(() {
+                    _confirmed = true;
+                  });
+                },
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -427,19 +593,21 @@ class _AgentInstaller extends State<AgentInstaller> {
         ),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
         if (usesMobileFlowLayout) body else Expanded(child: body),
-        ShadSeparator.horizontal(margin: EdgeInsets.zero),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            _backButton(
-              onPressed: () {
-                setState(() {
-                  _confirmed = false;
-                });
-              },
-            ),
-          ],
-        ),
+        if (!usesMobileFlowLayout) ...[
+          ShadSeparator.horizontal(margin: EdgeInsets.zero),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              _backButton(
+                onPressed: () {
+                  setState(() {
+                    _confirmed = false;
+                  });
+                },
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -509,21 +677,23 @@ class _AgentInstaller extends State<AgentInstaller> {
         ),
         ShadSeparator.horizontal(margin: EdgeInsets.zero),
         if (usesMobileFlowLayout) body else Expanded(child: body),
-        ShadSeparator.horizontal(margin: EdgeInsets.zero),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            _backButton(
-              onPressed: () {
-                setState(() {
-                  _roomName = null;
-                  _projectId = null;
-                });
-                _services.refresh();
-              },
-            ),
-          ],
-        ),
+        if (!usesMobileFlowLayout) ...[
+          ShadSeparator.horizontal(margin: EdgeInsets.zero),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              _backButton(
+                onPressed: () {
+                  setState(() {
+                    _roomName = null;
+                    _projectId = null;
+                  });
+                  _services.refresh();
+                },
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -576,22 +746,19 @@ class _AgentInstaller extends State<AgentInstaller> {
             manifest: _spec.state.value!,
             prefilledVars: prefill,
             onDone: _handleInstalled,
-            customActions: [
-              _backButton(
-                onPressed: () {
-                  if (widget.initialRoomName != null) {
-                    setState(() {
-                      _confirmed = false;
-                    });
-                  } else {
-                    setState(() {
-                      _roomName = null;
-                    });
-                    _services.refresh();
-                  }
-                },
-              ),
-            ],
+            mobileDialogChrome: widget.mobileDialogChrome,
+            mobileOnBack: () {
+              if (widget.initialRoomName != null) {
+                setState(() {
+                  _confirmed = false;
+                });
+              } else {
+                setState(() {
+                  _roomName = null;
+                });
+                _services.refresh();
+              }
+            },
           )
         else
           Expanded(
@@ -635,6 +802,7 @@ class _AgentInstaller extends State<AgentInstaller> {
     return SignalBuilder(
       builder: (context, _) {
         final step = _step;
+        _publishMobileChromeForStep(step);
 
         if (step != _InstallerStep.url) {
           if (!_spec.state.isReady) {

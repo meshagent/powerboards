@@ -629,6 +629,13 @@ void main() {
     expect(_flowDialogSurface(), findsOneWidget);
     expect(find.text('Install'), findsOneWidget);
     expect(find.text('Enter the URL of an agent or MCP server'), findsOneWidget);
+
+    await tester.enterText(find.byType(EditableText), 'https://example.com');
+    await tester.tap(find.widgetWithText(ShadButton, 'Continue'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byIcon(LucideIcons.chevronLeft), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

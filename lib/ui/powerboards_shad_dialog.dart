@@ -38,6 +38,8 @@ enum PowerboardsDialogMobileFlowBodyBehavior { inherit, scrollable, formScrollab
 
 enum PowerboardsDialogMobileKeyboardBehavior { inherit, avoid, ignore }
 
+typedef PowerboardsDialogChrome = ({String signature, List<Widget> actions, VoidCallback? onBack});
+
 Future<T?> showPowerboardsFlowDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,

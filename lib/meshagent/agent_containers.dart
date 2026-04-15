@@ -23,7 +23,7 @@ BoxConstraints? _desktopConfigureAgentDialogConstraints(BuildContext context, Bo
   return BoxConstraints(minWidth: 600.0, maxWidth: 600.0, minHeight: height, maxHeight: height);
 }
 
-class ConfigureServiceTemplateDialog extends StatelessWidget {
+class ConfigureServiceTemplateDialog extends StatefulWidget {
   const ConfigureServiceTemplateDialog({
     super.key,
     required this.template,
@@ -46,56 +46,91 @@ class ConfigureServiceTemplateDialog extends StatelessWidget {
   final String? description;
 
   @override
+  State<ConfigureServiceTemplateDialog> createState() => _ConfigureServiceTemplateDialogState();
+}
+
+class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplateDialog> {
+  final ValueNotifier<PowerboardsDialogChrome> _mobileChrome = ValueNotifier((
+    signature: 'initial',
+    actions: const <Widget>[],
+    onBack: null,
+  ));
+
+  @override
+  void dispose() {
+    _mobileChrome.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isInstalled = serviceId != null;
+    final isInstalled = widget.serviceId != null;
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+        final content = ConfigureServiceTemplate(
+          template: widget.template,
+          header: [
+            const SizedBox(height: 8),
+            dev.ServiceNameCard(manifest: widget.manifest),
+            if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: widget.manifest)],
+          ],
+          projectId: widget.projectId,
+          serviceId: widget.serviceId,
+          manifest: widget.manifest,
+          roomName: widget.roomName,
+          prefilledVars: widget.prefilledVars,
+          mobileDialogChrome: isMobile ? _mobileChrome : null,
+          onDone: (context, _) {
+            Navigator.of(context).pop(true);
+          },
+        );
 
-        return PowerboardsShadDialog.task(
-          scrollable: false,
-          constraints: _desktopConfigureAgentDialogConstraints(context, constraints),
-          title: Text(isInstalled ? 'Edit agent' : 'Install agent'),
-          description: Text(
-            isInstalled
-                ? 'Update variables or uninstall this agent.'
-                : 'Installing this agent will grant it access to your room. Review the details before continuing.',
-          ),
-          child: isMobile
-              ? ConfigureServiceTemplate(
-                  template: template,
-                  header: [
-                    const SizedBox(height: 8),
-                    dev.ServiceNameCard(manifest: manifest),
-                    if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: manifest)],
-                  ],
-                  projectId: projectId,
-                  serviceId: serviceId,
-                  manifest: manifest,
-                  roomName: roomName,
-                  prefilledVars: prefilledVars,
-                  onDone: (context, _) {
-                    Navigator.of(context).pop(true);
-                  },
-                )
-              : SizedBox.expand(
-                  child: ConfigureServiceTemplate(
-                    template: template,
-                    header: [
-                      const SizedBox(height: 8),
-                      dev.ServiceNameCard(manifest: manifest),
-                      if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: manifest)],
-                    ],
-                    projectId: projectId,
-                    serviceId: serviceId,
-                    manifest: manifest,
-                    roomName: roomName,
-                    prefilledVars: prefilledVars,
-                    onDone: (context, _) {
-                      Navigator.of(context).pop(true);
-                    },
-                  ),
-                ),
+        if (!isMobile) {
+          return PowerboardsShadDialog(
+            scrollable: false,
+            constraints: _desktopConfigureAgentDialogConstraints(context, constraints),
+            expandDesktopActions: true,
+            stackActionsOnMobile: true,
+            mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
+            mobileFlowBodyBehavior: isMobile
+                ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
+                : PowerboardsDialogMobileFlowBodyBehavior.fill,
+            mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
+            title: Text(isInstalled ? 'Edit agent' : 'Install agent'),
+            description: Text(
+              isInstalled
+                  ? 'Update variables or uninstall this agent.'
+                  : 'Installing this agent will grant it access to your room. Review the details before continuing.',
+            ),
+            child: SizedBox.expand(child: content),
+          );
+        }
+
+        return ValueListenableBuilder<PowerboardsDialogChrome>(
+          valueListenable: _mobileChrome,
+          builder: (context, chrome, _) {
+            return PowerboardsShadDialog(
+              scrollable: false,
+              constraints: _desktopConfigureAgentDialogConstraints(context, constraints),
+              expandDesktopActions: true,
+              stackActionsOnMobile: true,
+              mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
+              mobileFlowBodyBehavior: isMobile
+                  ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
+                  : PowerboardsDialogMobileFlowBodyBehavior.fill,
+              mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
+              title: Text(isInstalled ? 'Edit agent' : 'Install agent'),
+              description: Text(
+                isInstalled
+                    ? 'Update variables or uninstall this agent.'
+                    : 'Installing this agent will grant it access to your room. Review the details before continuing.',
+              ),
+              actions: chrome.actions,
+              onBack: chrome.onBack,
+              child: content,
+            );
+          },
         );
       },
     );
@@ -114,6 +149,8 @@ class ConfigureServiceTemplate extends StatefulWidget {
     this.prefilledVars,
     this.customActions = const [],
     this.header = const [],
+    this.mobileDialogChrome,
+    this.mobileOnBack,
   });
 
   final ServiceTemplateSpec manifest;
@@ -125,6 +162,8 @@ class ConfigureServiceTemplate extends StatefulWidget {
   final List<Widget> header;
   final String template;
   final ConfigureServiceTemplateDone onDone;
+  final ValueNotifier<PowerboardsDialogChrome>? mobileDialogChrome;
+  final VoidCallback? mobileOnBack;
 
   @override
   State<ConfigureServiceTemplate> createState() => _ConfigureServiceTemplateState();
@@ -134,6 +173,9 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
   bool _saving = false;
   bool _removing = false;
   String? _error;
+  Map<String, String> _latestFormVars = const <String, String>{};
+  bool Function()? _latestFormValidate;
+  String? _lastPublishedMobileChromeSignature;
 
   String _requireRoomName() {
     final roomName = widget.roomName;
@@ -527,7 +569,9 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
     );
   }
 
-  List<Widget> _actions(BuildContext context, Map<String, String> vars, bool Function() validate) {
+  bool _validateMobileForm() => _latestFormValidate?.call() ?? true;
+
+  List<Widget> _actions(BuildContext context) {
     final isInstalled = widget.serviceId != null;
 
     return [
@@ -548,7 +592,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
             ? null
             : () {
                 if (!_removing && !_saving) {
-                  _saveOrUpdate(vars, validate);
+                  _saveOrUpdate(_latestFormVars, _validateMobileForm);
                 }
               },
         child: Text(_saving ? (isInstalled ? 'Updating' : 'Installing') : (isInstalled ? 'Update' : 'Install')),
@@ -556,8 +600,36 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
     ];
   }
 
+  void _publishMobileDialogChrome() {
+    final notifier = widget.mobileDialogChrome;
+    if (notifier == null || !powerboardsUsesNativeMobileDialogLayout(context)) {
+      return;
+    }
+
+    final chrome = (
+      signature:
+          'service:${widget.serviceId != null}:saving:$_saving:removing:$_removing:error:${_error != null}:back:${widget.mobileOnBack != null}',
+      actions: _actions(context),
+      onBack: widget.mobileOnBack,
+    );
+
+    if (_lastPublishedMobileChromeSignature == chrome.signature) {
+      return;
+    }
+
+    _lastPublishedMobileChromeSignature = chrome.signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      notifier.value = chrome;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _publishMobileDialogChrome();
     final routeDomains = MeshagentConfig.current?.domains ?? const <String>[];
     return dev.ConfigureServiceTemplate(
       spec: widget.manifest,
@@ -565,7 +637,16 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
       routeDomains: routeDomains,
       customActions: widget.customActions,
       header: [_buildError(context), ...widget.header],
-      actionsBuilder: (context, vars, validate) => _actions(context, vars, validate),
+      showActionRow: widget.mobileDialogChrome == null || !powerboardsUsesNativeMobileDialogLayout(context),
+      onFormStateChanged: (vars, validate) {
+        _latestFormVars = vars;
+        _latestFormValidate = validate;
+      },
+      actionsBuilder: (context, vars, validate) {
+        _latestFormVars = vars;
+        _latestFormValidate = validate;
+        return _actions(context);
+      },
     );
   }
 }
