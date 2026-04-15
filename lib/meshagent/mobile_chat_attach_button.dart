@@ -132,11 +132,9 @@ class _PowerboardsMobileChatAttachButtonState extends State<PowerboardsMobileCha
         final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(dialogContext);
 
         return StatefulBuilder(
-          builder: (dialogContext, setDialogState) => PowerboardsShadDialog.task(
+          builder: (dialogContext, setDialogState) => PowerboardsShadDialog.listPicker(
             title: const Text('Select files'),
-            scrollable: false,
             description: const Text('Attach files from this room'),
-            mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.ignore,
             actions: [
               ShadButton.outline(
                 onPressed: () {
@@ -152,85 +150,88 @@ class _PowerboardsMobileChatAttachButtonState extends State<PowerboardsMobileCha
                 child: const Text('Add'),
               ),
             ],
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: SizedBox(
-                width: double.infinity,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 420),
-                  child: SizedBox(
-                    height: 450,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (roomOptions.length > 1)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: ShadSelect<String>(
-                                initialValue: selectedRoomName,
-                                selectedOptionBuilder: (selectContext, value) => Text(value),
-                                options: [for (final option in roomOptions) ShadOption<String>(value: option, child: Text(option))],
-                                onChanged: (value) async {
-                                  if (value == null || value == selectedRoomName || widget.connectRoomClient == null) {
-                                    return;
-                                  }
+            child: Padding(
+              padding: powerboardsUsesNativeMobileDialogLayout(dialogContext) ? EdgeInsets.zero : powerboardsDialogScrollableListPadding,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 420),
+                    child: SizedBox(
+                      height: 450,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (roomOptions.length > 1)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: ShadSelect<String>(
+                                  initialValue: selectedRoomName,
+                                  selectedOptionBuilder: (selectContext, value) => Text(value),
+                                  options: [for (final option in roomOptions) ShadOption<String>(value: option, child: Text(option))],
+                                  onChanged: (value) async {
+                                    if (value == null || value == selectedRoomName || widget.connectRoomClient == null) {
+                                      return;
+                                    }
 
-                                  setDialogState(() {
-                                    resolvingRoom = true;
-                                    resolveError = false;
-                                  });
-
-                                  RoomClient? nextRoomClient;
-                                  if (value == currentRoomName) {
-                                    nextRoomClient = widget.controller.room;
-                                  } else {
-                                    try {
-                                      nextRoomClient = await widget.connectRoomClient!(value);
-                                    } catch (_) {}
-                                  }
-
-                                  if (nextRoomClient == null) {
                                     setDialogState(() {
-                                      resolvingRoom = false;
-                                      resolveError = true;
+                                      resolvingRoom = true;
+                                      resolveError = false;
                                     });
-                                    return;
-                                  }
 
-                                  if (!identical(widget.controller.room, selectedRoomClient) &&
-                                      !identical(nextRoomClient, selectedRoomClient)) {
-                                    selectedRoomClient.dispose();
-                                  }
+                                    RoomClient? nextRoomClient;
+                                    if (value == currentRoomName) {
+                                      nextRoomClient = widget.controller.room;
+                                    } else {
+                                      try {
+                                        nextRoomClient = await widget.connectRoomClient!(value);
+                                      } catch (_) {}
+                                    }
 
-                                  setDialogState(() {
-                                    selectedRoomName = value;
-                                    selectedRoomClient = nextRoomClient!;
-                                    picked = [];
-                                    resolvingRoom = false;
-                                  });
-                                },
+                                    if (nextRoomClient == null) {
+                                      setDialogState(() {
+                                        resolvingRoom = false;
+                                        resolveError = true;
+                                      });
+                                      return;
+                                    }
+
+                                    if (!identical(widget.controller.room, selectedRoomClient) &&
+                                        !identical(nextRoomClient, selectedRoomClient)) {
+                                      selectedRoomClient.dispose();
+                                    }
+
+                                    setDialogState(() {
+                                      selectedRoomName = value;
+                                      selectedRoomClient = nextRoomClient!;
+                                      picked = [];
+                                      resolvingRoom = false;
+                                    });
+                                  },
+                                ),
                               ),
                             ),
-                          ),
-                        Expanded(
-                          child: ShadCard(
+                          Expanded(
                             child: resolvingRoom
                                 ? const Center(child: CircularProgressIndicator())
                                 : resolveError
                                 ? const Center(child: Text('Room failed to connect'))
-                                : FileBrowser(
-                                    key: ValueKey(selectedRoomName),
-                                    onSelectionChanged: (selection) {
-                                      picked = selection;
-                                    },
-                                    room: selectedRoomClient,
-                                    multiple: true,
+                                : ShadCard(
+                                    child: FileBrowser(
+                                      key: ValueKey(selectedRoomName),
+                                      onSelectionChanged: (selection) {
+                                        picked = selection;
+                                      },
+                                      room: selectedRoomClient,
+                                      multiple: true,
+                                    ),
                                   ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
