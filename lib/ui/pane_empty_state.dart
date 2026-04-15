@@ -6,28 +6,33 @@ class PaneEmptyState extends StatelessWidget {
     super.key,
     required this.title,
     this.description,
+    this.descriptionWidget,
     this.icon,
     this.action,
     this.titleScaleOverride,
     this.verticalOffset = 0,
     this.iconGap = 16,
     this.actionGap = 24,
+    this.showActionOnMobile = false,
   });
 
   final String title;
   final String? description;
+  final Widget? descriptionWidget;
   final Widget? icon;
   final Widget? action;
   final double? titleScaleOverride;
   final double verticalOffset;
   final double iconGap;
   final double actionGap;
+  final bool showActionOnMobile;
 
   static const double _mobileScreenWidthMax = 600;
 
   @override
   Widget build(BuildContext context) {
-    final hideAction = MediaQuery.sizeOf(context).width < _mobileScreenWidthMax;
+    final isMobile = MediaQuery.sizeOf(context).width < _mobileScreenWidthMax;
+    final hideAction = isMobile && !showActionOnMobile;
 
     return Center(
       child: Transform.translate(
@@ -40,7 +45,13 @@ class PaneEmptyState extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (icon != null) ...[icon!, SizedBox(height: iconGap)],
-                ChatThreadEmptyStateContent(title: title, description: description, titleScaleOverride: titleScaleOverride),
+                if (descriptionWidget == null)
+                  ChatThreadEmptyStateContent(title: title, description: description, titleScaleOverride: titleScaleOverride)
+                else ...[
+                  ChatThreadEmptyStateContent(title: title, titleScaleOverride: titleScaleOverride),
+                  const SizedBox(height: 8),
+                  descriptionWidget!,
+                ],
                 if (!hideAction && action != null) ...[SizedBox(height: actionGap), action!],
               ],
             ),

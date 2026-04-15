@@ -337,9 +337,55 @@ class UserForbiddenWarning extends StatelessWidget {
     final isMobile = context.breakpoint < theme.breakpoints.sm;
 
     if (isMobile) {
+      final user = MeshagentAuth.current.getUser();
+
       return Padding(
-        padding: const .all(20),
-        child: Center(child: _body(context, cs, tt)),
+        padding: const EdgeInsets.all(20),
+        child: PaneEmptyState(
+          title: 'Access Denied',
+          descriptionWidget: RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              style: tt.p.copyWith(color: tt.muted.color, height: 24 / 16),
+              children: [
+                const TextSpan(text: 'Your user '),
+                TextSpan(
+                  text: user?['email'],
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const TextSpan(
+                  text:
+                      ' does not have permission to access this project. Please check user\'s permissions or contact an admin for assistance.',
+                ),
+              ],
+            ),
+          ),
+          icon: Container(
+            width: 64.0,
+            height: 64.0,
+            decoration: BoxDecoration(color: cs.destructiveForeground, borderRadius: BorderRadius.circular(12)),
+            child: Icon(LucideIcons.x, size: 28.0, color: cs.destructive),
+          ),
+          showActionOnMobile: true,
+          action: ShadButton(
+            onPressed: () {
+              MeshagentAuth.current.signOut();
+              localStorage.clear();
+
+              final returnUrl = MeshagentConfig.current!.appUrl;
+              final signOutUrl = MeshagentConfig.current!.serverUrl
+                  .resolve("/signout")
+                  .replace(queryParameters: {if (MeshagentConfig.current?.appUrl != null) "return_url": returnUrl.toString()});
+
+              if (kIsWeb) {
+                launchUrl(signOutUrl, webOnlyWindowName: "_self");
+              } else {
+                context.go("/");
+              }
+            },
+            child: const Text("Sign out"),
+          ),
+        ),
       );
     }
 

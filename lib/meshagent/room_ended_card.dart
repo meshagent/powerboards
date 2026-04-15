@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class RoomEndedCard extends StatelessWidget {
@@ -12,6 +13,16 @@ class RoomEndedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
+
+    if (isMobile) {
+      return PaneEmptyState(
+        title: title,
+        description: description,
+        showActionOnMobile: true,
+        action: ShadButton(onPressed: onReconnect, child: const Text('Reconnect')),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),

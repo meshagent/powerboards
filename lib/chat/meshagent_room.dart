@@ -57,6 +57,7 @@ import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/meeting_view.dart';
+import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/resizable_split_view.dart';
@@ -2985,6 +2986,31 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
                                   if (!ownerResolved) {
                                     return _buildRoomLoading(context, title: "Loading room permissions");
+                                  }
+
+                                  if (isMobile) {
+                                    return PaneEmptyState(
+                                      title: "Welcome to your room",
+                                      description: canInstallAgent ? "Install an agent in this room to get started" : null,
+                                      showActionOnMobile: canInstallAgent,
+                                      action: !canInstallAgent
+                                          ? null
+                                          : ShadButton(
+                                              onPressed: () async {
+                                                await showPowerboardsFlowDialog(
+                                                  context: context,
+                                                  builder: (context) => ManageAgentsDialog(
+                                                    room: widget.room,
+                                                    projectId: widget.projectId,
+                                                    onServiceChanged: () {
+                                                      services.refresh();
+                                                    },
+                                                  ),
+                                                );
+                                              },
+                                              child: Text("Install an Agent"),
+                                            ),
+                                    );
                                   }
 
                                   return Center(
