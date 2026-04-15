@@ -136,7 +136,6 @@ class _DocumentPane extends State<DocumentPane> {
                             ),
                             "thread" => ChatThread(
                               path: widget.path,
-                              document: document,
                               room: widget.room,
                               toolsBuilder: (context, controller, _) => ChatThreadAttachButton(controller: controller),
                               inputPlaceholder: Text("Type a message…"),
