@@ -1337,7 +1337,7 @@ Widget buildTools(
     final client = getMeshagentClient();
     final conn = await client.connectRoom(projectId: projectId, roomName: roomName);
     final roomClient = RoomClient(
-      protocol: WebSocketClientProtocol(url: conn.roomUrl, token: conn.jwt),
+      protocolFactory: WebSocketClientProtocol.createFactory(url: conn.roomUrl, token: conn.jwt),
     );
     await roomClient.start();
     await roomClient.ready;

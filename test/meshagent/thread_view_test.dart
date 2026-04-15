@@ -51,7 +51,7 @@ class _ThreadViewHarnessState extends State<_ThreadViewHarness> {
 
 void main() {
   testWidgets('keeps the same new thread view mounted when the created thread becomes selected', (tester) async {
-    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
+    final room = RoomClient(protocolFactory: Protocol.createFactory(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
 
     await tester.pumpWidget(
