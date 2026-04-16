@@ -58,6 +58,16 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
     onBack: null,
   ));
 
+  Widget _mobileDestructiveDescription(BuildContext context, String description) {
+    final theme = ShadTheme.of(context);
+    return Text(
+      description,
+      style: theme.textTheme.muted.copyWith(
+        color: theme.colorScheme.destructive,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _mobileChrome.dispose();
@@ -70,10 +80,19 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+        final dialogDescription = !isMobile && widget.description != null
+            ? Text(widget.description!)
+            : null;
         final content = ConfigureServiceTemplate(
           template: widget.template,
           header: [
             dev.ServiceNameCard(manifest: widget.manifest),
+            if (isMobile &&
+                widget.description != null &&
+                widget.description!.trim().isNotEmpty) ...[
+              const SizedBox(height: _mobileConfigureFlowSectionGap),
+              _mobileDestructiveDescription(context, widget.description!),
+            ],
             if (!isInstalled) ...[
               SizedBox(height: isMobile ? _mobileConfigureFlowSectionGap : 12),
               dev.ServiceInfoCard(manifest: widget.manifest),
@@ -104,7 +123,7 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
                 : PowerboardsDialogMobileFlowBodyBehavior.fill,
             mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
             title: Text(widget.title),
-            description: widget.description == null ? null : Text(widget.description!),
+            description: dialogDescription,
             child: SizedBox.expand(child: content),
           );
         }
@@ -125,7 +144,7 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
                   : PowerboardsDialogMobileFlowBodyBehavior.fill,
               mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
               title: Text(widget.title),
-              description: widget.description == null ? null : Text(widget.description!),
+              description: dialogDescription,
               actions: chrome.actions,
               onBack: chrome.onBack,
               child: content,

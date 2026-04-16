@@ -114,7 +114,7 @@ class _InstallServiceDialogState extends State<InstallServiceDialog> {
                 ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
                 : PowerboardsDialogMobileFlowBodyBehavior.fill,
             mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
-            title: Text(widget.type == ServiceType.mcp ? "Add MCP Service" : "Install"),
+            title: Text(widget.type == ServiceType.mcp ? "Add MCP service" : "Install"),
             child: SizedBox.expand(child: installer),
           );
         }
@@ -134,7 +134,7 @@ class _InstallServiceDialogState extends State<InstallServiceDialog> {
                   ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
                   : PowerboardsDialogMobileFlowBodyBehavior.fill,
               mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
-              title: Text(widget.type == ServiceType.mcp ? "Add MCP Service" : "Install"),
+              title: Text(widget.type == ServiceType.mcp ? "Add MCP service" : "Install"),
               actions: chrome.actions,
               onBack: chrome.onBack,
               child: installer,
@@ -349,6 +349,11 @@ class _AgentInstaller extends State<AgentInstaller> {
     );
   }
 
+  Widget _mobileDestructiveDescription(String description) {
+    final theme = ShadTheme.of(context);
+    return Text(description, style: theme.textTheme.muted.copyWith(color: theme.colorScheme.destructive));
+  }
+
   bool get _usesMobileFlowLayout => powerboardsUsesNativeMobileDialogLayout(context);
 
   void _publishMobileDialogChrome(PowerboardsDialogChrome chrome) {
@@ -549,6 +554,8 @@ class _AgentInstaller extends State<AgentInstaller> {
           textInputAction: TextInputAction.done,
           autocorrect: false,
           scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+          mobileFlowDialogInset: usesMobileFlowLayout,
+          mobileFlowDialogInsetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           onSubmitted: (_) => _onUrlContinue(),
         ),
         if (!usesMobileFlowLayout) ...[
@@ -628,12 +635,11 @@ class _AgentInstaller extends State<AgentInstaller> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _mobileBodyIntro(
-                title: 'Review details',
-                description: 'Check what this agent installs and what access it will receive before continuing.',
-              ),
+              _mobileBodyIntro(title: 'Review details'),
               const SizedBox(height: _mobileInstallFlowSectionGap),
               dev.ServiceNameCard(manifest: _spec.state.value!),
+              const SizedBox(height: _mobileInstallFlowSectionGap),
+              _mobileDestructiveDescription('Check what this agent installs and what access it will receive before continuing.'),
               const SizedBox(height: _mobileInstallFlowSectionGap),
               dev.ServiceInfoCard(manifest: _spec.state.value!),
             ],
@@ -1068,7 +1074,7 @@ class _InstallServiceUrlDialogState extends State<_InstallServiceUrlDialog> {
       mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
       mobileFlowBodyBehavior: PowerboardsDialogMobileFlowBodyBehavior.formScrollable,
       mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
-      title: Text(widget.type == ServiceType.mcp ? "Add MCP Service" : "Install"),
+      title: Text(widget.type == ServiceType.mcp ? "Add MCP service" : "Install"),
       description: Text(description),
       actions: [ShadButton(onPressed: _continue, child: const Text('Continue'))],
       child: Column(
@@ -1082,6 +1088,8 @@ class _InstallServiceUrlDialogState extends State<_InstallServiceUrlDialog> {
             textInputAction: TextInputAction.done,
             autocorrect: false,
             scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+            mobileFlowDialogInset: powerboardsUsesNativeMobileDialogLayout(context),
+            mobileFlowDialogInsetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             onSubmitted: (_) => _continue(),
           ),
           if (_urlError != null) ...[const SizedBox(height: 12), ShadAlert.destructive(description: Text(_urlError!))],
