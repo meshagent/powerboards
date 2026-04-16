@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +29,7 @@ const double _desktopDialogActionMaxWidth = 220;
 const double _mobileFlowDialogTopGap = 20;
 const double _mobileLandscapeFlowDialogTopGap = 8;
 const double _mobileFlowDialogFloorHeightFactor = 0.34;
+const double _mobileFormFlowDialogFloorHeightFactor = 0.22;
 const double _mobileFlowDialogCornerRadius = 28;
 const double _mobileFlowDialogTopPadding = 30;
 const double _mobileLandscapeFlowDialogTopPadding = 24;
@@ -39,6 +42,95 @@ enum PowerboardsDialogMobileFlowBodyBehavior { inherit, scrollable, formScrollab
 enum PowerboardsDialogMobileKeyboardBehavior { inherit, avoid, ignore }
 
 typedef PowerboardsDialogChrome = ({String signature, List<Widget> actions, VoidCallback? onBack});
+
+class _PowerboardsFlowDialogStepEntry {
+  const _PowerboardsFlowDialogStepEntry({required this.builder, this.completer});
+
+  final WidgetBuilder builder;
+  final Completer<dynamic>? completer;
+}
+
+class _PowerboardsFlowDialogStepScope extends InheritedWidget {
+  const _PowerboardsFlowDialogStepScope({required super.child, required this.state, required this.depth});
+
+  final _PowerboardsFlowDialogStepHostState state;
+  final int depth;
+
+  static _PowerboardsFlowDialogStepScope? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<_PowerboardsFlowDialogStepScope>();
+  }
+
+  Future<T?> pushStep<T>({required WidgetBuilder builder}) {
+    return state.pushStep<T>(builder: builder);
+  }
+
+  VoidCallback? get defaultBackAction {
+    if (depth <= 0) {
+      return null;
+    }
+
+    return state.popCurrentStep;
+  }
+
+  @override
+  bool updateShouldNotify(covariant _PowerboardsFlowDialogStepScope oldWidget) {
+    return depth != oldWidget.depth || state != oldWidget.state;
+  }
+}
+
+class _PowerboardsFlowDialogStepHost extends StatefulWidget {
+  const _PowerboardsFlowDialogStepHost({required this.builder});
+
+  final WidgetBuilder builder;
+
+  @override
+  State<_PowerboardsFlowDialogStepHost> createState() => _PowerboardsFlowDialogStepHostState();
+}
+
+class _PowerboardsFlowDialogStepHostState extends State<_PowerboardsFlowDialogStepHost> {
+  late final List<_PowerboardsFlowDialogStepEntry> _steps = [_PowerboardsFlowDialogStepEntry(builder: widget.builder)];
+
+  Future<T?> pushStep<T>({required WidgetBuilder builder}) {
+    final completer = Completer<dynamic>();
+    setState(() {
+      _steps.add(_PowerboardsFlowDialogStepEntry(builder: builder, completer: completer));
+    });
+    return completer.future.then((value) => value as T?);
+  }
+
+  void popCurrentStep<T>([T? result]) {
+    if (_steps.length <= 1) {
+      Navigator.of(context).maybePop(result);
+      return;
+    }
+
+    final removed = _steps.removeLast();
+    if (removed.completer case final completer? when !completer.isCompleted) {
+      completer.complete(result);
+    }
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    for (final step in _steps.skip(1)) {
+      if (step.completer case final completer? when !completer.isCompleted) {
+        completer.complete(null);
+      }
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentStep = _steps.last;
+    return _PowerboardsFlowDialogStepScope(
+      state: this,
+      depth: _steps.length - 1,
+      child: Builder(builder: currentStep.builder),
+    );
+  }
+}
 
 Future<T?> showPowerboardsFlowDialog<T>({
   required BuildContext context,
@@ -78,9 +170,14 @@ Future<T?> showPowerboardsFlowDialog<T>({
     );
   }
 
+  final stepScope = _PowerboardsFlowDialogStepScope.maybeOf(context);
+  if (stepScope != null) {
+    return stepScope.pushStep<T>(builder: builder);
+  }
+
   return showModalBottomSheet<T>(
     context: context,
-    builder: builder,
+    builder: (_) => _PowerboardsFlowDialogStepHost(builder: builder),
     backgroundColor: Colors.transparent,
     barrierColor: barrierColor,
     barrierLabel: barrierLabel,
@@ -504,6 +601,7 @@ class PowerboardsShadDialog extends StatelessWidget {
       screenSize: screenSize,
       isMobile: isMobile,
       mobilePresentation: mobilePresentation,
+      bodyBehavior: mobileFlowBodyBehavior,
       mobileTopInset: mobileTopInset,
       mobileBottomInset: mobileBottomInset,
     );
@@ -779,9 +877,11 @@ Widget? _resolveDialogTitle(
 
   final theme = ShadTheme.of(context);
   final resolvedTitleStyle = (titleStyle ?? theme.textTheme.large).fallback(color: theme.colorScheme.foreground);
+  final stepScope = _PowerboardsFlowDialogStepScope.maybeOf(context);
+  final resolvedOnBack = onBack ?? stepScope?.defaultBackAction;
 
-  if (onBack == null) {
-    return _PowerboardsMobileFlowDialogTitleBar(
+  if (resolvedOnBack == null) {
+    return PowerboardsMobileFlowDialogTitleBar(
       title: DefaultTextStyle(style: resolvedTitleStyle, textAlign: TextAlign.left, child: truncatedTitle),
       closeIconData: closeIconData,
     );
@@ -789,7 +889,7 @@ Widget? _resolveDialogTitle(
 
   return _PowerboardsMobileFlowDialogHeader(
     title: DefaultTextStyle(style: resolvedTitleStyle, textAlign: TextAlign.center, child: truncatedTitle),
-    onBack: onBack,
+    onBack: resolvedOnBack,
     closeIconData: closeIconData,
   );
 }
@@ -873,13 +973,18 @@ BoxConstraints? _resolveDialogConstraints(
   required Size screenSize,
   required bool isMobile,
   required PowerboardsDialogMobilePresentation mobilePresentation,
+  required PowerboardsDialogMobileFlowBodyBehavior bodyBehavior,
   required double mobileTopInset,
   required double mobileBottomInset,
 }) {
   final availableMobileHeight = (screenSize.height - mobileTopInset - mobileBottomInset).clamp(0.0, screenSize.height).toDouble();
 
   if (isMobile && _usesMobileFlowPresentation(mobilePresentation)) {
-    final defaultMinHeight = _mobileFlowDefaultMinHeight(mobilePresentation, availableHeight: availableMobileHeight);
+    final defaultMinHeight = _mobileFlowDefaultMinHeight(
+      mobilePresentation,
+      bodyBehavior: bodyBehavior,
+      availableHeight: availableMobileHeight,
+    );
     final resolvedMinHeight = constraints == null
         ? defaultMinHeight
         : constraints.minHeight.clamp(defaultMinHeight, availableMobileHeight).toDouble();
@@ -907,9 +1012,17 @@ BoxConstraints? _resolveDialogConstraints(
   );
 }
 
-double _mobileFlowDefaultMinHeight(PowerboardsDialogMobilePresentation mobilePresentation, {required double availableHeight}) {
+double _mobileFlowDefaultMinHeight(
+  PowerboardsDialogMobilePresentation mobilePresentation, {
+  required PowerboardsDialogMobileFlowBodyBehavior bodyBehavior,
+  required double availableHeight,
+}) {
   if (mobilePresentation == PowerboardsDialogMobilePresentation.fullScreen) {
     return availableHeight;
+  }
+
+  if (bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.formScrollable) {
+    return (availableHeight * _mobileFormFlowDialogFloorHeightFactor).clamp(190.0, 280.0).toDouble();
   }
 
   return (availableHeight * _mobileFlowDialogFloorHeightFactor).clamp(300.0, 380.0).toDouble();
@@ -984,16 +1097,17 @@ class _PowerboardsDialogCloseButton extends StatelessWidget {
 }
 
 class _PowerboardsMobileDialogCloseButton extends StatelessWidget {
-  const _PowerboardsMobileDialogCloseButton({this.iconData});
+  const _PowerboardsMobileDialogCloseButton({this.iconData, this.onPressed});
 
   final IconData? iconData;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
 
     return ShadIconButton.ghost(
-      onPressed: () => Navigator.of(context).pop(),
+      onPressed: onPressed ?? () => Navigator.of(context).pop(),
       width: _mobileDialogCloseButtonSize,
       height: _mobileDialogCloseButtonSize,
       padding: EdgeInsets.zero,
@@ -1064,11 +1178,36 @@ class _PowerboardsMobileFlowDialogHeader extends StatelessWidget {
   }
 }
 
-class _PowerboardsMobileFlowDialogTitleBar extends StatelessWidget {
-  const _PowerboardsMobileFlowDialogTitleBar({required this.title, this.closeIconData});
+class PowerboardsMobileFlowDialogCenteredTitleBar extends StatelessWidget {
+  const PowerboardsMobileFlowDialogCenteredTitleBar({super.key, required this.title, this.closeIconData, this.onClose});
 
   final Widget title;
   final IconData? closeIconData;
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _mobileDialogCloseButtonSize,
+      child: Row(
+        children: [
+          const SizedBox(width: _mobileDialogCloseButtonSize),
+          const SizedBox(width: 8),
+          Expanded(child: Center(child: title)),
+          const SizedBox(width: 8),
+          _PowerboardsMobileDialogCloseButton(iconData: closeIconData, onPressed: onClose),
+        ],
+      ),
+    );
+  }
+}
+
+class PowerboardsMobileFlowDialogTitleBar extends StatelessWidget {
+  const PowerboardsMobileFlowDialogTitleBar({super.key, required this.title, this.closeIconData, this.onClose});
+
+  final Widget title;
+  final IconData? closeIconData;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -1078,7 +1217,7 @@ class _PowerboardsMobileFlowDialogTitleBar extends StatelessWidget {
         children: [
           Expanded(child: title),
           const SizedBox(width: 12),
-          _PowerboardsMobileDialogCloseButton(iconData: closeIconData),
+          _PowerboardsMobileDialogCloseButton(iconData: closeIconData, onPressed: onClose),
         ],
       ),
     );
@@ -1448,7 +1587,7 @@ class PowerboardsFlowDialogScrollableBody extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final minContentHeight = (constraints.maxHeight - padding.vertical).clamp(0.0, constraints.maxHeight).toDouble();
-        final canScroll = contentHeight == null || contentHeight! > (minContentHeight + 1);
+        final canScroll = !centerSparseContent || contentHeight == null || contentHeight! > (minContentHeight + 1);
         final shouldCenter = centerSparseContent && contentHeight != null && contentHeight! <= (minContentHeight * 0.45);
 
         Widget content = child;
