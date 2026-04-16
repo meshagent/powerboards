@@ -999,7 +999,120 @@ List<Widget> _buildDialogActions(
 }
 
 Widget _wrapDialogAction(Widget action) {
-  return SizedBox(height: powerboardsFooterActionButtonHeight, child: action);
+  final resolvedAction = switch (action) {
+    ShadButton button => _copyDialogActionButton(button),
+    _ => action,
+  };
+  return SizedBox(height: powerboardsFooterActionButtonHeight, child: resolvedAction);
+}
+
+ShadButton _copyDialogActionButton(ShadButton button) {
+  return ShadButton.raw(
+    key: button.key,
+    variant: button.variant,
+    size: button.size,
+    leading: button.leading,
+    trailing: button.trailing,
+    onPressed: button.onPressed,
+    cursor: button.cursor,
+    width: button.width,
+    height: button.height,
+    padding: button.padding,
+    backgroundColor: button.backgroundColor,
+    hoverBackgroundColor: button.hoverBackgroundColor,
+    foregroundColor: button.foregroundColor,
+    hoverForegroundColor: button.hoverForegroundColor,
+    autofocus: button.autofocus,
+    focusNode: button.focusNode,
+    pressedBackgroundColor: button.pressedBackgroundColor,
+    pressedForegroundColor: button.pressedForegroundColor,
+    shadows: button.shadows,
+    gradient: button.gradient,
+    textDecoration: button.textDecoration,
+    hoverTextDecoration: button.hoverTextDecoration,
+    decoration: button.decoration,
+    enabled: button.enabled,
+    onLongPress: button.onLongPress,
+    statesController: button.statesController,
+    mainAxisAlignment: button.mainAxisAlignment,
+    crossAxisAlignment: button.crossAxisAlignment,
+    hoverStrategies: button.hoverStrategies,
+    onHoverChange: button.onHoverChange,
+    onTapDown: button.onTapDown,
+    onTapUp: button.onTapUp,
+    onTapCancel: button.onTapCancel,
+    onSecondaryTapDown: button.onSecondaryTapDown,
+    onSecondaryTapUp: button.onSecondaryTapUp,
+    onSecondaryTapCancel: button.onSecondaryTapCancel,
+    onLongPressStart: button.onLongPressStart,
+    onLongPressCancel: button.onLongPressCancel,
+    onLongPressUp: button.onLongPressUp,
+    onLongPressDown: button.onLongPressDown,
+    onLongPressEnd: button.onLongPressEnd,
+    onDoubleTap: button.onDoubleTap,
+    onDoubleTapDown: button.onDoubleTapDown,
+    onDoubleTapCancel: button.onDoubleTapCancel,
+    longPressDuration: button.longPressDuration,
+    textDirection: button.textDirection,
+    gap: button.gap,
+    onFocusChange: button.onFocusChange,
+    expands: button.child != null ? true : button.expands,
+    textStyle: button.textStyle,
+    canRequestFocus: button.canRequestFocus,
+    child: _wrapDialogActionChild(button.child),
+  );
+}
+
+Widget? _wrapDialogActionChild(Widget? child) {
+  if (child == null) {
+    return null;
+  }
+
+  if (child case final Text text) {
+    return _PowerboardsDialogActionText(text: text);
+  }
+
+  return _PowerboardsDialogActionLabelDefaults(child: child);
+}
+
+class _PowerboardsDialogActionLabelDefaults extends StatelessWidget {
+  const _PowerboardsDialogActionLabelDefaults({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTextStyle.merge(maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, textAlign: TextAlign.center, child: child);
+  }
+}
+
+class _PowerboardsDialogActionText extends StatelessWidget {
+  const _PowerboardsDialogActionText({required this.text});
+
+  final Text text;
+
+  @override
+  Widget build(BuildContext context) {
+    final inlineSpan = text.textSpan ?? TextSpan(text: text.data);
+
+    return Text.rich(
+      inlineSpan,
+      key: text.key,
+      style: text.style,
+      strutStyle: text.strutStyle,
+      textAlign: text.textAlign ?? TextAlign.center,
+      textDirection: text.textDirection,
+      locale: text.locale,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      textScaler: text.textScaler,
+      maxLines: 1,
+      semanticsLabel: text.semanticsLabel,
+      textWidthBasis: text.textWidthBasis,
+      textHeightBehavior: text.textHeightBehavior,
+      selectionColor: text.selectionColor,
+    );
+  }
 }
 
 bool _usesHorizontalMobileActionRow({required bool isMobile, required List<Widget> actions}) {
