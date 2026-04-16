@@ -41,6 +41,8 @@ class InstallServiceDialog extends StatefulWidget {
     super.key,
     this.template,
     this.type = ServiceType.any,
+    this.initialUrl,
+    this.allowUrlEditing = true,
     required this.projectId,
     required this.roomName,
     this.onInstalled,
@@ -48,6 +50,8 @@ class InstallServiceDialog extends StatefulWidget {
 
   final String? template;
   final ServiceType type;
+  final Uri? initialUrl;
+  final bool allowUrlEditing;
   final String projectId;
   final String? roomName;
   final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
@@ -74,9 +78,20 @@ class _InstallServiceDialogState extends State<InstallServiceDialog> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+        if (isMobile && widget.template == null && widget.initialUrl == null) {
+          return _InstallServiceUrlDialog(
+            type: widget.type,
+            projectId: widget.projectId,
+            roomName: widget.roomName,
+            onInstalled: widget.onInstalled,
+          );
+        }
+
         final installer = AgentInstaller(
+          initialUrl: widget.initialUrl,
           template: widget.template,
           type: widget.type,
+          allowUrlEditing: widget.allowUrlEditing,
           initialProjectId: widget.projectId,
           initialRoomName: widget.roomName,
           onInstalled: widget.onInstalled,
@@ -130,6 +145,7 @@ class AgentInstaller extends StatefulWidget {
     this.initialUrl,
     this.template,
     this.type = ServiceType.any,
+    this.allowUrlEditing = true,
     this.initialProjectId,
     this.initialRoomName,
     this.onInstalled,
@@ -139,6 +155,7 @@ class AgentInstaller extends StatefulWidget {
   final Uri? initialUrl;
   final String? template;
   final ServiceType type;
+  final bool allowUrlEditing;
   final String? initialProjectId;
   final String? initialRoomName;
   final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
@@ -163,6 +180,7 @@ class _AgentInstaller extends State<AgentInstaller> {
   late final TextEditingController _urlController;
   String? _urlError;
   String? _lastPublishedMobileChromeSignature;
+  bool _mobileConfirmPresentationPending = false;
 
   bool get _hasValidUrl => _url != null && _url!.host.isNotEmpty;
   bool get _mcpOnly => widget.type == ServiceType.mcp;
@@ -348,7 +366,7 @@ class _AgentInstaller extends State<AgentInstaller> {
       _publishMobileDialogChrome((
         signature: 'loading:$step',
         actions: const <Widget>[],
-        onBack: widget.template == null ? _backToUrlInput : null,
+        onBack: widget.template == null && widget.allowUrlEditing ? _backToUrlInput : null,
       ));
       return;
     }
@@ -357,7 +375,7 @@ class _AgentInstaller extends State<AgentInstaller> {
       _publishMobileDialogChrome((
         signature: 'error:$step',
         actions: const <Widget>[],
-        onBack: widget.template == null ? _backToUrlInput : null,
+        onBack: widget.template == null && widget.allowUrlEditing ? _backToUrlInput : null,
       ));
       return;
     }
@@ -378,7 +396,7 @@ class _AgentInstaller extends State<AgentInstaller> {
               },
             ),
           ],
-          onBack: widget.template == null ? _backToUrlInput : null,
+          onBack: widget.template == null && widget.allowUrlEditing ? _backToUrlInput : null,
         ));
         return;
       case _InstallerStep.selectProject:
@@ -424,6 +442,64 @@ class _AgentInstaller extends State<AgentInstaller> {
         ));
         return;
     }
+  }
+
+  void _scheduleMobileConfirmPresentation() {
+    if (_mobileConfirmPresentationPending || !_usesMobileFlowLayout) {
+      return;
+    }
+
+    final spec = _spec.state.value;
+    final template = _template;
+    final projectId = _projectId;
+    final roomName = _roomName;
+
+    if (spec == null || template == null || projectId == null || roomName == null) {
+      return;
+    }
+
+    _mobileConfirmPresentationPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _step != _InstallerStep.confirm) {
+        _mobileConfirmPresentationPending = false;
+        return;
+      }
+
+      final changed = await showPowerboardsFlowDialog<bool>(
+        context: context,
+        builder: (_) => ConfigureServiceTemplateDialog(
+          template: template,
+          projectId: projectId,
+          serviceId: _currentServiceForSpec()?.id,
+          manifest: spec,
+          roomName: roomName,
+          prefilledVars: const <String, String>{},
+          title: 'Install agent',
+          description: 'Installing this agent will grant it access to your room. Review the details before continuing.',
+        ),
+      );
+
+      _mobileConfirmPresentationPending = false;
+
+      if (!mounted) {
+        return;
+      }
+
+      if (changed == true) {
+        Navigator.of(context).pop(true);
+        return;
+      }
+
+      setState(() {
+        if (widget.initialRoomName != null) {
+          _confirmed = false;
+        } else {
+          _roomName = null;
+        }
+      });
+
+      _services.refresh();
+    });
   }
 
   Widget _urlStep() {
@@ -473,6 +549,32 @@ class _AgentInstaller extends State<AgentInstaller> {
             children: [_backButton(onPressed: _backToUrlInput, label: "Change URL")],
           ),
       ],
+    );
+  }
+
+  Widget _loadingStep() {
+    final theme = ShadTheme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text("Loading agent details", style: _labelStyle, textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          Text(
+            "Preparing agent details for the next step.",
+            textAlign: TextAlign.center,
+            style: theme.textTheme.muted.copyWith(color: theme.colorScheme.mutedForeground),
+          ),
+          const SizedBox(height: 24),
+          const Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(width: 40, height: 40, child: CircularProgressIndicator(strokeWidth: 3.5)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -809,7 +911,7 @@ class _AgentInstaller extends State<AgentInstaller> {
             if (_spec.state.hasError && !_spec.state.isRefreshing) {
               return _specError("${_spec.state.error}");
             }
-            return const Center(child: CircularProgressIndicator());
+            return _usesMobileFlowLayout ? _loadingStep() : const Center(child: CircularProgressIndicator());
           }
 
           if (_spec.state.value == null) {
@@ -827,9 +929,119 @@ class _AgentInstaller extends State<AgentInstaller> {
           case _InstallerStep.selectRoom:
             return _roomStep();
           case _InstallerStep.confirm:
+            if (_usesMobileFlowLayout) {
+              _scheduleMobileConfirmPresentation();
+              return const Center(child: CircularProgressIndicator());
+            }
             return _confirmStep();
         }
       },
+    );
+  }
+}
+
+class _InstallServiceUrlDialog extends StatefulWidget {
+  const _InstallServiceUrlDialog({required this.type, required this.projectId, required this.roomName, this.onInstalled});
+
+  final ServiceType type;
+  final String projectId;
+  final String? roomName;
+  final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
+
+  @override
+  State<_InstallServiceUrlDialog> createState() => _InstallServiceUrlDialogState();
+}
+
+class _InstallServiceUrlDialogState extends State<_InstallServiceUrlDialog> {
+  late final TextEditingController _urlController;
+  String? _urlError;
+
+  bool get _mcpOnly => widget.type == ServiceType.mcp;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _continue() async {
+    final text = _urlController.text.trim();
+    final uri = Uri.tryParse(text);
+
+    if (uri == null || uri.host.isEmpty) {
+      setState(() {
+        _urlError = "Please enter a valid URL";
+      });
+      return;
+    }
+
+    setState(() {
+      _urlError = null;
+    });
+
+    final changed = await showPowerboardsFlowDialog<bool>(
+      context: context,
+      builder: (_) => InstallServiceDialog(
+        initialUrl: uri,
+        allowUrlEditing: false,
+        type: widget.type,
+        projectId: widget.projectId,
+        roomName: widget.roomName,
+        onInstalled: widget.onInstalled,
+      ),
+    );
+
+    if (!mounted || changed != true) {
+      return;
+    }
+
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _mcpOnly ? "Enter the URL of an MCP server" : "Enter the URL of an agent or MCP server";
+    final description = _mcpOnly
+        ? "The link must point to a valid MCP server URL."
+        : "The link must point to a valid service template YAML or an MCP server URL.";
+
+    return PowerboardsShadDialog(
+      scrollable: false,
+      expandDesktopActions: true,
+      stackActionsOnMobile: true,
+      mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
+      mobileFlowBodyBehavior: PowerboardsDialogMobileFlowBodyBehavior.formScrollable,
+      mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
+      title: Text(widget.type == ServiceType.mcp ? "Add MCP Service" : "Install"),
+      actions: [ShadButton(onPressed: _continue, child: const Text('Continue'))],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          spacing: 16,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            PowerboardsAdaptiveInput(controller: _urlController, placeholder: const Text("https://mcp.notion.com/mcp")),
+            Text(
+              description,
+              textAlign: TextAlign.left,
+              style: ShadTheme.of(context).textTheme.small.copyWith(color: ShadTheme.of(context).colorScheme.mutedForeground),
+            ),
+            if (_urlError != null) ShadAlert.destructive(description: Text(_urlError!)),
+          ],
+        ),
+      ),
     );
   }
 }
