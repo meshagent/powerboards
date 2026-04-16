@@ -23,6 +23,7 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
+import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
@@ -139,6 +140,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   late final ChatThreadController _chatController;
   late String _documentPath;
   late String? _initialMessageText;
+  String? _lastRestoredThreadScrollOffsetValue;
 
   String? _normalizeSelectedThreadPath(String? path) {
     final normalizedPath = path?.trim();
@@ -198,6 +200,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _restoreThreadScrollOffsetFromRoute();
+  }
+
+  @override
   void dispose() {
     _chatController.dispose();
 
@@ -223,12 +231,53 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     final currentUri = state.uri;
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    final previewOriginQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    previewOriginQueryParameters.putIfAbsent('pane', () => 'chat');
+    if (_chatController.threadScrollController.hasClients) {
+      previewOriginQueryParameters[filePreviewThreadScrollOffsetQueryParameter] = _chatController.threadScrollController.position.pixels
+          .toString();
+    }
+
     updatedQueryParameters['p'] = path;
+    updatedQueryParameters[filePreviewOriginQueryParameter] = currentUri.replace(queryParameters: previewOriginQueryParameters).toString();
     updatedQueryParameters.remove('pane'); // remove the pane parameter to ensure file is shown
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
 
     context.go(newUri.toString());
+  }
+
+  void _restoreThreadScrollOffsetFromRoute() {
+    final currentUri = PathRouteMatch.of(context).uri;
+    final rawOffset = currentUri.queryParameters[filePreviewThreadScrollOffsetQueryParameter];
+    if (rawOffset == null || rawOffset.isEmpty || rawOffset == _lastRestoredThreadScrollOffsetValue) {
+      return;
+    }
+
+    final parsedOffset = double.tryParse(rawOffset);
+    if (parsedOffset == null || !parsedOffset.isFinite) {
+      return;
+    }
+
+    _lastRestoredThreadScrollOffsetValue = rawOffset;
+
+    void restore() {
+      if (!mounted) {
+        return;
+      }
+
+      final scrollController = _chatController.threadScrollController;
+      if (!scrollController.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => restore());
+        return;
+      }
+
+      final position = scrollController.position;
+      final clampedOffset = parsedOffset.clamp(position.minScrollExtent, position.maxScrollExtent);
+      scrollController.jumpTo(clampedOffset);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => restore());
   }
 
   void _onThreadPathChanged(String? path) {

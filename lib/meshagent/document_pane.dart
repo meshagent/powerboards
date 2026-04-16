@@ -11,6 +11,7 @@ import 'package:meshagent_flutter_shadcn/viewers/gallery.dart';
 import 'package:meshagent_flutter_shadcn/viewers/presentation.dart';
 import 'package:meshagent_flutter_shadcn/viewers/transcript.dart';
 import 'package:path/path.dart' as p;
+import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
@@ -70,6 +71,7 @@ class _DocumentPane extends State<DocumentPane> {
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
     updatedQueryParameters['p'] = path;
+    updatedQueryParameters[filePreviewOriginQueryParameter] = currentUri.toString();
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
 

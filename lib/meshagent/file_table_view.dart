@@ -26,6 +26,7 @@ import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
+import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
@@ -759,6 +760,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
     updatedQueryParameters['p'] = path.isEmpty ? '' : (isFolder ? '$path/' : path);
+    updatedQueryParameters.remove(filePreviewOriginQueryParameter);
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
     context.go(newUri.toString());
@@ -777,7 +779,17 @@ class _FileManagerViewState extends State<FileManagerView> {
     _openEntry(files[nextIndex], false);
   }
 
-  void _closeFile() => _openEntry(_folderSig.value, true);
+  void _closeFile() {
+    final currentUri = PathRouteMatch.of(context).uri;
+    final previewOrigin = currentUri.queryParameters[filePreviewOriginQueryParameter];
+    if (previewOrigin != null && previewOrigin.isNotEmpty && previewOrigin != currentUri.toString()) {
+      context.go(previewOrigin);
+      return;
+    }
+
+    _openEntry(_folderSig.value, true);
+  }
+
   void _previousFile() => _cycleFile(-1);
   void _nextFile() => _cycleFile(1);
 

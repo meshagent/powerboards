@@ -32,6 +32,7 @@ import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
+import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/file_upload.dart';
@@ -1649,6 +1650,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _navigateBackFromMobileFiles(BuildContext context) {
+    final currentUri = PathRouteMatch.of(context).uri;
+    final previewOrigin = currentUri.queryParameters[filePreviewOriginQueryParameter];
+    if (previewOrigin != null && previewOrigin.isNotEmpty && previewOrigin != currentUri.toString()) {
+      context.go(previewOrigin);
+      return;
+    }
+
     final filesLocation = _mobileFilesLocation(context);
     final backFolderPath = filesLocation.backFolderPath;
 
