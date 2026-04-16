@@ -626,14 +626,19 @@ class PowerboardsShadDialog extends StatelessWidget {
       mobileKeyboardBehavior: mobileKeyboardBehavior,
       bodyBehavior: mobileFlowBodyBehavior,
     );
-    final mobileKeyboardInset = usesMobileFlowPresentation && usesKeyboardAvoidance ? (mediaQuery?.viewInsets.bottom ?? 0.0) : 0.0;
+    final rawMobileKeyboardInset = usesMobileFlowPresentation ? (mediaQuery?.viewInsets.bottom ?? 0.0) : 0.0;
+    final pinsFooterDuringKeyboard =
+        usesMobileFlowPresentation && mobileFlowBodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.formScrollable;
+    final mobileKeyboardInset = pinsFooterDuringKeyboard ? rawMobileKeyboardInset : (usesKeyboardAvoidance ? rawMobileKeyboardInset : 0.0);
     final mobileTopInset = usesMobileFlowPresentation
         ? (powerboardsMobileScreenTopInset +
               (usesLandscapeMobileFlowPresentation
                   ? _mobileLandscapeFlowDialogTopGap
                   : powerboardsMobileScreenBottomInset + _mobileFlowDialogTopGap))
         : (isMobile ? powerboardsMobileScreenTopInset : 0.0);
-    final mobileBottomInset = usesMobileFlowPresentation ? mobileKeyboardInset : (isMobile ? powerboardsMobileScreenBottomInset : 0.0);
+    final mobileBottomInset = usesMobileFlowPresentation
+        ? (pinsFooterDuringKeyboard ? 0.0 : mobileKeyboardInset)
+        : (isMobile ? powerboardsMobileScreenBottomInset : 0.0);
     final effectiveConstraints = _resolveDialogConstraints(
       constraints,
       screenSize: screenSize,
@@ -777,7 +782,7 @@ class PowerboardsShadDialog extends StatelessWidget {
             child: child,
           );
 
-    final wrappedDialog = usesMobileFlowPresentation && !usesKeyboardAvoidance
+    final wrappedDialog = usesMobileFlowPresentation && (pinsFooterDuringKeyboard || !usesKeyboardAvoidance)
         ? MediaQuery.removeViewInsets(context: context, removeBottom: true, child: dialog)
         : dialog;
 
@@ -1556,6 +1561,9 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
     final hasFixedHeight =
         heightConstraints.hasBoundedHeight && (heightConstraints.maxHeight - heightConstraints.minHeight).abs() < precisionErrorTolerance;
     final requiresMeasurement = widget.bodyBehavior != PowerboardsDialogMobileFlowBodyBehavior.fill && !hasFixedHeight;
+    final pinsFooterDuringKeyboard = widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.formScrollable;
+    final surfaceKeyboardInset = pinsFooterDuringKeyboard ? 0.0 : widget.keyboardInset;
+    final shouldRelaxClip = pinsFooterDuringKeyboard && widget.keyboardInset > 0;
     if (requiresMeasurement) {
       _scheduleMeasurement();
     }
@@ -1567,11 +1575,21 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
         ? ((_measuredContentHeight ?? (minHeight - resolvedPadding.vertical).clamp(0.0, minHeight).toDouble()) + resolvedPadding.vertical)
         : maxHeight;
     final targetHeight = measuredHeight.clamp(minHeight, maxHeight).toDouble();
+    final hideActionsForKeyboard =
+        widget.keyboardInset > 0 &&
+        (widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.scrollable ||
+            widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.formScrollable);
+    final keyboardLiftOffset = pinsFooterDuringKeyboard && widget.keyboardInset > 0
+        ? widget.keyboardInset.clamp(0.0, (maxHeight - targetHeight).clamp(0.0, widget.keyboardInset).toDouble()).toDouble()
+        : 0.0;
+    final bodyKeyboardInset = pinsFooterDuringKeyboard
+        ? (widget.keyboardInset - keyboardLiftOffset).clamp(0.0, widget.keyboardInset).toDouble()
+        : widget.keyboardInset;
     final visibleFrame = _PowerboardsMobileFlowDialogFrame(
       title: widget.title,
       description: widget.description,
-      body: _buildVisibleBody(),
-      actions: widget.actions,
+      body: _buildVisibleBody(keyboardInset: bodyKeyboardInset),
+      actions: hideActionsForKeyboard ? const <Widget>[] : widget.actions,
       gap: widget.gap,
       actionsGap: widget.actionsGap,
       expandBody: true,
@@ -1593,7 +1611,7 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
     return AnimatedPadding(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
-      padding: EdgeInsets.only(bottom: widget.keyboardInset),
+      padding: EdgeInsets.only(bottom: pinsFooterDuringKeyboard ? keyboardLiftOffset : surfaceKeyboardInset),
       child: SizedBox.expand(
         child: Column(
           children: [
@@ -1644,30 +1662,28 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
                       ),
                     ),
                   ),
-                GestureDetector(
-                  onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minWidth: widget.constraints?.minWidth ?? 0.0,
-                      maxWidth: widget.constraints?.maxWidth ?? double.infinity,
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: widget.constraints?.minWidth ?? 0.0,
+                    maxWidth: widget.constraints?.maxWidth ?? double.infinity,
+                  ),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: widget.backgroundColor,
+                      borderRadius: widget.radius,
+                      border: widget.border,
+                      boxShadow: widget.shadows,
                     ),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: widget.backgroundColor,
-                        borderRadius: widget.radius,
-                        border: widget.border,
-                        boxShadow: widget.shadows,
-                      ),
-                      child: ClipRRect(
-                        borderRadius: widget.radius,
-                        child: SizedBox(
-                          height: targetHeight,
-                          child: Padding(
-                            padding: widget.padding,
-                            child: !requiresMeasurement || _measuredContentHeight != null
-                                ? visibleFrame
-                                : SingleChildScrollView(child: provisionalFrame!),
-                          ),
+                    child: ClipRRect(
+                      borderRadius: widget.radius,
+                      clipBehavior: shouldRelaxClip ? Clip.none : Clip.antiAlias,
+                      child: SizedBox(
+                        height: targetHeight,
+                        child: Padding(
+                          padding: widget.padding,
+                          child: !requiresMeasurement || _measuredContentHeight != null
+                              ? visibleFrame
+                              : SingleChildScrollView(child: provisionalFrame!),
                         ),
                       ),
                     ),
@@ -1715,7 +1731,7 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
     return content;
   }
 
-  Widget _buildVisibleBody() {
+  Widget _buildVisibleBody({required double keyboardInset}) {
     final body = widget.body;
     if (body == null) {
       return const SizedBox.shrink();
@@ -1731,6 +1747,7 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
       PowerboardsDialogMobileFlowBodyBehavior.formScrollable => PowerboardsFlowDialogScrollableBody(
         contentHeight: _measuredBodyHeight,
         centerSparseContent: false,
+        keyboardInset: keyboardInset,
         child: body,
       ),
       PowerboardsDialogMobileFlowBodyBehavior.fill => PowerboardsFlowDialogFillBody(child: body),
@@ -1746,6 +1763,7 @@ class PowerboardsFlowDialogScrollableBody extends StatelessWidget {
     this.maxWidth,
     this.contentHeight,
     this.centerSparseContent = false,
+    this.keyboardInset = 0.0,
   });
 
   final Widget child;
@@ -1753,12 +1771,14 @@ class PowerboardsFlowDialogScrollableBody extends StatelessWidget {
   final double? maxWidth;
   final double? contentHeight;
   final bool centerSparseContent;
+  final double keyboardInset;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final minContentHeight = (constraints.maxHeight - padding.vertical).clamp(0.0, constraints.maxHeight).toDouble();
+        final effectivePadding = padding.copyWith(bottom: padding.bottom + keyboardInset);
+        final minContentHeight = (constraints.maxHeight - effectivePadding.vertical).clamp(0.0, constraints.maxHeight).toDouble();
         final canScroll = !centerSparseContent || contentHeight == null || contentHeight! > (minContentHeight + 1);
         final shouldCenter = centerSparseContent && contentHeight != null && contentHeight! <= (minContentHeight * 0.45);
 
@@ -1776,7 +1796,7 @@ class PowerboardsFlowDialogScrollableBody extends StatelessWidget {
 
         return SingleChildScrollView(
           physics: canScroll ? null : const NeverScrollableScrollPhysics(),
-          padding: padding,
+          padding: effectivePadding,
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: minContentHeight),
             child: Align(alignment: shouldCenter ? Alignment.center : Alignment.topCenter, child: content),

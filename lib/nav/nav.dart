@@ -717,6 +717,7 @@ class _NavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final keyboardOpen = isMobile && (MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0.0) > 0;
     final horizontalPadding = isMobile
         ? powerboardsMobileHorizontalPadding
         : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset);
@@ -768,7 +769,7 @@ class _NavBar extends StatelessWidget {
                     balanceLow: balanceLow,
                   ),
           ),
-          if (canCreateRooms)
+          if (canCreateRooms && !keyboardOpen)
             Padding(
               padding: EdgeInsets.fromLTRB(
                 isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
