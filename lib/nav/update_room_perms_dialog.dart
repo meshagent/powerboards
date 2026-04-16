@@ -399,20 +399,26 @@ class AddedUser {
   final GrantRole role;
 }
 
+enum _InviteUserSuggestionState { projectMember, inviteAllowed, inviteBlocked }
+
 class _InviteUserSuggestion {
   const _InviteUserSuggestion({
     required this.email,
     required this.label,
     required this.description,
-    required this.isProjectUser,
+    required this.state,
     this.supportingText,
   });
 
   final String email;
   final String label;
   final String description;
-  final bool isProjectUser;
+  final _InviteUserSuggestionState state;
   final String? supportingText;
+
+  bool get isProjectUser => state == _InviteUserSuggestionState.projectMember;
+
+  bool get canSelect => state != _InviteUserSuggestionState.inviteBlocked;
 }
 
 class _InviteUserMobileContextMenu extends StatefulWidget {
@@ -696,6 +702,31 @@ class _AddUserDialogState extends State<AddUserDialog> {
     _mobileEmailFocusNode.requestFocus();
   }
 
+  bool _isCurrentProjectAdmin(Map<String, User> projectUsersMap) {
+    final myUser = MeshagentAuth.current.getUser();
+    final myUserId = (myUser?['id'] as String?) ?? '';
+    final me = projectUsersMap.values.firstWhereOrNull((u) => u.id == myUserId);
+    return me?.isAdmin ?? false;
+  }
+
+  void _showInviteBlockedToast(Iterable<String> emails) {
+    final blockedEmails = emails.toList(growable: false);
+    if (blockedEmails.isEmpty) {
+      return;
+    }
+
+    final toaster = ShadToaster.maybeOf(context);
+    if (toaster == null) {
+      return;
+    }
+
+    final plural = blockedEmails.length > 1;
+    final message = plural
+        ? 'Ask a project admin to add these users to the project before inviting them to this room.'
+        : 'Ask a project admin to add this user to the project before inviting them to this room.';
+    toaster.show(ShadToast.destructive(description: Text(message)));
+  }
+
   void _addEmailToSelection(String email, {required Map<String, User> projectUsersMap, required Map<String, GrantSummary> roomGrants}) {
     _setSelectedUsersFromEmails(
       [...selectedUsers.value.map((user) => user.email), email],
@@ -729,12 +760,47 @@ class _AddUserDialogState extends State<AddUserDialog> {
       return false;
     }
 
+    final isCurrentUserAdmin = _isCurrentProjectAdmin(projectUsersMap);
+    final allowedEmails = <String>[];
+    final blockedEmails = <String>[];
+
+    for (final email in parsedEmails) {
+      final normalizedEmail = email.toLowerCase();
+      if (!isCurrentUserAdmin && !projectUsersMap.containsKey(normalizedEmail)) {
+        blockedEmails.add(email);
+        continue;
+      }
+      allowedEmails.add(email);
+    }
+
+    if (blockedEmails.isNotEmpty) {
+      _showInviteBlockedToast(blockedEmails);
+    }
+
+    if (allowedEmails.isEmpty) {
+      return false;
+    }
+
     _setSelectedUsersFromEmails(
-      [...selectedUsers.value.map((user) => user.email), ...parsedEmails],
+      [...selectedUsers.value.map((user) => user.email), ...allowedEmails],
       projectUsersMap: projectUsersMap,
       roomGrants: roomGrants,
     );
-    textController.clear();
+
+    if (blockedEmails.isEmpty) {
+      textController.clear();
+    } else {
+      final blockedEmailText = blockedEmails.join(', ');
+      textController.value = TextEditingValue(
+        text: blockedEmailText,
+        selection: TextSelection.collapsed(offset: blockedEmailText.length),
+      );
+      if (mounted) {
+        _mobileEmailFocusNode.requestFocus();
+      }
+      return true;
+    }
+
     _updateInputFocusAfterSelectionChange();
     return true;
   }
@@ -748,6 +814,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
     final selectedEmails = selectedUsers.value.map((user) => user.email.toLowerCase()).toSet();
     final queryLower = query.toLowerCase();
     final suggestions = <_InviteUserSuggestion>[];
+    final isCurrentUserAdmin = _isCurrentProjectAdmin(projectUsersMap);
 
     for (final projectUser in projectUsersMap.values) {
       final email = projectUser.email;
@@ -756,7 +823,9 @@ class _AddUserDialogState extends State<AddUserDialog> {
         continue;
       }
 
-      suggestions.add(_InviteUserSuggestion(email: email, label: email, description: 'Project member', isProjectUser: true));
+      suggestions.add(
+        _InviteUserSuggestion(email: email, label: email, description: 'Project member', state: _InviteUserSuggestionState.projectMember),
+      );
     }
 
     suggestions.sort((a, b) => a.email.toLowerCase().compareTo(b.email.toLowerCase()));
@@ -765,14 +834,29 @@ class _AddUserDialogState extends State<AddUserDialog> {
         !selectedEmails.contains(queryLower) &&
         suggestions.every((suggestion) => suggestion.email.toLowerCase() != queryLower)) {
       final isProjectUser = projectUsersMap.containsKey(queryLower);
+      final suggestionState = switch ((isProjectUser, isCurrentUserAdmin)) {
+        (true, _) => _InviteUserSuggestionState.projectMember,
+        (false, true) => _InviteUserSuggestionState.inviteAllowed,
+        (false, false) => _InviteUserSuggestionState.inviteBlocked,
+      };
       suggestions.insert(
         0,
         _InviteUserSuggestion(
           email: query,
           label: query,
-          description: isProjectUser ? 'Project member' : 'Invite to project and room',
-          supportingText: isProjectUser ? null : 'Not a member of this project yet. Adding them to the room also adds them to the project.',
-          isProjectUser: isProjectUser,
+          description: switch (suggestionState) {
+            _InviteUserSuggestionState.projectMember => 'Project member',
+            _InviteUserSuggestionState.inviteAllowed => 'Invite to project and room',
+            _InviteUserSuggestionState.inviteBlocked => 'Not in project',
+          },
+          supportingText: switch (suggestionState) {
+            _InviteUserSuggestionState.projectMember => null,
+            _InviteUserSuggestionState.inviteAllowed =>
+              'Not a member of this project yet. Adding them to the room also adds them to the project.',
+            _InviteUserSuggestionState.inviteBlocked =>
+              'Ask a project admin to add this user to the project before inviting them to this room.',
+          },
+          state: suggestionState,
         ),
       );
     }
@@ -792,7 +876,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
     final theme = ShadTheme.of(context);
     final destructiveTextColor = theme.colorScheme.destructive;
     final destructiveSupportingColor = theme.colorScheme.destructive.withValues(alpha: .78);
-    final showsInviteSuggestion = suggestions.any((suggestion) => !suggestion.isProjectUser);
+    final showsInviteSuggestion = suggestions.any((suggestion) => suggestion.state != _InviteUserSuggestionState.projectMember);
     final menuBorderColor = showsInviteSuggestion ? destructiveTextColor.withValues(alpha: .6) : theme.colorScheme.border;
     final menuDecoration = BoxDecoration(
       color: theme.colorScheme.card,
@@ -801,15 +885,48 @@ class _AddUserDialogState extends State<AddUserDialog> {
       boxShadow: const [BoxShadow(color: Color(0x11000000), blurRadius: 18, offset: Offset(0, 8))],
     );
 
+    Widget buildSuggestionIcon(_InviteUserSuggestion suggestion) {
+      final iconColor = suggestion.state == _InviteUserSuggestionState.inviteBlocked
+          ? destructiveTextColor
+          : theme.colorScheme.foreground.withValues(alpha: .74);
+
+      if (suggestion.state != _InviteUserSuggestionState.inviteBlocked) {
+        return Icon(suggestion.isProjectUser ? LucideIcons.userRoundCheck : LucideIcons.userRoundPlus, size: 18, color: iconColor);
+      }
+
+      return SizedBox(
+        width: 18,
+        height: 18,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(child: Icon(LucideIcons.userRound, size: 18, color: iconColor)),
+            Positioned(
+              right: -2,
+              bottom: -1,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: theme.colorScheme.card, borderRadius: BorderRadius.circular(999)),
+                child: Icon(LucideIcons.x, size: 9, color: destructiveTextColor),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     Widget buildSuggestionRow(int index) {
       final suggestion = suggestions[index];
       final primaryTextStyle = TextStyle(color: theme.colorScheme.foreground, fontWeight: FontWeight.w600, height: 1.15);
 
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () {
-          _addEmailToSelection(suggestion.email, projectUsersMap: projectUsersMap, roomGrants: roomGrants);
-        },
+        onTap: suggestion.canSelect
+            ? () {
+                _addEmailToSelection(suggestion.email, projectUsersMap: projectUsersMap, roomGrants: roomGrants);
+              }
+            : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -817,13 +934,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
             children: [
               SizedBox(
                 height: _mobileSuggestionTitleLineHeight,
-                child: Center(
-                  child: Icon(
-                    suggestion.isProjectUser ? LucideIcons.userRoundCheck : LucideIcons.userRoundPlus,
-                    size: 18,
-                    color: theme.colorScheme.foreground.withValues(alpha: .74),
-                  ),
-                ),
+                child: Center(child: buildSuggestionIcon(suggestion)),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -937,24 +1048,10 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
       // get users not in project
       final selected = selectedUsers.value;
-      final projUsersMap = projectUsersMap.state.value ?? {};
+      var projUsersMap = projectUsersMap.state.value ?? {};
 
-      final usersToAddToProject = selected.where((u) => !projUsersMap.containsKey(u.email.toLowerCase()));
-
-      final myUser = MeshagentAuth.current.getUser();
-      final myUserId = (myUser?['id'] as String?) ?? '';
-      final me = projUsersMap.values.firstWhereOrNull((u) => u.id == myUserId);
-      final isMeAdmin = me?.isAdmin ?? false;
-
-      final roomGrantsMap = grants.state.value ?? {};
-
-      final usersInRoomMap = {};
-      for (final user in projUsersMap.values) {
-        final grants = roomGrantsMap[user.id];
-        if (grants != null) {
-          usersInRoomMap[user.email.toLowerCase()] = grants;
-        }
-      }
+      final usersToAddToProject = selected.where((u) => !projUsersMap.containsKey(u.email.toLowerCase())).toList(growable: false);
+      final isMeAdmin = _isCurrentProjectAdmin(projUsersMap);
 
       if (selected.isEmpty) {
         setState(() => submitting = false);
@@ -967,8 +1064,14 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
       if (usersToAddToProject.isNotEmpty) {
         if (isMeAdmin) {
-          // add users to project if needed
-          await Future.wait(usersToAddToProject.map((u) => client.addUserToProjectByEmail(widget.projectId, u.email)));
+          // Add project membership first so the room-grant step sees the latest state.
+          for (final user in usersToAddToProject) {
+            await client.addUserToProjectByEmail(widget.projectId, user.email);
+          }
+
+          projectUsersMap.refresh();
+          await projectUsersMap.untilReady();
+          projUsersMap = projectUsersMap.state.value ?? projUsersMap;
         } else {
           if (!mounted) return;
 
@@ -1011,6 +1114,15 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
             return;
           }
+        }
+      }
+
+      final roomGrantsMap = grants.state.value ?? {};
+      final usersInRoomMap = <String, GrantSummary>{};
+      for (final user in projUsersMap.values) {
+        final grant = roomGrantsMap[user.id];
+        if (grant != null) {
+          usersInRoomMap[user.email.toLowerCase()] = grant;
         }
       }
 
