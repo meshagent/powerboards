@@ -676,6 +676,7 @@ class PowerboardsShadDialog extends StatelessWidget {
     final effectiveActions = _buildDialogActions(
       actions,
       isMobile: isMobile,
+      usesMobileFlowPresentation: usesMobileFlowPresentation,
       usesHorizontalMobileActionRow: useHorizontalMobileActionRow,
       isCompactDesktopDialog: isCompactDesktopDialog,
       expandDesktopActions: expandDesktopActions ?? false,
@@ -962,6 +963,7 @@ Widget? _resolveFlowDialogDescription(
 List<Widget> _buildDialogActions(
   List<Widget> actions, {
   required bool isMobile,
+  required bool usesMobileFlowPresentation,
   required bool usesHorizontalMobileActionRow,
   required bool isCompactDesktopDialog,
   required bool expandDesktopActions,
@@ -975,15 +977,26 @@ List<Widget> _buildDialogActions(
 
   if (isMobile) {
     if (usesHorizontalMobileActionRow) {
-      return actions.map((action) => Expanded(child: _wrapDialogAction(action))).toList(growable: false);
+      return actions
+          .map((action) => Expanded(child: _wrapDialogAction(action, stripArrowIcons: usesMobileFlowPresentation)))
+          .toList(growable: false);
     }
 
     if (!stackActionsOnMobile) {
-      return actions.map(_wrapDialogAction).toList(growable: false);
+      return actions.map((action) => _wrapDialogAction(action, stripArrowIcons: usesMobileFlowPresentation)).toList(growable: false);
     }
 
     return actions
-        .map((action) => SizedBox(width: double.infinity, height: powerboardsFooterActionButtonHeight, child: action))
+        .map(
+          (action) => SizedBox(
+            width: double.infinity,
+            height: powerboardsFooterActionButtonHeight,
+            child: switch (action) {
+              ShadButton _ => _wrapDialogAction(action, stripArrowIcons: usesMobileFlowPresentation),
+              _ => action,
+            },
+          ),
+        )
         .toList(growable: false);
   }
 
@@ -1003,21 +1016,21 @@ List<Widget> _buildDialogActions(
       .toList(growable: false);
 }
 
-Widget _wrapDialogAction(Widget action) {
+Widget _wrapDialogAction(Widget action, {bool stripArrowIcons = false}) {
   final resolvedAction = switch (action) {
-    ShadButton button => _copyDialogActionButton(button),
+    ShadButton button => _copyDialogActionButton(button, stripArrowIcons: stripArrowIcons),
     _ => action,
   };
-  return SizedBox(height: powerboardsFooterActionButtonHeight, child: resolvedAction);
+  return SizedBox(width: double.infinity, height: powerboardsFooterActionButtonHeight, child: resolvedAction);
 }
 
-ShadButton _copyDialogActionButton(ShadButton button) {
+ShadButton _copyDialogActionButton(ShadButton button, {bool stripArrowIcons = false}) {
   return ShadButton.raw(
     key: button.key,
     variant: button.variant,
     size: button.size,
-    leading: button.leading,
-    trailing: button.trailing,
+    leading: _resolveDialogActionAdornment(button.leading, stripArrowIcons: stripArrowIcons),
+    trailing: _resolveDialogActionAdornment(button.trailing, stripArrowIcons: stripArrowIcons),
     onPressed: button.onPressed,
     cursor: button.cursor,
     width: button.width,
@@ -1061,11 +1074,23 @@ ShadButton _copyDialogActionButton(ShadButton button) {
     textDirection: button.textDirection,
     gap: button.gap,
     onFocusChange: button.onFocusChange,
-    expands: button.child != null ? true : button.expands,
+    expands: button.leading == null && button.trailing == null && button.child != null ? true : button.expands,
     textStyle: button.textStyle,
     canRequestFocus: button.canRequestFocus,
     child: _wrapDialogActionChild(button.child),
   );
+}
+
+Widget? _resolveDialogActionAdornment(Widget? adornment, {required bool stripArrowIcons}) {
+  if (!stripArrowIcons || adornment == null) {
+    return adornment;
+  }
+
+  if (adornment case Icon(icon: final iconData?) when iconData == LucideIcons.arrowLeft || iconData == LucideIcons.arrowRight) {
+    return null;
+  }
+
+  return adornment;
 }
 
 Widget? _wrapDialogActionChild(Widget? child) {

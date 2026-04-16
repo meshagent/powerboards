@@ -1447,6 +1447,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
               onPressed: onAdded,
               enabled: !submitting && (!(_usesMobileLandscapeDialogLayout(context)) || selectedUsers.value.isNotEmpty),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: submitting
                     ? [const Icon(Icons.hourglass_top, size: 16), const SizedBox(width: 6), const Text('Saving...')]
