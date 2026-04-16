@@ -12,7 +12,6 @@ import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:uuid/uuid.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -64,7 +63,9 @@ class MeshagentThreadView extends StatefulWidget {
     this.initialMessageAttachments,
     this.agentName,
     this.selectedThreadPath,
+    this.selectedThreadDisplayName,
     this.onSelectedThreadPathChanged,
+    this.onSelectedThreadResolved,
     this.emptyState,
     this.newThreadEmptyStateVerticalOffset = 0,
     this.hideChatInput = false,
@@ -84,7 +85,9 @@ class MeshagentThreadView extends StatefulWidget {
   final String? initialMessageText;
   final List<FileAttachment>? initialMessageAttachments;
   final String? selectedThreadPath;
+  final String? selectedThreadDisplayName;
   final ValueChanged<String?>? onSelectedThreadPathChanged;
+  final void Function(String? path, String? displayName)? onSelectedThreadResolved;
   final Widget? emptyState;
   final double newThreadEmptyStateVerticalOffset;
   final bool hideChatInput;
@@ -95,7 +98,6 @@ class MeshagentThreadView extends StatefulWidget {
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
-  String? _createdThreadPath;
 
   String _chatPlaceholderText(String? agentName) {
     final normalizedAgentName = agentName?.trim();
@@ -121,74 +123,18 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   late final ChatThreadController _chatController;
-  late String _documentPath;
-  late String? _initialMessageText;
-
-  String? _normalizeSelectedThreadPath(String? path) {
-    final normalizedPath = path?.trim();
-    if (normalizedPath == null || normalizedPath.isEmpty) {
-      return null;
-    }
-    return normalizedPath;
-  }
-
-  void _clearCreatedThreadPathIfStale() {
-    final createdThreadPath = _createdThreadPath;
-    if (createdThreadPath == null) {
-      return;
-    }
-
-    final selectedThreadPath = _normalizeSelectedThreadPath(widget.selectedThreadPath);
-    if (selectedThreadPath != createdThreadPath) {
-      _createdThreadPath = null;
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.agentName != widget.agentName ||
-        oldWidget.threadDisplayMode != widget.threadDisplayMode ||
-        oldWidget.documentPath != widget.documentPath ||
-        oldWidget.threadListPath != widget.threadListPath) {
-      _documentPath = widget.documentPath;
-      _initialMessageText = widget.initialMessageText;
-    } else if (oldWidget.initialMessageText != widget.initialMessageText &&
-        widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer) {
-      _initialMessageText = widget.initialMessageText;
-    }
-
-    if (oldWidget.threadDisplayMode != widget.threadDisplayMode ||
-        oldWidget.agentName != widget.agentName ||
-        oldWidget.client != widget.client ||
-        oldWidget.newThreadResetVersion != widget.newThreadResetVersion) {
-      _createdThreadPath = null;
-      return;
-    }
-
-    if (oldWidget.selectedThreadPath != widget.selectedThreadPath) {
-      _clearCreatedThreadPathIfStale();
-    }
-  }
 
   @override
   void initState() {
     super.initState();
-
     _chatController = MeshagentRoomChatThreadController(room: widget.client);
-    _documentPath = widget.documentPath;
-    _initialMessageText = widget.initialMessageText;
   }
 
   @override
   void dispose() {
     _chatController.dispose();
-
     super.dispose();
   }
-
-  void _onMessageSent(ma.ChatMessage message) {}
 
   Widget _fileInThreadBuilder(BuildContext context, String path) {
     if (path.endsWith('.meeting')) {
@@ -215,110 +161,50 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     context.go(newUri.toString());
   }
 
-  void _onThreadPathChanged(String? path) {
-    final normalizedPath = _normalizeSelectedThreadPath(path);
-    if (_createdThreadPath != normalizedPath) {
-      setState(() {
-        _createdThreadPath = normalizedPath;
-      });
-    }
-    final onSelectedThreadPathChanged = widget.onSelectedThreadPathChanged;
-    if (onSelectedThreadPathChanged != null) {
-      onSelectedThreadPathChanged(normalizedPath);
-    }
-  }
-
-  Future<void> _onVisibleMessagesEmpty(String path) async {
-    if (widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer || widget.selectedThreadPath != path) {
-      return;
-    }
-  }
-
-  Widget _buildThread({required String path, required String? initialMessageText, Widget Function(BuildContext)? loadingBuilder}) {
-    return IconTheme(
-      data: const IconThemeData(size: 14),
-      child: ChatThreadLoader(
-        key: ValueKey(path),
-        room: widget.client,
-        loadingBuilder: loadingBuilder ?? (context) => const SizedBox.shrink(),
-        path: path,
-        builder: (context, document) => ChatThread(
-          path: path,
-          document: document,
-          room: widget.client,
-          controller: _chatController,
-          inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
-          initialMessage: initialMessageText == null
-              ? null
-              : ma.ChatMessage(
-                  id: widget.initialMessageID ?? const Uuid().v4(),
-                  text: initialMessageText,
-                  attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
-                ),
-          onMessageSent: _onMessageSent,
-          fileInThreadBuilder: _fileInThreadBuilder,
-          openFile: _open,
-          toolsBuilder: (context, controller, snapshot) =>
-              buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
-          agentName: widget.agentName,
-          emptyStateTitle: "Chat to get started",
-          emptyStateDescription: _threadEmptyDescription,
-          emptyState: widget.emptyState,
-          onVisibleMessagesEmpty: widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
-              ? () => _onVisibleMessagesEmpty(path)
-              : null,
-          chatInputBoxBuilder: (context, inputBox) {
-            if (widget.hideChatInput) {
-              return const SizedBox.shrink();
-            }
-
-            return inputBox;
-          },
-        ),
-        participantNames: widget.participantNames,
-      ),
-    );
-  }
-
-  Widget _buildDefaultNewThreadContent(BuildContext context, {required String agentName}) {
-    final threadPath = _normalizeSelectedThreadPath(widget.selectedThreadPath);
-    final isCreatedThreadSelected = threadPath != null && threadPath == _createdThreadPath;
-    final threadContent = threadPath == null || isCreatedThreadSelected
-        ? ma.NewChatThread(
-            key: ValueKey("new-thread-$agentName-${widget.newThreadResetVersion}"),
-            room: widget.client,
-            agentName: agentName,
-            centerComposer: false,
-            emptyState:
-                widget.emptyState ??
-                Builder(
-                  builder: (context) => _buildThreadEmptyState(context, title: "Start a new thread", description: _threadEmptyDescription),
-                ),
-            controller: _chatController,
-            onThreadPathChanged: _onThreadPathChanged,
-            toolsBuilder: (context, controller, snapshot) =>
-                buildTools(context, widget.projectId, widget.client, agentName, controller, snapshot),
-            builder: (context, path, loadingBuilder) => _buildThread(path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
-          )
-        : _buildThread(path: threadPath, initialMessageText: null);
-
-    return threadContent;
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer) {
-      final agentName = widget.agentName;
-      if (agentName == null) {
-        return Center(
-          child: ShadAlert.destructive(title: Text("Unable to start a new thread"), description: Text("No chat agent is selected.")),
-        );
-      }
-
-      return _buildDefaultNewThreadContent(context, agentName: agentName);
-    }
-
-    return _buildThread(path: _documentPath, initialMessageText: _initialMessageText);
+    return IconTheme(
+      data: const IconThemeData(size: 14),
+      child: ma.ChatBotView(
+        room: widget.client,
+        agentName: widget.agentName,
+        threadDisplayMode: widget.threadDisplayMode,
+        threadListPath: widget.threadListPath,
+        documentPath: widget.documentPath,
+        controller: _chatController,
+        selectedThreadPath: widget.selectedThreadPath,
+        selectedThreadDisplayName: widget.selectedThreadDisplayName,
+        onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
+        onSelectedThreadResolved: widget.onSelectedThreadResolved,
+        newThreadResetVersion: widget.newThreadResetVersion,
+        participantNames: widget.participantNames,
+        initialMessage: widget.initialMessageText == null
+            ? null
+            : ChatMessage(
+                id: widget.initialMessageID ?? widget.documentPath,
+                text: widget.initialMessageText!,
+                attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
+              ),
+        fileInThreadBuilder: _fileInThreadBuilder,
+        openFile: _open,
+        toolsBuilder: (context, controller, snapshot) =>
+            buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
+        inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
+        emptyStateTitle: "Chat to get started",
+        emptyStateDescription: _threadEmptyDescription,
+        emptyState:
+            widget.emptyState ??
+            Builder(
+              builder: (context) => _buildThreadEmptyState(
+                context,
+                title: widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer ? "Start a new thread" : "Chat to get started",
+                description: _threadEmptyDescription,
+              ),
+            ),
+        centerComposer: false,
+        hideChatInput: widget.hideChatInput,
+      ),
+    );
   }
 }
 
@@ -517,6 +403,13 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   }
 
+  DateTime _threadCreatedSortDate(_ThreadListEntry entry) {
+    if (entry.createdAt.trim().isNotEmpty) {
+      return _parseThreadDate(entry.createdAt);
+    }
+    return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  }
+
   String _threadNameFromPath(String path) {
     return defaultThreadDisplayNameFromPath(path);
   }
@@ -566,38 +459,25 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       );
     }
 
-    entries.sort((a, b) => _threadSortDate(b).compareTo(_threadSortDate(a)));
+    entries.sort((a, b) {
+      final dateComparison = _threadSortDate(b).compareTo(_threadSortDate(a));
+      if (dateComparison != 0) {
+        return dateComparison;
+      }
+
+      final createdDateComparison = _threadCreatedSortDate(b).compareTo(_threadCreatedSortDate(a));
+      if (createdDateComparison != 0) {
+        return createdDateComparison;
+      }
+
+      return a.path.compareTo(b.path);
+    });
     return entries;
-  }
-
-  bool _threadListContainsPath(String path) {
-    final document = _threadListDocument;
-    if (document == null) {
-      return false;
-    }
-
-    for (final node in document.root.getChildren()) {
-      if (node is! MeshElement || node.tagName != "thread") {
-        continue;
-      }
-      if (node.getAttribute("path") == path) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   void _onThreadListChanged() {
     if (!mounted) {
       return;
-    }
-
-    final selectedPath = widget.selectedThreadPath;
-    if (selectedPath != null && !_threadListContainsPath(selectedPath)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.onSelectedThreadPathChanged(null);
-      });
     }
 
     setState(() {});
