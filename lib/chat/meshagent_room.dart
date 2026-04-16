@@ -1407,10 +1407,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Future<void> showManageAgents() async {
-    await showPowerboardsFlowDialog(
-      context: context,
-      builder: (context) => ManageAgentsDialog(projectId: widget.projectId, room: widget.room),
-    );
+    await showManageAgentsSurface(context: context, projectId: widget.projectId, room: widget.room);
     if (!mounted) return;
     services.refresh();
   }
@@ -2997,15 +2994,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           ? null
                                           : ShadButton(
                                               onPressed: () async {
-                                                await showPowerboardsFlowDialog(
+                                                await showManageAgentsSurface(
                                                   context: context,
-                                                  builder: (context) => ManageAgentsDialog(
-                                                    room: widget.room,
-                                                    projectId: widget.projectId,
-                                                    onServiceChanged: () {
-                                                      services.refresh();
-                                                    },
-                                                  ),
+                                                  room: widget.room,
+                                                  projectId: widget.projectId,
+                                                  onServiceChanged: () {
+                                                    services.refresh();
+                                                  },
                                                 );
                                               },
                                               child: Text("Install an Agent"),
@@ -3036,15 +3031,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                               SizedBox(height: 20),
                                               ShadButton(
                                                 onPressed: () async {
-                                                  await showPowerboardsFlowDialog(
+                                                  await showManageAgentsSurface(
                                                     context: context,
-                                                    builder: (context) => ManageAgentsDialog(
-                                                      room: widget.room,
-                                                      projectId: widget.projectId,
-                                                      onServiceChanged: () {
-                                                        services.refresh();
-                                                      },
-                                                    ),
+                                                    room: widget.room,
+                                                    projectId: widget.projectId,
+                                                    onServiceChanged: () {
+                                                      services.refresh();
+                                                    },
                                                   );
                                                 },
                                                 child: Text("Install an Agent"),
