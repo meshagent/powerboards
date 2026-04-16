@@ -13,6 +13,8 @@ const double powerboardsMobileDialogEdgeInset = 16;
 const double powerboardsDialogScrollViewportVerticalInset = 18;
 const EdgeInsets powerboardsDialogScrollViewportPadding = EdgeInsets.symmetric(vertical: powerboardsDialogScrollViewportVerticalInset);
 const EdgeInsets powerboardsDialogScrollableListPadding = EdgeInsets.only(bottom: powerboardsDialogScrollViewportVerticalInset);
+const double powerboardsMobileFlowDialogContentSectionGap = 12;
+const EdgeInsets powerboardsMobileFlowDialogCompactPadding = EdgeInsets.fromLTRB(24, 24, 24, 28);
 
 const double _desktopDialogCloseButtonSize = 32;
 const double _desktopDialogCloseIconSize = 24;
@@ -1258,29 +1260,36 @@ class _PowerboardsMobileFlowDialogFrame extends StatelessWidget {
 
     final bodyContent = body ?? const SizedBox.shrink();
     final bodySection = expandBody ? Expanded(child: bodyContent) : bodyContent;
+    final actionSection = actions.isEmpty
+        ? null
+        : usesHorizontalActionRow
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: _buildHorizontalSection(actions, spacing: actionsGap),
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _buildVerticalSection(actions, spacing: actionsGap),
+          );
 
-    final contentSections = <Widget>[
-      if (headerSection != null) headerSection,
-      bodySection,
-      if (actions.isNotEmpty)
-        usesHorizontalActionRow
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: _buildHorizontalSection(actions, spacing: actionsGap),
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: _buildVerticalSection(actions, spacing: actionsGap),
-              ),
-    ];
+    final contentSections = <Widget>[];
+    if (headerSection != null) {
+      contentSections.add(headerSection);
+      contentSections.add(const SizedBox(height: powerboardsMobileFlowDialogContentSectionGap));
+    }
+    contentSections.add(bodySection);
+    if (actionSection != null) {
+      contentSections.add(SizedBox(height: gap * 2));
+      contentSections.add(actionSection);
+    }
 
     return SizedBox(
       width: double.infinity,
       child: Column(
         mainAxisSize: expandBody ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _buildVerticalSection(contentSections, spacing: gap * 2),
+        children: contentSections,
       ),
     );
   }

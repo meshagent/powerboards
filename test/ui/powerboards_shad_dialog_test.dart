@@ -259,6 +259,75 @@ class _InviteSuggestionsOverlayHostState extends State<_InviteSuggestionsOverlay
   }
 }
 
+class _NestedFlowDialogLauncher extends StatelessWidget {
+  const _NestedFlowDialogLauncher();
+
+  @override
+  Widget build(BuildContext context) {
+    return ShadButton(
+      onPressed: () {
+        showPowerboardsFlowDialog<void>(
+          context: context,
+          builder: (dialogContext) => PowerboardsShadDialog.task(
+            title: const Text('Agents & Services'),
+            description: const Text('Browse and manage services.'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Root flow body'),
+                const SizedBox(height: 16),
+                ShadButton(
+                  onPressed: () {
+                    showPowerboardsFlowDialog<void>(
+                      context: dialogContext,
+                      builder: (_) => PowerboardsShadDialog.task(
+                        title: const Text('Install'),
+                        description: const Text('Preparing the next step.'),
+                        child: const SizedBox(
+                          height: 140,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [Text('Loading agent details'), SizedBox(height: 12), Text('Preparing agent details')],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Install'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      child: const Text('Open'),
+    );
+  }
+}
+
+class _HeaderBodyGapProbe extends StatelessWidget {
+  const _HeaderBodyGapProbe();
+
+  static const descriptionKey = Key('header-gap-description');
+  static const bodyKey = Key('header-gap-body');
+
+  @override
+  Widget build(BuildContext context) {
+    return PowerboardsShadDialog.task(
+      title: const Text('Install agent'),
+      description: const Text('Review the details before continuing.', key: descriptionKey),
+      actions: [ShadButton(onPressed: () {}, child: const Text('Install'))],
+      child: Container(
+        key: bodyKey,
+        alignment: Alignment.centerLeft,
+        constraints: const BoxConstraints(minHeight: 48),
+        child: const Text('Body content'),
+      ),
+    );
+  }
+}
+
 class _AsyncGrowingListBody extends StatefulWidget {
   const _AsyncGrowingListBody();
 
@@ -446,7 +515,7 @@ void main() {
     final saveRect = tester.getRect(find.widgetWithText(ShadButton, 'Save'));
     final saveBottom = tester.getBottomLeft(find.widgetWithText(ShadButton, 'Save')).dy;
 
-    expect(dialogSize.height, greaterThan(300));
+    expect(dialogSize.height, greaterThanOrEqualTo(300));
     expect(dialogSize.height, lessThan(420));
     expect(dialogBottom - saveBottom, lessThan(110));
     expect((saveRect.top - cancelRect.top).abs(), lessThan(1));
@@ -628,15 +697,65 @@ void main() {
 
     expect(_flowDialogSurface(), findsOneWidget);
     expect(find.text('Install'), findsOneWidget);
-    expect(find.text('Enter the URL of an agent or MCP server'), findsOneWidget);
+    expect(find.text('The link must point to a valid service template YAML or an MCP server URL.'), findsOneWidget);
 
     await tester.enterText(find.byType(EditableText), 'https://example.com');
     await tester.tap(find.widgetWithText(ShadButton, 'Continue'));
     await tester.pump();
     await tester.pump();
 
-    expect(find.byIcon(LucideIcons.chevronLeft), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+    expect(find.byIcon(LucideIcons.chevronLeft), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile nested flow dialogs replace the visible step and add a default back button', (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      const ShadApp(
+        home: Scaffold(resizeToAvoidBottomInset: false, body: Center(child: _NestedFlowDialogLauncher())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Agents & Services'), findsOneWidget);
+    expect(find.text('Root flow body'), findsOneWidget);
+    expect(find.byIcon(LucideIcons.chevronLeft), findsNothing);
+
+    await tester.tap(find.widgetWithText(ShadButton, 'Install'));
+    await tester.pumpAndSettle();
+
+    expect(_flowDialogSurface(), findsOneWidget);
+    expect(find.text('Install'), findsOneWidget);
+    expect(find.text('Loading agent details'), findsOneWidget);
+    expect(find.text('Agents & Services'), findsNothing);
+    expect(find.text('Root flow body'), findsNothing);
+    expect(find.byIcon(LucideIcons.chevronLeft), findsOneWidget);
+
+    await tester.tap(find.byIcon(LucideIcons.chevronLeft));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Agents & Services'), findsOneWidget);
+    expect(find.text('Root flow body'), findsOneWidget);
+    expect(find.text('Loading agent details'), findsNothing);
+    expect(find.byIcon(LucideIcons.chevronLeft), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile flow dialog keeps header and body content separated by the shared section gap', (tester) async {
+    await _pumpDialog(tester, const _HeaderBodyGapProbe());
+
+    final descriptionBottom = tester.getBottomLeft(find.byKey(_HeaderBodyGapProbe.descriptionKey)).dy;
+    final bodyTop = tester.getTopLeft(find.byKey(_HeaderBodyGapProbe.bodyKey)).dy;
+
+    expect(bodyTop - descriptionBottom, closeTo(powerboardsMobileFlowDialogContentSectionGap, 0.01));
   });
 
   testWidgets('mobile form flow dialog does not lift above the keyboard inset', (tester) async {

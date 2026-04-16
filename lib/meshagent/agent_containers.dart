@@ -13,6 +13,8 @@ import 'package:powerboards/meshagent/meshagent.dart';
 
 typedef ConfigureServiceTemplateDone = void Function(BuildContext context, String serviceId);
 
+const double _mobileConfigureFlowSectionGap = powerboardsMobileFlowDialogContentSectionGap * 3;
+
 BoxConstraints? _desktopConfigureAgentDialogConstraints(BuildContext context, BoxConstraints constraints) {
   if (powerboardsUsesNativeMobileDialogLayout(context)) {
     return null;
@@ -71,9 +73,11 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
         final content = ConfigureServiceTemplate(
           template: widget.template,
           header: [
-            const SizedBox(height: 8),
             dev.ServiceNameCard(manifest: widget.manifest),
-            if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: widget.manifest)],
+            if (!isInstalled) ...[
+              SizedBox(height: isMobile ? _mobileConfigureFlowSectionGap : 12),
+              dev.ServiceInfoCard(manifest: widget.manifest),
+            ],
           ],
           projectId: widget.projectId,
           serviceId: widget.serviceId,
@@ -92,17 +96,15 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
             constraints: _desktopConfigureAgentDialogConstraints(context, constraints),
             expandDesktopActions: true,
             stackActionsOnMobile: true,
+            gap: isMobile ? 8 : null,
+            padding: isMobile ? powerboardsMobileFlowDialogCompactPadding : null,
             mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
             mobileFlowBodyBehavior: isMobile
                 ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
                 : PowerboardsDialogMobileFlowBodyBehavior.fill,
             mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
-            title: Text(isInstalled ? 'Edit agent' : 'Install agent'),
-            description: Text(
-              isInstalled
-                  ? 'Update variables or uninstall this agent.'
-                  : 'Installing this agent will grant it access to your room. Review the details before continuing.',
-            ),
+            title: Text(widget.title),
+            description: widget.description == null ? null : Text(widget.description!),
             child: SizedBox.expand(child: content),
           );
         }
@@ -115,17 +117,15 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
               constraints: _desktopConfigureAgentDialogConstraints(context, constraints),
               expandDesktopActions: true,
               stackActionsOnMobile: true,
+              gap: isMobile ? 8 : null,
+              padding: isMobile ? powerboardsMobileFlowDialogCompactPadding : null,
               mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
               mobileFlowBodyBehavior: isMobile
                   ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
                   : PowerboardsDialogMobileFlowBodyBehavior.fill,
               mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
-              title: Text(isInstalled ? 'Edit agent' : 'Install agent'),
-              description: Text(
-                isInstalled
-                    ? 'Update variables or uninstall this agent.'
-                    : 'Installing this agent will grant it access to your room. Review the details before continuing.',
-              ),
+              title: Text(widget.title),
+              description: widget.description == null ? null : Text(widget.description!),
               actions: chrome.actions,
               onBack: chrome.onBack,
               child: content,
@@ -169,13 +169,26 @@ class ConfigureServiceTemplate extends StatefulWidget {
   State<ConfigureServiceTemplate> createState() => _ConfigureServiceTemplateState();
 }
 
-class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
+class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> with SingleTickerProviderStateMixin {
   bool _saving = false;
   bool _removing = false;
   String? _error;
   Map<String, String> _latestFormVars = const <String, String>{};
   bool Function()? _latestFormValidate;
   String? _lastPublishedMobileChromeSignature;
+  late final AnimationController _loaderController;
+
+  @override
+  void initState() {
+    super.initState();
+    _loaderController = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat();
+  }
+
+  @override
+  void dispose() {
+    _loaderController.dispose();
+    super.dispose();
+  }
 
   String _requireRoomName() {
     final roomName = widget.roomName;
@@ -538,10 +551,10 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
     });
   }
 
-  Widget _buildError(BuildContext context) {
+  Widget? _buildError(BuildContext context) {
     final error = _error;
     if (error == null) {
-      return const SizedBox.shrink();
+      return null;
     }
     return Padding(
       key: const ValueKey('error-alert'),
@@ -573,6 +586,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
 
   List<Widget> _actions(BuildContext context) {
     final isInstalled = widget.serviceId != null;
+    final progressLabel = isInstalled ? 'Updating' : 'Installing';
 
     return [
       if (isInstalled)
@@ -587,7 +601,9 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
           child: Text(_removing ? 'Uninstalling' : 'Uninstall'),
         ),
       ShadButton(
-        leading: Icon(LucideIcons.download),
+        leading: _saving
+            ? RotationTransition(turns: _loaderController, child: const Icon(LucideIcons.loaderCircle))
+            : const Icon(LucideIcons.download),
         onPressed: _saving
             ? null
             : () {
@@ -595,7 +611,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
                   _saveOrUpdate(_latestFormVars, _validateMobileForm);
                 }
               },
-        child: Text(_saving ? (isInstalled ? 'Updating' : 'Installing') : (isInstalled ? 'Update' : 'Install')),
+        child: Text(_saving ? progressLabel : (isInstalled ? 'Update' : 'Install')),
       ),
     ];
   }
@@ -631,12 +647,13 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
   Widget build(BuildContext context) {
     _publishMobileDialogChrome();
     final routeDomains = MeshagentConfig.current?.domains ?? const <String>[];
+    final errorAlert = _buildError(context);
     return dev.ConfigureServiceTemplate(
       spec: widget.manifest,
       prefilledVars: widget.prefilledVars,
       routeDomains: routeDomains,
       customActions: widget.customActions,
-      header: [_buildError(context), ...widget.header],
+      header: [if (errorAlert != null) errorAlert, ...widget.header],
       showActionRow: widget.mobileDialogChrome == null || !powerboardsUsesNativeMobileDialogLayout(context),
       onFormStateChanged: (vars, validate) {
         _latestFormVars = vars;

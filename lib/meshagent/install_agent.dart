@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart' as dev;
@@ -17,6 +18,8 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 enum _InstallerStep { url, review, selectProject, selectRoom, confirm }
 
 enum ServiceType { any, mcp }
+
+const double _mobileInstallFlowSectionGap = powerboardsMobileFlowDialogContentSectionGap * 3;
 
 double _desktopTaskDialogHeight(BoxConstraints constraints, {required double preferredHeight, required double verticalInset}) {
   final maxHeight = constraints.maxHeight;
@@ -104,6 +107,8 @@ class _InstallServiceDialogState extends State<InstallServiceDialog> {
             constraints: _desktopInstallServiceDialogConstraints(context, constraints),
             expandDesktopActions: true,
             stackActionsOnMobile: true,
+            gap: isMobile ? 8 : null,
+            padding: isMobile ? powerboardsMobileFlowDialogCompactPadding : null,
             mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
             mobileFlowBodyBehavior: isMobile
                 ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
@@ -122,6 +127,8 @@ class _InstallServiceDialogState extends State<InstallServiceDialog> {
               constraints: _desktopInstallServiceDialogConstraints(context, constraints),
               expandDesktopActions: true,
               stackActionsOnMobile: true,
+              gap: isMobile ? 8 : null,
+              padding: isMobile ? powerboardsMobileFlowDialogCompactPadding : null,
               mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
               mobileFlowBodyBehavior: isMobile
                   ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
@@ -194,6 +201,13 @@ class _AgentInstaller extends State<AgentInstaller> {
   }
 
   TextStyle get _labelStyle => Theme.of(context).textTheme.titleMedium!.copyWith(fontWeight: FontWeight.bold);
+  TextStyle get _mobileSectionTitleStyle => GoogleFonts.inter(
+    textStyle: DefaultTextStyle.of(context).style,
+    color: ShadTheme.of(context).colorScheme.foreground,
+    fontWeight: FontWeight.w600,
+  );
+  TextStyle get _mobileSectionDescriptionStyle =>
+      ShadTheme.of(context).textTheme.muted.copyWith(color: ShadTheme.of(context).colorScheme.mutedForeground);
 
   late String? _template = widget.template;
 
@@ -319,6 +333,20 @@ class _AgentInstaller extends State<AgentInstaller> {
 
   Widget _continueButton({required VoidCallback onPressed, String label = 'Continue'}) {
     return ShadButton(trailing: const Icon(LucideIcons.arrowRight), onPressed: onPressed, child: Text(label));
+  }
+
+  Widget _mobileBodyIntro({required String title, String? description}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: _mobileSectionTitleStyle),
+        if (description != null && description.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(description, style: _mobileSectionDescriptionStyle),
+        ],
+      ],
+    );
   }
 
   bool get _usesMobileFlowLayout => powerboardsUsesNativeMobileDialogLayout(context);
@@ -508,28 +536,38 @@ class _AgentInstaller extends State<AgentInstaller> {
         ? "The link must point to a valid MCP server URL."
         : "The link must point to a valid service template YAML or an MCP server URL.";
     final usesMobileFlowLayout = _usesMobileFlowLayout;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
-        spacing: 16,
-        children: [
-          Text(title, style: _labelStyle, textAlign: TextAlign.center),
-          PowerboardsAdaptiveInput(controller: _urlController, placeholder: const Text("https://mcp.notion.com/mcp")),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
+      children: [
+        if (usesMobileFlowLayout) _mobileBodyIntro(title: title, description: description),
+        if (usesMobileFlowLayout) const SizedBox(height: _mobileInstallFlowSectionGap),
+        PowerboardsAdaptiveInput(
+          controller: _urlController,
+          placeholder: const Text("https://mcp.notion.com/mcp"),
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          autocorrect: false,
+          scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+          onSubmitted: (_) => _onUrlContinue(),
+        ),
+        if (!usesMobileFlowLayout) ...[
+          const SizedBox(height: 12),
           Text(
             description,
             textAlign: TextAlign.left,
             style: ShadTheme.of(context).textTheme.small.copyWith(color: ShadTheme.of(context).colorScheme.mutedForeground),
           ),
-          if (_urlError != null) ShadAlert.destructive(description: Text(_urlError!)),
-          if (!usesMobileFlowLayout)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [_continueButton(onPressed: _onUrlContinue)],
-            ),
         ],
-      ),
+        if (_urlError != null) ...[const SizedBox(height: 12), ShadAlert.destructive(description: Text(_urlError!))],
+        if (!usesMobileFlowLayout) ...[
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [_continueButton(onPressed: _onUrlContinue)],
+          ),
+        ],
+      ],
     );
   }
 
@@ -584,22 +622,21 @@ class _AgentInstaller extends State<AgentInstaller> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
-      spacing: 16,
       children: [
         if (usesMobileFlowLayout)
-          Padding(
-            padding: const EdgeInsets.all(15),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text("Review details", style: _labelStyle, textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                dev.ServiceNameCard(manifest: _spec.state.value!),
-                const SizedBox(height: 20),
-                dev.ServiceInfoCard(manifest: _spec.state.value!),
-              ],
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _mobileBodyIntro(
+                title: 'Review details',
+                description: 'Check what this agent installs and what access it will receive before continuing.',
+              ),
+              const SizedBox(height: _mobileInstallFlowSectionGap),
+              dev.ServiceNameCard(manifest: _spec.state.value!),
+              const SizedBox(height: _mobileInstallFlowSectionGap),
+              dev.ServiceInfoCard(manifest: _spec.state.value!),
+            ],
           )
         else
           Expanded(
@@ -686,14 +723,20 @@ class _AgentInstaller extends State<AgentInstaller> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
-      spacing: 16,
       children: [
-        Text(
-          _mcpOnly ? "Select a project to add this MCP service to" : "Select a project to install this agent into",
-          style: _labelStyle,
-          textAlign: TextAlign.center,
-        ),
-        ShadSeparator.horizontal(margin: EdgeInsets.zero),
+        if (usesMobileFlowLayout)
+          _mobileBodyIntro(
+            title: 'Choose a project',
+            description: _mcpOnly ? 'Select where this MCP service should be added.' : 'Select where this agent should be installed.',
+          )
+        else ...[
+          Text(
+            _mcpOnly ? "Select a project to add this MCP service to" : "Select a project to install this agent into",
+            style: _labelStyle,
+            textAlign: TextAlign.center,
+          ),
+          ShadSeparator.horizontal(margin: EdgeInsets.zero),
+        ],
         if (usesMobileFlowLayout) body else Expanded(child: body),
         if (!usesMobileFlowLayout) ...[
           ShadSeparator.horizontal(margin: EdgeInsets.zero),
@@ -770,14 +813,20 @@ class _AgentInstaller extends State<AgentInstaller> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: usesMobileFlowLayout ? MainAxisSize.min : MainAxisSize.max,
-      spacing: 16,
       children: [
-        Text(
-          _mcpOnly ? "Pick a room to add this MCP service to" : "Pick a room to install this agent into",
-          style: _labelStyle,
-          textAlign: TextAlign.center,
-        ),
-        ShadSeparator.horizontal(margin: EdgeInsets.zero),
+        if (usesMobileFlowLayout)
+          _mobileBodyIntro(
+            title: 'Choose a room',
+            description: _mcpOnly ? 'Pick a room for this MCP service.' : 'Pick a room for this agent.',
+          )
+        else ...[
+          Text(
+            _mcpOnly ? "Pick a room to add this MCP service to" : "Pick a room to install this agent into",
+            style: _labelStyle,
+            textAlign: TextAlign.center,
+          ),
+          ShadSeparator.horizontal(margin: EdgeInsets.zero),
+        ],
         if (usesMobileFlowLayout) body else Expanded(child: body),
         if (!usesMobileFlowLayout) ...[
           ShadSeparator.horizontal(margin: EdgeInsets.zero),
@@ -839,8 +888,8 @@ class _AgentInstaller extends State<AgentInstaller> {
                 style: _labelStyle,
                 textAlign: TextAlign.center,
               ),
+              const SizedBox(height: _mobileInstallFlowSectionGap),
               dev.ServiceNameCard(manifest: _spec.state.value!),
-              const SizedBox(height: 8),
             ],
             serviceId: existingServiceId,
             projectId: _projectId!,
@@ -1006,7 +1055,6 @@ class _InstallServiceUrlDialogState extends State<_InstallServiceUrlDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final title = _mcpOnly ? "Enter the URL of an MCP server" : "Enter the URL of an agent or MCP server";
     final description = _mcpOnly
         ? "The link must point to a valid MCP server URL."
         : "The link must point to a valid service template YAML or an MCP server URL.";
@@ -1015,32 +1063,29 @@ class _InstallServiceUrlDialogState extends State<_InstallServiceUrlDialog> {
       scrollable: false,
       expandDesktopActions: true,
       stackActionsOnMobile: true,
+      gap: powerboardsUsesNativeMobileDialogLayout(context) ? 8 : null,
+      padding: powerboardsUsesNativeMobileDialogLayout(context) ? powerboardsMobileFlowDialogCompactPadding : null,
       mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
       mobileFlowBodyBehavior: PowerboardsDialogMobileFlowBodyBehavior.formScrollable,
       mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
       title: Text(widget.type == ServiceType.mcp ? "Add MCP Service" : "Install"),
+      description: Text(description),
       actions: [ShadButton(onPressed: _continue, child: const Text('Continue'))],
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          spacing: 16,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            PowerboardsAdaptiveInput(controller: _urlController, placeholder: const Text("https://mcp.notion.com/mcp")),
-            Text(
-              description,
-              textAlign: TextAlign.left,
-              style: ShadTheme.of(context).textTheme.small.copyWith(color: ShadTheme.of(context).colorScheme.mutedForeground),
-            ),
-            if (_urlError != null) ShadAlert.destructive(description: Text(_urlError!)),
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PowerboardsAdaptiveInput(
+            controller: _urlController,
+            placeholder: const Text("https://mcp.notion.com/mcp"),
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.done,
+            autocorrect: false,
+            scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+            onSubmitted: (_) => _continue(),
+          ),
+          if (_urlError != null) ...[const SizedBox(height: 12), ShadAlert.destructive(description: Text(_urlError!))],
+        ],
       ),
     );
   }
