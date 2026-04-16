@@ -6,11 +6,13 @@ import 'package:http/http.dart' as http;
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/route_service_match.dart';
+import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:meshagent/meshagent.dart' as ma;
@@ -265,12 +267,34 @@ class _InstallAgentDialog extends StatelessWidget {
   }
 }
 
+Future<void> showManageAgentsSurface({
+  required BuildContext context,
+  required String projectId,
+  required RoomClient room,
+  void Function()? onServiceChanged,
+}) async {
+  if (powerboardsUsesNativeMobileDialogLayout(context)) {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => ManageAgentsDialog(projectId: projectId, room: room, onServiceChanged: onServiceChanged, asScreen: true),
+      ),
+    );
+    return;
+  }
+
+  await showPowerboardsFlowDialog<void>(
+    context: context,
+    builder: (_) => ManageAgentsDialog(projectId: projectId, room: room, onServiceChanged: onServiceChanged),
+  );
+}
+
 class ManageAgentsDialog extends StatefulWidget {
   final RoomClient room;
   final String projectId;
   final void Function()? onServiceChanged;
+  final bool asScreen;
 
-  const ManageAgentsDialog({super.key, required this.room, required this.projectId, this.onServiceChanged});
+  const ManageAgentsDialog({super.key, required this.room, required this.projectId, this.onServiceChanged, this.asScreen = false});
 
   @override
   State<ManageAgentsDialog> createState() => _ManageAgentsDialogState();
@@ -423,51 +447,125 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
     }
   }
 
+  Widget _screenBody({required BuildContext context, required Widget child, required bool installEnabled, bool showFooter = true}) {
+    final theme = ShadTheme.of(context);
+    final titleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: theme.colorScheme.foreground);
+    final surfaceColor = theme.colorScheme.card;
+
+    return Scaffold(
+      backgroundColor: surfaceColor,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: powerboardsMobileHorizontalPadding,
+              child: SizedBox(
+                height: headerHeight,
+                child: Row(
+                  children: [
+                    PowerboardsBackIconButton(onPressed: () => Navigator.of(context).maybePop(), tooltip: "Close", icon: LucideIcons.x),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Center(
+                        child: Text('Agents & Services', maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IgnorePointer(
+                      child: Opacity(
+                        opacity: 0,
+                        child: PowerboardsBackIconButton(onPressed: () {}, tooltip: "Close", icon: LucideIcons.x),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(child: child),
+            if (showFooter)
+              Container(
+                color: surfaceColor,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ShadButton.outline(onPressed: installEnabled ? _openCustomDialog : null, child: const Text('Install')),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ShadButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Close')),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context, _) {
-        if (availableAgents.state.value == null ||
-            services.state.value == null ||
-            mailboxes.state.value == null ||
-            routes.state.value == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final optionsToShow = <AgentOption>[
-          for (final service in services.state.value!)
-            if (availableAgents.state.value!.templates.firstWhereOrNull(
-                  (x) => x.parsed.metadata.annotations["meshagent.service.id"] == service.metadata.annotations["meshagent.service.id"],
-                ) ==
-                null)
-              AgentOption(
-                id: service.metadata.annotations["meshagent.service.id"] ?? "",
-                readme: service.metadata.annotations["meshagent.service.readme"],
-                title: service.metadata.name,
-                subtitle: service.metadata.description ?? "",
-                icon: LucideIcons.puzzle,
-                color: const Color(0xFF222222),
-                canChange: true,
-                template: null,
-                parsed: null,
-              ),
-
-          for (final available in availableAgents.state.value!.templates)
-            AgentOption(
-              readme: available.parsed.metadata.annotations["meshagent.service.readme"],
-              id: available.parsed.metadata.annotations["meshagent.service.id"] ?? "",
-              title: available.parsed.metadata.name,
-              subtitle: available.parsed.metadata.description ?? "",
-              template: available.template,
-              icon: LucideIcons.bot,
-              color: const Color(0xFF222222),
-              parsed: available.parsed,
-            ),
-        ];
-
         return LayoutBuilder(
           builder: (context, constraints) {
             final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+            final isScreen = widget.asScreen && isMobile;
+            final isLoading =
+                availableAgents.state.value == null ||
+                services.state.value == null ||
+                mailboxes.state.value == null ||
+                routes.state.value == null;
+
+            if (isLoading) {
+              final loadingBody = const Center(child: CircularProgressIndicator());
+
+              if (isScreen) {
+                return _screenBody(context: context, child: loadingBody, installEnabled: false, showFooter: false);
+              }
+
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final optionsToShow = <AgentOption>[
+              for (final service in services.state.value!)
+                if (availableAgents.state.value!.templates.firstWhereOrNull(
+                      (x) => x.parsed.metadata.annotations["meshagent.service.id"] == service.metadata.annotations["meshagent.service.id"],
+                    ) ==
+                    null)
+                  AgentOption(
+                    id: service.metadata.annotations["meshagent.service.id"] ?? "",
+                    readme: service.metadata.annotations["meshagent.service.readme"],
+                    title: service.metadata.name,
+                    subtitle: service.metadata.description ?? "",
+                    icon: LucideIcons.puzzle,
+                    color: const Color(0xFF222222),
+                    canChange: true,
+                    template: null,
+                    parsed: null,
+                  ),
+
+              for (final available in availableAgents.state.value!.templates)
+                AgentOption(
+                  readme: available.parsed.metadata.annotations["meshagent.service.readme"],
+                  id: available.parsed.metadata.annotations["meshagent.service.id"] ?? "",
+                  title: available.parsed.metadata.name,
+                  subtitle: available.parsed.metadata.description ?? "",
+                  template: available.template,
+                  icon: LucideIcons.bot,
+                  color: const Color(0xFF222222),
+                  parsed: available.parsed,
+                ),
+            ];
+
             final maxViewportHeight = constraints.maxHeight;
             final maxHeight = maxViewportHeight.isFinite ? (maxViewportHeight * 0.7).clamp(0.0, 860.0).toDouble() : 620.0;
             final optionsList = Column(
@@ -522,6 +620,17 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                 ],
               ],
             );
+
+            if (isScreen) {
+              return _screenBody(
+                context: context,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 24), child: optionsList),
+                ),
+                installEnabled: true,
+              );
+            }
 
             return PowerboardsShadDialog.task(
               scrollable: false,
