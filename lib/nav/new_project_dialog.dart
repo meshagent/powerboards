@@ -10,8 +10,7 @@ class NewProjectDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tt = ShadTheme.of(context).textTheme;
-    final labelStyle = tt.small.copyWith(fontWeight: FontWeight.w600);
+    final labelStyle = powerboardsFieldLabelTextStyle(context);
 
     return PowerboardsShadDialog.compact(
       title: Text("New Project"),

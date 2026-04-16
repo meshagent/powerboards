@@ -12,8 +12,7 @@ Future<String?> showRenameRoomDialog(
   String placeholder = 'e.g. General',
 }) {
   final formKey = GlobalKey<ShadFormState>();
-  final tt = ShadTheme.of(context).textTheme;
-  final labelStyle = tt.small.copyWith(fontWeight: FontWeight.w600);
+  final labelStyle = powerboardsFieldLabelTextStyle(context);
 
   return showShadDialog<String?>(
     context: context,

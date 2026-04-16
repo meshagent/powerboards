@@ -1070,7 +1070,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
-    final inputLabelStyle = theme.decoration.labelStyle?.copyWith(fontWeight: .w700);
+    final inputLabelStyle = powerboardsFieldLabelTextStyle(context);
 
     return LayoutBuilder(
       builder: (context, constraints) {

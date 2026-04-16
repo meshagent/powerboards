@@ -32,6 +32,7 @@ import 'theme/theme.dart';
 import 'ui/incoming_share_watcher.dart';
 import 'ui/link_listener.dart';
 import 'ui/meeting_view.dart';
+import 'ui/powerboards_adaptive_input.dart';
 import 'ui/powerboards_shad_dialog.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
@@ -66,6 +67,14 @@ ShadToastTheme? _powerboardsToastThemeForContext(BuildContext context) {
   }
 
   return const ShadToastTheme(alignment: Alignment.topCenter);
+}
+
+ShadDecoration? _powerboardsDecorationThemeForContext(BuildContext context) {
+  if (!powerboardsUsesMobileFieldLabelStyle(context)) {
+    return null;
+  }
+
+  return ShadDecoration(labelStyle: powerboardsMobileFieldLabelTextStyle(powerboardsShadColorScheme().foreground));
 }
 
 ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
@@ -250,6 +259,7 @@ class MyApp extends StatelessWidget {
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
         textTheme: powerboardsShadTextTheme(),
+        decoration: _powerboardsDecorationThemeForContext(context),
         primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
@@ -373,6 +383,7 @@ class _RootProvidersState extends State<_RootProviders> {
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
         textTheme: powerboardsShadTextTheme(),
+        decoration: _powerboardsDecorationThemeForContext(context),
         primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
