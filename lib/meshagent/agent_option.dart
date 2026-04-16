@@ -267,6 +267,22 @@ class _InstallAgentDialog extends StatelessWidget {
   }
 }
 
+class _NoTransitionPageRoute<T> extends PageRouteBuilder<T> {
+  _NoTransitionPageRoute({required this.builder})
+    : super(
+        pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      );
+
+  final WidgetBuilder builder;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    return child;
+  }
+}
+
 Future<void> showManageAgentsSurface({
   required BuildContext context,
   required String projectId,
@@ -280,7 +296,7 @@ Future<void> showManageAgentsSurface({
     }
 
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
+      _NoTransitionPageRoute(
         builder: (_) => ManageAgentsDialog(projectId: projectId, room: room, onServiceChanged: onServiceChanged, asScreen: true),
       ),
     );
