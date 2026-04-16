@@ -304,6 +304,8 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.mobilePresentation = PowerboardsDialogMobilePresentation.inherit,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.inherit,
     this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.inherit,
+    this.mobileKeyboardInsetScale = 1.0,
+    this.mobileHideActionsWhenKeyboardVisible = true,
     this.stackActionsOnMobile = false,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -348,6 +350,8 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.mobilePresentation = PowerboardsDialogMobilePresentation.inset,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.inherit,
     this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.inherit,
+    this.mobileKeyboardInsetScale = 1.0,
+    this.mobileHideActionsWhenKeyboardVisible = true,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -392,6 +396,8 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.mobilePresentation = PowerboardsDialogMobilePresentation.flowSheet,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.scrollable,
     this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.ignore,
+    this.mobileKeyboardInsetScale = 1.0,
+    this.mobileHideActionsWhenKeyboardVisible = true,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -436,6 +442,8 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.mobilePresentation = PowerboardsDialogMobilePresentation.inherit,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.inherit,
     this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.inherit,
+    this.mobileKeyboardInsetScale = 1.0,
+    this.mobileHideActionsWhenKeyboardVisible = true,
     this.stackActionsOnMobile = false,
     this.onBack,
   }) : variant = ShadDialogVariant.alert;
@@ -480,6 +488,8 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.mobilePresentation = PowerboardsDialogMobilePresentation.inset,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.inherit,
     this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.inherit,
+    this.mobileKeyboardInsetScale = 1.0,
+    this.mobileHideActionsWhenKeyboardVisible = true,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.alert;
@@ -524,6 +534,8 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.mobilePresentation = PowerboardsDialogMobilePresentation.flowSheet,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.scrollable,
     this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.avoid,
+    this.mobileKeyboardInsetScale = 1.0,
+    this.mobileHideActionsWhenKeyboardVisible = true,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -568,6 +580,8 @@ class PowerboardsShadDialog extends StatelessWidget {
     this.mobilePresentation = PowerboardsDialogMobilePresentation.fullScreen,
     this.mobileFlowBodyBehavior = PowerboardsDialogMobileFlowBodyBehavior.formScrollable,
     this.mobileKeyboardBehavior = PowerboardsDialogMobileKeyboardBehavior.ignore,
+    this.mobileKeyboardInsetScale = 1.0,
+    this.mobileHideActionsWhenKeyboardVisible = true,
     this.stackActionsOnMobile = true,
     this.onBack,
   }) : variant = ShadDialogVariant.primary;
@@ -611,6 +625,8 @@ class PowerboardsShadDialog extends StatelessWidget {
   final PowerboardsDialogMobilePresentation mobilePresentation;
   final PowerboardsDialogMobileFlowBodyBehavior mobileFlowBodyBehavior;
   final PowerboardsDialogMobileKeyboardBehavior mobileKeyboardBehavior;
+  final double mobileKeyboardInsetScale;
+  final bool mobileHideActionsWhenKeyboardVisible;
   final bool stackActionsOnMobile;
   final VoidCallback? onBack;
 
@@ -626,7 +642,7 @@ class PowerboardsShadDialog extends StatelessWidget {
       mobileKeyboardBehavior: mobileKeyboardBehavior,
       bodyBehavior: mobileFlowBodyBehavior,
     );
-    final rawMobileKeyboardInset = usesMobileFlowPresentation ? (mediaQuery?.viewInsets.bottom ?? 0.0) : 0.0;
+    final rawMobileKeyboardInset = usesMobileFlowPresentation ? (mediaQuery?.viewInsets.bottom ?? 0.0) * mobileKeyboardInsetScale : 0.0;
     final pinsFooterDuringKeyboard =
         usesMobileFlowPresentation && mobileFlowBodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.formScrollable;
     final mobileKeyboardInset = pinsFooterDuringKeyboard ? rawMobileKeyboardInset : (usesKeyboardAvoidance ? rawMobileKeyboardInset : 0.0);
@@ -743,6 +759,7 @@ class PowerboardsShadDialog extends StatelessWidget {
             bodyBehavior: mobileFlowBodyBehavior,
             usesHorizontalActionRow: useHorizontalMobileActionRow,
             keyboardInset: mobileKeyboardInset,
+            hideActionsWhenKeyboardVisible: mobileHideActionsWhenKeyboardVisible,
           )
         : ShadDialog.raw(
             key: key,
@@ -1514,6 +1531,7 @@ class _PowerboardsMobileFlowDialogSurface extends StatefulWidget {
     required this.bodyBehavior,
     required this.usesHorizontalActionRow,
     required this.keyboardInset,
+    required this.hideActionsWhenKeyboardVisible,
   });
 
   final BoxConstraints? constraints;
@@ -1531,6 +1549,7 @@ class _PowerboardsMobileFlowDialogSurface extends StatefulWidget {
   final PowerboardsDialogMobileFlowBodyBehavior bodyBehavior;
   final bool usesHorizontalActionRow;
   final double keyboardInset;
+  final bool hideActionsWhenKeyboardVisible;
 
   @override
   State<_PowerboardsMobileFlowDialogSurface> createState() => _PowerboardsMobileFlowDialogSurfaceState();
@@ -1601,6 +1620,7 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
         : maxHeight;
     final targetHeight = measuredHeight.clamp(minHeight, maxHeight).toDouble();
     final hideActionsForKeyboard =
+        widget.hideActionsWhenKeyboardVisible &&
         widget.keyboardInset > 0 &&
         (widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.scrollable ||
             widget.bodyBehavior == PowerboardsDialogMobileFlowBodyBehavior.formScrollable);

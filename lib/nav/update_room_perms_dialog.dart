@@ -1393,7 +1393,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                                 keyboardType: TextInputType.emailAddress,
                                 autocorrect: false,
                                 enableSuggestions: true,
-                                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 220),
+                                scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 55),
                                 placeholder: const Text('Type an email'),
                                 contextMenuBuilder: (context, editableTextState) => powerboardsUsesSystemAdaptiveTextSelectionToolbar()
                                     ? powerboardsAdaptiveInputContextMenuBuilder(context, editableTextState)
