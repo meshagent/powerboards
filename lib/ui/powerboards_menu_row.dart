@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:powerboards/theme/theme.dart';
 
 const double powerboardsMenuRowHeight = 80;
@@ -9,11 +8,11 @@ const double powerboardsMenuRowItemGap = 14;
 const double powerboardsMenuRowTrailingGap = 12;
 
 TextStyle powerboardsMenuRowTitleStyle() {
-  return GoogleFonts.inter(fontSize: 16, height: 1.2, fontWeight: FontWeight.w600, color: shadForeground);
+  return powerboardsSectionTitleStyle(height: 1.2);
 }
 
 TextStyle powerboardsMenuRowDescriptionStyle() {
-  return GoogleFonts.inter(fontSize: 14, height: 1.2, fontWeight: FontWeight.w500, color: shadSecondaryForeground);
+  return powerboardsSecondaryTextStyle(height: 1.2);
 }
 
 class PowerboardsMenuRow extends StatelessWidget {

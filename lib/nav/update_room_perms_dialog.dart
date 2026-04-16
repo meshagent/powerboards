@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
@@ -22,6 +21,7 @@ import 'package:powerboards/ui/avatar_menu_button.dart';
 
 import 'package:powerboards/widgets/email_address.dart';
 import 'package:powerboards/widgets/select_users.dart';
+import 'package:powerboards/theme/theme.dart';
 
 enum _View { permissions, addUser }
 
@@ -167,7 +167,7 @@ class _UserGrantRow extends StatelessWidget {
                             user.email,
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
-                            style: GoogleFonts.inter(color: cs.foreground, fontWeight: FontWeight.w600),
+                            style: powerboardsInterTextStyle(color: cs.foreground, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 6),
                           Text(grantSummary.role.displayName, style: TextStyle(color: cs.foreground)),
@@ -176,7 +176,7 @@ class _UserGrantRow extends StatelessWidget {
                     : Text(
                         user.email,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(color: cs.foreground, fontWeight: FontWeight.w600),
+                        style: powerboardsInterTextStyle(color: cs.foreground, fontWeight: FontWeight.w600),
                       ),
               ),
             ],

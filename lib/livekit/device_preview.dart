@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -408,7 +407,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final isLandscapePhone = _isLandscapePhoneViewport(context);
         final isMobile = size.width < 600;
         final useMobileLobbyLayout = isMobile || isLandscapePhone;
-        final statusTextStyle = GoogleFonts.inter(fontSize: useMobileLobbyLayout ? 17.6 : 16, fontWeight: FontWeight.w600);
+        final statusTextStyle = powerboardsInterTextStyle(fontSize: useMobileLobbyLayout ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
         final contentHorizontalInset = switch (maxWidth) {
           >= 850 => 0.0,

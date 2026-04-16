@@ -158,6 +158,44 @@ ShadTextTheme powerboardsShadTextTheme() {
   );
 }
 
+TextStyle powerboardsInterTextStyle({
+  TextStyle? textStyle,
+  Color? color,
+  FontWeight? fontWeight,
+  double? fontSize,
+  double? height,
+  double? letterSpacing,
+}) {
+  return GoogleFonts.inter(
+    textStyle: textStyle,
+    color: color,
+    fontWeight: fontWeight,
+    fontSize: fontSize,
+    height: height,
+    letterSpacing: letterSpacing,
+  );
+}
+
+TextStyle powerboardsSectionTitleStyle({Color color = shadForeground, double? height}) {
+  return powerboardsInterTextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: color, height: height);
+}
+
+TextStyle powerboardsSecondaryTextStyle({Color color = shadSecondaryForeground, double? height}) {
+  return powerboardsInterTextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: color, height: height);
+}
+
+TextStyle powerboardsActionLabelStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: color);
+}
+
+TextStyle powerboardsMetaTextStyle({required Color color, FontWeight fontWeight = FontWeight.w500, double? height}) {
+  return powerboardsInterTextStyle(fontSize: 13, fontWeight: fontWeight, color: color, height: height);
+}
+
+TextStyle powerboardsEmphasizedTitleStyle({required Color color, double height = 1.15}) {
+  return powerboardsInterTextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: color, height: height);
+}
+
 const EdgeInsets powerboardsBadgePadding = EdgeInsets.symmetric(horizontal: 16, vertical: 2);
 
 const filledButtonColor = shadPrimary;
@@ -203,7 +241,7 @@ String timeAgo(DateTime d) {
 }
 
 final menuItemButtonStyle = ButtonStyle(
-  textStyle: WidgetStatePropertyAll<TextStyle>(GoogleFonts.inter(fontSize: 14, color: Colors.black, letterSpacing: 0.4)),
+  textStyle: WidgetStatePropertyAll<TextStyle>(powerboardsInterTextStyle(fontSize: 14, color: Colors.black, letterSpacing: 0.4)),
 
   elevation: const WidgetStatePropertyAll(20),
 );

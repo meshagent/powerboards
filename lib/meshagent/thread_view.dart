@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
@@ -124,11 +123,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       child: compact
           ? ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
-              child: Text(
-                title,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: shadForeground),
-              ),
+              child: Text(title, textAlign: TextAlign.center, style: powerboardsSectionTitleStyle()),
             )
           : ChatThreadEmptyStateContent(title: title, description: description),
     );
@@ -515,12 +510,12 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
 class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   static TextStyle threadNameStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w400, Color? color}) {
     final theme = ShadTheme.of(context);
-    return GoogleFonts.inter(fontSize: 13, fontWeight: fontWeight, color: color ?? theme.colorScheme.mutedForeground);
+    return powerboardsMetaTextStyle(color: color ?? theme.colorScheme.mutedForeground, fontWeight: fontWeight);
   }
 
   static TextStyle createActionStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w700}) {
     final theme = ShadTheme.of(context);
-    return GoogleFonts.inter(
+    return powerboardsInterTextStyle(
       fontSize: chatBubbleMarkdownBaseFontSize(context),
       fontWeight: fontWeight,
       color: theme.colorScheme.foreground,
@@ -931,14 +926,14 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
             if (icon != null) ...[Icon(icon, size: 44, color: shadMutedForeground), const SizedBox(height: 16)],
             Text(
               title,
-              style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
+              style: powerboardsInterTextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
             ),
             if (description != null) ...[
               const SizedBox(height: 8),
               Text(
                 description,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: shadMutedForeground),
+                style: powerboardsSecondaryTextStyle(color: shadMutedForeground),
               ),
             ],
           ],
@@ -1085,10 +1080,7 @@ class _ThreadListEmptyHint extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(leadingInset, isMobile ? 4 : 8, 0, 0),
-      child: Text(
-        "Add and manage multiple threads.",
-        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: shadMutedForeground, height: 1.4),
-      ),
+      child: Text("Add and manage multiple threads.", style: powerboardsMetaTextStyle(color: shadMutedForeground, height: 1.4)),
     );
   }
 }

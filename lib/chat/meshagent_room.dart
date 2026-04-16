@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/markdown.dart';
 import 'package:powerboards/meshagent/project.dart';
@@ -65,7 +64,7 @@ import 'package:powerboards/ui/sweep_status_text.dart';
 import 'package:powerboards/ui/text_validators.dart';
 
 const defaultDebugSize = 0.4;
-final meetingHeaderTitleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600);
+final meetingHeaderTitleStyle = powerboardsSectionTitleStyle();
 const double _meetingToolbarCompactThreshold = 620;
 const double _meetingToolbarPreferredExpandedWidth = 640;
 const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
@@ -1455,10 +1454,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     VoidCallback? onManage,
   }) {
     final theme = ShadTheme.of(context);
-    final createActionStyle = GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: theme.colorScheme.foreground);
-    final secondaryActionStyle = GoogleFonts.inter(
-      fontSize: 14,
-      fontWeight: FontWeight.w500,
+    final createActionStyle = powerboardsActionLabelStyle(color: theme.colorScheme.foreground);
+    final secondaryActionStyle = powerboardsSecondaryTextStyle(
       color: onManage == null ? theme.colorScheme.mutedForeground.withValues(alpha: 0.7) : theme.colorScheme.mutedForeground,
     );
 

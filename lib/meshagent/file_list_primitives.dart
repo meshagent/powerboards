@@ -1,6 +1,5 @@
 import 'package:file_icon/file_icon.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
@@ -25,11 +24,11 @@ const double powerboardsFileListLeadingGlyphSize = 24.0;
 const double powerboardsFileListRowGap = 12.0;
 
 TextStyle powerboardsFileListTitleStyle() {
-  return GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: shadForeground);
+  return powerboardsSecondaryTextStyle(color: shadForeground);
 }
 
 TextStyle powerboardsFileListMetadataStyle() {
-  return GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: shadMutedForeground);
+  return powerboardsSecondaryTextStyle(color: shadMutedForeground);
 }
 
 IconData? powerboardsFileIconDataForEntry(StorageEntry entry) {
@@ -132,11 +131,7 @@ Widget buildPowerboardsFileBrowserEmptyState(BuildContext context) {
   return Center(
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Text(
-        'Nothing to attach here',
-        textAlign: TextAlign.center,
-        style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: shadForeground),
-      ),
+      child: Text('Nothing to attach here', textAlign: TextAlign.center, style: powerboardsSectionTitleStyle()),
     ),
   );
 }
@@ -180,7 +175,7 @@ class _PowerboardsFileBrowserInsetHeaderState extends State<_PowerboardsFileBrow
   }
 
   TextStyle _segmentLabelStyle() {
-    return GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: shadMutedForeground);
+    return powerboardsSectionTitleStyle(color: shadMutedForeground);
   }
 
   double _measureLabelWidth(BuildContext context, String label, TextStyle style) {

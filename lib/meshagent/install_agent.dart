@@ -2,7 +2,6 @@ import 'package:collection/collection.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart' as dev;
@@ -11,6 +10,7 @@ import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -201,7 +201,7 @@ class _AgentInstaller extends State<AgentInstaller> {
   }
 
   TextStyle get _labelStyle => Theme.of(context).textTheme.titleMedium!.copyWith(fontWeight: FontWeight.bold);
-  TextStyle get _mobileSectionTitleStyle => GoogleFonts.inter(
+  TextStyle get _mobileSectionTitleStyle => powerboardsInterTextStyle(
     textStyle: DefaultTextStyle.of(context).style,
     color: ShadTheme.of(context).colorScheme.foreground,
     fontWeight: FontWeight.w600,

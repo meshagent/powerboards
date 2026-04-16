@@ -5,7 +5,6 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -187,7 +186,7 @@ class FileManagerView extends StatefulWidget {
 }
 
 class _FileManagerViewState extends State<FileManagerView> {
-  static TextStyle breadcrumbLinkStyle = GoogleFonts.inter(fontSize: 16, fontWeight: .w600);
+  static TextStyle breadcrumbLinkStyle = powerboardsSectionTitleStyle();
   static const String _threadIndexFileName = 'index.threadl';
 
   _FileLocation _location = const _FileLocation(folder: "", openedFile: null);
@@ -1812,7 +1811,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   TextStyle _mobileOpenedFileTextActionStyle(Color color) {
-    return GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: color);
+    return powerboardsActionLabelStyle(color: color);
   }
 
   Future<void> _saveAdaptiveMobileEdits() async {
@@ -2778,10 +2777,7 @@ class _FileTableViewState extends State<FileTableView> {
     return ShadButton.ghost(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       onPressed: selectionActive ? widget.onClearSelectionMode : widget.onActivateSelectionMode,
-      child: Text(
-        label,
-        style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: textColor),
-      ),
+      child: Text(label, style: powerboardsActionLabelStyle(color: textColor)),
     );
   }
 

@@ -1,7 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
@@ -390,7 +389,7 @@ class _AttachFlowDialogActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final foreground = theme.colorScheme.foreground;
-    final titleStyle = GoogleFonts.inter(color: foreground, fontWeight: FontWeight.w600);
+    final titleStyle = powerboardsInterTextStyle(color: foreground, fontWeight: FontWeight.w600);
 
     return Material(
       color: Colors.transparent,

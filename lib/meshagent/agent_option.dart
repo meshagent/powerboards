@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
@@ -474,7 +473,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
 
   Widget _screenBody({required BuildContext context, required Widget child, required bool installEnabled, bool showFooter = true}) {
     final theme = ShadTheme.of(context);
-    final titleStyle = GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: theme.colorScheme.foreground);
+    final titleStyle = powerboardsSectionTitleStyle(color: theme.colorScheme.foreground);
     final surfaceColor = theme.colorScheme.card;
 
     return Scaffold(

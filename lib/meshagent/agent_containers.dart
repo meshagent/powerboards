@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:meshagent/agent.dart';
 import 'package:meshagent/client.dart' as meshagent_client;
 import 'package:meshagent/protocol.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart' as dev;
+import 'package:powerboards/theme/theme.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
@@ -27,7 +27,7 @@ String powerboardsDisplayServiceName(String rawName) {
 
 TextStyle powerboardsAgentCardTitleTextStyle(BuildContext context) {
   final theme = ShadTheme.of(context);
-  return GoogleFonts.inter(fontSize: 16, height: 1.15, fontWeight: FontWeight.w700, color: theme.colorScheme.foreground);
+  return powerboardsEmphasizedTitleStyle(color: theme.colorScheme.foreground);
 }
 
 ServiceTemplateSpec powerboardsDisplayServiceTemplateSpec(ServiceTemplateSpec manifest) {

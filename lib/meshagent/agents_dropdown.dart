@@ -2,10 +2,10 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/markdown.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
@@ -212,7 +212,7 @@ class AgentsDropdown extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.left,
-                            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600),
+                            style: powerboardsSectionTitleStyle(),
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -224,7 +224,7 @@ class AgentsDropdown extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.left,
-                      style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: powerboardsSectionTitleStyle(),
                     ),
             );
           },

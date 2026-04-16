@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart' as fs;
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -836,12 +835,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final mobileHeaderControlSize = desktopPaneHeaderCompactButtonWidth;
     final displayName = selectedProject?.name ?? "Select project";
-    final projectTitleStyle = GoogleFonts.inter(
-      fontSize: 16,
-      fontWeight: FontWeight.w600,
-      height: 1.2,
-      color: theme.colorScheme.foreground,
-    );
+    final projectTitleStyle = powerboardsSectionTitleStyle(color: theme.colorScheme.foreground, height: 1.2);
 
     return Container(
       padding: isSmallDisplay ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),

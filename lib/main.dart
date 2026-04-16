@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_portal/flutter_portal.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_shadcn/web_context_menu_manager.dart';
@@ -313,7 +312,7 @@ class MyApp extends StatelessWidget {
           child: MediaQuery(
             data: media.copyWith(textScaler: const TextScaler.linear(textScale)),
             child: DefaultTextStyle(
-              style: GoogleFonts.inter(fontSize: 14),
+              style: powerboardsInterTextStyle(fontSize: 14),
               child: ShadToaster(
                 child: _RootProviders(
                   child: IncomingShareWatcher(
