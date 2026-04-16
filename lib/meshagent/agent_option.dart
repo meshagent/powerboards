@@ -49,6 +49,16 @@ class AgentOption {
   });
 }
 
+String _agentDisplayTitle(String rawTitle) {
+  final normalized = rawTitle.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (normalized.isEmpty) {
+    return rawTitle.trim();
+  }
+
+  final lowerCased = normalized.toLowerCase();
+  return '${lowerCased[0].toUpperCase()}${lowerCased.substring(1)}';
+}
+
 class AgentOptionTile extends StatefulWidget {
   final AgentOption option;
   final bool inRoom;
@@ -123,12 +133,15 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
   @override
   Widget build(BuildContext context) {
     const radius = 12.0;
+    final theme = ShadTheme.of(context);
+    final titleStyle = powerboardsAgentCardTitleTextStyle(context);
+    final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: ShadTheme.of(context).colorScheme.border),
+        border: Border.all(color: theme.colorScheme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,18 +154,9 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
                   spacing: 6,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.option.title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text(_agentDisplayTitle(widget.option.title), style: titleStyle, overflow: TextOverflow.ellipsis),
 
-                    Text(
-                      widget.option.subtitle,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.8)),
-                    ),
+                    Text(widget.option.subtitle, style: descriptionStyle),
 
                     if (widget.mailboxes.isNotEmpty || widget.routes.isNotEmpty) SizedBox(height: 0),
 
@@ -631,7 +635,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                             [],
                         routes: serviceRoutes,
                         busy: false,
-                        version: "latest",
+                        version: null,
                         versionHasUpdate: false,
                         onPrimaryTap: () => _openManageDialog(option: option, existing: service),
                       );
@@ -694,6 +698,7 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
     return Row(
       children: [
         Container(
@@ -702,10 +707,7 @@ class _StatusChip extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: const Color(0xFF111827), fontWeight: FontWeight.w600),
-        ),
+        Text(label, style: theme.textTheme.small.copyWith(color: color)),
       ],
     );
   }

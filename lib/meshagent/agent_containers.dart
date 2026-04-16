@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:meshagent/agent.dart';
 import 'package:meshagent/client.dart' as meshagent_client;
 import 'package:meshagent/protocol.dart';
@@ -14,6 +15,91 @@ import 'package:powerboards/meshagent/meshagent.dart';
 typedef ConfigureServiceTemplateDone = void Function(BuildContext context, String serviceId);
 
 const double _mobileConfigureFlowSectionGap = powerboardsMobileFlowDialogContentSectionGap * 3;
+
+String powerboardsDisplayServiceName(String rawName) {
+  final trimmed = rawName.trim();
+  if (trimmed.isEmpty) {
+    return trimmed;
+  }
+
+  return '${trimmed[0].toUpperCase()}${trimmed.substring(1)}';
+}
+
+TextStyle powerboardsAgentCardTitleTextStyle(BuildContext context) {
+  final theme = ShadTheme.of(context);
+  return GoogleFonts.inter(fontSize: 16, height: 1.15, fontWeight: FontWeight.w700, color: theme.colorScheme.foreground);
+}
+
+ServiceTemplateSpec powerboardsDisplayServiceTemplateSpec(ServiceTemplateSpec manifest) {
+  return ServiceTemplateSpec(
+    version: manifest.version,
+    kind: manifest.kind,
+    variables: manifest.variables,
+    metadata: ServiceTemplateMetadata(
+      name: powerboardsDisplayServiceName(manifest.metadata.name),
+      description: manifest.metadata.description,
+      icon: manifest.metadata.icon,
+      repo: manifest.metadata.repo,
+      annotations: Map<String, String>.from(manifest.metadata.annotations),
+    ),
+    ports: manifest.ports,
+    container: manifest.container,
+    external: manifest.external,
+    agents: manifest.agents,
+  );
+}
+
+TextStyle powerboardsAgentCardDescriptionTextStyle(BuildContext context) {
+  final theme = ShadTheme.of(context);
+  final descriptionStyle = theme.decoration.descriptionStyle ?? theme.textTheme.muted;
+  return descriptionStyle.copyWith(color: descriptionStyle.color ?? theme.colorScheme.mutedForeground);
+}
+
+class PowerboardsServiceNameCard extends StatelessWidget {
+  const PowerboardsServiceNameCard({super.key, required this.manifest});
+
+  final ServiceTemplateSpec manifest;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
+    final titleStyle = powerboardsAgentCardTitleTextStyle(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: theme.colorScheme.border, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(manifest.metadata.name, style: titleStyle, overflow: TextOverflow.ellipsis),
+                if (manifest.metadata.description case final description? when description.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(description, maxLines: 2, overflow: TextOverflow.ellipsis, style: descriptionStyle),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: theme.colorScheme.foreground, shape: BoxShape.circle),
+            alignment: Alignment.center,
+            child: Icon(LucideIcons.bot, color: theme.colorScheme.background, size: 22),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 BoxConstraints? _desktopConfigureAgentDialogConstraints(BuildContext context, BoxConstraints constraints) {
   if (powerboardsUsesNativeMobileDialogLayout(context)) {
@@ -72,6 +158,7 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
   @override
   Widget build(BuildContext context) {
     final isInstalled = widget.serviceId != null;
+    final displayManifest = powerboardsDisplayServiceTemplateSpec(widget.manifest);
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
@@ -79,14 +166,14 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
         final content = ConfigureServiceTemplate(
           template: widget.template,
           header: [
-            dev.ServiceNameCard(manifest: widget.manifest),
+            PowerboardsServiceNameCard(manifest: displayManifest),
             if (isMobile && widget.description != null && widget.description!.trim().isNotEmpty) ...[
               const SizedBox(height: _mobileConfigureFlowSectionGap),
               _mobileDestructiveDescription(context, widget.description!),
             ],
             if (!isInstalled) ...[
               SizedBox(height: isMobile ? _mobileConfigureFlowSectionGap : 12),
-              dev.ServiceInfoCard(manifest: widget.manifest),
+              dev.ServiceInfoCard(manifest: displayManifest),
             ],
           ],
           projectId: widget.projectId,

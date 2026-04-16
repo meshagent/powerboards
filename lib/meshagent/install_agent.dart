@@ -625,6 +625,7 @@ class _AgentInstaller extends State<AgentInstaller> {
 
   Widget _reviewStep() {
     final usesMobileFlowLayout = _usesMobileFlowLayout;
+    final displaySpec = powerboardsDisplayServiceTemplateSpec(_spec.state.value!);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -637,11 +638,11 @@ class _AgentInstaller extends State<AgentInstaller> {
             children: [
               _mobileBodyIntro(title: 'Review details'),
               const SizedBox(height: _mobileInstallFlowSectionGap),
-              dev.ServiceNameCard(manifest: _spec.state.value!),
+              PowerboardsServiceNameCard(manifest: displaySpec),
               const SizedBox(height: _mobileInstallFlowSectionGap),
               _mobileDestructiveDescription('Check what this agent installs and what access it will receive before continuing.'),
               const SizedBox(height: _mobileInstallFlowSectionGap),
-              dev.ServiceInfoCard(manifest: _spec.state.value!),
+              dev.ServiceInfoCard(manifest: displaySpec),
             ],
           )
         else
@@ -651,9 +652,9 @@ class _AgentInstaller extends State<AgentInstaller> {
               children: [
                 Text("Review details", style: _labelStyle, textAlign: TextAlign.center),
                 const SizedBox(height: 16),
-                dev.ServiceNameCard(manifest: _spec.state.value!),
+                PowerboardsServiceNameCard(manifest: displaySpec),
                 const SizedBox(height: 20),
-                dev.ServiceInfoCard(manifest: _spec.state.value!),
+                dev.ServiceInfoCard(manifest: displaySpec),
               ],
             ),
           ),
@@ -865,6 +866,7 @@ class _AgentInstaller extends State<AgentInstaller> {
 
     final existingService = _currentServiceForSpec();
     final existingServiceId = existingService?.id;
+    final displaySpec = powerboardsDisplayServiceTemplateSpec(_spec.state.value!);
 
     Map<String, String> prefill = {};
     /*try {
@@ -895,7 +897,7 @@ class _AgentInstaller extends State<AgentInstaller> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: _mobileInstallFlowSectionGap),
-              dev.ServiceNameCard(manifest: _spec.state.value!),
+              PowerboardsServiceNameCard(manifest: displaySpec),
             ],
             serviceId: existingServiceId,
             projectId: _projectId!,
@@ -923,7 +925,7 @@ class _AgentInstaller extends State<AgentInstaller> {
               template: _template!,
               header: [
                 Text("Confirm and Install into ${_roomName ?? _roomDisplayName}", style: _labelStyle, textAlign: TextAlign.center),
-                dev.ServiceNameCard(manifest: _spec.state.value!),
+                PowerboardsServiceNameCard(manifest: displaySpec),
                 const SizedBox(height: 8),
               ],
               serviceId: existingServiceId,
