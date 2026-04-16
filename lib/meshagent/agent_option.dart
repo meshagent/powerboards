@@ -274,6 +274,11 @@ Future<void> showManageAgentsSurface({
   void Function()? onServiceChanged,
 }) async {
   if (powerboardsUsesNativeMobileDialogLayout(context)) {
+    await dismissBackgroundKeyboardBeforeAdaptiveSurface(context);
+    if (!context.mounted) {
+      return;
+    }
+
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => ManageAgentsDialog(projectId: projectId, room: room, onServiceChanged: onServiceChanged, asScreen: true),

@@ -860,7 +860,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Future<String?> _promptRenamePath(String fullPath, {required bool isFolder}) async {
     final currentName = p.basename(fullPath);
-    return await showShadDialog<String>(
+    return await showPowerboardsAlertDialog<String>(
       context: context,
       builder: (context) {
         return ControlledForm(
@@ -1046,7 +1046,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _addFolder(String path) async {
-    final result = await showShadDialog<String>(
+    final result = await showPowerboardsAlertDialog<String>(
       context: context,
       builder: (context) {
         return ControlledForm(
@@ -1109,7 +1109,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   Future<bool> _confirmAndDelete(String fullPath, bool isFolder) async {
     final name = fullPath.split('/').where((s) => s.isNotEmpty).last;
     final displayName = isFolder ? name : _displayNameForPath(fullPath);
-    final bool? confirmDelete = await showShadDialog<bool>(
+    final bool? confirmDelete = await showPowerboardsAlertDialog<bool>(
       context: context,
       builder: (context) => PowerboardsShadDialog.compactAlert(
         title: const Text("Confirm Delete"),
@@ -1152,7 +1152,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return _displayNameForPath(path);
     }).toList();
 
-    final confirmDelete = await showShadDialog<bool>(
+    final confirmDelete = await showPowerboardsAlertDialog<bool>(
       context: context,
       builder: (context) => PowerboardsShadDialog.compactAlert(
         title: const Text("Confirm Delete"),
@@ -1258,7 +1258,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _showNewTextFileDialog() {
-    showShadDialog<String>(
+    showPowerboardsAlertDialog<String>(
       context: context,
       builder: (context) {
         return ControlledForm(
@@ -1274,7 +1274,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               String? resolvedName = trimmedName;
 
               if (!trimmedName.contains('.')) {
-                resolvedName = await showShadDialog<String>(
+                resolvedName = await showPowerboardsAlertDialog<String>(
                   context: context,
                   builder: (context) {
                     return PowerboardsShadDialog.compact(

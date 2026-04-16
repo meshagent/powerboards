@@ -148,12 +148,7 @@ Future<T?> showPowerboardsFlowDialog<T>({
   final screenSize = mediaQuery?.size ?? const Size(1024.0, 768.0);
   final isMobile = _usesNativeMobileDialogLayout(screenSize);
 
-  if (isMobile) {
-    await _dismissBackgroundKeyboardBeforeFlowDialog(context);
-  } else {
-    FocusManager.instance.primaryFocus?.unfocus();
-    await WidgetsBinding.instance.endOfFrame;
-  }
+  await dismissBackgroundKeyboardBeforeAdaptiveSurface(context);
 
   if (!context.mounted) {
     return null;
@@ -192,6 +187,47 @@ Future<T?> showPowerboardsFlowDialog<T>({
     routeSettings: routeSettings,
     anchorPoint: anchorPoint,
   );
+}
+
+Future<T?> showPowerboardsAlertDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+  Color barrierColor = const Color(0xcc000000),
+  String barrierLabel = '',
+  bool useRootNavigator = true,
+  RouteSettings? routeSettings,
+  Offset? anchorPoint,
+}) async {
+  await dismissBackgroundKeyboardBeforeAdaptiveSurface(context);
+
+  if (!context.mounted) {
+    return null;
+  }
+
+  return showShadDialog<T>(
+    context: context,
+    builder: builder,
+    barrierDismissible: barrierDismissible,
+    barrierColor: barrierColor,
+    barrierLabel: barrierLabel,
+    useRootNavigator: useRootNavigator,
+    routeSettings: routeSettings,
+    anchorPoint: anchorPoint,
+  );
+}
+
+Future<void> dismissBackgroundKeyboardBeforeAdaptiveSurface(BuildContext context) async {
+  final mediaQuery = MediaQuery.maybeOf(context);
+  final screenSize = mediaQuery?.size ?? const Size(1024.0, 768.0);
+  final isMobile = _usesNativeMobileDialogLayout(screenSize);
+
+  if (isMobile) {
+    await _dismissBackgroundKeyboardBeforeFlowDialog(context);
+  } else {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await WidgetsBinding.instance.endOfFrame;
+  }
 }
 
 Future<void> _dismissBackgroundKeyboardBeforeFlowDialog(BuildContext context) async {
@@ -745,11 +781,11 @@ class PowerboardsShadDialog extends StatelessWidget {
         ? MediaQuery.removeViewInsets(context: context, removeBottom: true, child: dialog)
         : dialog;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-      child: wrappedDialog,
-    );
+    if (usesMobileFlowPresentation) {
+      return wrappedDialog;
+    }
+
+    return GestureDetector(onTap: () => FocusManager.instance.primaryFocus?.unfocus(), child: wrappedDialog);
   }
 }
 
@@ -1402,6 +1438,7 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
 
   @override
   Widget build(BuildContext context) {
+    final routeBarrierDismissible = ModalRoute.of(context)?.barrierDismissible ?? true;
     final heightConstraints = widget.constraints ?? const BoxConstraints();
     final hasFixedHeight =
         heightConstraints.hasBoundedHeight && (heightConstraints.maxHeight - heightConstraints.minHeight).abs() < precisionErrorTolerance;
@@ -1444,39 +1481,49 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
       padding: EdgeInsets.only(bottom: widget.keyboardInset),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: Stack(
-          alignment: Alignment.bottomCenter,
+      child: SizedBox.expand(
+        child: Column(
           children: [
-            if (requiresMeasurement)
-              Offstage(
-                child: IgnorePointer(
-                  child: ExcludeFocus(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minWidth: widget.constraints?.minWidth ?? 0.0,
-                        maxWidth: widget.constraints?.maxWidth ?? double.infinity,
-                      ),
-                      child: Padding(
-                        padding: widget.padding,
-                        child: NotificationListener<SizeChangedLayoutNotification>(
-                          onNotification: (_) {
-                            _scheduleMeasurement();
-                            return false;
-                          },
-                          child: SizeChangedLayoutNotifier(
-                            child: KeyedSubtree(
-                              key: _measureKey,
-                              child: _PowerboardsMobileFlowDialogFrame(
-                                title: widget.title,
-                                description: widget.description,
-                                body: _buildMeasuredBody(),
-                                actions: widget.actions,
-                                gap: widget.gap,
-                                actionsGap: widget.actionsGap,
-                                expandBody: false,
-                                usesHorizontalActionRow: widget.usesHorizontalActionRow,
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: routeBarrierDismissible ? () => Navigator.of(context).maybePop() : null,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                if (requiresMeasurement)
+                  Offstage(
+                    child: IgnorePointer(
+                      child: ExcludeFocus(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: widget.constraints?.minWidth ?? 0.0,
+                            maxWidth: widget.constraints?.maxWidth ?? double.infinity,
+                          ),
+                          child: Padding(
+                            padding: widget.padding,
+                            child: NotificationListener<SizeChangedLayoutNotification>(
+                              onNotification: (_) {
+                                _scheduleMeasurement();
+                                return false;
+                              },
+                              child: SizeChangedLayoutNotifier(
+                                child: KeyedSubtree(
+                                  key: _measureKey,
+                                  child: _PowerboardsMobileFlowDialogFrame(
+                                    title: widget.title,
+                                    description: widget.description,
+                                    body: _buildMeasuredBody(),
+                                    actions: widget.actions,
+                                    gap: widget.gap,
+                                    actionsGap: widget.actionsGap,
+                                    expandBody: false,
+                                    usesHorizontalActionRow: widget.usesHorizontalActionRow,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -1484,33 +1531,36 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
                       ),
                     ),
                   ),
-                ),
-              ),
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: widget.constraints?.minWidth ?? 0.0,
-                maxWidth: widget.constraints?.maxWidth ?? double.infinity,
-              ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: widget.backgroundColor,
-                  borderRadius: widget.radius,
-                  border: widget.border,
-                  boxShadow: widget.shadows,
-                ),
-                child: ClipRRect(
-                  borderRadius: widget.radius,
-                  child: SizedBox(
-                    height: targetHeight,
-                    child: Padding(
-                      padding: widget.padding,
-                      child: !requiresMeasurement || _measuredContentHeight != null
-                          ? visibleFrame
-                          : SingleChildScrollView(child: provisionalFrame!),
+                GestureDetector(
+                  onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minWidth: widget.constraints?.minWidth ?? 0.0,
+                      maxWidth: widget.constraints?.maxWidth ?? double.infinity,
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: widget.backgroundColor,
+                        borderRadius: widget.radius,
+                        border: widget.border,
+                        boxShadow: widget.shadows,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: widget.radius,
+                        child: SizedBox(
+                          height: targetHeight,
+                          child: Padding(
+                            padding: widget.padding,
+                            child: !requiresMeasurement || _measuredContentHeight != null
+                                ? visibleFrame
+                                : SingleChildScrollView(child: provisionalFrame!),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
         ),

@@ -1706,7 +1706,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Future<void> _addFolderToCurrentFilesLocation(BuildContext context) async {
     final folder = _mobileFilesLocation(context).folder;
-    final result = await showShadDialog<String>(
+    final result = await showPowerboardsAlertDialog<String>(
       context: context,
       builder: (context) {
         return ControlledForm(
@@ -1760,7 +1760,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Future<void> _showNewTextFileDialogForCurrentFilesLocation(BuildContext context) async {
     final folder = _mobileFilesLocation(context).folder;
-    final resolvedName = await showShadDialog<String>(
+    final resolvedName = await showPowerboardsAlertDialog<String>(
       context: context,
       builder: (context) {
         return ControlledForm(
@@ -1774,7 +1774,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               var nextName = name;
 
               if (!name.contains('.')) {
-                final maybeName = await showShadDialog<String>(
+                final maybeName = await showPowerboardsAlertDialog<String>(
                   context: context,
                   builder: (context) => PowerboardsShadDialog.compact(
                     title: const Text("Add .txt extension?"),

@@ -63,7 +63,7 @@ class NewProjectDialog extends StatelessWidget {
 Future<String?> showNewProjectDialog(BuildContext context) {
   final formKey = GlobalKey<ShadFormState>();
 
-  return showShadDialog<String?>(
+  return showPowerboardsAlertDialog<String?>(
     context: context,
     builder: (context) => NewProjectDialog(formKey: formKey),
   );

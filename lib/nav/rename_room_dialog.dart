@@ -14,7 +14,7 @@ Future<String?> showRenameRoomDialog(
   final formKey = GlobalKey<ShadFormState>();
   final labelStyle = powerboardsFieldLabelTextStyle(context);
 
-  return showShadDialog<String?>(
+  return showPowerboardsAlertDialog<String?>(
     context: context,
     builder: (ctx) {
       void submit() {

@@ -60,12 +60,7 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
 
   Widget _mobileDestructiveDescription(BuildContext context, String description) {
     final theme = ShadTheme.of(context);
-    return Text(
-      description,
-      style: theme.textTheme.muted.copyWith(
-        color: theme.colorScheme.destructive,
-      ),
-    );
+    return Text(description, style: theme.textTheme.muted.copyWith(color: theme.colorScheme.destructive));
   }
 
   @override
@@ -80,16 +75,12 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
-        final dialogDescription = !isMobile && widget.description != null
-            ? Text(widget.description!)
-            : null;
+        final dialogDescription = !isMobile && widget.description != null ? Text(widget.description!) : null;
         final content = ConfigureServiceTemplate(
           template: widget.template,
           header: [
             dev.ServiceNameCard(manifest: widget.manifest),
-            if (isMobile &&
-                widget.description != null &&
-                widget.description!.trim().isNotEmpty) ...[
+            if (isMobile && widget.description != null && widget.description!.trim().isNotEmpty) ...[
               const SizedBox(height: _mobileConfigureFlowSectionGap),
               _mobileDestructiveDescription(context, widget.description!),
             ],
@@ -481,7 +472,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
         if (!mounted) {
           return;
         }
-        final confirmed = await showShadDialog<bool>(
+        final confirmed = await showPowerboardsAlertDialog<bool>(
           context: context,
           builder: (context) => PowerboardsShadDialog.compactAlert(
             title: const Text('Delete routes?'),

@@ -193,7 +193,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
         },
         notFoundBuilder: (context) => RoomNotFound(),
         oauthTokenRequestHandler: (RoomClient client, request) async {
-          showShadDialog(
+          showPowerboardsAlertDialog(
             context: context,
             builder: (context) => PowerboardsShadDialog.compact(
               title: Text("An agent would like permission to use one of your accounts"),
@@ -233,7 +233,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
 
           if (request.type == "git") {
             final secretValue = {};
-            final value = await showShadDialog<Map>(
+            final value = await showPowerboardsAlertDialog<Map>(
               context: context,
               builder: (context) => PowerboardsShadDialog.alert(
                 title: Text("Secret requested"),
@@ -270,7 +270,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
             }
           } else {
             String secretValue = "";
-            final value = await showShadDialog<String>(
+            final value = await showPowerboardsAlertDialog<String>(
               context: context,
               builder: (context) => PowerboardsShadDialog.alert(
                 title: Text("Secret requested"),

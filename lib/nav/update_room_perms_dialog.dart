@@ -975,7 +975,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
           final emails = usersToAddToProject.map((u) => u.email).join(', ');
           final plural = usersToAddToProject.length > 1;
 
-          final cont = await showShadDialog<bool>(
+          final cont = await showPowerboardsAlertDialog<bool>(
             context: context,
             builder: (context) => PowerboardsShadDialog.compactAlert(
               title: plural ? Text('Users are not in project') : Text('User is not in project'),
@@ -1043,7 +1043,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
     } catch (e) {
       if (!mounted) return;
 
-      await showShadDialog(
+      await showPowerboardsAlertDialog(
         context: context,
         builder: (context) {
           return PowerboardsShadDialog.compactAlert(
@@ -1429,7 +1429,6 @@ Future<void> showUpdateRoomPermsDialog(BuildContext context, {required String pr
 
   return showPowerboardsFlowDialog<void>(
     context: context,
-    barrierDismissible: false,
     builder: (context) => _UpdateRoomPermsFlow(projectId: projectId, room: room),
   );
 }
@@ -1439,7 +1438,6 @@ Future<void> showAddUserToRoomDialog(BuildContext context, {required String proj
 
   return showPowerboardsFlowDialog<void>(
     context: context,
-    barrierDismissible: false,
     builder: (context) {
       return AddUserDialog(
         projectId: projectId,

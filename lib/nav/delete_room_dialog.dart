@@ -11,7 +11,7 @@ Future<bool?> showDeleteRoomDialog(
   bool destructive = false,
   bool barrierDismissible = true,
 }) {
-  return showShadDialog<bool?>(
+  return showPowerboardsAlertDialog<bool?>(
     context: context,
     barrierDismissible: barrierDismissible,
     builder: (ctx) => PowerboardsShadDialog.compact(

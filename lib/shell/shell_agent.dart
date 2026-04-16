@@ -55,7 +55,7 @@ class _ShellAgent extends State<ShellAgent> {
     final env = <String, String>{};
     if (widget.service.agents[0].annotations["meshagent.shell.auth"] == "delegate") {
       if (!mounted) return null;
-      final check = await showShadDialog(
+      final check = await showPowerboardsAlertDialog(
         context: context,
         builder: (context) => PowerboardsShadDialog.compactAlert(
           title: Text("Permission Requested"),

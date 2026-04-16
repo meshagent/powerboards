@@ -22,7 +22,7 @@ Future<RoomNameResult?> showRoomNameDialog(
   final formKey = GlobalKey<ShadFormState>();
   final labelStyle = powerboardsFieldLabelTextStyle(context);
 
-  return showShadDialog<RoomNameResult?>(
+  return showPowerboardsAlertDialog<RoomNameResult?>(
     context: context,
     builder: (ctx) {
       void submit() {
@@ -88,7 +88,7 @@ Future<void> showRoomCreationErrorDialog(BuildContext context, Object error) {
 
   debugPrint('Room creation error: $error');
 
-  return showShadDialog(
+  return showPowerboardsAlertDialog(
     context: context,
     builder: (context) {
       return PowerboardsShadDialog.compactAlert(
