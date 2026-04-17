@@ -13,7 +13,7 @@ class RoomNameResult {
 
 Future<RoomNameResult?> showRoomNameDialog(
   BuildContext context, {
-  String title = 'Create room',
+  String title = 'Create Room',
   String description = 'Give this a short, memorable name.',
   String initialValue = '',
   String label = 'Name',
@@ -39,7 +39,7 @@ Future<RoomNameResult?> showRoomNameDialog(
         description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(description)),
         actions: [
           ShadButton.outline(onPressed: () => Navigator.of(ctx).pop(null), child: const Text('Cancel')),
-          ShadButton(onPressed: submit, child: const Text('Continue')),
+          ShadButton(onPressed: submit, child: const Text('Create')),
         ],
         child: ShadForm(
           key: formKey,

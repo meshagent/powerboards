@@ -26,7 +26,7 @@ class NewProjectDialog extends StatelessWidget {
               Navigator.of(context).pop(name);
             }
           },
-          child: const Text('Create Project'),
+          child: const Text('Create'),
         ),
       ],
       child: ShadForm(
