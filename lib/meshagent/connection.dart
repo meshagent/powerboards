@@ -305,22 +305,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
 
           return _roomConnectionFailedCard();
         },
-        builder: (context, client) {
-          return FutureBuilder(
-            future: client.ready,
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return _roomConnectionFailedCard();
-              }
-
-              if (snapshot.connectionState != ConnectionState.done) {
-                return _withReservedRoomHeader(_connectionProgress(room: client));
-              }
-
-              return widget.builder(context, client);
-            },
-          );
-        },
+        builder: (context, client) => widget.builder(context, client),
       ),
     );
   }
