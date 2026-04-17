@@ -369,7 +369,12 @@ class _PermissionDialogState extends State<_PermissionDialog> {
           child: isMobile
               ? ScrollConfiguration(
                   behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                  child: (state == _LoadingState.loading) ? const Center(child: CircularProgressIndicator()) : permissionsList,
+                  child: (state == _LoadingState.loading)
+                      ? const Center(child: CircularProgressIndicator())
+                      : Padding(
+                          padding: const EdgeInsets.only(top: powerboardsDialogScrollViewportVerticalInset),
+                          child: permissionsList,
+                        ),
                 )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
