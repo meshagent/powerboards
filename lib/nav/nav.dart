@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -65,10 +63,11 @@ class Nav extends StatefulWidget {
 
 class _NavState extends State<Nav> {
   final resizeController = ShadResizableController();
-  BoxConstraints? lastConstraints;
-  Timer? resizeDebounceTimer;
+  double? _navRatio;
+  bool _panelLayoutSyncScheduled = false;
   bool? _lastDesktopHidden;
-  int _panelGroupVersion = 0;
+  double? _lastDesktopWidth;
+  bool? _lastSmallDisplay;
   int _mobileNavigationDirection = 1;
 
   final childKey = GlobalKey();
@@ -143,64 +142,85 @@ class _NavState extends State<Nav> {
     launchUrl(redirectUrl);
   }
 
-  void _resetResizeState() {
-    resizeDebounceTimer?.cancel();
-    resizeDebounceTimer = null;
-    lastConstraints = null;
+  ({({double minSize, double maxSize, double defaultSize}) nav, ({double minSize, double maxSize, double defaultSize}) main})
+  _resolvePanelLayout(double width, {required bool hidden}) {
+    if (hidden) {
+      return (nav: (minSize: 0, maxSize: 0, defaultSize: 0), main: (minSize: 1, maxSize: 1, defaultSize: 1));
+    }
+
+    final rawMinRatio = _navBarMinWidth / width;
+    final rawMaxRatio = _navBarMaxWidth / width;
+    final minRatio = rawMinRatio.clamp(0.0, 1.0);
+    final maxRatio = rawMaxRatio.clamp(minRatio, 1.0);
+    final preferredRatio = (_navRatio ?? (navBarWidth / width)).clamp(minRatio, maxRatio).toDouble();
+    final mainDefaultSize = (1.0 - preferredRatio).clamp(0.0, 1.0).toDouble();
+    final mainMinSize = (1.0 - maxRatio).clamp(0.0, 1.0).toDouble();
+    final mainMaxSize = (1.0 - minRatio).clamp(mainMinSize, 1.0).toDouble();
+
+    return (
+      nav: (minSize: minRatio, maxSize: maxRatio, defaultSize: preferredRatio),
+      main: (minSize: mainMinSize, maxSize: mainMaxSize, defaultSize: mainDefaultSize),
+    );
   }
 
-  void _resetResizableLayoutState() {
-    _resetResizeState();
+  void _resetDesktopPanelState() {
     resizeController.clear();
-    _panelGroupVersion++;
+    _lastDesktopHidden = null;
+    _lastDesktopWidth = null;
+    _panelLayoutSyncScheduled = false;
   }
 
-  void debounceResize(BoxConstraints constraints) {
-    final width = constraints.maxWidth;
-    if (!width.isFinite || width <= 0) {
-      _resetResizeState();
+  void _updatePanelLayout(BoxConstraints constraints, {required bool hidden}) {
+    final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
+    final mainPanel = resizeController.panelsInfo.where((panel) => panel.id == "main").firstOrNull;
+    if (navPanel == null || mainPanel == null) {
       return;
     }
 
-    if (lastConstraints == null || lastConstraints!.maxWidth != width) {
-      lastConstraints ??= constraints;
-
-      resizeDebounceTimer?.cancel();
-      resizeDebounceTimer = Timer(const Duration(milliseconds: 30), () {
-        resizeDebounceTimer = null;
-        if (!mounted) {
-          return;
-        }
-
-        final previousWidth = lastConstraints?.maxWidth;
-        if (previousWidth == null || !previousWidth.isFinite || previousWidth <= 0) {
-          return;
-        }
-
-        final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
-        final mainPanel = resizeController.panelsInfo.where((panel) => panel.id == "main").firstOrNull;
-        if (navPanel == null || mainPanel == null) {
-          return;
-        }
-
-        final rawMinSize = _navBarMinWidth / width;
-        final rawMaxSize = _navBarMaxWidth / width;
-        final minSize = rawMinSize.clamp(0.0, 1.0);
-        final maxSize = rawMaxSize.clamp(minSize, 1.0);
-        final defaultSize = (navBarWidth / width).clamp(minSize, maxSize);
-
-        final newPanel = ShadPanelInfo(id: "nav", minSize: minSize, maxSize: maxSize, defaultSize: defaultSize);
-
-        // Don't change the size - prevent flickering
-        final currentSize = (navPanel.size * previousWidth) / width;
-        if (currentSize.isFinite && currentSize > minSize && currentSize < maxSize) {
-          newPanel.size = currentSize;
-        }
-
-        lastConstraints = constraints;
-        resizeController.update([newPanel, mainPanel]);
-      });
+    final width = constraints.maxWidth;
+    if (!width.isFinite || width <= 0) {
+      return;
     }
+
+    if (navPanel.size > 0) {
+      _navRatio = navPanel.size;
+    }
+
+    final panelLayout = _resolvePanelLayout(width, hidden: hidden);
+    final nextNav = ShadPanelInfo(
+      id: "nav",
+      minSize: panelLayout.nav.minSize,
+      maxSize: panelLayout.nav.maxSize,
+      defaultSize: panelLayout.nav.defaultSize,
+    );
+    final nextMain = ShadPanelInfo(
+      id: "main",
+      minSize: panelLayout.main.minSize,
+      maxSize: panelLayout.main.maxSize,
+      defaultSize: panelLayout.main.defaultSize,
+    );
+
+    if (!hidden && navPanel.size > 0) {
+      nextNav.size = navPanel.size.clamp(nextNav.minSize, nextNav.maxSize).toDouble();
+    }
+
+    resizeController.update([nextNav, nextMain]);
+  }
+
+  void _schedulePanelLayoutSyncForBuild(BoxConstraints constraints, {required bool hidden}) {
+    if (_panelLayoutSyncScheduled) {
+      return;
+    }
+
+    _panelLayoutSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _panelLayoutSyncScheduled = false;
+      if (!mounted) {
+        return;
+      }
+
+      _updatePanelLayout(constraints, hidden: hidden);
+    });
   }
 
   @override
@@ -286,7 +306,7 @@ class _NavState extends State<Nav> {
 
   @override
   void dispose() {
-    _resetResizeState();
+    resizeController.dispose();
     projects.dispose();
     isBalanceLowRes.dispose();
     rooms.dispose();
@@ -324,39 +344,34 @@ class _NavState extends State<Nav> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         if (!width.isFinite || width <= 0) {
-          _resetResizeState();
           return const SizedBox.shrink();
+        }
+
+        if (_lastDesktopWidth != width) {
+          _lastDesktopWidth = width;
+          _schedulePanelLayoutSyncForBuild(constraints, hidden: hidden);
         }
 
         if (_lastDesktopHidden != hidden) {
           _lastDesktopHidden = hidden;
-          _resetResizableLayoutState();
+          _schedulePanelLayoutSyncForBuild(constraints, hidden: hidden);
         }
 
-        final rawMinRatio = _navBarMinWidth / width;
-        final rawMaxRatio = _navBarMaxWidth / width;
-        final minRatio = rawMinRatio.clamp(0.0, 1.0);
-        final maxRatio = rawMaxRatio.clamp(minRatio, 1.0);
-        final defaultSize = (navBarWidth / width).clamp(minRatio, maxRatio);
-        final mainDefaultSize = hidden ? 1.0 : (1.0 - defaultSize).clamp(0.0, 1.0);
-
-        // Debounce resize to avoid excessive rebuilds when resizing the window
-        debounceResize(constraints);
+        final panelLayout = _resolvePanelLayout(width, hidden: hidden);
 
         return ShadResizablePanelGroup(
-          key: ValueKey('nav-panels-$_panelGroupVersion-$hidden'),
           axis: .horizontal,
           showHandle: true,
           dividerColor: Colors.transparent,
           controller: resizeController,
           children: [
-            // left nav
-            if (!hidden)
-              ShadResizablePanel(
-                id: "nav",
-                defaultSize: defaultSize,
-                minSize: minRatio,
-                maxSize: maxRatio,
+            ShadResizablePanel(
+              id: "nav",
+              defaultSize: panelLayout.nav.defaultSize,
+              minSize: panelLayout.nav.minSize,
+              maxSize: panelLayout.nav.maxSize,
+              child: IgnorePointer(
+                ignoring: hidden,
                 child: ColoredBox(
                   color: cs.background,
                   child: Column(
@@ -382,9 +397,15 @@ class _NavState extends State<Nav> {
                   ),
                 ),
               ),
+            ),
 
-            // main content
-            ShadResizablePanel(id: "main", defaultSize: mainDefaultSize, child: desktopBody(context, userRole, balanceLow, canCreateRooms)),
+            ShadResizablePanel(
+              id: "main",
+              defaultSize: panelLayout.main.defaultSize,
+              minSize: panelLayout.main.minSize,
+              maxSize: panelLayout.main.maxSize,
+              child: desktopBody(context, userRole, balanceLow, canCreateRooms),
+            ),
           ],
         );
       },
@@ -392,8 +413,6 @@ class _NavState extends State<Nav> {
   }
 
   Widget mobileView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
-    _resetResizeState();
-
     if (userRole == ProjectRole.none) {
       return forbiddenView(context);
     }
@@ -600,6 +619,11 @@ class _NavState extends State<Nav> {
     final cs = theme.colorScheme;
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final navController = Controller.ofType<NavController>(context);
+
+    if (_lastSmallDisplay == true && !isSmallDisplay) {
+      _resetDesktopPanelState();
+    }
+    _lastSmallDisplay = isSmallDisplay;
 
     return SignalBuilder(
       builder: (context, _) {
