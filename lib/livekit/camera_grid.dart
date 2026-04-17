@@ -30,24 +30,8 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
     return activeVideoPublicationForSource(participant, TrackSource.screenShareVideo) != null;
   }
 
-  int _getNumberOfShares(List<Participant> participants) {
-    return participants.where((p) => _participantHasShare(p)).length;
-  }
-
-  bool _participantHasCamera(Participant participant) {
-    return activeVideoPublicationForSource(participant, TrackSource.camera) != null;
-  }
-
-  int _getNumberOfVideos(List<Participant> participants) {
-    return participants.where((p) => _participantHasCamera(p)).length;
-  }
-
-  bool _expandedCameraStillAvailable(List<Participant> participants) {
-    return participants.any((p) => _expandedController.isExpanded(p.identity) && _participantHasCamera(p));
-  }
-
-  bool _expandedVideoStillAvailable(List<Participant> participants) {
-    return participants.any((p) => _expandedController.isExpanded(p.identity) && (_participantHasShare(p) || _participantHasCamera(p)));
+  bool _expandedShareStillAvailable(List<Participant> participants) {
+    return participants.any((p) => _expandedController.isExpanded(p.identity, TrackSource.screenShareVideo) && _participantHasShare(p));
   }
 
   bool _shouldCollapseExpandedParticipant(List<Participant> participants) {
@@ -56,18 +40,17 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
     }
 
     // expanded participant should be in the list of participants. If not, collapse.
-    if (!participants.any((p) => _expandedController.isExpanded(p.identity))) {
+    if (!participants.any((p) => _expandedController.isExpandedIdentity(p.identity))) {
       return true;
     }
 
-    final numberOfShares = _getNumberOfShares(participants);
-    if (numberOfShares > 0) {
-      return !_expandedVideoStillAvailable(participants);
+    final expandedTarget = _expandedController.expandedTarget;
+    if (expandedTarget == null) {
+      return false;
     }
 
-    final numberOfVideos = _getNumberOfVideos(participants);
-    if (numberOfVideos > 0) {
-      return !_expandedCameraStillAvailable(participants);
+    if (expandedTarget.source == TrackSource.screenShareVideo) {
+      return !_expandedShareStillAvailable(participants);
     }
 
     return false;
@@ -114,29 +97,29 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final expandedTarget = _expandedController.expandedTarget;
     final participants = _expandedController.hasExpanded
-        ? widget.participants.where((p) => _expandedController.isExpanded(p.identity)).toList(growable: false)
+        ? widget.participants.where((p) => _expandedController.isExpandedIdentity(p.identity)).toList(growable: false)
         : widget.participants;
 
     return cameraGridBuilder(
       context,
       participants,
+      preferredSource: expandedTarget?.source,
       spacing: 12.0,
       frameBuilder: (context, participant, publication, trackWidget, showName) {
-        final isScreenShare = publication?.source == TrackSource.screenShareVideo;
-
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: HoverBuilder(
             cursor: SystemMouseCursors.basic,
             builder: (hovered) {
-              final alwaysShowName = isMobile && _expandedController.isExpanded(participant.identity);
+              final alwaysShowName = isMobile && _expandedController.isExpandedIdentity(participant.identity);
               return ParticipantTrack(
                 participant: participant,
+                expandSource: publication?.source ?? TrackSource.camera,
                 track: trackWidget,
-                overlayAlignment: isScreenShare ? .topCenter : .topRight,
                 showName: (showName && hovered) || alwaysShowName,
-                interactive: !isScreenShare,
+                interactive: publication?.source != TrackSource.screenShareVideo,
               );
             },
           ),
@@ -196,6 +179,7 @@ Widget cameraGridBuilder(
   double spacing = 0.0,
   bool showNames = true,
   bool showAllVideos = false,
+  TrackSource? preferredSource,
   int rowsDesired = 0,
   int columnsDesired = 0,
   bool tryFill = true,
@@ -216,13 +200,13 @@ Widget cameraGridBuilder(
       final trackPublications = <TrackPublication?>[];
 
       final hasShare = participants.any((p) => activeVideoPublicationForSource(p, TrackSource.screenShareVideo) != null);
+      final videoSource = preferredSource ?? (hasShare ? TrackSource.screenShareVideo : TrackSource.camera);
+      final shouldShowCameraPlaceholder = videoSource == TrackSource.camera;
 
       for (var p in participants) {
         bool added = false;
 
-        final publications = showAllVideos
-            ? activeVideoPublications(p)
-            : activeVideoPublications(p, source: hasShare ? TrackSource.screenShareVideo : TrackSource.camera);
+        final publications = showAllVideos ? activeVideoPublications(p) : activeVideoPublications(p, source: videoSource);
 
         for (final publication in publications) {
           final track = publication.track;
@@ -243,7 +227,7 @@ Widget cameraGridBuilder(
           );
         }
 
-        if (!hasShare && !added) {
+        if (shouldShowCameraPlaceholder && !added) {
           trackParticipants.add(p);
           trackPublications.add(null);
           tracks.add(
