@@ -513,14 +513,12 @@ class _FileManagerViewState extends State<FileManagerView> {
       return;
     }
     _refreshThreadDisplayNames();
-    unawaited(_backfillThreadDisplayNames());
   }
 
   Future<void> _rebindThreadIndexDocument() async {
     final nextThreadIndexPath = _threadIndexPathForFolder(_folderSig.value);
     if (_threadIndexPath == nextThreadIndexPath && _threadIndexDocument != null) {
       _refreshThreadDisplayNames();
-      unawaited(_backfillThreadDisplayNames());
       return;
     }
 
@@ -550,7 +548,6 @@ class _FileManagerViewState extends State<FileManagerView> {
       _threadIndexDocument = document;
       _threadIndexPath = nextThreadIndexPath;
       _refreshThreadDisplayNames();
-      unawaited(_backfillThreadDisplayNames());
     } catch (_) {
       if (!_canUpdateUi) {
         return;
@@ -603,37 +600,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
   }
 
-  Future<void> _backfillThreadDisplayNames() async {
-    if (!_canUpdateUi) {
-      return;
-    }
-
-    final entries = storageEntries.state.value;
-    if (entries == null) {
-      return;
-    }
-
-    final currentFolder = _folderSig.value;
-    for (final entry in entries) {
-      if (entry.isFolder || !isThreadFileName(entry.name)) {
-        continue;
-      }
-
-      final path = joinPaths(currentFolder, entry.name);
-      if (!shouldReadThreadDocumentForDisplayName(path)) {
-        continue;
-      }
-
-      final currentDisplayName = _threadDisplayNamesByPath[path];
-      if (!shouldBackfillThreadDisplayName(currentDisplayName) || _threadTitleResolutionsInFlight.contains(path)) {
-        continue;
-      }
-
-      _threadTitleResolutionsInFlight.add(path);
-      unawaited(_resolveAndStoreThreadDisplayName(path: path));
-    }
-  }
-
   MeshElement? _threadNodeForPath(String path) {
     final document = _threadIndexDocument;
     if (document == null) {
@@ -643,34 +609,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     return document.root.getChildren().whereType<MeshElement>().firstWhereOrNull((node) {
       return node.tagName == 'thread' && node.getAttribute('path') == path;
     });
-  }
-
-  Future<void> _resolveAndStoreThreadDisplayName({required String path}) async {
-    try {
-      final document = await widget.client.sync.open(path);
-      try {
-        final resolvedName = deriveThreadDisplayNameFromDocument(document);
-        if (!_canUpdateUi || resolvedName == null || resolvedName.trim().isEmpty) {
-          return;
-        }
-
-        final latestNode = _threadNodeForPath(path);
-        if (latestNode != null && shouldBackfillThreadDisplayName(latestNode.getAttribute('name') as String?)) {
-          latestNode.setAttribute('name', resolvedName);
-        }
-        setState(() {
-          _threadDisplayNamesByPath = <String, String>{..._threadDisplayNamesByPath, path: resolvedName};
-        });
-      } finally {
-        try {
-          await widget.client.sync.close(path);
-        } catch (_) {}
-      }
-    } catch (_) {
-      return;
-    } finally {
-      _threadTitleResolutionsInFlight.remove(path);
-    }
   }
 
   void _removePath(String path, {isFolder = false}) {
@@ -696,7 +634,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     } else if (!hasThreadIndex && _threadIndexPath == expectedThreadIndexPath && _threadIndexDocument != null) {
       unawaited(_closeThreadIndexDocument());
     }
-    unawaited(_backfillThreadDisplayNames());
   }
 
   void _setSort(FileSort sort) {
@@ -869,8 +806,30 @@ class _FileManagerViewState extends State<FileManagerView> {
     return null;
   }
 
+  bool _usesThreadDisplayNameRename(String fullPath, {required bool isFolder}) {
+    return !isFolder && isThreadPath(fullPath);
+  }
+
+  String _renameFieldInitialValue(String fullPath, {required bool isFolder}) {
+    if (_usesThreadDisplayNameRename(fullPath, isFolder: isFolder)) {
+      return threadFileDisplayNameFromPath(fullPath, threadDisplayName: _threadDisplayNamesByPath[fullPath]);
+    }
+
+    return p.basename(fullPath);
+  }
+
+  String _renameConflictDisplayName(String nextName, {required bool isFolder}) {
+    if (!isFolder && isThreadFileName(nextName)) {
+      return threadFileDisplayNameFromPath(nextName);
+    }
+
+    return nextName;
+  }
+
   Future<String?> _promptRenamePath(String fullPath, {required bool isFolder}) async {
-    final currentName = p.basename(fullPath);
+    final initialValue = _renameFieldInitialValue(fullPath, isFolder: isFolder);
+    final usesThreadDisplayNameRename = _usesThreadDisplayNameRename(fullPath, isFolder: isFolder);
+
     return await showPowerboardsAlertDialog<String>(
       context: context,
       builder: (context) {
@@ -888,7 +847,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
             return PowerboardsShadDialog.compact(
               crossAxisAlignment: CrossAxisAlignment.start,
-              title: Text(isFolder ? "Rename folder" : "Rename file"),
+              title: Text(isFolder ? "Rename folder" : (usesThreadDisplayNameRename ? "Rename thread" : "Rename file")),
               actions: [
                 ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
                 ShadButton(onPressed: submit, child: const Text("Rename")),
@@ -902,7 +861,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   children: [
                     PowerboardsAdaptiveInputFormField(
                       id: "name",
-                      initialValue: currentName,
+                      initialValue: initialValue,
                       validator: _validateRenameInput,
                       label: const Text("Name"),
                       autofocus: true,
@@ -919,16 +878,38 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _renamePath(String fullPath, {required bool isFolder}) async {
+    final usesThreadDisplayNameRename = _usesThreadDisplayNameRename(fullPath, isFolder: isFolder);
     final currentName = p.basename(fullPath);
     final nextName = await _promptRenamePath(fullPath, isFolder: isFolder);
     if (!mounted) {
       return;
     }
-    if (nextName == null || nextName == currentName) {
+    if (nextName == null) {
       return;
     }
 
-    final destinationPath = joinPaths(parentPath(fullPath), nextName);
+    if (usesThreadDisplayNameRename) {
+      final currentDisplayName = _renameFieldInitialValue(fullPath, isFolder: isFolder);
+      if (nextName == currentDisplayName) {
+        return;
+      }
+
+      final threadNode = _threadNodeForPath(fullPath);
+      if (threadNode != null) {
+        threadNode.setAttribute('name', nextName);
+        setState(() {
+          _threadDisplayNamesByPath = <String, String>{..._threadDisplayNamesByPath, fullPath: nextName};
+        });
+        return;
+      }
+    }
+
+    final resolvedNextName = usesThreadDisplayNameRename ? threadFileNameFromDisplayName(nextName) : nextName;
+    if (resolvedNextName == currentName) {
+      return;
+    }
+
+    final destinationPath = joinPaths(parentPath(fullPath), resolvedNextName);
     final toaster = ShadToaster.of(context);
 
     try {
@@ -940,7 +921,9 @@ class _FileManagerViewState extends State<FileManagerView> {
         toaster.show(
           ShadToast.destructive(
             title: const Text("Rename failed"),
-            description: Text("${isFolder ? 'Folder' : 'File'} `$nextName` already exists in this location."),
+            description: Text(
+              "${isFolder ? 'Folder' : 'File'} `${_renameConflictDisplayName(resolvedNextName, isFolder: isFolder)}` already exists in this location.",
+            ),
             duration: const Duration(seconds: 5),
           ),
         );

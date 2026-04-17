@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
+import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -33,6 +34,7 @@ TextStyle powerboardsFileListMetadataStyle() {
 
 IconData? powerboardsFileIconDataForEntry(StorageEntry entry) {
   if (entry.isFolder) return LucideIcons.folder;
+  if (isThreadFileName(entry.name)) return LucideIcons.messageSquareText;
   if (entry.name.endsWith('presentation')) return LucideIcons.presentation;
   if (entry.name.endsWith('document')) return LucideIcons.fileText;
   if (entry.name.endsWith('gallery')) return LucideIcons.image;

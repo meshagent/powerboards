@@ -16,7 +16,12 @@ bool shouldReadThreadDocumentForDisplayName(String path) {
 
 String threadFileDisplayNameFromPath(String path, {String? threadDisplayName}) {
   final resolvedName = (threadDisplayName?.trim().isNotEmpty ?? false) ? threadDisplayName!.trim() : defaultThreadDisplayNameFromPath(path);
-  return resolvedName.toLowerCase().endsWith('.thread') ? resolvedName : '$resolvedName.thread';
+  return _stripThreadExtension(resolvedName);
+}
+
+String threadFileNameFromDisplayName(String value) {
+  final trimmed = value.trim();
+  return trimmed.toLowerCase().endsWith('.thread') ? trimmed : '$trimmed.thread';
 }
 
 String defaultThreadDisplayNameFromPath(String path) {
@@ -84,4 +89,8 @@ String? deriveThreadDisplayNameFromDocument(MeshDocument document) {
 
 bool _isUuidLike(String value) {
   return _uuidPattern.hasMatch(value);
+}
+
+String _stripThreadExtension(String value) {
+  return value.toLowerCase().endsWith('.thread') ? value.substring(0, value.length - '.thread'.length) : value;
 }
