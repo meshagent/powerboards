@@ -1,37 +1,72 @@
+import 'package:livekit_client/livekit_client.dart' as lk;
+
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 
-class ExpandParticipantController extends Controller {
-  String? _expandedIdentity;
+class ExpandParticipantTarget {
+  const ExpandParticipantTarget({required this.identity, required this.source});
 
-  void expand(String identity) {
-    if (_expandedIdentity == identity) {
+  final String identity;
+  final lk.TrackSource source;
+
+  bool matches(String participantIdentity, lk.TrackSource participantSource) {
+    return identity == participantIdentity && source == participantSource;
+  }
+}
+
+class ExpandParticipantController extends Controller {
+  ExpandParticipantTarget? _expandedTarget;
+
+  void expand(String identity, lk.TrackSource source) {
+    if (_expandedTarget?.matches(identity, source) == true) {
       return;
     }
 
-    _expandedIdentity = identity;
+    _expandedTarget = ExpandParticipantTarget(identity: identity, source: source);
     notifyListeners();
+  }
+
+  void expandCamera(String identity) {
+    expand(identity, lk.TrackSource.camera);
+  }
+
+  void expandShare(String identity) {
+    expand(identity, lk.TrackSource.screenShareVideo);
   }
 
   void collapse() {
-    if (_expandedIdentity == null) {
+    if (_expandedTarget == null) {
       return;
     }
 
-    _expandedIdentity = null;
+    _expandedTarget = null;
     notifyListeners();
   }
 
-  void toggle(String identity) {
-    if (_expandedIdentity == identity) {
+  void toggle(String identity, lk.TrackSource source) {
+    if (_expandedTarget?.matches(identity, source) == true) {
       collapse();
     } else {
-      expand(identity);
+      expand(identity, source);
     }
   }
 
-  bool isExpanded(String identity) {
-    return _expandedIdentity == identity;
+  void toggleCamera(String identity) {
+    toggle(identity, lk.TrackSource.camera);
   }
 
-  bool get hasExpanded => _expandedIdentity != null;
+  void toggleShare(String identity) {
+    toggle(identity, lk.TrackSource.screenShareVideo);
+  }
+
+  bool isExpanded(String identity, lk.TrackSource source) {
+    return _expandedTarget?.matches(identity, source) == true;
+  }
+
+  bool isExpandedIdentity(String identity) {
+    return _expandedTarget?.identity == identity;
+  }
+
+  ExpandParticipantTarget? get expandedTarget => _expandedTarget;
+
+  bool get hasExpanded => _expandedTarget != null;
 }

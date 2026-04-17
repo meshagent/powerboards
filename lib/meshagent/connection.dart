@@ -87,7 +87,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
 
     return ColoredBox(
       color: isMobile ? Colors.transparent : shadCard,
-      child: SafeArea(minimum: powerboardsMobileScreenSafeAreaMinimum, child: child),
+      child: SafeArea(minimum: isMobile ? powerboardsMobileScreenSafeAreaMinimum : EdgeInsets.zero, child: child),
     );
   }
 

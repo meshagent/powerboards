@@ -8,6 +8,7 @@ class ParticipantTrack extends StatelessWidget {
     super.key,
     required this.participant,
     required this.track,
+    this.expandSource = lk.TrackSource.camera,
     this.overlayAlignment = .topRight,
     this.showName = true,
     this.interactive = true,
@@ -15,6 +16,7 @@ class ParticipantTrack extends StatelessWidget {
 
   final lk.Participant participant;
   final Widget track;
+  final lk.TrackSource expandSource;
   final Alignment overlayAlignment;
   final bool showName;
   final bool interactive;
@@ -24,6 +26,7 @@ class ParticipantTrack extends StatelessWidget {
     return CameraBox(
       camera: IgnorePointer(ignoring: true, child: track),
       participant: participant,
+      expandSource: expandSource,
       overlayAlignment: overlayAlignment,
       showName: showName,
       interactive: interactive,
