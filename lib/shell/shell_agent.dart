@@ -83,8 +83,12 @@ class _ShellAgent extends State<ShellAgent> {
       if (check != true) {
         return null;
       }
-      env["OPENAI_API_KEY"] = (widget.room.protocol.channel as WebSocketProtocolChannel).jwt;
-      env["MESHAGENT_TOKEN"] = (widget.room.protocol.channel as WebSocketProtocolChannel).jwt;
+      final roomToken = widget.room.protocol.token;
+      if (roomToken == null || roomToken.isEmpty) {
+        throw StateError("room token unavailable");
+      }
+      env["OPENAI_API_KEY"] = roomToken;
+      env["MESHAGENT_TOKEN"] = roomToken;
     }
     return await widget.room.containers.runService(serviceId: widget.service.id!, env: env);
   }

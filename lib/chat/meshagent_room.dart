@@ -1150,6 +1150,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return _selectedThreadPathByAgentKey[agentKey];
   }
 
+  // ignore: unused_element
   String? _selectedThreadLabelForAgentKey(String? agentKey) {
     if (agentKey == null) {
       return null;
@@ -1173,8 +1174,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final resolvedDisplayName = normalizedName == null || normalizedName.isEmpty ? null : normalizedName;
     final previousPath = _selectedThreadPathByAgentKey[agentKey];
     final previousDisplayName = _selectedThreadLabelByAgentKey[agentKey];
+    final effectiveDisplayName = resolvedPath == previousPath && resolvedDisplayName == null ? previousDisplayName : resolvedDisplayName;
 
-    if (resolvedPath == previousPath && resolvedDisplayName == previousDisplayName) {
+    if (resolvedPath == previousPath && effectiveDisplayName == previousDisplayName) {
       return;
     }
 
@@ -1185,10 +1187,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         _newThreadResetVersion++;
       } else {
         _selectedThreadPathByAgentKey[agentKey] = resolvedPath;
-        if (resolvedDisplayName == null) {
+        if (effectiveDisplayName == null) {
           _selectedThreadLabelByAgentKey.remove(agentKey);
         } else {
-          _selectedThreadLabelByAgentKey[agentKey] = resolvedDisplayName;
+          _selectedThreadLabelByAgentKey[agentKey] = effectiveDisplayName;
         }
       }
     });
@@ -1447,6 +1449,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildMobileThreadGetStartedActions(
     BuildContext context, {
     required VoidCallback onNewThread,
@@ -2208,7 +2211,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         client: widget.room,
         documentPath: documentPath,
         selectedThreadPath: selectedThreadPath,
+        selectedThreadDisplayName: _selectedThreadLabelForAgentKey(agentKey),
         onSelectedThreadPathChanged: onSelectedThreadPathChanged,
+        onSelectedThreadResolved: (path, displayName) => _setSelectedThreadPath(agentKey, path, displayName: displayName),
         participantNames: [
           if (userEmail is String && userEmail.isNotEmpty) userEmail,
           if (agentName case final String agentParticipantName) agentParticipantName,
@@ -2290,6 +2295,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildDesktopChatWithThreadRail(
     BuildContext context, {
     required Widget chatView,
@@ -2320,6 +2326,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildDesktopChatWithInlineThreadList(
     BuildContext context, {
     required Widget chatView,
@@ -2645,6 +2652,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _showChatPane(context);
   }
 
+  // ignore: unused_element
   Future<void> _showMobileThreadPicker({required String threadListPath, required String? agentKey, required String? agentName}) async {
     await showPowerboardsFlowDialog<void>(
       context: context,
@@ -2717,6 +2725,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
             newThreadResetVersion: _newThreadResetVersion,
             onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
+            onSelectedThreadResolved: (path, displayName) => _setSelectedThreadPath(agentKey, path, displayName: displayName),
           ),
         ),
       ),

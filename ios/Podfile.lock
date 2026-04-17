@@ -165,11 +165,11 @@ PODS:
   - SDWebImageWebPCoder (0.15.0):
     - libwebp (~> 1.0)
     - SDWebImage/Core (~> 5.17)
-  - Sentry/HybridSDK (8.58.0)
-  - sentry_flutter (9.15.0):
+  - Sentry/HybridSDK (8.58.1)
+  - sentry_flutter (9.17.0):
     - Flutter
     - FlutterMacOS
-    - Sentry/HybridSDK (= 8.58.0)
+    - Sentry/HybridSDK (= 8.58.1)
   - share_plus (0.0.1):
     - Flutter
   - shared_preferences_foundation (0.0.1):

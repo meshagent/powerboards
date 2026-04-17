@@ -13,11 +13,11 @@ import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:uuid/uuid.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat_bot_view.dart';
 import 'package:meshagent_flutter_shadcn/chat_bubble_markdown_config.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
@@ -68,7 +68,9 @@ class MeshagentThreadView extends StatefulWidget {
     this.initialMessageAttachments,
     this.agentName,
     this.selectedThreadPath,
+    this.selectedThreadDisplayName,
     this.onSelectedThreadPathChanged,
+    this.onSelectedThreadResolved,
     this.emptyState,
     this.newThreadEmptyStateVerticalOffset = 0,
     this.hideChatInput = false,
@@ -88,7 +90,9 @@ class MeshagentThreadView extends StatefulWidget {
   final String? initialMessageText;
   final List<FileAttachment>? initialMessageAttachments;
   final String? selectedThreadPath;
+  final String? selectedThreadDisplayName;
   final ValueChanged<String?>? onSelectedThreadPathChanged;
+  final void Function(String? path, String? displayName)? onSelectedThreadResolved;
   final Widget? emptyState;
   final double newThreadEmptyStateVerticalOffset;
   final bool hideChatInput;
@@ -100,7 +104,9 @@ class MeshagentThreadView extends StatefulWidget {
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
   static const double _mobileThreadEmptyStateWidthMax = 600;
-  String? _createdThreadPath;
+
+  late final ChatThreadController _chatController;
+  String? _lastRestoredThreadScrollOffsetValue;
 
   bool _usesCompactMobileThreadEmptyState(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -137,66 +143,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     return Transform.translate(offset: Offset(0, verticalOffset), child: content);
   }
 
-  late final ChatThreadController _chatController;
-  late String _documentPath;
-  late String? _initialMessageText;
-  String? _lastRestoredThreadScrollOffsetValue;
-
-  String? _normalizeSelectedThreadPath(String? path) {
-    final normalizedPath = path?.trim();
-    if (normalizedPath == null || normalizedPath.isEmpty) {
-      return null;
-    }
-    return normalizedPath;
-  }
-
-  void _clearCreatedThreadPathIfStale() {
-    final createdThreadPath = _createdThreadPath;
-    if (createdThreadPath == null) {
-      return;
-    }
-
-    final selectedThreadPath = _normalizeSelectedThreadPath(widget.selectedThreadPath);
-    if (selectedThreadPath != createdThreadPath) {
-      _createdThreadPath = null;
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.agentName != widget.agentName ||
-        oldWidget.threadDisplayMode != widget.threadDisplayMode ||
-        oldWidget.documentPath != widget.documentPath ||
-        oldWidget.threadListPath != widget.threadListPath) {
-      _documentPath = widget.documentPath;
-      _initialMessageText = widget.initialMessageText;
-    } else if (oldWidget.initialMessageText != widget.initialMessageText &&
-        widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer) {
-      _initialMessageText = widget.initialMessageText;
-    }
-
-    if (oldWidget.threadDisplayMode != widget.threadDisplayMode ||
-        oldWidget.agentName != widget.agentName ||
-        oldWidget.client != widget.client ||
-        oldWidget.newThreadResetVersion != widget.newThreadResetVersion) {
-      _createdThreadPath = null;
-      return;
-    }
-
-    if (oldWidget.selectedThreadPath != widget.selectedThreadPath) {
-      _clearCreatedThreadPathIfStale();
-    }
-  }
-
   @override
   void initState() {
     super.initState();
-
     _chatController = MeshagentRoomChatThreadController(room: widget.client);
-    _documentPath = widget.documentPath;
-    _initialMessageText = widget.initialMessageText;
   }
 
   @override
@@ -208,11 +158,18 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   void dispose() {
     _chatController.dispose();
-
     super.dispose();
   }
 
   void _onMessageSent(ma.ChatMessage message) {}
+
+  Uri? _currentRouteUriOrNull() {
+    try {
+      return PathRouteMatch.of(context).uri;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Widget _fileInThreadBuilder(BuildContext context, String path) {
     if (path.endsWith('.meeting')) {
@@ -227,8 +184,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   void _open(String path) {
-    final state = PathRouteMatch.of(context);
-    final currentUri = state.uri;
+    final currentUri = _currentRouteUriOrNull();
+    if (currentUri == null) {
+      return;
+    }
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
     final previewOriginQueryParameters = Map<String, String>.from(currentUri.queryParameters);
@@ -240,7 +199,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     updatedQueryParameters['p'] = path;
     updatedQueryParameters[filePreviewOriginQueryParameter] = currentUri.replace(queryParameters: previewOriginQueryParameters).toString();
-    updatedQueryParameters.remove('pane'); // remove the pane parameter to ensure file is shown
+    updatedQueryParameters.remove('pane');
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
 
@@ -248,7 +207,11 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   void _restoreThreadScrollOffsetFromRoute() {
-    final currentUri = PathRouteMatch.of(context).uri;
+    final currentUri = _currentRouteUriOrNull();
+    if (currentUri == null) {
+      return;
+    }
+
     final rawOffset = currentUri.queryParameters[filePreviewThreadScrollOffsetQueryParameter];
     if (rawOffset == null || rawOffset.isEmpty || rawOffset == _lastRestoredThreadScrollOffsetValue) {
       return;
@@ -280,136 +243,57 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     WidgetsBinding.instance.addPostFrameCallback((_) => restore());
   }
 
-  void _onThreadPathChanged(String? path) {
-    final normalizedPath = _normalizeSelectedThreadPath(path);
-    if (_createdThreadPath != normalizedPath) {
-      setState(() {
-        _createdThreadPath = normalizedPath;
-      });
-    }
-    final onSelectedThreadPathChanged = widget.onSelectedThreadPathChanged;
-    if (onSelectedThreadPathChanged != null) {
-      onSelectedThreadPathChanged(normalizedPath);
-    }
-  }
-
-  Future<void> _onVisibleMessagesEmpty(String path) async {
-    if (widget.threadDisplayMode != ChatThreadDisplayMode.multiThreadComposer || widget.selectedThreadPath != path) {
-      return;
-    }
-  }
-
-  Widget _buildThread({
-    required BuildContext context,
-    required String path,
-    required String? initialMessageText,
-    Widget Function(BuildContext)? loadingBuilder,
-  }) {
+  @override
+  Widget build(BuildContext context) {
     final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
+    final emptyStateTitle = widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
+        ? "Start a new thread"
+        : "Chat to get started";
     final resolvedEmptyState =
         widget.emptyState ??
-        (usesMobileEmptyState
-            ? Builder(
-                builder: (context) =>
-                    _buildThreadEmptyState(context, title: "Chat to get started", description: _threadEmptyDescription, compact: true),
-              )
-            : null);
+        Builder(
+          builder: (context) =>
+              _buildThreadEmptyState(context, title: emptyStateTitle, description: _threadEmptyDescription, compact: usesMobileEmptyState),
+        );
 
     return IconTheme(
       data: const IconThemeData(size: 14),
-      child: ChatThreadLoader(
-        key: ValueKey(path),
+      child: ChatBotView(
         room: widget.client,
-        loadingBuilder: loadingBuilder ?? (context) => const SizedBox.shrink(),
-        path: path,
-        builder: (context, document) => ChatThread(
-          path: path,
-          document: document,
-          room: widget.client,
-          controller: _chatController,
-          inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
-          initialMessage: initialMessageText == null
-              ? null
-              : ma.ChatMessage(
-                  id: widget.initialMessageID ?? const Uuid().v4(),
-                  text: initialMessageText,
-                  attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
-                ),
-          onMessageSent: _onMessageSent,
-          fileInThreadBuilder: _fileInThreadBuilder,
-          openFile: _open,
-          toolsBuilder: (context, controller, snapshot) =>
-              buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
-          agentName: widget.agentName,
-          emptyStateTitle: "Chat to get started",
-          emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
-          emptyState: resolvedEmptyState,
-          onVisibleMessagesEmpty: widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
-              ? () => _onVisibleMessagesEmpty(path)
-              : null,
-          inputContextMenuBuilder: powerboardsAdaptiveInputContextMenuBuilder,
-          inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
-          chatInputBoxBuilder: (context, inputBox) {
-            if (widget.hideChatInput) {
-              return const SizedBox.shrink();
-            }
-
-            return inputBox;
-          },
-        ),
+        agentName: widget.agentName,
+        threadDisplayMode: widget.threadDisplayMode,
+        threadListPath: widget.threadListPath,
+        documentPath: widget.documentPath,
+        controller: _chatController,
+        selectedThreadPath: widget.selectedThreadPath,
+        selectedThreadDisplayName: widget.selectedThreadDisplayName,
+        onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
+        onSelectedThreadResolved: widget.onSelectedThreadResolved,
+        newThreadResetVersion: widget.newThreadResetVersion,
         participantNames: widget.participantNames,
+        initialMessage: widget.initialMessageText == null
+            ? null
+            : ChatMessage(
+                id: widget.initialMessageID ?? widget.documentPath,
+                text: widget.initialMessageText!,
+                attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
+              ),
+        onMessageSent: _onMessageSent,
+        fileInThreadBuilder: _fileInThreadBuilder,
+        openFile: _open,
+        toolsBuilder: (context, controller, snapshot) =>
+            buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
+        inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
+        emptyStateTitle: "Chat to get started",
+        emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
+        emptyState: resolvedEmptyState,
+        inputContextMenuBuilder: powerboardsAdaptiveInputContextMenuBuilder,
+        inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
+        centerComposer: false,
+        hideChatInput: widget.hideChatInput,
+        showThreadList: false,
       ),
     );
-  }
-
-  Widget _buildDefaultNewThreadContent(BuildContext context, {required String agentName}) {
-    final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
-    final threadPath = _normalizeSelectedThreadPath(widget.selectedThreadPath);
-    final isCreatedThreadSelected = threadPath != null && threadPath == _createdThreadPath;
-    final threadContent = threadPath == null || isCreatedThreadSelected
-        ? ma.NewChatThread(
-            key: ValueKey("new-thread-$agentName-${widget.newThreadResetVersion}"),
-            room: widget.client,
-            agentName: agentName,
-            centerComposer: false,
-            emptyState:
-                widget.emptyState ??
-                Builder(
-                  builder: (context) => _buildThreadEmptyState(
-                    context,
-                    title: "Start a new thread",
-                    description: _threadEmptyDescription,
-                    compact: usesMobileEmptyState,
-                  ),
-                ),
-            controller: _chatController,
-            onThreadPathChanged: _onThreadPathChanged,
-            toolsBuilder: (context, controller, snapshot) =>
-                buildTools(context, widget.projectId, widget.client, agentName, controller, snapshot),
-            inputContextMenuBuilder: powerboardsAdaptiveInputContextMenuBuilder,
-            inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
-            builder: (context, path, loadingBuilder) =>
-                _buildThread(context: context, path: path, initialMessageText: null, loadingBuilder: loadingBuilder),
-          )
-        : _buildThread(context: context, path: threadPath, initialMessageText: null);
-
-    return threadContent;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer) {
-      final agentName = widget.agentName;
-      if (agentName == null) {
-        return Center(
-          child: ShadAlert.destructive(title: Text("Unable to start a new thread"), description: Text("No chat agent is selected.")),
-        );
-      }
-
-      return _buildDefaultNewThreadContent(context, agentName: agentName);
-    }
-
-    return _buildThread(context: context, path: _documentPath, initialMessageText: _initialMessageText);
   }
 }
 
@@ -608,6 +492,13 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   }
 
+  DateTime _threadCreatedSortDate(_ThreadListEntry entry) {
+    if (entry.createdAt.trim().isNotEmpty) {
+      return _parseThreadDate(entry.createdAt);
+    }
+    return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  }
+
   String _threadNameFromPath(String path) {
     return defaultThreadDisplayNameFromPath(path);
   }
@@ -657,38 +548,25 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       );
     }
 
-    entries.sort((a, b) => _threadSortDate(b).compareTo(_threadSortDate(a)));
+    entries.sort((a, b) {
+      final dateComparison = _threadSortDate(b).compareTo(_threadSortDate(a));
+      if (dateComparison != 0) {
+        return dateComparison;
+      }
+
+      final createdDateComparison = _threadCreatedSortDate(b).compareTo(_threadCreatedSortDate(a));
+      if (createdDateComparison != 0) {
+        return createdDateComparison;
+      }
+
+      return a.path.compareTo(b.path);
+    });
     return entries;
-  }
-
-  bool _threadListContainsPath(String path) {
-    final document = _threadListDocument;
-    if (document == null) {
-      return false;
-    }
-
-    for (final node in document.root.getChildren()) {
-      if (node is! MeshElement || node.tagName != "thread") {
-        continue;
-      }
-      if (node.getAttribute("path") == path) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   void _onThreadListChanged() {
     if (!mounted) {
       return;
-    }
-
-    final selectedPath = widget.selectedThreadPath;
-    if (selectedPath != null && !_threadListContainsPath(selectedPath)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.onSelectedThreadPathChanged(null);
-      });
     }
 
     setState(() {});
@@ -1433,7 +1311,7 @@ Widget buildTools(
     final client = getMeshagentClient();
     final conn = await client.connectRoom(projectId: projectId, roomName: roomName);
     final roomClient = RoomClient(
-      protocol: WebSocketClientProtocol(url: conn.roomUrl, token: conn.jwt),
+      protocolFactory: WebSocketClientProtocol.createFactory(url: conn.roomUrl, token: conn.jwt),
     );
     await roomClient.start();
     await roomClient.ready;

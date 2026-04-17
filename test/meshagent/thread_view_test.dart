@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent/runtime.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/new_chat_thread.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
@@ -10,6 +13,47 @@ import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+
+class _ProtocolPair {
+  _ProtocolPair() {
+    serverProtocol = Protocol(
+      channel: StreamProtocolChannel(input: _clientToServer.stream, output: _serverToClient.sink),
+    );
+  }
+
+  final _clientToServer = StreamController<Uint8List>();
+  final _serverToClient = StreamController<Uint8List>();
+  Protocol? _clientProtocol;
+  late final Protocol serverProtocol;
+
+  Protocol clientProtocolFactory() {
+    final existing = _clientProtocol;
+    if (existing != null) {
+      throw ProtocolReconnectUnsupportedException('protocolFactory was not configured for reconnecting this protocol');
+    }
+    final protocol = Protocol(
+      channel: StreamProtocolChannel(input: _serverToClient.stream, output: _clientToServer.sink),
+    );
+    _clientProtocol = protocol;
+    return protocol;
+  }
+
+  Future<void> dispose() async {
+    final clientProtocol = _clientProtocol;
+    if (clientProtocol != null) {
+      try {
+        clientProtocol.dispose();
+      } catch (_) {}
+    }
+    try {
+      serverProtocol.dispose();
+    } catch (_) {}
+    unawaited(_clientToServer.close());
+    if (!_serverToClient.isClosed) {
+      unawaited(_serverToClient.close());
+    }
+  }
+}
 
 class _NoopProtocolChannel extends ProtocolChannel {
   @override
@@ -20,6 +64,55 @@ class _NoopProtocolChannel extends ProtocolChannel {
 
   @override
   void start(void Function(Uint8List data) onDataReceived, {void Function()? onDone, void Function(Object? error)? onError}) {}
+}
+
+Future<void> _sendRoomReady(Protocol protocol) async {
+  await protocol.send(
+    'room_ready',
+    packMessage({'room_name': 'test-room', 'room_url': 'ws://example/rooms/test-room', 'session_id': 'session-1'}),
+  );
+  await protocol.send(
+    'connected',
+    packMessage({
+      'type': 'init',
+      'participantId': 'self',
+      'attributes': {'name': 'self'},
+    }),
+  );
+}
+
+Future<void> _sendToolCallResponseChunk({required Protocol protocol, required String toolCallId, required Content chunk}) async {
+  final packed = unpackMessage(chunk.pack());
+  await protocol.send(
+    'room.tool_call_response_chunk',
+    packMessage({'tool_call_id': toolCallId, 'chunk': packed.header}, packed.payload.isEmpty ? null : packed.payload),
+  );
+}
+
+class _FakeDocumentRuntime extends DocumentRuntime {
+  _FakeDocumentRuntime() : super.base();
+
+  @override
+  void applyBackendChanges({required String documentId, required String base64}) {}
+
+  @override
+  void registerDocument(RuntimeDocument document) {}
+
+  @override
+  String getState({required String documentId, String? vectorBase64}) {
+    return '';
+  }
+
+  @override
+  String getStateVector({required String documentId}) {
+    return '';
+  }
+
+  @override
+  void sendChanges(Map<String, dynamic> message) {}
+
+  @override
+  void unregisterDocument(RuntimeDocument document) {}
 }
 
 class _ThreadViewHarness extends StatefulWidget {
@@ -73,9 +166,82 @@ ChatThreadSnapshot _emptySnapshot({bool supportsMcp = false, bool agentOnline = 
 }
 
 void main() {
-  testWidgets('keeps the same new thread view mounted when the created thread becomes selected', (tester) async {
-    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
-    addTearDown(room.dispose);
+  final previousRuntime = DocumentRuntime.instance;
+
+  setUpAll(() {
+    DocumentRuntime.instance = _FakeDocumentRuntime();
+  });
+
+  tearDownAll(() {
+    if (previousRuntime != null) {
+      DocumentRuntime.instance = previousRuntime;
+    }
+  });
+
+  testWidgets('switches from the new thread view to the selected thread when the parent selection changes', (tester) async {
+    final pair = _ProtocolPair();
+    final schema = MeshSchema(
+      rootTagName: 'thread',
+      elements: [ElementType(tagName: 'thread', description: '', properties: [])],
+    );
+    String? toolCallId;
+
+    pair.serverProtocol.start(
+      onMessage: (protocol, messageId, type, data) async {
+        if (type == 'room.invoke_tool') {
+          final request = unpackMessage(data).header;
+          if (request['toolkit'] == 'sync' && request['tool'] == 'open') {
+            toolCallId = request['tool_call_id'] as String;
+            await protocol.send('__response__', ControlContent(method: 'open').pack(), id: messageId);
+          }
+          return;
+        }
+
+        if (type != 'room.tool_call_request_chunk' || toolCallId == null) {
+          return;
+        }
+
+        final message = unpackMessage(data);
+        final header = message.header;
+        final chunkHeader = Map<String, dynamic>.from(header['chunk'] as Map);
+        final packedChunk = packMessage(chunkHeader, message.payload.isEmpty ? null : message.payload);
+        final chunk = unpackContent(packedChunk);
+        await protocol.send('__response__', EmptyContent().pack(), id: messageId);
+
+        if (chunk is BinaryContent && chunk.headers['kind'] == 'start') {
+          await _sendToolCallResponseChunk(
+            protocol: protocol,
+            toolCallId: toolCallId!,
+            chunk: BinaryContent(
+              data: Uint8List.fromList(utf8.encode('')),
+              headers: {'kind': 'state', 'path': chunk.headers['path'], 'schema': schema.toJson()},
+            ),
+          );
+          return;
+        }
+
+        if (chunk is ControlContent && chunk.method == 'close') {
+          await _sendToolCallResponseChunk(
+            protocol: protocol,
+            toolCallId: toolCallId!,
+            chunk: ControlContent(method: 'close'),
+          );
+        }
+      },
+    );
+
+    final room = RoomClient(protocolFactory: pair.clientProtocolFactory);
+    final startFuture = room.start();
+    await _sendRoomReady(pair.serverProtocol);
+    await startFuture;
+
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await tester.pump();
+      room.dispose();
+      await pair.dispose();
+    });
 
     await tester.pumpWidget(
       ShadApp(
@@ -88,18 +254,16 @@ void main() {
     final newThreadFinder = find.byType(NewChatThread);
     expect(newThreadFinder, findsOneWidget);
 
-    final stateBefore = tester.state<State<StatefulWidget>>(newThreadFinder);
     final newThread = tester.widget<NewChatThread>(newThreadFinder);
     newThread.onThreadPathChanged?.call('.threads/created.thread');
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(newThreadFinder, findsOneWidget);
-    final stateAfter = tester.state<State<StatefulWidget>>(newThreadFinder);
-    expect(identical(stateAfter, stateBefore), isTrue);
+    expect(newThreadFinder, findsNothing);
+    expect(find.byType(ChatThread), findsOneWidget);
   });
 
   testWidgets('uses the mobile attach flow dialog entry point only on native mobile layouts', (tester) async {
-    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
 
     final controller = ChatThreadController(room: room);
@@ -128,7 +292,7 @@ void main() {
   });
 
   testWidgets('mobile attach chooser uses the migrated flow dialog list without MCP', (tester) async {
-    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
 
     final controller = ChatThreadController(room: room);
@@ -156,7 +320,7 @@ void main() {
   });
 
   testWidgets('mobile thread empty state keeps descriptive copy when keyboard is down', (tester) async {
-    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
     tester.view.devicePixelRatio = 1.0;
     tester.view.physicalSize = const Size(390, 844);
@@ -181,7 +345,7 @@ void main() {
   });
 
   testWidgets('mobile thread empty state uses title-only compact copy when keyboard is up', (tester) async {
-    final room = RoomClient(protocol: Protocol(channel: _NoopProtocolChannel()));
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
     tester.view.devicePixelRatio = 1.0;
     tester.view.physicalSize = const Size(390, 844);

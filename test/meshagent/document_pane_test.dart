@@ -45,6 +45,12 @@ class _FakeDocumentRuntime extends DocumentRuntime {
   void applyBackendChanges({required String documentId, required String base64}) {}
 
   @override
+  String getState({required String documentId, String? vectorBase64}) => '';
+
+  @override
+  String getStateVector({required String documentId}) => '';
+
+  @override
   void registerDocument(RuntimeDocument document) {}
 
   @override
@@ -198,7 +204,7 @@ void main() {
       },
     );
 
-    final room = RoomClient(protocol: pair.clientProtocol);
+    final room = RoomClient(protocolFactory: () => pair.clientProtocol);
     final startFuture = room.start();
     await _sendRoomReady(pair.serverProtocol);
     await startFuture;

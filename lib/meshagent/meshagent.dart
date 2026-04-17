@@ -10,8 +10,7 @@ import 'slug.dart';
 
 bool isSupportedServiceType(ServiceSpec service) {
   final type = service.agents.firstOrNull?.annotations["meshagent.agent.type"];
-  final widget = service.agents.firstOrNull?.annotations["meshagent.agent.widget"];
-  return widget != null || type == "ChatBot" || type == "VoiceBot" || type == "MeetingTranscriber" || type == "Shell";
+  return type == "ChatBot" || type == "VoiceBot" || type == "MeetingTranscriber" || type == "Shell";
 }
 
 bool hasMessagingParticipant(ServiceSpec service) {

@@ -111,8 +111,18 @@ class _DocumentPane extends State<DocumentPane> {
 
   Widget _meshagentPreview() {
     final ext = _ext(widget.path);
+    if (ext == "thread") {
+      return ChatThread(
+        key: ValueKey('${widget.path}:$_reload'),
+        path: widget.path,
+        room: widget.room,
+        toolsBuilder: (context, controller, _) => ChatThreadAttachButton(controller: controller),
+        inputPlaceholder: const Text("Type a message…"),
+        openFile: _open,
+      );
+    }
+
     final allowEmptyDocumentViewer = switch (ext) {
-      "thread" => true,
       "transcript" => true,
       _ => false,
     };
@@ -135,14 +145,6 @@ class _DocumentPane extends State<DocumentPane> {
                           child: switch (ext) {
                             "document" => SingleChildScrollView(
                               child: DocumentViewer(client: widget.room, document: document),
-                            ),
-                            "thread" => ChatThread(
-                              path: widget.path,
-                              document: document,
-                              room: widget.room,
-                              toolsBuilder: (context, controller, _) => ChatThreadAttachButton(controller: controller),
-                              inputPlaceholder: Text("Type a message…"),
-                              openFile: _open,
                             ),
                             "gallery" => GalleryViewer(client: widget.room, document: document),
                             "presentation" => SingleChildScrollView(

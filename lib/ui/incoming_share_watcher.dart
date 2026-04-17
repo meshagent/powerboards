@@ -254,7 +254,7 @@ class _IncomingShareWatcherState extends State<IncomingShareWatcher> {
     final client = getMeshagentClient();
     final roomConnection = await client.connectRoom(projectId: destination.projectId, roomName: destination.roomName);
     final roomClient = RoomClient(
-      protocol: WebSocketClientProtocol(url: roomConnection.roomUrl, token: roomConnection.jwt),
+      protocolFactory: WebSocketClientProtocol.createFactory(url: roomConnection.roomUrl, token: roomConnection.jwt),
     );
 
     try {
@@ -447,7 +447,7 @@ class _IncomingShareDestinationDialogState extends State<_IncomingShareDestinati
       final client = getMeshagentClient();
       final roomConnection = await client.connectRoom(projectId: _selectedProjectId, roomName: selectedRoomName);
       final roomClient = RoomClient(
-        protocol: WebSocketClientProtocol(url: roomConnection.roomUrl, token: roomConnection.jwt),
+        protocolFactory: WebSocketClientProtocol.createFactory(url: roomConnection.roomUrl, token: roomConnection.jwt),
       );
       await roomClient.start();
       if (!mounted || selectedRoomName != _selectedRoomName) {

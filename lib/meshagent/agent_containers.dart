@@ -364,7 +364,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
 
       final roomConnection = await client.connectRoom(projectId: projectId, roomName: roomName);
       final roomClient = RoomClient(
-        protocol: WebSocketClientProtocol(url: roomConnection.roomUrl, token: roomConnection.jwt),
+        protocolFactory: WebSocketClientProtocol.createFactory(url: roomConnection.roomUrl, token: roomConnection.jwt),
       );
 
       try {
