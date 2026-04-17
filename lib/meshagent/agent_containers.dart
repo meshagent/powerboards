@@ -177,7 +177,7 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
             ],
             if (!isInstalled) ...[
               SizedBox(height: isMobile ? _mobileConfigureFlowSectionGap : 12),
-              dev.ServiceInfoCard(manifest: displayManifest),
+              dev.ServiceInfoCard(manifest: displayManifest, desktopContentGroupGap: isMobile ? null : 24),
             ],
           ],
           projectId: widget.projectId,

@@ -20,6 +20,7 @@ enum _InstallerStep { url, review, selectProject, selectRoom, confirm }
 enum ServiceType { any, mcp }
 
 const double _mobileInstallFlowSectionGap = powerboardsMobileFlowDialogContentSectionGap * 3;
+const double _desktopInstallDialogCardBodyGap = 44;
 
 BoxConstraints? _desktopInstallServiceDialogConstraints(BuildContext context, BoxConstraints constraints) {
   if (powerboardsUsesNativeMobileDialogLayout(context)) {
@@ -1076,24 +1077,45 @@ class _InstallServiceUrlDialogState extends State<_InstallServiceUrlDialog> {
       title: Text(widget.type == ServiceType.mcp ? "Add MCP service" : "Install"),
       description: Text(description),
       actions: [ShadButton(onPressed: _continue, child: const Text('Continue'))],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          PowerboardsAdaptiveInput(
-            controller: _urlController,
-            placeholder: const Text("https://mcp.notion.com/mcp"),
-            keyboardType: TextInputType.url,
-            textInputAction: TextInputAction.done,
-            autocorrect: false,
-            scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
-            mobileFlowDialogInset: powerboardsUsesNativeMobileDialogLayout(context),
-            mobileFlowDialogInsetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            onSubmitted: (_) => _continue(),
-          ),
-          if (_urlError != null) ...[const SizedBox(height: 12), ShadAlert.destructive(description: Text(_urlError!))],
-        ],
-      ),
+      child: powerboardsUsesNativeMobileDialogLayout(context)
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PowerboardsAdaptiveInput(
+                  controller: _urlController,
+                  placeholder: const Text("https://mcp.notion.com/mcp"),
+                  keyboardType: TextInputType.url,
+                  textInputAction: TextInputAction.done,
+                  autocorrect: false,
+                  scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
+                  mobileFlowDialogInset: powerboardsUsesNativeMobileDialogLayout(context),
+                  mobileFlowDialogInsetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  onSubmitted: (_) => _continue(),
+                ),
+                if (_urlError != null) ...[const SizedBox(height: 12), ShadAlert.destructive(description: Text(_urlError!))],
+              ],
+            )
+          : _desktopInstallDialogBodyViewport(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PowerboardsAdaptiveInput(
+                    controller: _urlController,
+                    placeholder: const Text("https://mcp.notion.com/mcp"),
+                    keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.done,
+                    autocorrect: false,
+                    scrollPadding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
+                    mobileFlowDialogInset: false,
+                    mobileFlowDialogInsetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    onSubmitted: (_) => _continue(),
+                  ),
+                  if (_urlError != null) ...[const SizedBox(height: 12), ShadAlert.destructive(description: Text(_urlError!))],
+                ],
+              ),
+            ),
     );
   }
 }
