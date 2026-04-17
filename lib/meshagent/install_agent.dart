@@ -78,6 +78,23 @@ Widget _desktopInstallDialogDescriptionForStep(BuildContext context, String sign
   return Text(description);
 }
 
+Widget _installConfirmDescription(BuildContext context, String roomName) {
+  final theme = ShadTheme.of(context);
+  final baseStyle = theme.textTheme.muted.copyWith(color: theme.colorScheme.mutedForeground);
+  return Text.rich(
+    TextSpan(
+      style: baseStyle,
+      children: [
+        const TextSpan(text: 'Confirm and install into '),
+        TextSpan(
+          text: roomName,
+          style: baseStyle.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ],
+    ),
+  );
+}
+
 class InstallServiceDialog extends StatefulWidget {
   const InstallServiceDialog({
     super.key,
@@ -158,7 +175,11 @@ class _InstallServiceDialogState extends State<InstallServiceDialog> {
               mobileKeyboardInsetScale: isMobile ? 0.75 : 1.0,
               mobileHideActionsWhenKeyboardVisible: false,
               title: Text(widget.type == ServiceType.mcp ? "Add MCP service" : "Install"),
-              description: !isMobile ? _desktopInstallDialogDescriptionForStep(context, chrome.signature, widget.type) : null,
+              description: switch ((isMobile, chrome.signature)) {
+                (true, 'review') => const Text('Review details'),
+                (false, _) => _desktopInstallDialogDescriptionForStep(context, chrome.signature, widget.type),
+                _ => null,
+              },
               actions: chrome.actions,
               onBack: isMobile ? chrome.onBack : null,
               child: isMobile ? installer : _desktopInstallDialogBodyViewport(child: installer),
@@ -381,11 +402,6 @@ class _AgentInstaller extends State<AgentInstaller> {
     );
   }
 
-  Widget _mobileDestructiveDescription(String description) {
-    final theme = ShadTheme.of(context);
-    return Text(description, style: theme.textTheme.muted.copyWith(color: theme.colorScheme.destructive));
-  }
-
   bool get _usesMobileFlowLayout => powerboardsUsesNativeMobileDialogLayout(context);
 
   void _publishDialogChrome(PowerboardsDialogChrome chrome) {
@@ -565,16 +581,19 @@ class _AgentInstaller extends State<AgentInstaller> {
 
       final changed = await showPowerboardsFlowDialog<bool>(
         context: context,
-        builder: (_) => ConfigureServiceTemplateDialog(
-          template: template,
-          projectId: projectId,
-          serviceId: _currentServiceForSpec()?.id,
-          manifest: spec,
-          roomName: roomName,
-          prefilledVars: const <String, String>{},
-          title: 'Install agent',
-          description: 'Installing this agent will grant it access to your room. Review the details before continuing.',
-        ),
+        builder: (dialogContext) {
+          final roomLabel = (_roomDisplayName?.trim().isNotEmpty ?? false) ? _roomDisplayName!.trim() : roomName;
+          return ConfigureServiceTemplateDialog(
+            template: template,
+            projectId: projectId,
+            serviceId: _currentServiceForSpec()?.id,
+            manifest: spec,
+            roomName: roomName,
+            prefilledVars: const <String, String>{},
+            title: 'Install agent',
+            description: _installConfirmDescription(dialogContext, roomLabel),
+          );
+        },
       );
 
       _mobileConfirmPresentationPending = false;
@@ -681,11 +700,7 @@ class _AgentInstaller extends State<AgentInstaller> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _mobileBodyIntro(title: 'Review details'),
-              const SizedBox(height: _mobileInstallFlowSectionGap),
               PowerboardsServiceNameCard(manifest: displaySpec),
-              const SizedBox(height: _mobileInstallFlowSectionGap),
-              _mobileDestructiveDescription('Check what this agent installs and what access it will receive before continuing.'),
               const SizedBox(height: _mobileInstallFlowSectionGap),
               dev.ServiceInfoCard(manifest: displaySpec),
             ],
@@ -1072,7 +1087,7 @@ class _InstallServiceUrlDialogState extends State<_InstallServiceUrlDialog> {
       mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
       mobileFlowBodyBehavior: PowerboardsDialogMobileFlowBodyBehavior.formScrollable,
       mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
-      mobileKeyboardInsetScale: powerboardsUsesNativeMobileDialogLayout(context) ? 0.75 : 1.0,
+      mobileKeyboardInsetScale: 1.0,
       mobileHideActionsWhenKeyboardVisible: false,
       title: Text(widget.type == ServiceType.mcp ? "Add MCP service" : "Install"),
       description: Text(description),

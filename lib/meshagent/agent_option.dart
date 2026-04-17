@@ -448,7 +448,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
           ? ConfigureServiceTemplateDialog(
               prefilledVars: prefilled,
               title: "Change agent",
-              description: "Change the properties of this agent",
+              description: const Text("Change the properties of this agent"),
               template: option.template ?? "",
               projectId: widget.projectId,
               serviceId: existing.id!,

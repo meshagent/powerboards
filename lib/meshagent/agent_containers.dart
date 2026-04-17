@@ -135,7 +135,7 @@ class ConfigureServiceTemplateDialog extends StatefulWidget {
   final ServiceTemplateSpec manifest;
   final String? roomName;
   final String title;
-  final String? description;
+  final Widget? description;
 
   @override
   State<ConfigureServiceTemplateDialog> createState() => _ConfigureServiceTemplateDialogState();
@@ -147,11 +147,6 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
     actions: const <Widget>[],
     onBack: null,
   ));
-
-  Widget _mobileDestructiveDescription(BuildContext context, String description) {
-    final theme = ShadTheme.of(context);
-    return Text(description, style: theme.textTheme.muted.copyWith(color: theme.colorScheme.destructive));
-  }
 
   @override
   void dispose() {
@@ -166,16 +161,11 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
-        final dialogDescription = !isMobile && widget.description != null ? Text(widget.description!) : null;
         final content = ConfigureServiceTemplate(
           template: widget.template,
           header: [
             PowerboardsServiceNameCard(manifest: displayManifest),
-            if (isMobile && widget.description != null && widget.description!.trim().isNotEmpty) ...[
-              const SizedBox(height: _mobileConfigureFlowSectionGap),
-              _mobileDestructiveDescription(context, widget.description!),
-            ],
-            if (!isInstalled) ...[
+            if (!isInstalled && !isMobile) ...[
               SizedBox(height: isMobile ? _mobileConfigureFlowSectionGap : 12),
               dev.ServiceInfoCard(manifest: displayManifest, desktopContentGroupGap: isMobile ? null : 24),
             ],
@@ -207,7 +197,7 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
                   : PowerboardsDialogMobileFlowBodyBehavior.fill,
               mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
               title: Text(widget.title),
-              description: dialogDescription,
+              description: widget.description,
               actions: chrome.actions,
               onBack: isMobile ? chrome.onBack : null,
               child: isMobile ? content : _desktopConfigureDialogBodyViewport(child: content),
