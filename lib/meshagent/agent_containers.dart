@@ -106,9 +106,13 @@ BoxConstraints? _desktopConfigureAgentDialogConstraints(BuildContext context, Bo
     return null;
   }
 
-  final maxHeight = constraints.maxHeight;
-  final height = !maxHeight.isFinite ? 500.0 : (maxHeight - 100.0).clamp(0.0, 500.0).toDouble();
-  return BoxConstraints(minWidth: 600.0, maxWidth: 600.0, minHeight: height, maxHeight: height);
+  final maxViewportHeight = constraints.maxHeight;
+  final maxHeight = maxViewportHeight.isFinite ? (maxViewportHeight * 0.7).clamp(0.0, 860.0).toDouble() : 620.0;
+  return BoxConstraints(maxWidth: 500.0, maxHeight: maxHeight);
+}
+
+Widget _desktopConfigureDialogBodyViewport({required Widget child}) {
+  return Padding(padding: powerboardsDialogScrollViewportPadding, child: child);
 }
 
 class ConfigureServiceTemplateDialog extends StatefulWidget {
@@ -181,30 +185,11 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
           manifest: widget.manifest,
           roomName: widget.roomName,
           prefilledVars: widget.prefilledVars,
-          mobileDialogChrome: isMobile ? _mobileChrome : null,
+          mobileDialogChrome: _mobileChrome,
           onDone: (context, _) {
             Navigator.of(context).pop(true);
           },
         );
-
-        if (!isMobile) {
-          return PowerboardsShadDialog(
-            scrollable: false,
-            constraints: _desktopConfigureAgentDialogConstraints(context, constraints),
-            expandDesktopActions: true,
-            stackActionsOnMobile: true,
-            gap: isMobile ? 8 : null,
-            padding: isMobile ? powerboardsMobileFlowDialogCompactPadding : null,
-            mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
-            mobileFlowBodyBehavior: isMobile
-                ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
-                : PowerboardsDialogMobileFlowBodyBehavior.fill,
-            mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
-            title: Text(widget.title),
-            description: dialogDescription,
-            child: SizedBox.expand(child: content),
-          );
-        }
 
         return ValueListenableBuilder<PowerboardsDialogChrome>(
           valueListenable: _mobileChrome,
@@ -224,8 +209,8 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
               title: Text(widget.title),
               description: dialogDescription,
               actions: chrome.actions,
-              onBack: chrome.onBack,
-              child: content,
+              onBack: isMobile ? chrome.onBack : null,
+              child: isMobile ? content : _desktopConfigureDialogBodyViewport(child: content),
             );
           },
         );
@@ -248,6 +233,7 @@ class ConfigureServiceTemplate extends StatefulWidget {
     this.header = const [],
     this.mobileDialogChrome,
     this.mobileOnBack,
+    this.dialogChromeSignaturePrefix,
   });
 
   final ServiceTemplateSpec manifest;
@@ -261,6 +247,7 @@ class ConfigureServiceTemplate extends StatefulWidget {
   final ConfigureServiceTemplateDone onDone;
   final ValueNotifier<PowerboardsDialogChrome>? mobileDialogChrome;
   final VoidCallback? mobileOnBack;
+  final String? dialogChromeSignaturePrefix;
 
   @override
   State<ConfigureServiceTemplate> createState() => _ConfigureServiceTemplateState();
@@ -713,17 +700,17 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
     ];
   }
 
-  void _publishMobileDialogChrome() {
+  void _publishDialogChrome() {
     final notifier = widget.mobileDialogChrome;
-    if (notifier == null || !powerboardsUsesNativeMobileDialogLayout(context)) {
+    if (notifier == null) {
       return;
     }
 
     final chrome = (
       signature:
-          'service:${widget.serviceId != null}:saving:$_saving:removing:$_removing:error:${_error != null}:back:${widget.mobileOnBack != null}',
-      actions: _actions(context),
-      onBack: widget.mobileOnBack,
+          '${widget.dialogChromeSignaturePrefix ?? ''}service:${widget.serviceId != null}:saving:$_saving:removing:$_removing:error:${_error != null}:back:${widget.mobileOnBack != null}',
+      actions: [...widget.customActions, ..._actions(context)],
+      onBack: powerboardsUsesNativeMobileDialogLayout(context) ? widget.mobileOnBack : null,
     );
 
     if (_lastPublishedMobileChromeSignature == chrome.signature) {
@@ -742,16 +729,19 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
 
   @override
   Widget build(BuildContext context) {
-    _publishMobileDialogChrome();
+    _publishDialogChrome();
     final routeDomains = MeshagentConfig.current?.domains ?? const <String>[];
     final errorAlert = _buildError(context);
     return dev.ConfigureServiceTemplate(
       spec: widget.manifest,
       prefilledVars: widget.prefilledVars,
       routeDomains: routeDomains,
+      desktopHorizontalPadding: 0,
+      desktopSectionSpacing: 20,
+      desktopHeaderBottomSpacing: 44,
       customActions: widget.customActions,
       header: [if (errorAlert != null) errorAlert, ...widget.header],
-      showActionRow: widget.mobileDialogChrome == null || !powerboardsUsesNativeMobileDialogLayout(context),
+      showActionRow: widget.mobileDialogChrome == null,
       onFormStateChanged: (vars, validate) {
         _latestFormVars = vars;
         _latestFormValidate = validate;
