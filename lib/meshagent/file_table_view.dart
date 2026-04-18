@@ -476,7 +476,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   String _displayNameForPath(String path) {
     final fileName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
     if (isThreadPath(path)) {
-      return threadFileDisplayNameFromPath(path, threadDisplayName: _threadDisplayNamesByPath[path]);
+      final normalizedPath = normalizeThreadStoragePath(path);
+      return threadFileDisplayNameFromPath(path, threadDisplayName: _threadDisplayNamesByPath[normalizedPath]);
     }
     return _displayFileName(fileName);
   }
@@ -571,7 +572,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         if (rawPath is! String) {
           continue;
         }
-        final path = rawPath.trim();
+        final path = normalizeThreadStoragePath(rawPath);
         if (path.isEmpty) {
           continue;
         }
@@ -606,8 +607,11 @@ class _FileManagerViewState extends State<FileManagerView> {
       return null;
     }
 
+    final normalizedPath = normalizeThreadStoragePath(path);
+
     return document.root.getChildren().whereType<MeshElement>().firstWhereOrNull((node) {
-      return node.tagName == 'thread' && node.getAttribute('path') == path;
+      final nodePath = node.getAttribute('path');
+      return node.tagName == 'thread' && nodePath is String && normalizeThreadStoragePath(nodePath) == normalizedPath;
     });
   }
 
@@ -812,7 +816,8 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   String _renameFieldInitialValue(String fullPath, {required bool isFolder}) {
     if (_usesThreadDisplayNameRename(fullPath, isFolder: isFolder)) {
-      return threadFileDisplayNameFromPath(fullPath, threadDisplayName: _threadDisplayNamesByPath[fullPath]);
+      final normalizedPath = normalizeThreadStoragePath(fullPath);
+      return threadFileDisplayNameFromPath(fullPath, threadDisplayName: _threadDisplayNamesByPath[normalizedPath]);
     }
 
     return p.basename(fullPath);
@@ -897,8 +902,9 @@ class _FileManagerViewState extends State<FileManagerView> {
       final threadNode = _threadNodeForPath(fullPath);
       if (threadNode != null) {
         threadNode.setAttribute('name', nextName);
+        final normalizedPath = normalizeThreadStoragePath(fullPath);
         setState(() {
-          _threadDisplayNamesByPath = <String, String>{..._threadDisplayNamesByPath, fullPath: nextName};
+          _threadDisplayNamesByPath = <String, String>{..._threadDisplayNamesByPath, normalizedPath: nextName};
         });
         return;
       }

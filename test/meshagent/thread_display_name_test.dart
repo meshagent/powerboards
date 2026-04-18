@@ -14,4 +14,9 @@ void main() {
     expect(threadFileNameFromDisplayName('Release Plan'), 'Release Plan.thread');
     expect(threadFileNameFromDisplayName('Release Plan.thread'), 'Release Plan.thread');
   });
+
+  test('thread storage paths normalize leading slashes and relative segments', () {
+    expect(normalizeThreadStoragePath('/webmaster/threads/abc.thread'), 'webmaster/threads/abc.thread');
+    expect(normalizeThreadStoragePath('webmaster/threads/../threads/abc.thread'), 'webmaster/threads/abc.thread');
+  });
 }

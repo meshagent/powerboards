@@ -10,6 +10,16 @@ bool isThreadFileName(String fileName) => fileName.toLowerCase().endsWith('.thre
 
 bool isThreadPath(String path) => isThreadFileName(p.posix.basename(path));
 
+String normalizeThreadStoragePath(String path) {
+  final trimmed = path.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+
+  final normalized = p.posix.normalize(trimmed);
+  return normalized.startsWith('/') ? normalized.substring(1) : normalized;
+}
+
 bool shouldReadThreadDocumentForDisplayName(String path) {
   return p.posix.basename(path).toLowerCase() != 'main.thread';
 }
