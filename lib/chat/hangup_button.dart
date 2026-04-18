@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart' as livekit;
-import 'package:powerboards/nav/nav.dart';
 
 import 'package:powerboards/livekit/room.dart';
-import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/ui/wake_lock.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -33,14 +31,7 @@ class HangupButton extends StatelessWidget {
               offColor: ShadTheme.of(context).colorScheme.destructive,
               offForeground: Colors.white,
               icon: LucideIcons.phone,
-              onPressed: () {
-                context.findAncestorStateOfType<VideoChatConnectionState>()!.hangup();
-                final navController = Controller.ofType<NavController>(context);
-                navController.showNav();
-                if (onPressed != null) {
-                  onPressed!();
-                }
-              },
+              onPressed: onPressed,
             ),
           ),
           _ => RoomToolbarButton(

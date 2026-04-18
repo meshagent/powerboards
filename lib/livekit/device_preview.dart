@@ -53,8 +53,8 @@ class _DeviceSettings extends StatefulWidget {
 class _DeviceSettingsState extends State<_DeviceSettings> {
   static const Duration _minimumLobbySwitchPendingDuration = Duration(milliseconds: 350);
   bool _loaded = false;
-  bool _audioOn = false;
-  bool _videoOn = false;
+  bool _audioOn = true;
+  bool _videoOn = true;
   bool _audioProcessing = false;
   bool _videoProcessing = false;
   bool _audioUnavailable = false;
@@ -144,10 +144,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
     _videoDeviceId = _preferences.getString("videoInput");
 
     if (!mounted) return;
-    await _enableVideo();
-
-    if (!mounted) return;
-    await _enableAudio();
+    await Future.wait<void>([_enableVideo(), _enableAudio()]);
 
     if (!mounted) return;
     await _restoreAudioOutputSelection();
@@ -370,7 +367,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         : "disabled";
 
     if (cameraState == microphoneState) {
-      return 'Camera & microphone are $cameraState';
+      return 'Camera and microphone are $cameraState';
     } else {
       return 'Camera is $cameraState and microphone is $microphoneState';
     }
@@ -458,8 +455,28 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final availableToggleForeground = ShadTheme.of(context).colorScheme.greenCustomForeground;
         final unavailableToggleColor = ShadTheme.of(context).colorScheme.destructive;
         final unavailableToggleForeground = ShadTheme.of(context).colorScheme.destructiveForeground;
-        final meetNowButtonColor = microphoneAvailable ? availableToggleColor : unavailableToggleColor;
-        final meetNowButtonForeground = microphoneAvailable ? availableToggleForeground : unavailableToggleForeground;
+        final meetNowPending = audioPending || videoPending;
+        final meetNowButtonColor = availableToggleColor;
+        final meetNowButtonForeground = availableToggleForeground;
+
+        Widget buildMeetNowButtonChild() {
+          if (!meetNowPending) {
+            return const Text("Meet now");
+          }
+
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(meetNowButtonForeground)),
+              ),
+              const SizedBox(width: 6),
+              const Text("Starting"),
+            ],
+          );
+        }
 
         final previewControls = <Widget>[
           RoomToolbarButton(
@@ -577,7 +594,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                     foregroundColor: meetNowButtonForeground,
                     hoverForegroundColor: meetNowButtonForeground,
                     pressedForegroundColor: meetNowButtonForeground,
-                    onPressed: audioPending || videoPending
+                    onPressed: meetNowPending
                         ? null
                         : () {
                             widget.onJoin?.call(
@@ -587,7 +604,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                               audioUnavailable: _audioUnavailable || !microphoneAvailable,
                             );
                           },
-                    child: const Text("Meet Now"),
+                    child: buildMeetNowButtonChild(),
                   );
 
                   if (compactActionButtons) {
@@ -648,7 +665,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                                 foregroundColor: meetNowButtonForeground,
                                 hoverForegroundColor: meetNowButtonForeground,
                                 pressedForegroundColor: meetNowButtonForeground,
-                                onPressed: audioPending || videoPending
+                                onPressed: meetNowPending
                                     ? null
                                     : () {
                                         widget.onJoin?.call(
@@ -658,7 +675,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                                           audioUnavailable: _audioUnavailable || !microphoneAvailable,
                                         );
                                       },
-                                child: const Text("Meet Now"),
+                                child: buildMeetNowButtonChild(),
                               ),
                             if (widget.onCancel != null)
                               ShadButton.outline(
@@ -730,7 +747,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                         foregroundColor: meetNowButtonForeground,
                         hoverForegroundColor: meetNowButtonForeground,
                         pressedForegroundColor: meetNowButtonForeground,
-                        onPressed: audioPending || videoPending
+                        onPressed: meetNowPending
                             ? null
                             : () {
                                 widget.onJoin?.call(
@@ -740,7 +757,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                                   audioUnavailable: _audioUnavailable || !microphoneAvailable,
                                 );
                               },
-                        child: const Text("Meet Now"),
+                        child: buildMeetNowButtonChild(),
                       );
 
                       if (compactActionButtons) {
