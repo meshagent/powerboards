@@ -1431,6 +1431,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildActionsMenu(BuildContext? boundaryContext, String fullPath, bool isFolder, bool showTrigger) {
+    final isAdaptiveMobile = _usesAdaptiveMobileLayout(context);
+
     Future<void> onAction(_FileAction action) async {
       switch (action) {
         case _FileAction.open:
@@ -1492,7 +1494,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             onPressed: () => onAction(_FileAction.open),
             child: const Text('Open'),
           ),
-        if (!isFolder)
+        if (!isFolder && !isAdaptiveMobile)
           ShadContextMenuItem(
             height: 40.0,
             leading: const Icon(LucideIcons.download, size: 16),
@@ -1903,12 +1905,6 @@ class _FileManagerViewState extends State<FileManagerView> {
                 const SizedBox(width: 8),
               ],
               _buildAdaptiveMobileOpenedFileIconButton(
-                tooltip: "Download",
-                icon: LucideIcons.download,
-                onPressed: () => _downloadFile(_openedFile!),
-              ),
-              const SizedBox(width: 8),
-              _buildAdaptiveMobileOpenedFileIconButton(
                 tooltip: "Delete file",
                 icon: LucideIcons.trash,
                 destructive: true,
@@ -2017,15 +2013,16 @@ class _FileManagerViewState extends State<FileManagerView> {
               },
             ),
           ),
-        Tooltip(
-          message: "Download",
-          child: ShadIconButton.outline(
-            icon: const Icon(LucideIcons.download),
-            onPressed: () {
-              _downloadFile(_openedFile!);
-            },
+        if (!isMobile)
+          Tooltip(
+            message: "Download",
+            child: ShadIconButton.outline(
+              icon: const Icon(LucideIcons.download),
+              onPressed: () {
+                _downloadFile(_openedFile!);
+              },
+            ),
           ),
-        ),
         Tooltip(
           message: "Delete file",
           child: ShadIconButton.outline(
@@ -2804,15 +2801,9 @@ class _FileTableViewState extends State<FileTableView> {
       return const SizedBox.shrink();
     }
 
-    final showDownloadAction = widget.selected.isNotEmpty && widget.selected.every((key) => !_FilePathKey.isFolderKey(key));
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (showDownloadAction) ...[
-          _buildMobileHeaderActionButton(tooltip: "Download selected", icon: LucideIcons.download, onPressed: widget.onDownloadSelected),
-          const SizedBox(width: 8),
-        ],
         _buildMobileHeaderActionButton(
           tooltip: "Delete selected",
           icon: LucideIcons.trash,

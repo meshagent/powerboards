@@ -166,6 +166,8 @@ class _DocumentPane extends State<DocumentPane> {
   }
 
   Widget _noPreview({String? subtitle}) {
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
+
     return PaneEmptyState(
       title: "No preview available",
       description: subtitle,
@@ -174,12 +176,13 @@ class _DocumentPane extends State<DocumentPane> {
       action: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Tooltip(
-            message: "Download",
-            child: ShadButton.outline(leading: const Icon(LucideIcons.download), onPressed: _download, child: const Text("Download")),
-          ),
+          if (!isMobile)
+            Tooltip(
+              message: "Download",
+              child: ShadButton.outline(leading: const Icon(LucideIcons.download), onPressed: _download, child: const Text("Download")),
+            ),
           if (supportsNativeFileShare) ...[
-            const SizedBox(width: 8),
+            if (!isMobile) const SizedBox(width: 8),
             Tooltip(
               message: "Share",
               child: ShadButton.outline(leading: const Icon(LucideIcons.share), onPressed: _share, child: const Text("Share")),
