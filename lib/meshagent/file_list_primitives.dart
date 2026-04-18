@@ -22,7 +22,9 @@ const EdgeInsets powerboardsCompactFileListRowPadding = EdgeInsets.fromLTRB(
 );
 const double powerboardsFileListLeadingIconSize = 34.0;
 const double powerboardsFileListLeadingGlyphSize = 24.0;
+const double powerboardsThreadFileListLeadingGlyphSize = 20.0;
 const double powerboardsFileListRowGap = 12.0;
+const Color powerboardsThreadFileIconColor = Color(0xFFA074C4);
 
 TextStyle powerboardsFileListTitleStyle() {
   return powerboardsSecondaryTextStyle(color: shadForeground);
@@ -34,7 +36,7 @@ TextStyle powerboardsFileListMetadataStyle() {
 
 IconData? powerboardsFileIconDataForEntry(StorageEntry entry) {
   if (entry.isFolder) return LucideIcons.folder;
-  if (isThreadFileName(entry.name)) return LucideIcons.messageSquareText;
+  if (isThreadFileName(entry.name)) return LucideIcons.messageSquare;
   if (entry.name.endsWith('presentation')) return LucideIcons.presentation;
   if (entry.name.endsWith('document')) return LucideIcons.fileText;
   if (entry.name.endsWith('gallery')) return LucideIcons.image;
@@ -44,6 +46,7 @@ IconData? powerboardsFileIconDataForEntry(StorageEntry entry) {
 
 Widget buildPowerboardsFileListIcon(BuildContext context, StorageEntry entry) {
   final iconData = powerboardsFileIconDataForEntry(entry);
+  final isThreadFile = isThreadFileName(entry.name);
 
   return SizedBox(
     width: powerboardsFileListLeadingIconSize,
@@ -52,8 +55,10 @@ Widget buildPowerboardsFileListIcon(BuildContext context, StorageEntry entry) {
         ? Center(
             child: Icon(
               iconData,
-              size: powerboardsFileListLeadingGlyphSize,
-              color: entry.isFolder ? ShadTheme.of(context).colorScheme.secondaryForeground : null,
+              size: isThreadFile ? powerboardsThreadFileListLeadingGlyphSize : powerboardsFileListLeadingGlyphSize,
+              color: entry.isFolder
+                  ? ShadTheme.of(context).colorScheme.secondaryForeground
+                  : (isThreadFile ? powerboardsThreadFileIconColor : null),
             ),
           )
         : FileIcon(entry.name, size: powerboardsFileListLeadingIconSize),

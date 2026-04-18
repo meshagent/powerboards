@@ -138,7 +138,7 @@ class FilePickerMenuState extends State<FilePickerMenu> {
                   : formatTranscriptFileNameForDisplay(entry.name);
               final icon = entry.isFolder
                   ? LucideIcons.folder
-                  : (isThreadFileName(entry.name) ? LucideIcons.messageSquareText : LucideIcons.file);
+                  : (isThreadFileName(entry.name) ? LucideIcons.messageSquare : LucideIcons.file);
               return PowerboardsMenuItemButton(
                 onPressed: () => widget.onSelect(entry.name),
                 child: Row(
