@@ -46,8 +46,14 @@ const String placeholderFileName = ".placeholder";
 const double filePaneTableHeaderHeight = 48;
 
 bool _usesAdaptiveMobileLayout(BuildContext context) {
-  final size = MediaQuery.sizeOf(context);
-  return ResponsiveBreakpoints.of(context).isMobile || (size.width > size.height && size.shortestSide < 600);
+  if (!kIsWeb) {
+    final size = MediaQuery.sizeOf(context);
+    if (size.width > size.height && size.shortestSide < 600) {
+      return true;
+    }
+  }
+
+  return ResponsiveBreakpoints.of(context).isMobile;
 }
 
 String _displayFileName(String fileName) {

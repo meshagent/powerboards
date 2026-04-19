@@ -2,6 +2,7 @@ import 'dart:core';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -97,6 +98,10 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   }
 
   bool _isLandscapePhoneViewport(BuildContext context) {
+    if (kIsWeb) {
+      return false;
+    }
+
     final size = MediaQuery.sizeOf(context);
     return size.width > size.height && size.shortestSide < 600;
   }
