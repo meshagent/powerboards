@@ -99,6 +99,10 @@ void _showThreadStorageSaveToast(BuildContext context, {required Widget title, W
   toaster.show(toast);
 }
 
+void _dismissSaveFieldFocus() {
+  FocusManager.instance.primaryFocus?.unfocus();
+}
+
 Future<void> showPowerboardsThreadStorageSaveSurface(BuildContext context, ThreadStorageSaveSurfaceRequest request) async {
   final fileNameController = TextEditingController(text: request.suggestedFileName);
   String selectedFolder = "";
@@ -247,20 +251,27 @@ Future<void> showPowerboardsThreadStorageSaveSurface(BuildContext context, Threa
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ShadInputFormField(
-                        label: Text(request.fileNameLabel),
-                        placeholder: Text(request.suggestedFileName),
-                        keyboardType: TextInputType.text,
-                        enabled: !saving,
-                        controller: fileNameController,
+                      TapRegion(
+                        onTapOutside: (_) => _dismissSaveFieldFocus(),
+                        child: ShadInputFormField(
+                          label: Text(request.fileNameLabel),
+                          placeholder: Text(request.suggestedFileName),
+                          keyboardType: TextInputType.text,
+                          enabled: !saving,
+                          controller: fileNameController,
+                        ),
                       ),
                       const SizedBox(height: 12),
-                      SizedBox(
-                        height: _saveFlowDialogBrowserHeight,
-                        child: browserWidget(
-                          headerHorizontalPadding: _saveFlowDialogBodyHorizontalInset,
-                          rowBuilder: buildPowerboardsFileBrowserNavigationRow,
-                          usesNativeMobileLayout: true,
+                      Listener(
+                        behavior: HitTestBehavior.translucent,
+                        onPointerDown: (_) => _dismissSaveFieldFocus(),
+                        child: SizedBox(
+                          height: _saveFlowDialogBrowserHeight,
+                          child: browserWidget(
+                            headerHorizontalPadding: _saveFlowDialogBodyHorizontalInset,
+                            rowBuilder: buildPowerboardsFileBrowserNavigationRow,
+                            usesNativeMobileLayout: true,
+                          ),
                         ),
                       ),
                     ],
