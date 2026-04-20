@@ -101,12 +101,15 @@ class MeshagentThreadView extends StatefulWidget {
   State createState() => _MeshagentThreadViewState();
 }
 
-class _MeshagentThreadViewState extends State<MeshagentThreadView> {
+class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsBindingObserver {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
   static const double _mobileThreadEmptyStateWidthMax = 600;
+  static const Duration _mobileClipboardPollInterval = Duration(milliseconds: 750);
 
   late final ChatThreadController _chatController;
   String? _lastRestoredThreadScrollOffsetValue;
+  Timer? _mobileClipboardPollTimer;
+  bool _mobileClipboardHasPasteableAttachment = false;
 
   bool _usesCompactMobileThreadEmptyState(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -146,7 +149,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _chatController = MeshagentRoomChatThreadController(room: widget.client);
+    _startMobileClipboardMonitoring();
   }
 
   @override
@@ -157,8 +162,17 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _mobileClipboardPollTimer?.cancel();
     _chatController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshMobileClipboardAttachmentAvailability());
+    }
   }
 
   void _onMessageSent(ma.ChatMessage message) {}
@@ -243,6 +257,33 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     WidgetsBinding.instance.addPostFrameCallback((_) => restore());
   }
 
+  void _startMobileClipboardMonitoring() {
+    if (!powerboardsUsesSystemAdaptiveTextSelectionToolbar()) {
+      return;
+    }
+
+    unawaited(_refreshMobileClipboardAttachmentAvailability());
+    _mobileClipboardPollTimer?.cancel();
+    _mobileClipboardPollTimer = Timer.periodic(_mobileClipboardPollInterval, (_) {
+      unawaited(_refreshMobileClipboardAttachmentAvailability());
+    });
+  }
+
+  Future<void> _refreshMobileClipboardAttachmentAvailability() async {
+    if (!mounted || !powerboardsUsesSystemAdaptiveTextSelectionToolbar()) {
+      return;
+    }
+
+    final hasPasteableAttachment = await powerboardsClipboardHasPasteableAttachment();
+    if (!mounted || hasPasteableAttachment == _mobileClipboardHasPasteableAttachment) {
+      return;
+    }
+
+    setState(() {
+      _mobileClipboardHasPasteableAttachment = hasPasteableAttachment;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
@@ -287,7 +328,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         emptyStateTitle: "Chat to get started",
         emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
         emptyState: resolvedEmptyState,
-        inputContextMenuBuilder: powerboardsAdaptiveInputContextMenuBuilder,
+        inputContextMenuBuilder: powerboardsUsesSystemAdaptiveTextSelectionToolbar()
+            ? powerboardsThreadMobileAttachmentContextMenuBuilder(
+                hasPasteableAttachment: _mobileClipboardHasPasteableAttachment,
+                onPasteFile: (name, dataStream, size) => _chatController.uploadFile(name, dataStream, size),
+              )
+            : powerboardsAdaptiveInputContextMenuBuilder,
         inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
         centerComposer: false,
         hideChatInput: widget.hideChatInput,
