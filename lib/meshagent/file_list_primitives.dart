@@ -82,6 +82,15 @@ Widget buildPowerboardsCompactFileBrowserTitleOnlyRow(BuildContext context, File
   );
 }
 
+Widget buildPowerboardsCompactFileBrowserNavigationRow(BuildContext context, FileBrowserRowViewModel row) {
+  return _buildPowerboardsFileBrowserTitleOnlyRow(
+    context,
+    row,
+    padding: powerboardsCompactFileListRowPadding,
+    showSelectionAffordance: false,
+  );
+}
+
 Widget _buildPowerboardsFileBrowserTitleOnlyRow(
   BuildContext context,
   FileBrowserRowViewModel row, {
