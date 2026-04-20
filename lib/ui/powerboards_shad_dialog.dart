@@ -4,17 +4,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:meshagent_flutter_shadcn/ui/mobile_flow_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/theme/theme.dart';
 
 const double powerboardsCompactDesktopDialogWidth = 360;
 const BoxConstraints powerboardsCompactDesktopDialogConstraints = BoxConstraints(maxWidth: powerboardsCompactDesktopDialogWidth);
 const double powerboardsMobileDialogEdgeInset = 16;
-const double powerboardsDialogScrollViewportVerticalInset = 18;
+const double powerboardsDialogScrollViewportVerticalInset = shadDialogScrollViewportVerticalInset;
 const EdgeInsets powerboardsDialogScrollViewportPadding = EdgeInsets.symmetric(vertical: powerboardsDialogScrollViewportVerticalInset);
-const EdgeInsets powerboardsDialogScrollableListPadding = EdgeInsets.only(bottom: powerboardsDialogScrollViewportVerticalInset);
-const double powerboardsMobileFlowDialogContentSectionGap = 12;
-const EdgeInsets powerboardsMobileFlowDialogCompactPadding = EdgeInsets.fromLTRB(24, 24, 24, 28);
+const EdgeInsets powerboardsDialogScrollableListPadding = shadDialogScrollableListPadding;
+const double powerboardsMobileFlowDialogContentSectionGap = shadMobileFlowDialogContentSectionGap;
+const EdgeInsets powerboardsMobileFlowDialogCompactPadding = shadMobileFlowDialogCompactPadding;
 
 const double _desktopDialogCloseButtonSize = 32;
 const double _desktopDialogCloseIconSize = 24;
@@ -742,8 +743,7 @@ class PowerboardsShadDialog extends StatelessWidget {
       usesMobileFlowPresentation: usesMobileFlowPresentation,
     );
     final dialog = usesMobileFlowPresentation
-        ? _PowerboardsMobileFlowDialogSurface(
-            key: key,
+        ? _PowerboardsSharedMobileFlowDialogSurface(
             constraints: effectiveConstraints,
             backgroundColor: effectiveBackgroundColor ?? theme.colorScheme.card,
             radius: effectiveRadius ?? const BorderRadius.vertical(top: Radius.circular(_mobileFlowDialogCornerRadius)),
@@ -1295,17 +1295,16 @@ class _PowerboardsDialogCloseButton extends StatelessWidget {
 }
 
 class _PowerboardsMobileDialogCloseButton extends StatelessWidget {
-  const _PowerboardsMobileDialogCloseButton({this.iconData, this.onPressed});
+  const _PowerboardsMobileDialogCloseButton({this.iconData});
 
   final IconData? iconData;
-  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
 
     return ShadIconButton.ghost(
-      onPressed: onPressed ?? () => Navigator.of(context).pop(),
+      onPressed: () => Navigator.of(context).pop(),
       width: _mobileDialogCloseButtonSize,
       height: _mobileDialogCloseButtonSize,
       padding: EdgeInsets.zero,
@@ -1385,18 +1384,7 @@ class PowerboardsMobileFlowDialogCenteredTitleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: _mobileDialogCloseButtonSize,
-      child: Row(
-        children: [
-          const SizedBox(width: _mobileDialogCloseButtonSize),
-          const SizedBox(width: 8),
-          Expanded(child: Center(child: title)),
-          const SizedBox(width: 8),
-          _PowerboardsMobileDialogCloseButton(iconData: closeIconData, onPressed: onClose),
-        ],
-      ),
-    );
+    return ShadMobileFlowDialogCenteredTitleBar(title: title, closeIconData: closeIconData, onClose: onClose);
   }
 }
 
@@ -1409,16 +1397,7 @@ class PowerboardsMobileFlowDialogTitleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: _mobileDialogCloseButtonSize,
-      child: Row(
-        children: [
-          Expanded(child: title),
-          const SizedBox(width: 12),
-          _PowerboardsMobileDialogCloseButton(iconData: closeIconData, onPressed: onClose),
-        ],
-      ),
-    );
+    return ShadMobileFlowDialogTitleBar(title: title, closeIconData: closeIconData, onClose: onClose);
   }
 }
 
@@ -1513,9 +1492,75 @@ class _PowerboardsMobileFlowDialogFrame extends StatelessWidget {
   }
 }
 
+class _PowerboardsSharedMobileFlowDialogSurface extends StatelessWidget {
+  const _PowerboardsSharedMobileFlowDialogSurface({
+    required this.constraints,
+    required this.backgroundColor,
+    required this.radius,
+    required this.border,
+    required this.shadows,
+    required this.padding,
+    required this.title,
+    required this.description,
+    required this.body,
+    required this.actions,
+    required this.gap,
+    required this.actionsGap,
+    required this.bodyBehavior,
+    required this.usesHorizontalActionRow,
+    required this.keyboardInset,
+    required this.hideActionsWhenKeyboardVisible,
+  });
+
+  final BoxConstraints? constraints;
+  final Color backgroundColor;
+  final BorderRadius radius;
+  final BoxBorder? border;
+  final List<BoxShadow>? shadows;
+  final EdgeInsetsGeometry padding;
+  final Widget? title;
+  final Widget? description;
+  final Widget? body;
+  final List<Widget> actions;
+  final double gap;
+  final double actionsGap;
+  final PowerboardsDialogMobileFlowBodyBehavior bodyBehavior;
+  final bool usesHorizontalActionRow;
+  final double keyboardInset;
+  final bool hideActionsWhenKeyboardVisible;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShadMobileFlowDialogSurface(
+      constraints: constraints,
+      backgroundColor: backgroundColor,
+      radius: radius,
+      border: border,
+      shadows: shadows,
+      padding: padding,
+      title: title,
+      description: description,
+      body: body,
+      actions: actions,
+      gap: gap,
+      actionsGap: actionsGap,
+      bodyBehavior: switch (bodyBehavior) {
+        PowerboardsDialogMobileFlowBodyBehavior.inherit => ShadMobileFlowDialogBodyBehavior.inherit,
+        PowerboardsDialogMobileFlowBodyBehavior.scrollable => ShadMobileFlowDialogBodyBehavior.scrollable,
+        PowerboardsDialogMobileFlowBodyBehavior.formScrollable => ShadMobileFlowDialogBodyBehavior.formScrollable,
+        PowerboardsDialogMobileFlowBodyBehavior.fill => ShadMobileFlowDialogBodyBehavior.fill,
+      },
+      usesHorizontalActionRow: usesHorizontalActionRow,
+      keyboardInset: keyboardInset,
+      hideActionsWhenKeyboardVisible: hideActionsWhenKeyboardVisible,
+      scrollableBodyPadding: powerboardsDialogScrollableListPadding,
+      contentSectionGap: powerboardsMobileFlowDialogContentSectionGap,
+    );
+  }
+}
+
 class _PowerboardsMobileFlowDialogSurface extends StatefulWidget {
   const _PowerboardsMobileFlowDialogSurface({
-    super.key,
     required this.constraints,
     required this.backgroundColor,
     required this.radius,

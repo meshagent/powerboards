@@ -66,18 +66,33 @@ Widget buildPowerboardsFileListIcon(BuildContext context, StorageEntry entry) {
 }
 
 Widget buildPowerboardsFileBrowserTitleOnlyRow(BuildContext context, FileBrowserRowViewModel row) {
-  return _buildPowerboardsFileBrowserTitleOnlyRow(context, row, padding: powerboardsFileListRowPadding);
+  return _buildPowerboardsFileBrowserTitleOnlyRow(context, row, padding: powerboardsFileListRowPadding, showSelectionAffordance: true);
+}
+
+Widget buildPowerboardsFileBrowserNavigationRow(BuildContext context, FileBrowserRowViewModel row) {
+  return _buildPowerboardsFileBrowserTitleOnlyRow(context, row, padding: powerboardsFileListRowPadding, showSelectionAffordance: false);
 }
 
 Widget buildPowerboardsCompactFileBrowserTitleOnlyRow(BuildContext context, FileBrowserRowViewModel row) {
-  return _buildPowerboardsFileBrowserTitleOnlyRow(context, row, padding: powerboardsCompactFileListRowPadding);
+  return _buildPowerboardsFileBrowserTitleOnlyRow(
+    context,
+    row,
+    padding: powerboardsCompactFileListRowPadding,
+    showSelectionAffordance: true,
+  );
 }
 
-Widget _buildPowerboardsFileBrowserTitleOnlyRow(BuildContext context, FileBrowserRowViewModel row, {required EdgeInsets padding}) {
+Widget _buildPowerboardsFileBrowserTitleOnlyRow(
+  BuildContext context,
+  FileBrowserRowViewModel row, {
+  required EdgeInsets padding,
+  required bool showSelectionAffordance,
+}) {
   final colorScheme = ShadTheme.of(context).colorScheme;
   final checkboxForeground = colorScheme.primaryForeground;
+  final allowsSelection = showSelectionAffordance && row.canToggleSelection;
   final disabledFolder = row.entry.isFolder && !row.canActivate;
-  final checkbox = row.canToggleSelection
+  final selectionAffordance = allowsSelection
       ? IgnorePointer(
           child: ShadCheckbox(
             decoration: ShadDecoration(border: ShadBorder.all(color: colorScheme.border)),
@@ -96,12 +111,12 @@ Widget _buildPowerboardsFileBrowserTitleOnlyRow(BuildContext context, FileBrowse
         );
 
   final checkboxSlot = Opacity(
-    opacity: row.canToggleSelection ? 1.0 : 0.9,
-    child: SizedBox(width: 36, child: Center(child: checkbox)),
+    opacity: allowsSelection ? 1.0 : 0.9,
+    child: SizedBox(width: 36, child: Center(child: selectionAffordance)),
   );
 
   return Material(
-    color: row.selected ? const Color(0xFFF2F1FF) : shadCard,
+    color: allowsSelection && row.selected ? const Color(0xFFF2F1FF) : shadCard,
     child: InkWell(
       onTap: row.canActivate ? row.onPressed : null,
       child: Padding(
@@ -111,11 +126,7 @@ Widget _buildPowerboardsFileBrowserTitleOnlyRow(BuildContext context, FileBrowse
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: row.canToggleSelection ? row.onToggleSelection : null,
-                child: checkboxSlot,
-              ),
+              GestureDetector(behavior: HitTestBehavior.opaque, onTap: allowsSelection ? row.onToggleSelection : null, child: checkboxSlot),
               const SizedBox(width: 4),
               buildPowerboardsFileListIcon(context, row.entry),
               const SizedBox(width: powerboardsFileListRowGap),
@@ -135,10 +146,18 @@ Widget buildPowerboardsFileListDivider(BuildContext context, int index) {
 }
 
 Widget buildPowerboardsFileBrowserEmptyState(BuildContext context) {
+  return buildPowerboardsFileBrowserMessageEmptyState(context, message: 'Nothing to attach here');
+}
+
+Widget buildPowerboardsFileBrowserSaveEmptyState(BuildContext context) {
+  return buildPowerboardsFileBrowserMessageEmptyState(context, message: 'Nothing saved here yet');
+}
+
+Widget buildPowerboardsFileBrowserMessageEmptyState(BuildContext context, {required String message}) {
   return Center(
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Text('Nothing to attach here', textAlign: TextAlign.center, style: powerboardsSectionTitleStyle()),
+      child: Text(message, textAlign: TextAlign.center, style: powerboardsSectionTitleStyle()),
     ),
   );
 }
