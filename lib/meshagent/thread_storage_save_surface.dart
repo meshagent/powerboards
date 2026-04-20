@@ -251,27 +251,21 @@ Future<void> showPowerboardsThreadStorageSaveSurface(BuildContext context, Threa
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TapRegion(
-                        onTapOutside: (_) => _dismissSaveFieldFocus(),
-                        child: ShadInputFormField(
-                          label: Text(request.fileNameLabel),
-                          placeholder: Text(request.suggestedFileName),
-                          keyboardType: TextInputType.text,
-                          enabled: !saving,
-                          controller: fileNameController,
-                        ),
+                      ShadInputFormField(
+                        label: Text(request.fileNameLabel),
+                        placeholder: Text(request.suggestedFileName),
+                        keyboardType: TextInputType.text,
+                        enabled: !saving,
+                        controller: fileNameController,
+                        onPressedOutside: (_) => _dismissSaveFieldFocus(),
                       ),
                       const SizedBox(height: 12),
-                      Listener(
-                        behavior: HitTestBehavior.translucent,
-                        onPointerDown: (_) => _dismissSaveFieldFocus(),
-                        child: SizedBox(
-                          height: _saveFlowDialogBrowserHeight,
-                          child: browserWidget(
-                            headerHorizontalPadding: _saveFlowDialogBodyHorizontalInset,
-                            rowBuilder: buildPowerboardsFileBrowserNavigationRow,
-                            usesNativeMobileLayout: true,
-                          ),
+                      SizedBox(
+                        height: _saveFlowDialogBrowserHeight,
+                        child: browserWidget(
+                          headerHorizontalPadding: _saveFlowDialogBodyHorizontalInset,
+                          rowBuilder: buildPowerboardsFileBrowserNavigationRow,
+                          usesNativeMobileLayout: true,
                         ),
                       ),
                     ],
