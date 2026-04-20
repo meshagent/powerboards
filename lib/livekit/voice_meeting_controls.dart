@@ -228,14 +228,25 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
     }
 
     final toaster = ShadToaster.maybeOf(context);
+    if (enabled) {
+      widget.controller.pendingLocalMedia.setMicrophonePending(true, awaitEnableConfirmation: true);
+    }
+
     setState(() {
       _processing = true;
     });
 
     try {
       await local.setMicrophoneEnabled(enabled);
+      await _refreshDeviceAvailability();
       widget.controller.pendingLocalMedia.setMicrophoneUnavailable(false);
+      if (!enabled || local.isMicrophoneEnabled()) {
+        widget.controller.pendingLocalMedia.setMicrophonePending(false);
+      }
     } catch (error) {
+      if (enabled) {
+        widget.controller.pendingLocalMedia.setMicrophonePending(false);
+      }
       widget.controller.pendingLocalMedia.setMicrophoneUnavailable(true);
       toaster?.show(ShadToast.destructive(description: Text(_describeMicrophoneToggleError(error))));
     } finally {
@@ -259,7 +270,9 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
         : ShadTheme.of(context).colorScheme.greenCustomForeground;
 
     return RoomToolbarButton(
-      text: _pending
+      text: unavailable
+          ? "Microphone disabled"
+          : _pending
           ? "Starting microphone"
           : _microphoneEnabled
           ? "Turn off microphone"
@@ -383,14 +396,25 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
     }
 
     final toaster = ShadToaster.maybeOf(context);
+    if (enabled) {
+      widget.controller.pendingLocalMedia.setCameraPending(true, awaitEnableConfirmation: true);
+    }
+
     setState(() {
       _processing = true;
     });
 
     try {
       await local.setCameraEnabled(enabled);
+      await _refreshDeviceAvailability();
       widget.controller.pendingLocalMedia.setCameraUnavailable(false);
+      if (!enabled || local.isCameraEnabled()) {
+        widget.controller.pendingLocalMedia.setCameraPending(false);
+      }
     } catch (error) {
+      if (enabled) {
+        widget.controller.pendingLocalMedia.setCameraPending(false);
+      }
       widget.controller.pendingLocalMedia.setCameraUnavailable(true);
       toaster?.show(ShadToast.destructive(description: Text(_describeCameraToggleError(error))));
     } finally {
@@ -414,7 +438,9 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
         : ShadTheme.of(context).colorScheme.greenCustomForeground;
 
     return RoomToolbarButton(
-      text: _pending
+      text: unavailable
+          ? "Camera disabled"
+          : _pending
           ? "Starting camera"
           : _cameraEnabled
           ? "Turn off camera"

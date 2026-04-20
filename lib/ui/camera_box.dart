@@ -9,6 +9,7 @@ class CameraBox extends StatelessWidget {
     super.key,
     required this.camera,
     required this.participant,
+    this.expandSource = lk.TrackSource.camera,
     this.overlayAlignment = .topRight,
     this.showName = false,
     this.interactive = true,
@@ -16,6 +17,7 @@ class CameraBox extends StatelessWidget {
 
   final Widget camera;
   final lk.Participant participant;
+  final lk.TrackSource expandSource;
   final Alignment overlayAlignment;
   final bool showName;
   final bool interactive;
@@ -36,7 +38,7 @@ class CameraBox extends StatelessWidget {
           alignment: overlayAlignment,
           child: Padding(
             padding: const .all(5),
-            child: ParticipantOverlay(participant: participant, showName: showName),
+            child: ParticipantOverlay(participant: participant, showName: showName, expandSource: expandSource),
           ),
         ),
       ],

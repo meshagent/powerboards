@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:meshagent/meshagent.dart';
@@ -118,6 +119,10 @@ class AgentsDropdown extends StatelessWidget {
   }
 
   bool _isLandscapePhoneViewport(BuildContext context) {
+    if (kIsWeb) {
+      return false;
+    }
+
     final size = MediaQuery.sizeOf(context);
     return size.width > size.height && size.shortestSide < 600;
   }
