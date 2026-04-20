@@ -3144,7 +3144,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                     body: mobileBody,
                                     bottomActions: useMobileMeetingHeaderControls
                                         ? const []
-                                        : (controller.inMeeting ? meetingActions(context) : const []),
+                                        : (controller.inMeeting && meetingSessionActive ? meetingActions(context) : const []),
                                   );
                                 }
 
