@@ -77,6 +77,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.emptyState,
     this.newThreadEmptyStateVerticalOffset = 0,
     this.hideChatInput = false,
+    this.onConnectAgents,
     this.onInvite,
     this.onOpenFiles,
     this.onOpenMeet,
@@ -102,6 +103,7 @@ class MeshagentThreadView extends StatefulWidget {
   final Widget? emptyState;
   final double newThreadEmptyStateVerticalOffset;
   final bool hideChatInput;
+  final VoidCallback? onConnectAgents;
   final VoidCallback? onInvite;
   final VoidCallback? onOpenFiles;
   final VoidCallback? onOpenMeet;
@@ -166,8 +168,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
     final inactivePillColor = theme.colorScheme.foreground;
     final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
     final items = <PowerboardsMobileActionPillItem>[
-      if (widget.onInvite != null) PowerboardsMobileActionPillItem(label: "Invite", onPressed: widget.onInvite),
       const PowerboardsMobileActionPillItem(label: "Chat", selected: true),
+      if (widget.onConnectAgents != null) PowerboardsMobileActionPillItem(label: "Connect agents", onPressed: widget.onConnectAgents),
+      if (widget.onInvite != null) PowerboardsMobileActionPillItem(label: "Invite", onPressed: widget.onInvite),
       if (widget.onOpenFiles != null) PowerboardsMobileActionPillItem(label: "Share Files", onPressed: widget.onOpenFiles),
       if (widget.onOpenMeet != null) PowerboardsMobileActionPillItem(label: "Meet", onPressed: widget.onOpenMeet),
     ];
@@ -178,17 +181,20 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (items.isNotEmpty)
-            SizedBox(
-              height: powerboardsMobileSecondaryRowHeight,
-              width: double.infinity,
-              child: Center(
-                child: PowerboardsMobileActionPillStrip(
-                  items: items,
-                  viewportPadding: const EdgeInsets.symmetric(horizontal: horizontalInset),
-                  textStyle: pillTextStyle,
-                  unselectedForegroundColor: inactivePillColor,
-                  itemGap: 10,
-                  pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+            Padding(
+              padding: const EdgeInsets.only(top: powerboardsMobileOverlaySecondaryRowLift),
+              child: SizedBox(
+                height: powerboardsMobileSecondaryRowHeight,
+                width: double.infinity,
+                child: Center(
+                  child: PowerboardsMobileActionPillStrip(
+                    items: items,
+                    viewportPadding: const EdgeInsets.symmetric(horizontal: horizontalInset),
+                    textStyle: pillTextStyle,
+                    unselectedForegroundColor: inactivePillColor,
+                    itemGap: 10,
+                    pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+                  ),
                 ),
               ),
             ),

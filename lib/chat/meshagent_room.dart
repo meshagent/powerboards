@@ -330,6 +330,7 @@ EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
 }
 
 Widget _buildPaneHeaderIconButton({
+  required BuildContext context,
   required String tooltip,
   required IconData icon,
   required VoidCallback? onPressed,
@@ -341,13 +342,35 @@ Widget _buildPaneHeaderIconButton({
   final iconWidget = Icon(icon, size: paneHeaderIconButtonIconSize, color: iconColor);
 
   final button = backgroundColor != null || foregroundColor != null
-      ? ShadIconButton(icon: iconWidget, onPressed: onPressed, backgroundColor: backgroundColor, foregroundColor: foregroundColor)
+      ? ShadIconButton(
+          icon: iconWidget,
+          decoration: powerboardsAdaptiveIconButtonDecoration(context),
+          onPressed: onPressed,
+          backgroundColor: backgroundColor,
+          foregroundColor: foregroundColor,
+        )
       : switch (variant) {
-          ShadButtonVariant.primary => ShadIconButton(icon: iconWidget, onPressed: onPressed),
-          ShadButtonVariant.destructive => ShadIconButton.destructive(icon: iconWidget, onPressed: onPressed),
-          ShadButtonVariant.secondary => ShadIconButton.secondary(icon: iconWidget, onPressed: onPressed),
-          ShadButtonVariant.ghost => ShadIconButton.ghost(icon: iconWidget, onPressed: onPressed),
-          _ => ShadIconButton.outline(icon: iconWidget, onPressed: onPressed),
+          ShadButtonVariant.primary => ShadIconButton(
+            icon: iconWidget,
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: onPressed,
+          ),
+          ShadButtonVariant.destructive => ShadIconButton.destructive(
+            icon: iconWidget,
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: onPressed,
+          ),
+          ShadButtonVariant.secondary => ShadIconButton.secondary(
+            icon: iconWidget,
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: onPressed,
+          ),
+          ShadButtonVariant.ghost => ShadIconButton.ghost(
+            icon: iconWidget,
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: onPressed,
+          ),
+          _ => ShadIconButton.outline(icon: iconWidget, decoration: powerboardsAdaptiveIconButtonDecoration(context), onPressed: onPressed),
         };
 
   return Tooltip(message: tooltip, child: button);
@@ -549,6 +572,7 @@ class InviteUserButton extends StatelessWidget {
 
     if (isMobile || compact) {
       return _buildPaneHeaderIconButton(
+        context: context,
         tooltip: "Invite user",
         icon: LucideIcons.userPlus,
         onPressed: () async {
@@ -615,6 +639,7 @@ class MeetButton extends StatelessWidget {
 
       if (isMobile || compact) {
         return _buildPaneHeaderIconButton(
+          context: context,
           tooltip: "Meet",
           icon: iconData,
           iconColor: iconColor,
@@ -671,6 +696,7 @@ class FilesButton extends StatelessWidget {
             message: "Hide files",
             child: isIconOnly
                 ? _buildPaneHeaderIconButton(
+                    context: context,
                     tooltip: "Hide files",
                     icon: LucideIcons.files,
                     onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
@@ -690,6 +716,7 @@ class FilesButton extends StatelessWidget {
             message: "Show files",
             child: isIconOnly
                 ? _buildPaneHeaderIconButton(
+                    context: context,
                     tooltip: "Show files",
                     icon: LucideIcons.files,
                     onPressed: onPressed ?? () => controller.selectFilesTab(isMobile: isMobile),
@@ -1396,6 +1423,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           message: "Expand chat",
           child: ShadIconButton.ghost(
             icon: const Icon(LucideIcons.panelLeftOpen),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
             onPressed: () {
               _meetingSplitViewController.expand();
               setState(() {});
@@ -1901,8 +1929,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     return [
       _buildPaneHeaderIconButton(
+        context: context,
         tooltip: useDirectFileShareAction ? "Share" : (useDirectNewThreadAction ? "New thread" : "Create"),
-        icon: useDirectFileShareAction ? LucideIcons.share : (useDirectNewThreadAction ? LucideIcons.messageSquarePlus : LucideIcons.plus),
+        icon: useDirectFileShareAction ? LucideIcons.share : (useDirectNewThreadAction ? LucideIcons.squarePen : LucideIcons.plus),
         onPressed: useDirectFileShareAction
             ? () => _filesHeaderController.shareOpenedFileInCurrentLocation()
             : useDirectNewThreadAction
@@ -2155,6 +2184,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         joinMeeting: _joinMeeting,
         emptyState: meetingActiveSingleThreadEmptyState,
         hideChatInput: hideChatInput,
+        onConnectAgents: () async {
+          await showManageAgentsSurface(context: context, projectId: widget.projectId, room: widget.room);
+        },
         onInvite: () async {
           final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
           if (!context.mounted) {

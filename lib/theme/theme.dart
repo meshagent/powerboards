@@ -72,9 +72,10 @@ const EdgeInsets powerboardsMobileScreenSafeAreaMinimum = EdgeInsets.only(
   top: powerboardsMobileScreenTopInset,
   bottom: powerboardsMobileScreenBottomInset,
 );
-const powerboardsMobileTransitionDuration = Duration(milliseconds: 320);
-const Curve powerboardsMobileTransitionInCurve = Curves.easeInOutCubicEmphasized;
-const Curve powerboardsMobileTransitionOutCurve = Curves.easeInOutCubic;
+const powerboardsMobileTransitionDuration = Duration(milliseconds: 380);
+const Curve powerboardsMobileTransitionInCurve = Curves.easeOutCubic;
+const Curve powerboardsMobileTransitionOutCurve = Curves.easeInOutCubicEmphasized;
+const double powerboardsPressedOpacity = 0.5;
 
 Duration powerboardsAdaptiveTransitionDuration(BuildContext context, {Duration desktop = const Duration(milliseconds: 180)}) {
   return ResponsiveBreakpoints.of(context).isMobile ? powerboardsMobileTransitionDuration : desktop;
@@ -86,6 +87,57 @@ Curve powerboardsAdaptiveTransitionInCurve(BuildContext context, {Curve desktop 
 
 Curve powerboardsAdaptiveTransitionOutCurve(BuildContext context, {Curve desktop = Curves.easeInCubic}) {
   return ResponsiveBreakpoints.of(context).isMobile ? powerboardsMobileTransitionOutCurve : desktop;
+}
+
+ShadDecoration? powerboardsAdaptiveIconButtonDecoration(BuildContext context) {
+  return ResponsiveBreakpoints.of(context).isMobile ? const ShadDecoration(shape: BoxShape.circle) : null;
+}
+
+double _powerboardsClampUnit(double value) {
+  return value.clamp(0.0, 1.0).toDouble();
+}
+
+Color powerboardsMobileGlassColor(Color baseColor, {double tint = 0.8, double alpha = 0.82}) {
+  final tinted = Color.lerp(baseColor, Colors.white, _powerboardsClampUnit(tint)) ?? baseColor;
+  return tinted.withValues(alpha: _powerboardsClampUnit(alpha));
+}
+
+Color powerboardsMobileGlassBorderColor(Color baseColor, {double tint = 0.58, double alpha = 0.5}) {
+  final tinted = Color.lerp(baseColor, Colors.white, _powerboardsClampUnit(tint)) ?? baseColor;
+  return tinted.withValues(alpha: _powerboardsClampUnit(alpha));
+}
+
+LinearGradient powerboardsMobileGlassGradient(
+  Color baseColor, {
+  double topTint = 0.9,
+  double bottomTint = 0.72,
+  double topAlpha = 0.94,
+  double bottomAlpha = 0.76,
+}) {
+  return LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      powerboardsMobileGlassColor(baseColor, tint: topTint, alpha: topAlpha),
+      powerboardsMobileGlassColor(baseColor, tint: bottomTint, alpha: bottomAlpha),
+    ],
+  );
+}
+
+List<BoxShadow> powerboardsMobileGlassShadows({double opacity = 0.12}) {
+  final shadowOpacity = _powerboardsClampUnit(opacity);
+  return [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: shadowOpacity * 0.42),
+      blurRadius: 28,
+      offset: const Offset(0, 12),
+    ),
+    BoxShadow(
+      color: Colors.black.withValues(alpha: shadowOpacity * 0.2),
+      blurRadius: 10,
+      offset: const Offset(0, 2),
+    ),
+  ];
 }
 
 ShadColorScheme powerboardsShadColorScheme() {
@@ -194,6 +246,22 @@ TextStyle powerboardsMetaTextStyle({required Color color, FontWeight fontWeight 
 
 TextStyle powerboardsEmphasizedTitleStyle({required Color color, double height = 1.15}) {
   return powerboardsInterTextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: color, height: height);
+}
+
+TextStyle powerboardsMobileHeaderSecondaryTextStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color, height: 1.0, letterSpacing: 0.1);
+}
+
+TextStyle powerboardsMobileHeaderPrimaryTextStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: color, height: 1.0, letterSpacing: -0.2);
+}
+
+TextStyle powerboardsMobileDialogTitleStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: color, height: 1.05, letterSpacing: -0.3);
+}
+
+TextStyle powerboardsMobileDialogDescriptionStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: color, height: 1.35, letterSpacing: -0.05);
 }
 
 const EdgeInsets powerboardsBadgePadding = EdgeInsets.symmetric(horizontal: 16, vertical: 2);

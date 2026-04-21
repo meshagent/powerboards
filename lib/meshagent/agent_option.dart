@@ -170,6 +170,7 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
                           width: 22,
                           height: 22,
                           padding: EdgeInsets.zero,
+                          decoration: powerboardsAdaptiveIconButtonDecoration(context),
                           onPressed: () {
                             Clipboard.setData(ClipboardData(text: mailbox.address));
                           },
@@ -188,6 +189,7 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
                           width: 22,
                           height: 22,
                           padding: EdgeInsets.zero,
+                          decoration: powerboardsAdaptiveIconButtonDecoration(context),
                           onPressed: () {
                             Clipboard.setData(ClipboardData(text: "https://${route.domain}"));
                           },

@@ -448,7 +448,11 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
               return Tooltip(
                 message: "Device settings",
-                child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
+                child: ShadIconButton.outline(
+                  onPressed: onPressed,
+                  decoration: powerboardsAdaptiveIconButtonDecoration(context),
+                  icon: const Icon(LucideIcons.settings),
+                ),
               );
             },
           );

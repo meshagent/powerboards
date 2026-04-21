@@ -6,6 +6,7 @@ import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/room.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_menu_row.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -508,7 +509,11 @@ class _VoiceChangeSettings extends StatelessWidget {
       microphoneUnavailable: controller.pendingLocalMedia.microphoneUnavailable,
       renderButton: (onPressed) => Tooltip(
         message: "Device settings",
-        child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
+        child: ShadIconButton.outline(
+          onPressed: onPressed,
+          decoration: powerboardsAdaptiveIconButtonDecoration(context),
+          icon: const Icon(LucideIcons.settings),
+        ),
       ),
     );
   }

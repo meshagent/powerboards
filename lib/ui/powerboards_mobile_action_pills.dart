@@ -17,7 +17,7 @@ class PowerboardsMobileActionPillStrip extends StatelessWidget {
     required this.items,
     this.viewportPadding = EdgeInsets.zero,
     this.itemGap = 10,
-    this.pillPadding = const EdgeInsets.symmetric(horizontal: 17, vertical: 8),
+    this.pillPadding = const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
     this.textStyle,
     this.unselectedForegroundColor,
     this.unselectedBorderColor,
@@ -62,7 +62,7 @@ class PowerboardsMobileActionPillStrip extends StatelessWidget {
   }
 }
 
-class _PowerboardsMobileActionPill extends StatelessWidget {
+class _PowerboardsMobileActionPill extends StatefulWidget {
   const _PowerboardsMobileActionPill({
     required this.item,
     required this.padding,
@@ -78,38 +78,78 @@ class _PowerboardsMobileActionPill extends StatelessWidget {
   final Color? unselectedBorderColor;
 
   @override
+  State<_PowerboardsMobileActionPill> createState() => _PowerboardsMobileActionPillState();
+}
+
+class _PowerboardsMobileActionPillState extends State<_PowerboardsMobileActionPill> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed == value) {
+      return;
+    }
+
+    setState(() {
+      _pressed = value;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     final theme = ShadTheme.of(context);
-    final selectedBackgroundColor = item.destructive ? theme.colorScheme.destructive : theme.colorScheme.foreground;
+    final selectedBackgroundColor = item.destructive
+        ? theme.colorScheme.destructive.withValues(alpha: 0.96)
+        : theme.colorScheme.foreground.withValues(alpha: 0.94);
     final selectedForegroundColor = item.destructive ? theme.colorScheme.destructiveForeground : theme.colorScheme.background;
     final unselectedDefaultForegroundColor = item.destructive
         ? theme.colorScheme.destructive
-        : theme.colorScheme.mutedForeground.withValues(alpha: 0.92);
+        : theme.colorScheme.foreground.withValues(alpha: 0.78);
     final unselectedDefaultBorderColor = item.destructive
-        ? theme.colorScheme.destructive.withValues(alpha: 0.9)
-        : theme.colorScheme.border.withValues(alpha: 0.9);
+        ? theme.colorScheme.destructive.withValues(alpha: 0.34)
+        : theme.colorScheme.border;
 
-    final backgroundColor = item.selected ? selectedBackgroundColor : Colors.transparent;
-    final foregroundColor = item.selected ? selectedForegroundColor : (unselectedForegroundColor ?? unselectedDefaultForegroundColor);
-    final borderColor = item.selected ? Colors.transparent : (unselectedBorderColor ?? unselectedDefaultBorderColor);
+    final backgroundColor = item.selected ? selectedBackgroundColor : null;
+    final backgroundGradient = item.selected
+        ? null
+        : powerboardsMobileGlassGradient(theme.colorScheme.background, topTint: 0.92, bottomTint: 0.74, topAlpha: 0.96, bottomAlpha: 0.82);
+    final foregroundColor = item.selected
+        ? selectedForegroundColor
+        : (widget.unselectedForegroundColor ?? unselectedDefaultForegroundColor);
+    final borderColor = item.selected ? Colors.transparent : (widget.unselectedBorderColor ?? unselectedDefaultBorderColor);
     final resolvedTextStyle =
-        textStyle ?? powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: foregroundColor, height: 1.0);
+        widget.textStyle ??
+        powerboardsInterTextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: foregroundColor, height: 1.0, letterSpacing: -0.1);
 
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: item.onPressed,
-        borderRadius: BorderRadius.circular(999),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOutCubic,
-          padding: padding,
-          decoration: BoxDecoration(
-            color: backgroundColor,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: borderColor),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        opacity: _pressed ? powerboardsPressedOpacity : 1.0,
+        child: InkWell(
+          onTap: item.onPressed,
+          borderRadius: BorderRadius.circular(999),
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          onTapDown: (_) => _setPressed(true),
+          onTapUp: (_) => _setPressed(false),
+          onTapCancel: () => _setPressed(false),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            padding: widget.padding,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              gradient: backgroundGradient,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: borderColor),
+            ),
+            child: Text(item.label, style: resolvedTextStyle.copyWith(color: foregroundColor)),
           ),
-          child: Text(item.label, style: resolvedTextStyle.copyWith(color: foregroundColor)),
         ),
       ),
     );

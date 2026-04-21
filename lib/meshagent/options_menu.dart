@@ -7,6 +7,7 @@ import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -203,6 +204,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
               message: "Room options",
               child: ShadIconButton.outline(
                 icon: const Icon(LucideIcons.ellipsis, size: paneHeaderIconButtonIconSize),
+                decoration: powerboardsAdaptiveIconButtonDecoration(context),
                 onPressed: controller.toggle,
               ),
             );

@@ -719,7 +719,7 @@ class PowerboardsShadDialog extends StatelessWidget {
                   : ((isCompactDesktopDialog || expandDesktopActions == true) ? MainAxisAlignment.start : MainAxisAlignment.end)));
     final effectiveTitleTextAlign = titleTextAlign ?? TextAlign.left;
     final effectiveDescriptionTextAlign = descriptionTextAlign ?? TextAlign.left;
-    final effectiveGap = gap ?? theme.sheetTheme.gap ?? 16.0;
+    final effectiveGap = gap ?? (usesMobileFlowPresentation ? 18.0 : (theme.sheetTheme.gap ?? 16.0));
     final effectiveAlignment = alignment ?? (usesMobileFlowPresentation ? Alignment.bottomCenter : null);
     final effectiveActionsPinned = _resolveDialogActionsPinned(actionsPinned, usesMobileFlowPresentation: usesMobileFlowPresentation);
     final effectiveTitle = _resolveDialogTitle(
@@ -747,7 +747,7 @@ class PowerboardsShadDialog extends StatelessWidget {
             constraints: effectiveConstraints,
             backgroundColor: effectiveBackgroundColor ?? theme.colorScheme.card,
             radius: effectiveRadius ?? const BorderRadius.vertical(top: Radius.circular(_mobileFlowDialogCornerRadius)),
-            border: border ?? Border.all(color: theme.colorScheme.border),
+            border: border ?? Border.all(color: powerboardsMobileGlassBorderColor(theme.colorScheme.border, alpha: 0.42)),
             shadows: shadows,
             padding: effectivePadding ?? EdgeInsets.zero,
             title: effectiveTitle,
@@ -937,7 +937,9 @@ Widget? _resolveDialogTitle(
   }
 
   final theme = ShadTheme.of(context);
-  final resolvedTitleStyle = (titleStyle ?? theme.textTheme.large).fallback(color: theme.colorScheme.foreground);
+  final resolvedTitleStyle = (titleStyle ?? powerboardsMobileDialogTitleStyle(color: theme.colorScheme.foreground)).fallback(
+    color: theme.colorScheme.foreground,
+  );
   final stepScope = _PowerboardsFlowDialogStepScope.maybeOf(context);
   final resolvedOnBack = onBack ?? stepScope?.defaultBackAction;
 
@@ -972,7 +974,8 @@ Widget? _resolveFlowDialogDescription(
   }
 
   final theme = ShadTheme.of(context);
-  final resolvedDescriptionStyle = (descriptionStyle ?? theme.textTheme.muted).fallback(color: theme.colorScheme.mutedForeground);
+  final resolvedDescriptionStyle = (descriptionStyle ?? powerboardsMobileDialogDescriptionStyle(color: theme.colorScheme.mutedForeground))
+      .fallback(color: theme.colorScheme.mutedForeground);
 
   return DefaultTextStyle(style: resolvedDescriptionStyle, textAlign: descriptionTextAlign, child: description);
 }
@@ -1294,6 +1297,27 @@ class _PowerboardsDialogCloseButton extends StatelessWidget {
   }
 }
 
+class _PowerboardsMobileChromeButtonShell extends StatelessWidget {
+  const _PowerboardsMobileChromeButtonShell({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: powerboardsMobileGlassGradient(theme.colorScheme.card, topTint: 0.94, bottomTint: 0.78, topAlpha: 0.9, bottomAlpha: 0.72),
+        border: Border.all(color: powerboardsMobileGlassBorderColor(theme.colorScheme.border, alpha: 0.46)),
+        boxShadow: powerboardsMobileGlassShadows(opacity: 0.08),
+      ),
+      child: child,
+    );
+  }
+}
+
 class _PowerboardsMobileDialogCloseButton extends StatelessWidget {
   const _PowerboardsMobileDialogCloseButton({this.iconData});
 
@@ -1303,16 +1327,18 @@ class _PowerboardsMobileDialogCloseButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
 
-    return ShadIconButton.ghost(
-      onPressed: () => Navigator.of(context).pop(),
-      width: _mobileDialogCloseButtonSize,
-      height: _mobileDialogCloseButtonSize,
-      padding: EdgeInsets.zero,
-      foregroundColor: theme.colorScheme.foreground.withValues(alpha: .5),
-      hoverBackgroundColor: Colors.transparent,
-      hoverForegroundColor: theme.colorScheme.foreground,
-      pressedForegroundColor: theme.colorScheme.foreground,
-      icon: Icon(iconData ?? LucideIcons.x, size: _mobileDialogCloseIconSize),
+    return _PowerboardsMobileChromeButtonShell(
+      child: ShadIconButton.ghost(
+        onPressed: () => Navigator.of(context).pop(),
+        width: _mobileDialogCloseButtonSize,
+        height: _mobileDialogCloseButtonSize,
+        padding: EdgeInsets.zero,
+        foregroundColor: theme.colorScheme.foreground.withValues(alpha: .66),
+        hoverBackgroundColor: Colors.transparent,
+        hoverForegroundColor: theme.colorScheme.foreground,
+        pressedForegroundColor: theme.colorScheme.foreground,
+        icon: Icon(iconData ?? LucideIcons.x, size: _mobileDialogCloseIconSize),
+      ),
     );
   }
 }
@@ -1326,16 +1352,18 @@ class _PowerboardsMobileDialogBackButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
 
-    return ShadIconButton.ghost(
-      onPressed: onPressed,
-      width: _mobileDialogCloseButtonSize,
-      height: _mobileDialogCloseButtonSize,
-      padding: EdgeInsets.zero,
-      foregroundColor: theme.colorScheme.foreground.withValues(alpha: .72),
-      hoverBackgroundColor: Colors.transparent,
-      hoverForegroundColor: theme.colorScheme.foreground,
-      pressedForegroundColor: theme.colorScheme.foreground,
-      icon: const Icon(LucideIcons.chevronLeft, size: _mobileDialogCloseIconSize),
+    return _PowerboardsMobileChromeButtonShell(
+      child: ShadIconButton.ghost(
+        onPressed: onPressed,
+        width: _mobileDialogCloseButtonSize,
+        height: _mobileDialogCloseButtonSize,
+        padding: EdgeInsets.zero,
+        foregroundColor: theme.colorScheme.foreground.withValues(alpha: .78),
+        hoverBackgroundColor: Colors.transparent,
+        hoverForegroundColor: theme.colorScheme.foreground,
+        pressedForegroundColor: theme.colorScheme.foreground,
+        icon: const Icon(LucideIcons.chevronLeft, size: _mobileDialogCloseIconSize),
+      ),
     );
   }
 }
@@ -1536,7 +1564,7 @@ class _PowerboardsSharedMobileFlowDialogSurface extends StatelessWidget {
       backgroundColor: backgroundColor,
       radius: radius,
       border: border,
-      shadows: shadows,
+      shadows: shadows ?? powerboardsMobileGlassShadows(opacity: 0.12),
       padding: padding,
       title: title,
       description: description,
@@ -1699,8 +1727,8 @@ class _PowerboardsMobileFlowDialogSurfaceState extends State<_PowerboardsMobileF
         : null;
 
     return AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
       padding: EdgeInsets.only(bottom: pinsFooterDuringKeyboard ? keyboardLiftOffset : surfaceKeyboardInset),
       child: SizedBox.expand(
         child: Column(

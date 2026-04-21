@@ -11,6 +11,7 @@ import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
+import 'package:powerboards/theme/theme.dart';
 
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/ui/powerboards_dialog.dart';
@@ -1070,7 +1071,11 @@ class ChangeSettings extends StatelessWidget {
       renderButton: (onPressed) {
         return Tooltip(
           message: "Device settings",
-          child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
+          child: ShadIconButton.outline(
+            onPressed: onPressed,
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            icon: const Icon(LucideIcons.settings),
+          ),
         );
       },
     );
@@ -1112,6 +1117,7 @@ class RoomToolbarButton extends StatelessWidget {
       message: text,
       child: ShadIconButton(
         onPressed: onPressed,
+        decoration: powerboardsAdaptiveIconButtonDecoration(context),
         backgroundColor: on ? onColor : (disabled ? theme.colorScheme.destructive : offColor),
         foregroundColor: foregroundColor,
         icon: loading

@@ -11,7 +11,7 @@ const double powerboardsMobileOverlayHeaderCollapsedHeight = 48.0;
 const double powerboardsMobileOverlayHeaderContentOverlap = 12.0;
 const double powerboardsMobileOverlayContentEdgeGap = 12.0;
 const double powerboardsMobileOverlaySecondaryRowLift = 10.0;
-const Duration powerboardsMobileOverlayHeaderTransitionDuration = Duration(milliseconds: 220);
+const Duration powerboardsMobileOverlayHeaderTransitionDuration = Duration(milliseconds: 280);
 
 double powerboardsMobileOverlayBodyTopPadding(BuildContext context, double collapseProgress) {
   final expandedTopPadding =
@@ -196,10 +196,11 @@ class PowerboardsMobileOverlayHeader extends StatelessWidget {
       powerboardsMobileOverlayHeaderCollapsedHeight,
       collapseProgress,
     )!;
-    final backgroundOpacity = ui.lerpDouble(0.96, 0.12, collapseProgress)!;
-    final blur = ui.lerpDouble(18, 10, collapseProgress)!;
-    final borderOpacity = ui.lerpDouble(0.12, 0.0, collapseProgress)!;
-    final shadowOpacity = ui.lerpDouble(0.05, 0.0, collapseProgress)!;
+    final backgroundTopAlpha = ui.lerpDouble(0.96, 0.82, collapseProgress)!;
+    final backgroundBottomAlpha = ui.lerpDouble(0.82, 0.62, collapseProgress)!;
+    final blur = ui.lerpDouble(26, 18, collapseProgress)!;
+    final borderOpacity = ui.lerpDouble(0.5, 0.22, collapseProgress)!;
+    final shadowOpacity = ui.lerpDouble(0.12, 0.04, collapseProgress)!;
     final actionVisibility = 1 - Curves.easeOut.transform(collapseProgress);
 
     return ClipRect(
@@ -207,17 +208,17 @@ class PowerboardsMobileOverlayHeader extends StatelessWidget {
         filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: backgroundColor.withValues(alpha: backgroundOpacity),
-            border: Border(
-              bottom: BorderSide(color: theme.colorScheme.border.withValues(alpha: borderOpacity)),
+            gradient: powerboardsMobileGlassGradient(
+              backgroundColor,
+              topTint: 0.92,
+              bottomTint: 0.74,
+              topAlpha: backgroundTopAlpha,
+              bottomAlpha: backgroundBottomAlpha,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: shadowOpacity),
-                blurRadius: 18,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            border: Border(
+              bottom: BorderSide(color: powerboardsMobileGlassBorderColor(theme.colorScheme.border, alpha: borderOpacity)),
+            ),
+            boxShadow: powerboardsMobileGlassShadows(opacity: shadowOpacity),
           ),
           child: SizedBox(
             height: headerHeight,
@@ -270,15 +271,11 @@ class PowerboardsMobileHeaderTrigger extends StatelessWidget {
     final contentAlignment = Alignment.lerp(isCentered ? Alignment.center : Alignment.centerLeft, Alignment.center, collapseCurve)!;
     final effectiveTextAlign = collapseCurve > 0.01 ? TextAlign.center : textAlign;
     final secondaryVisibility = Curves.easeOut.transform(1 - collapseProgress);
-    final secondaryHeight = secondaryText == null ? 0.0 : ui.lerpDouble(16, 0, collapseProgress)!;
-    final secondaryGap = secondaryText == null ? 0.0 : ui.lerpDouble(4, 0, collapseProgress)!;
-    const secondaryFontSize = 13.0;
-    final secondaryWeight = FontWeight.w600;
-    final primaryFontSize = secondaryFontSize;
-    final primaryWeight = secondaryWeight;
+    final secondaryHeight = secondaryText == null ? 0.0 : ui.lerpDouble(14, 0, collapseProgress)!;
+    final secondaryGap = secondaryText == null ? 0.0 : ui.lerpDouble(5, 0, collapseProgress)!;
 
     Widget content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       child: Align(
         alignment: contentAlignment,
         child: Column(
@@ -299,11 +296,7 @@ class PowerboardsMobileHeaderTrigger extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: effectiveTextAlign,
-                        style: powerboardsMetaTextStyle(
-                          color: theme.colorScheme.mutedForeground.withValues(alpha: 0.92),
-                          fontWeight: secondaryWeight,
-                          height: 1.0,
-                        ),
+                        style: powerboardsMobileHeaderSecondaryTextStyle(color: theme.colorScheme.mutedForeground.withValues(alpha: 0.82)),
                       ),
                     ),
                   ),
@@ -321,23 +314,14 @@ class PowerboardsMobileHeaderTrigger extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: effectiveTextAlign,
-                      style: powerboardsInterTextStyle(
-                        fontSize: primaryFontSize,
-                        fontWeight: primaryWeight,
-                        color: theme.colorScheme.foreground,
-                        height: 1.05,
-                      ),
+                      style: powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground),
                     ),
                   ),
                   if (showChevron) ...[
-                    const SizedBox(width: 3),
+                    const SizedBox(width: 4),
                     Padding(
                       padding: const EdgeInsets.only(top: 1),
-                      child: Icon(
-                        LucideIcons.chevronDown,
-                        size: primaryFontSize,
-                        color: theme.colorScheme.mutedForeground.withValues(alpha: 0.9),
-                      ),
+                      child: Icon(LucideIcons.chevronDown, size: 14, color: theme.colorScheme.mutedForeground.withValues(alpha: 0.82)),
                     ),
                   ],
                 ],
@@ -382,9 +366,9 @@ class _PowerboardsPressedOpacityButtonState extends State<_PowerboardsPressedOpa
   @override
   Widget build(BuildContext context) {
     return AnimatedOpacity(
-      duration: const Duration(milliseconds: 120),
+      duration: const Duration(milliseconds: 160),
       curve: Curves.easeOutCubic,
-      opacity: _pressed ? 0.5 : 1.0,
+      opacity: _pressed ? powerboardsPressedOpacity : 1.0,
       child: Material(
         color: Colors.transparent,
         child: InkWell(

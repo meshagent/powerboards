@@ -2007,6 +2007,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       message: "Select items",
       child: (_forceShowSelect ? ShadIconButton.new : ShadIconButton.outline)(
         icon: const Icon(LucideIcons.squareCheckBig),
+        decoration: powerboardsAdaptiveIconButtonDecoration(context),
         onPressed: _toggleForceShowSelect,
       ),
     );
@@ -2045,7 +2046,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     return [
       Tooltip(
         message: "Close file",
-        child: ShadIconButton.ghost(icon: const Icon(LucideIcons.x), onPressed: _closeFile),
+        child: ShadIconButton.ghost(
+          icon: const Icon(LucideIcons.x),
+          decoration: powerboardsAdaptiveIconButtonDecoration(context),
+          onPressed: _closeFile,
+        ),
       ),
     ];
   }
@@ -2057,12 +2062,20 @@ class _FileManagerViewState extends State<FileManagerView> {
       if (canCycleFiles)
         Tooltip(
           message: "Previous file",
-          child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronLeft), onPressed: _previousFile),
+          child: ShadIconButton.outline(
+            icon: const Icon(LucideIcons.chevronLeft),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: _previousFile,
+          ),
         ),
       if (canCycleFiles)
         Tooltip(
           message: "Next file",
-          child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronRight), onPressed: _nextFile),
+          child: ShadIconButton.outline(
+            icon: const Icon(LucideIcons.chevronRight),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: _nextFile,
+          ),
         ),
     ];
   }
@@ -2080,6 +2093,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             message: "Share",
             child: ShadIconButton.outline(
               icon: const Icon(LucideIcons.share),
+              decoration: powerboardsAdaptiveIconButtonDecoration(context),
               onPressed: () {
                 _shareFile(_openedFile!);
               },
@@ -2090,6 +2104,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             message: "Download",
             child: ShadIconButton.outline(
               icon: const Icon(LucideIcons.download),
+              decoration: powerboardsAdaptiveIconButtonDecoration(context),
               onPressed: () {
                 _downloadFile(_openedFile!);
               },
@@ -2099,6 +2114,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           message: "Delete file",
           child: ShadIconButton.outline(
             icon: const Icon(LucideIcons.trash),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
             onPressed: () async {
               final confirmDelete = await _confirmAndDelete(_openedFile!, false);
               if (confirmDelete == true) {
@@ -2114,6 +2130,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           message: "New folder",
           child: ShadIconButton.outline(
             icon: const Icon(LucideIcons.folderPlus),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
             onPressed: () {
               _addFolder(_folderSig.value);
             },
@@ -2125,6 +2142,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             message: "Upload photo",
             child: ShadIconButton.outline(
               icon: const Icon(LucideIcons.imagePlus),
+              decoration: powerboardsAdaptiveIconButtonDecoration(context),
               onPressed: () {
                 _addPhotos(_folderSig.value);
               },
@@ -2158,7 +2176,11 @@ class _FileManagerViewState extends State<FileManagerView> {
       childBuilder: (context, controller) {
         return Tooltip(
           message: "Upload file",
-          child: ShadIconButton.outline(icon: const Icon(LucideIcons.upload), onPressed: controller.toggle),
+          child: ShadIconButton.outline(
+            icon: const Icon(LucideIcons.upload),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: controller.toggle,
+          ),
         );
       },
     );
@@ -2274,7 +2296,11 @@ class _FileManagerViewState extends State<FileManagerView> {
           .toList(growable: false),
       child: Tooltip(
         message: "Browse collapsed path",
-        child: ShadIconButton.outline(icon: const Icon(LucideIcons.folderTree), onPressed: _collapsedBreadcrumbMenuController.toggle),
+        child: ShadIconButton.outline(
+          icon: const Icon(LucideIcons.folderTree),
+          decoration: powerboardsAdaptiveIconButtonDecoration(context),
+          onPressed: _collapsedBreadcrumbMenuController.toggle,
+        ),
       ),
     );
   }
