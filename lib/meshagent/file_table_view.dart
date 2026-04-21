@@ -38,6 +38,8 @@ import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
+import 'package:powerboards/ui/powerboards_mobile_action_pills.dart';
+import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/text_validators.dart';
 
 import 'file_upload.dart';
@@ -1658,6 +1660,33 @@ class _FileManagerViewState extends State<FileManagerView> {
     return _buildMobileToolbar(selected);
   }
 
+  Widget _buildAdaptiveMobileScrollAwareSecondaryRow(Widget child) {
+    if (!(widget.mobileShellOwnsHeader && _usesAdaptiveMobileLayout(context))) {
+      return child;
+    }
+
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final collapseProgress = overlayHeaderScope?.collapseProgress ?? 0;
+    final hideForScroll = collapseProgress > 0.1;
+
+    return AnimatedSwitcher(
+      duration: powerboardsMobileOverlayHeaderTransitionDuration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) {
+        return ClipRect(
+          child: FadeTransition(
+            opacity: animation,
+            child: SizeTransition(sizeFactor: animation, axisAlignment: -1.0, child: child),
+          ),
+        );
+      },
+      child: hideForScroll
+          ? const SizedBox.shrink(key: ValueKey('files-mobile-secondary-row-hidden'))
+          : KeyedSubtree(key: const ValueKey('files-mobile-secondary-row-visible'), child: child),
+    );
+  }
+
   Widget _buildDesktopToolbar(Set<String> selected) {
     final desktopActions = widget.desktopHeaderActions;
 
@@ -1889,10 +1918,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  TextStyle _mobileOpenedFileTextActionStyle(Color color) {
-    return powerboardsActionLabelStyle(color: color);
-  }
-
   Future<void> _saveAdaptiveMobileEdits() async {
     await _codePreviewController.save();
 
@@ -1915,54 +1940,39 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  Widget _buildAdaptiveMobileOpenedFileIconButton({
-    required String tooltip,
-    required IconData icon,
-    required VoidCallback onPressed,
-    bool destructive = false,
-  }) {
-    final button = destructive
-        ? ShadIconButton.destructive(
-            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
-            onPressed: onPressed,
-          )
-        : ShadIconButton.outline(
-            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
-            onPressed: onPressed,
-          );
-
-    return Tooltip(message: tooltip, child: button);
-  }
-
-  Widget _buildAdaptiveMobileOpenedFileTextAction() {
+  PowerboardsMobileActionPillItem _buildAdaptiveMobileOpenedFilePrimaryPillItem() {
     if (!_openedFileSupportsEditTabs) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        child: Text("Preview", style: _mobileOpenedFileTextActionStyle(shadForeground)),
-      );
+      return const PowerboardsMobileActionPillItem(label: "Preview", selected: true);
     }
 
     if (_tab != 'edit') {
-      return ShadButton.ghost(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        onPressed: () => setState(() => _tab = 'edit'),
-        child: Text("Edit this file", style: _mobileOpenedFileTextActionStyle(shadForeground)),
-      );
+      return PowerboardsMobileActionPillItem(label: "Edit this file", onPressed: () => setState(() => _tab = 'edit'));
     }
 
-    return AnimatedBuilder(
-      animation: _codePreviewController,
-      builder: (context, _) {
-        return ShadButton.ghost(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          onPressed: _saveAdaptiveMobileEdits,
-          child: Text("Save your edits", style: _mobileOpenedFileTextActionStyle(shadDestructive)),
-        );
-      },
-    );
+    return PowerboardsMobileActionPillItem(label: "Save your edits", selected: true, onPressed: _saveAdaptiveMobileEdits);
   }
 
   Widget _buildAdaptiveMobileOpenedFileToolbar() {
+    final theme = ShadTheme.of(context);
+    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
+    final primaryPill = _buildAdaptiveMobileOpenedFilePrimaryPillItem();
+    final deletePill = PowerboardsMobileActionPillItem(
+      label: "Delete",
+      selected: true,
+      destructive: true,
+      onPressed: () async {
+        final openedFile = _openedFile;
+        if (openedFile == null) {
+          return;
+        }
+
+        final confirmDelete = await _confirmAndDelete(openedFile, false);
+        if (confirmDelete == true) {
+          _openEntry(_folderSig.value, true);
+        }
+      },
+    );
+
     return SizedBox(
       height: powerboardsMobileSecondaryRowHeight,
       child: Center(
@@ -1970,31 +1980,17 @@ class _FileManagerViewState extends State<FileManagerView> {
           padding: powerboardsMobileSecondaryRowPadding,
           child: Row(
             children: [
-              _buildAdaptiveMobileOpenedFileTextAction(),
-              const Spacer(),
-              if (supportsNativeFileShare) ...[
-                _buildAdaptiveMobileOpenedFileIconButton(
-                  tooltip: "Share",
-                  icon: LucideIcons.share,
-                  onPressed: () => _shareFile(_openedFile!),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: PowerboardsMobileActionPillStrip(
+                    items: [primaryPill, deletePill],
+                    textStyle: pillTextStyle,
+                    unselectedForegroundColor: theme.colorScheme.foreground,
+                    itemGap: 10,
+                    pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+                  ),
                 ),
-                const SizedBox(width: 8),
-              ],
-              _buildAdaptiveMobileOpenedFileIconButton(
-                tooltip: "Delete file",
-                icon: LucideIcons.trash,
-                destructive: true,
-                onPressed: () async {
-                  final openedFile = _openedFile;
-                  if (openedFile == null) {
-                    return;
-                  }
-
-                  final confirmDelete = await _confirmAndDelete(openedFile, false);
-                  if (confirmDelete == true) {
-                    _openEntry(_folderSig.value, true);
-                  }
-                },
               ),
             ],
           ),
@@ -2079,7 +2075,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return [
         if (showLegacyMobileEditActions && _openedFileSupportsEditTabs) _buildOpenFileTabs(),
         if (showLegacyMobileEditActions && _openedFileSupportsExternalSave) _buildExternalSaveButton(compact: true),
-        if (supportsNativeFileShare)
+        if (supportsNativeFileShare && !widget.mobileShellOwnsHeader)
           Tooltip(
             message: "Share",
             child: ShadIconButton.outline(
@@ -2517,11 +2513,8 @@ class _FileManagerViewState extends State<FileManagerView> {
               final hasOpenedFile = _openedFile != null;
               final hideEmbeddedMobileToolbar = isAdaptiveMobile && !hasOpenedFile;
               final showAdaptiveOpenedFileDivider = isAdaptiveMobile && hasOpenedFile;
-              return Column(
-                crossAxisAlignment: .start,
-                children: [
-                  if (showAdaptiveOpenedFileDivider)
-                    DecoratedBox(
+              final adaptiveSecondaryRow = showAdaptiveOpenedFileDivider
+                  ? DecoratedBox(
                       decoration: BoxDecoration(
                         border: Border(bottom: BorderSide(color: shadBorder.withValues(alpha: 0.5))),
                       ),
@@ -2533,10 +2526,19 @@ class _FileManagerViewState extends State<FileManagerView> {
                         ],
                       ),
                     )
-                  else ...[
-                    _buildToolbar(selected),
-                    if (!hideEmbeddedMobileToolbar) const SizedBox(height: desktopPaneSecondaryRowContentGap),
-                  ],
+                  : hideEmbeddedMobileToolbar
+                  ? const SizedBox.shrink()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildToolbar(selected),
+                        const SizedBox(height: desktopPaneSecondaryRowContentGap),
+                      ],
+                    );
+              return Column(
+                crossAxisAlignment: .start,
+                children: [
+                  _buildAdaptiveMobileScrollAwareSecondaryRow(adaptiveSecondaryRow),
                   Expanded(
                     child: IndexedStack(
                       index: _openedFile == null ? 0 : 1,
@@ -2809,10 +2811,6 @@ class _FileTableViewState extends State<FileTableView> {
     return MouseRegion(opaque: true, onEnter: (_) => _setHovered(rowKey), onExit: (_) => _clearHoveredIf(rowKey), child: child);
   }
 
-  Icon _sortIcon(bool ascending, {Color color = shadMutedForeground}) {
-    return Icon(ascending ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 16, color: color);
-  }
-
   Widget _fileSelectionCheckbox({required bool value, required ShadDecoration decoration, ValueChanged<bool?>? onChanged}) {
     final checkboxForeground = ShadTheme.of(context).colorScheme.primaryForeground;
 
@@ -2824,51 +2822,22 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
-  Widget _buildMobileHeaderActionButton({
-    required String tooltip,
-    required IconData icon,
-    required VoidCallback onPressed,
-    bool destructive = false,
-  }) {
-    final button = destructive
-        ? ShadIconButton.destructive(
-            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
-            onPressed: onPressed,
-          )
-        : ShadIconButton.outline(
-            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
-            onPressed: onPressed,
-          );
-
-    return Tooltip(message: tooltip, child: button);
-  }
-
-  Widget _buildMobileSelectionHeaderButton() {
+  PowerboardsMobileActionPillItem _buildMobileSelectionHeaderPillItem() {
     final selectionActive = widget.forceShowSelect;
-    final label = selectionActive ? 'Cancel' : 'Select';
-    final textColor = selectionActive ? shadDestructive : shadForeground;
-
-    return ShadButton.ghost(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+    return PowerboardsMobileActionPillItem(
+      label: 'Select',
+      selected: selectionActive,
       onPressed: selectionActive ? widget.onClearSelectionMode : widget.onActivateSelectionMode,
-      child: Text(label, style: powerboardsActionLabelStyle(color: textColor)),
     );
   }
 
-  Widget _buildMobileSortHeaderButton() {
+  PowerboardsMobileActionPillItem _buildMobileSortHeaderPillItem() {
     final isNameSort = widget.sort.field == FileSortField.name;
-
-    return ShadButton.ghost(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+    final descending = isNameSort && !widget.sort.ascending;
+    return PowerboardsMobileActionPillItem(
+      label: 'Sort by name',
+      selected: descending,
       onPressed: () => widget.onSortChanged(FileSort(FileSortField.name, isNameSort ? !widget.sort.ascending : true)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Sort by name', style: headerStyle.copyWith(color: shadMutedForeground)),
-          const SizedBox(width: 6),
-          _sortIcon(widget.sort.ascending, color: shadMutedForeground),
-        ],
-      ),
     );
   }
 
@@ -2877,22 +2846,20 @@ class _FileTableViewState extends State<FileTableView> {
       return const SizedBox.shrink();
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildMobileHeaderActionButton(
-          tooltip: "Delete selected",
-          icon: LucideIcons.trash,
-          onPressed: widget.onDeleteSelected,
-          destructive: true,
-        ),
-      ],
+    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
+
+    return PowerboardsMobileActionPillStrip(
+      items: [PowerboardsMobileActionPillItem(label: "Delete", selected: true, destructive: true, onPressed: widget.onDeleteSelected)],
+      textStyle: pillTextStyle,
+      itemGap: 10,
+      pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
     );
   }
 
   Widget _buildMobileHeader(bool showSelectColumn, bool? selectAllValue) {
-    final selectButton = _buildMobileSelectionHeaderButton();
-    final sortButton = _buildMobileSortHeaderButton();
+    final theme = ShadTheme.of(context);
+    final pills = <PowerboardsMobileActionPillItem>[_buildMobileSelectionHeaderPillItem(), _buildMobileSortHeaderPillItem()];
+    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
     final selectionActions = _buildMobileSelectedActions();
     final showSelectionModeActions = widget.forceShowSelect;
 
@@ -2912,8 +2879,18 @@ class _FileTableViewState extends State<FileTableView> {
                 ),
                 const SizedBox(width: 4),
               ],
-              selectButton,
-              const Spacer(),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: PowerboardsMobileActionPillStrip(
+                    items: pills,
+                    textStyle: pillTextStyle,
+                    unselectedForegroundColor: theme.colorScheme.foreground,
+                    itemGap: 10,
+                    pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+                  ),
+                ),
+              ),
               if (showSelectionModeActions) selectionActions,
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -2923,7 +2900,6 @@ class _FileTableViewState extends State<FileTableView> {
                       padding: EdgeInsets.only(right: 8),
                       child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                     ),
-                  if (!showSelectionModeActions) sortButton,
                 ],
               ),
             ],
@@ -2933,13 +2909,36 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
+  Widget _buildScrollAwareMobileHeader(Widget child) {
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final collapseProgress = overlayHeaderScope?.collapseProgress ?? 0;
+    final hideForScroll = collapseProgress > 0.1;
+
+    return AnimatedSwitcher(
+      duration: powerboardsMobileOverlayHeaderTransitionDuration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) {
+        return ClipRect(
+          child: FadeTransition(
+            opacity: animation,
+            child: SizeTransition(sizeFactor: animation, axisAlignment: -1.0, child: child),
+          ),
+        );
+      },
+      child: hideForScroll
+          ? const SizedBox.shrink(key: ValueKey('file-browser-mobile-header-hidden'))
+          : KeyedSubtree(key: const ValueKey('file-browser-mobile-header-visible'), child: child),
+    );
+  }
+
   Widget _buildMobileList(BuildContext context, bool showSelectColumn, bool alwaysShowMenu, bool? selectAllValue, bool showSize) {
     final colorScheme = ShadTheme.of(context).colorScheme;
 
     return _buildTableCard(
       Column(
         children: [
-          _buildMobileHeader(showSelectColumn, selectAllValue),
+          _buildScrollAwareMobileHeader(_buildMobileHeader(showSelectColumn, selectAllValue)),
           const Divider(height: 1, color: shadBorder),
           Expanded(
             child: ListView.separated(
