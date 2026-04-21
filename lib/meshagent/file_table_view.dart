@@ -160,11 +160,47 @@ class _FilePathKey {
   static bool isFolderKey(String key) => key.endsWith('/');
 }
 
+class FileManagerViewController {
+  Future<void> Function()? _createFolderInCurrentLocation;
+  void Function()? _createTextFileInCurrentLocation;
+  Future<void> Function()? _addFilesInCurrentLocation;
+  Future<void> Function()? _shareOpenedFileInCurrentLocation;
+
+  Future<void> createFolderInCurrentLocation() async {
+    final action = _createFolderInCurrentLocation;
+    if (action == null) {
+      return;
+    }
+    await action();
+  }
+
+  void createTextFileInCurrentLocation() {
+    _createTextFileInCurrentLocation?.call();
+  }
+
+  Future<void> addFilesInCurrentLocation() async {
+    final action = _addFilesInCurrentLocation;
+    if (action == null) {
+      return;
+    }
+    await action();
+  }
+
+  Future<void> shareOpenedFileInCurrentLocation() async {
+    final action = _shareOpenedFileInCurrentLocation;
+    if (action == null) {
+      return;
+    }
+    await action();
+  }
+}
+
 class FileManagerView extends StatefulWidget {
   final RoomClient client;
   final Resource<List<ServiceSpec>>? services;
   final bool hideSystem;
   final bool mobileShellOwnsHeader;
+  final FileManagerViewController? controller;
   final List<Widget> desktopHeaderActions;
   final double desktopHeaderActionLeadingWidthFloor;
   final double desktopHeaderActionMinimumLeadingWidth;
@@ -176,6 +212,7 @@ class FileManagerView extends StatefulWidget {
     this.services,
     this.hideSystem = false,
     this.mobileShellOwnsHeader = false,
+    this.controller,
     this.desktopHeaderActions = const [],
     this.desktopHeaderActionLeadingWidthFloor = 0,
     this.desktopHeaderActionMinimumLeadingWidth = 0,
@@ -252,6 +289,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   void initState() {
     super.initState();
     roomSub = widget.client.listen(_onRoomEvent);
+    _bindController(widget.controller);
     unawaited(_rebindThreadIndexDocument());
   }
 
@@ -262,7 +300,17 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   @override
+  void didUpdateWidget(covariant FileManagerView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _unbindController(oldWidget.controller);
+      _bindController(widget.controller);
+    }
+  }
+
+  @override
   void dispose() {
+    _unbindController(widget.controller);
     _isDisposing = true;
     roomSub.cancel();
 
@@ -284,6 +332,34 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     widget.client.localParticipant?.setAttribute("current_file", null);
     super.dispose();
+  }
+
+  void _bindController(FileManagerViewController? controller) {
+    if (controller == null) {
+      return;
+    }
+
+    controller._createFolderInCurrentLocation = () => _addFolder(_folderSig.value);
+    controller._createTextFileInCurrentLocation = _showNewTextFileDialog;
+    controller._addFilesInCurrentLocation = () => _addFiles(_folderSig.value);
+    controller._shareOpenedFileInCurrentLocation = () async {
+      final openedFile = _openedFile;
+      if (openedFile == null || !supportsNativeFileShare) {
+        return;
+      }
+      await _shareFile(openedFile);
+    };
+  }
+
+  void _unbindController(FileManagerViewController? controller) {
+    if (controller == null) {
+      return;
+    }
+
+    controller._createFolderInCurrentLocation = null;
+    controller._createTextFileInCurrentLocation = null;
+    controller._addFilesInCurrentLocation = null;
+    controller._shareOpenedFileInCurrentLocation = null;
   }
 
   void _setLocation() {

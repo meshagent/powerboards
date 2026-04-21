@@ -11,6 +11,8 @@ import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_mobile_action_pills.dart';
+import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -75,6 +77,9 @@ class MeshagentThreadView extends StatefulWidget {
     this.emptyState,
     this.newThreadEmptyStateVerticalOffset = 0,
     this.hideChatInput = false,
+    this.onInvite,
+    this.onOpenFiles,
+    this.onOpenMeet,
   });
 
   final String projectId;
@@ -97,6 +102,9 @@ class MeshagentThreadView extends StatefulWidget {
   final Widget? emptyState;
   final double newThreadEmptyStateVerticalOffset;
   final bool hideChatInput;
+  final VoidCallback? onInvite;
+  final VoidCallback? onOpenFiles;
+  final VoidCallback? onOpenMeet;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -117,6 +125,11 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
     final view = View.of(context);
     final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
     return mediaQuery.size.width < _mobileThreadEmptyStateWidthMax && bottomInset > 0;
+  }
+
+  bool _usesMobileThreadLayout(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return ResponsiveBreakpoints.of(context).isMobile || (size.width > size.height && size.shortestSide < 600);
   }
 
   String _chatPlaceholderText(String? agentName) {
@@ -145,6 +158,94 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
     }
 
     return Transform.translate(offset: Offset(0, verticalOffset), child: content);
+  }
+
+  Widget _buildMobileNewThreadEmptyState(BuildContext context) {
+    const horizontalInset = powerboardsMobileShellHorizontalInset;
+    final theme = ShadTheme.of(context);
+    final inactivePillColor = theme.colorScheme.foreground;
+    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
+    final items = <PowerboardsMobileActionPillItem>[
+      if (widget.onInvite != null) PowerboardsMobileActionPillItem(label: "Invite", onPressed: widget.onInvite),
+      const PowerboardsMobileActionPillItem(label: "Chat", selected: true),
+      if (widget.onOpenFiles != null) PowerboardsMobileActionPillItem(label: "Share Files", onPressed: widget.onOpenFiles),
+      if (widget.onOpenMeet != null) PowerboardsMobileActionPillItem(label: "Meet", onPressed: widget.onOpenMeet),
+    ];
+
+    Widget content = Align(
+      alignment: Alignment.topCenter,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (items.isNotEmpty)
+            SizedBox(
+              height: powerboardsMobileSecondaryRowHeight,
+              width: double.infinity,
+              child: Center(
+                child: PowerboardsMobileActionPillStrip(
+                  items: items,
+                  viewportPadding: const EdgeInsets.symmetric(horizontal: horizontalInset),
+                  textStyle: pillTextStyle,
+                  unselectedForegroundColor: inactivePillColor,
+                  itemGap: 10,
+                  pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    final verticalOffset = widget.newThreadEmptyStateVerticalOffset;
+    if (verticalOffset != 0) {
+      content = Transform.translate(offset: Offset(0, verticalOffset), child: content);
+    }
+
+    return content;
+  }
+
+  Widget _buildAdaptiveMobileChatInputBox(BuildContext context, Widget chatBox) {
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final collapseProgress = overlayHeaderScope?.collapseProgress ?? 0;
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final hideForScroll = collapseProgress > 0.1 && !keyboardVisible;
+    final expandedTopGap = 16 * (1 - Curves.easeOutCubic.transform(collapseProgress));
+
+    return IgnorePointer(
+      ignoring: hideForScroll,
+      child: AnimatedSwitcher(
+        duration: powerboardsMobileOverlayHeaderTransitionDuration,
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeOutCubic,
+        transitionBuilder: (child, animation) {
+          return AnimatedBuilder(
+            animation: animation,
+            child: child,
+            builder: (context, transitionChild) {
+              final offsetY = 18 * (1 - animation.value);
+              return Transform.translate(
+                offset: Offset(0, offsetY),
+                child: ClipRect(
+                  child: FadeTransition(
+                    opacity: animation,
+                    child: SizeTransition(sizeFactor: animation, axisAlignment: 1.0, child: transitionChild),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+        child: hideForScroll
+            ? const SizedBox.shrink(key: ValueKey('mobile-chat-input-hidden'))
+            : KeyedSubtree(
+                key: const ValueKey('mobile-chat-input-visible'),
+                child: Padding(
+                  padding: EdgeInsets.only(top: expandedTopGap),
+                  child: chatBox,
+                ),
+              ),
+      ),
+    );
   }
 
   @override
@@ -287,15 +388,23 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
 
   @override
   Widget build(BuildContext context) {
+    final usesMobileLayout = _usesMobileThreadLayout(context);
     final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
+    final usesCompactNewThreadPrompt = usesMobileLayout && widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
     final emptyStateTitle = widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
         ? "Start a new thread"
         : "Chat to get started";
     final resolvedEmptyState =
         widget.emptyState ??
         Builder(
-          builder: (context) =>
-              _buildThreadEmptyState(context, title: emptyStateTitle, description: _threadEmptyDescription, compact: usesMobileEmptyState),
+          builder: (context) => usesCompactNewThreadPrompt
+              ? _buildMobileNewThreadEmptyState(context)
+              : _buildThreadEmptyState(
+                  context,
+                  title: emptyStateTitle,
+                  description: _threadEmptyDescription,
+                  compact: usesMobileEmptyState,
+                ),
         );
 
     return IconTheme(
@@ -323,6 +432,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
         onMessageSent: _onMessageSent,
         fileInThreadBuilder: _fileInThreadBuilder,
         openFile: _open,
+        chatInputBoxBuilder: (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox),
         toolsBuilder: (context, controller, snapshot) =>
             buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
         inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),

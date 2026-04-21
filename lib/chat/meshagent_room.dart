@@ -10,7 +10,6 @@ import 'package:meshagent_flutter_shadcn/file_preview/markdown.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/shell/shell_agent.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
@@ -22,7 +21,6 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
-import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
@@ -35,7 +33,6 @@ import 'package:powerboards/meshagent/agents_dropdown.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
-import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/grant.dart' as grant;
 import 'package:powerboards/meshagent/loader.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -59,10 +56,11 @@ import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/meeting_view.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
+import 'package:powerboards/ui/powerboards_menu_row.dart';
+import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/resizable_split_view.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
-import 'package:powerboards/ui/text_validators.dart';
 
 const defaultDebugSize = 0.4;
 final meetingHeaderTitleStyle = powerboardsSectionTitleStyle();
@@ -70,9 +68,7 @@ const double _meetingToolbarCompactThreshold = 620;
 const double _meetingToolbarPreferredExpandedWidth = 640;
 const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
 const double _mobileRoomHeaderGap = 8;
-const double _mobilePlainHeaderTitleInset = 8;
 const String _roomPaneQueryParameter = 'pane';
-const String _mobileFilesPlaceholderFileName = '.placeholder';
 
 enum _MobileRoomPane { chat, files, meeting }
 
@@ -156,6 +152,24 @@ class _MobileMeetingOrigin {
 
   final _MobileRoomPane pane;
   final String? rawPath;
+}
+
+class _MobileChatHeaderContext {
+  const _MobileChatHeaderContext({
+    required this.agentName,
+    required this.agentKey,
+    required this.currentThreadLabel,
+    required this.selectedThreadPath,
+    required this.threadListPath,
+  });
+
+  final String agentName;
+  final String? agentKey;
+  final String currentThreadLabel;
+  final String? selectedThreadPath;
+  final String? threadListPath;
+
+  bool get canOpenContextSwitcher => threadListPath != null || agentKey != null;
 }
 
 class _MobileSelectedThreadLabelResolver extends StatefulWidget {
@@ -341,6 +355,43 @@ Widget _buildPaneHeaderIconButton({
 
 Color _mobileRoomSurfaceColor(BuildContext context) {
   return ShadTheme.of(context).colorScheme.card;
+}
+
+class _MobileRoomCreateActionRow extends StatelessWidget {
+  const _MobileRoomCreateActionRow({required this.title, required this.icon, required this.onPressed});
+
+  final String title;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final foreground = theme.colorScheme.foreground;
+    final titleStyle = powerboardsInterTextStyle(color: foreground, fontWeight: FontWeight.w600);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        child: SizedBox(
+          height: powerboardsMobileSecondaryRowHeight,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                child: Center(child: Icon(icon, size: 20, color: foreground)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class ParticipantsButton extends StatefulWidget {
@@ -914,6 +965,7 @@ class _ResolvedAgentSelection {
 
 class MeshagentRoomState extends State<MeshagentRoom> {
   final ResizableSplitViewController _meetingSplitViewController = ResizableSplitViewController();
+  final FileManagerViewController _filesHeaderController = FileManagerViewController();
 
   final videoChatKey = GlobalKey();
   final meetingViewKey = GlobalKey();
@@ -1038,6 +1090,26 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     return trimmed;
+  }
+
+  bool _isBaseRouteId(String id) => id.isEmpty || id == "chat";
+
+  void _navigateToAgentRoute(BuildContext context, String routeId) {
+    final pid = fromUUID(widget.projectId);
+    final currentUri = PathRouteMatch.of(context).uri;
+    final nextPath = _isBaseRouteId(routeId) ? '/p/$pid/r/${widget.room.roomName}' : '/p/$pid/r/${widget.room.roomName}/a/$routeId';
+    final nextUri = currentUri.replace(path: nextPath);
+    context.go(nextUri.toString());
+  }
+
+  IconData _developmentAgentIcon(RemoteParticipant participant) {
+    if (participantSupportsVoice(participant)) {
+      return LucideIcons.audioWaveform;
+    }
+    if (!participantSupportsChat(participant)) {
+      return LucideIcons.badgeQuestionMark;
+    }
+    return LucideIcons.bot;
   }
 
   List<RemoteParticipant> _developmentParticipants(List<ServiceSpec> supported) {
@@ -1261,6 +1333,52 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return '.threads/main.thread';
   }
 
+  _MobileChatHeaderContext? _resolveMobileChatHeaderContext(List<ServiceSpec> supported, _ResolvedAgentSelection selection) {
+    String? agentName;
+    String? threadListPath;
+
+    final developmentParticipant = selection.developmentParticipant;
+    if (developmentParticipant != null) {
+      final descriptor = participantConversationDescriptor(developmentParticipant);
+      if (descriptor?.isChat != true) {
+        return null;
+      }
+
+      agentName = participantDisplayName(developmentParticipant);
+      if (agentName == null) {
+        return null;
+      }
+      threadListPath = _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: agentName);
+    } else if (selection.service != null) {
+      final service = selection.service!;
+      final descriptor = serviceConversationDescriptor(service, remoteParticipants: widget.room.messaging.remoteParticipants);
+      if (descriptor?.isChat != true) {
+        return null;
+      }
+
+      agentName = service.agents.firstOrNull?.name ?? service.metadata.name;
+      threadListPath = _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: agentName);
+    }
+
+    if (agentName == null) {
+      return null;
+    }
+
+    final agentKey = selection.routeId;
+    final selectedThreadPath = _selectedThreadPathForAgentKey(agentKey);
+    final currentThreadLabel = selectedThreadPath == null
+        ? "New thread"
+        : (_selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
+
+    return _MobileChatHeaderContext(
+      agentName: agentName,
+      agentKey: agentKey,
+      currentThreadLabel: currentThreadLabel,
+      selectedThreadPath: selectedThreadPath,
+      threadListPath: threadListPath,
+    );
+  }
+
   List<Widget> _meetingToolbarControls(BuildContext context, {bool compact = false}) {
     final model = room.VideoRoomModel.maybeOf(context);
     if (model?.room == null) {
@@ -1414,7 +1532,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     services.refresh();
   }
 
-  Widget _buildAgentsActionRow(BuildContext context, {Widget? mobileBelowDropdown}) {
+  Widget _buildAgentsActionRow(BuildContext context) {
     final isMobile = _usesMobileRoomLayout(context);
     if (!isMobile) return const SizedBox.shrink();
 
@@ -1437,95 +1555,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            dropdown,
-            if (mobileBelowDropdown != null) ...[const SizedBox(height: 10), mobileBelowDropdown],
-          ],
-        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [dropdown]),
       ),
     );
   }
 
   // ignore: unused_element
-  Widget _buildMobileThreadGetStartedActions(
-    BuildContext context, {
-    required VoidCallback onNewThread,
-    required bool isNewThreadSelected,
-    required String currentThreadLabel,
-    VoidCallback? onManage,
-  }) {
-    final theme = ShadTheme.of(context);
-    final createActionStyle = powerboardsActionLabelStyle(color: theme.colorScheme.foreground);
-    final secondaryActionStyle = powerboardsSecondaryTextStyle(
-      color: onManage == null ? theme.colorScheme.mutedForeground.withValues(alpha: 0.7) : theme.colorScheme.mutedForeground,
-    );
-
-    return Padding(
-      padding: powerboardsMobileSecondaryRowPadding,
-      child: Row(
-        children: [
-          Expanded(
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: onManage ?? onNewThread,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                  child: Row(
-                    children: [
-                      AnimatedSwitcher(
-                        duration: powerboardsAdaptiveTransitionDuration(context),
-                        switchInCurve: powerboardsAdaptiveTransitionInCurve(context),
-                        switchOutCurve: powerboardsAdaptiveTransitionOutCurve(context),
-                        transitionBuilder: (child, animation) => FadeTransition(
-                          opacity: animation,
-                          child: ScaleTransition(scale: Tween<double>(begin: 0.92, end: 1).animate(animation), child: child),
-                        ),
-                        child: Icon(
-                          isNewThreadSelected ? LucideIcons.check : LucideIcons.messageSquare,
-                          key: ValueKey(currentThreadLabel),
-                          size: 16,
-                          color: theme.colorScheme.foreground,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          currentThreadLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          softWrap: false,
-                          style: createActionStyle,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          ShadButton.ghost(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            onPressed: onManage,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text("All threads", maxLines: 1, overflow: TextOverflow.visible, softWrap: false, style: secondaryActionStyle),
-                const SizedBox(width: 6),
-                Icon(LucideIcons.chevronRight, size: 16, color: secondaryActionStyle.color),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   _MobileRoomPane _mobileActivePane({required bool filesVisible}) {
     if (controller.inMeeting) {
       return _MobileRoomPane.meeting;
@@ -1686,7 +1721,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         ? destinations.reversed.toList(growable: false)
         : destinations.reversed.skip(1).toList(growable: false);
 
-    if (ancestorDestinations.isEmpty && filesLocation.openedFile == null) {
+    final isFilesLanding = filesLocation.folder.isEmpty && filesLocation.openedFile == null;
+    if (isFilesLanding) {
       return const [];
     }
 
@@ -1701,185 +1737,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       AppMenuEntry(title: "Files", icon: LucideIcons.files, onPressed: () => _openMobileFilesEntry(context, "", isFolder: true)),
       AppMenuEntry(title: "Chat", icon: LucideIcons.messageSquareText, separatorBefore: true, onPressed: () => _showChatPane(context)),
     ];
-  }
-
-  Future<void> _uploadFileToRoom(Stream<Uint8List> stream, String path, int totalBytes) async {
-    final upload = MeshagentFileUpload(room: widget.room, path: path, dataStream: stream, size: totalBytes);
-    await upload.done;
-  }
-
-  Future<void> _addFilesToFolder(String path) async {
-    await FileUploadHelper.pickAndUploadFiles(path: path, onUpload: _uploadFileToRoom);
-  }
-
-  Future<void> _addFolderToCurrentFilesLocation(BuildContext context) async {
-    final folder = _mobileFilesLocation(context).folder;
-    final result = await showPowerboardsAlertDialog<String>(
-      context: context,
-      builder: (context) {
-        return ControlledForm(
-          builder: (context, controller, formKey) {
-            void submit() {
-              if (!formKey.currentState!.saveAndValidate()) {
-                return;
-              }
-
-              Navigator.of(context).pop(formKey.currentState!.value["name"] ?? "");
-            }
-
-            return PowerboardsShadDialog.compact(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              title: const Text("New folder"),
-              actions: [
-                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
-                ShadButton(onPressed: submit, child: const Text("OK")),
-              ],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 16,
-                  children: [
-                    PowerboardsAdaptiveInputFormField(
-                      initialValue: "",
-                      validator: TextValidators.folder,
-                      id: "name",
-                      label: const Text("Name"),
-                      autofocus: true,
-                      onSubmitted: (_) => submit(),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (result == null || result.trim().isEmpty) {
-      return;
-    }
-
-    final fileName = joinPaths(folder, "${result.trim()}/$_mobileFilesPlaceholderFileName");
-    await _uploadFileToRoom(Stream<Uint8List>.value(Uint8List(0)), fileName, 0);
-  }
-
-  Future<void> _showNewTextFileDialogForCurrentFilesLocation(BuildContext context) async {
-    final folder = _mobileFilesLocation(context).folder;
-    final resolvedName = await showPowerboardsAlertDialog<String>(
-      context: context,
-      builder: (context) {
-        return ControlledForm(
-          builder: (context, controller, formKey) {
-            Future<void> submit(_) async {
-              if (!formKey.currentState!.saveAndValidate()) {
-                return;
-              }
-
-              final String name = (formKey.currentState!.value["name"] ?? "").trim();
-              var nextName = name;
-
-              if (!name.contains('.')) {
-                final maybeName = await showPowerboardsAlertDialog<String>(
-                  context: context,
-                  builder: (context) => PowerboardsShadDialog.compact(
-                    title: const Text("Add .txt extension?"),
-                    description: Text("`$name` has no extension."),
-                    actions: [
-                      ShadButton.outline(onPressed: () => Navigator.of(context).pop(name), child: const Text("No extension")),
-                      ShadButton(onPressed: () => Navigator.of(context).pop("$name.txt"), child: const Text("Add .txt")),
-                    ],
-                  ),
-                );
-
-                if (maybeName == null) {
-                  return;
-                }
-                nextName = maybeName;
-              }
-
-              if (!context.mounted) {
-                return;
-              }
-
-              Navigator.of(context).pop(nextName);
-            }
-
-            return PowerboardsShadDialog.compact(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              title: const Text("New Text File"),
-              actions: [
-                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
-                ShadButton(onPressed: () => submit(null), child: const Text("OK")),
-              ],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: 16,
-                  children: [
-                    PowerboardsAdaptiveInputFormField(
-                      id: "name",
-                      initialValue: "",
-                      validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,
-                      label: const Text("Name"),
-                      autofocus: true,
-                      onSubmitted: submit,
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (resolvedName == null || resolvedName.trim().isEmpty) {
-      return;
-    }
-
-    await _uploadFileToRoom(Stream<Uint8List>.value(Uint8List(0)), joinPaths(folder, resolvedName.trim()), 0);
-  }
-
-  Widget _buildMobileFilesCreateMenuButton(BuildContext context) {
-    final folder = _mobileFilesLocation(context).folder;
-
-    return AppContextMenuButton(
-      compact: true,
-      boundaryContext: context,
-      entries: [
-        AppMenuEntry(
-          title: "New folder",
-          description: "Create a folder in this location.",
-          icon: LucideIcons.folderPlus,
-          onPressed: () => _addFolderToCurrentFilesLocation(context),
-        ),
-        AppMenuEntry(
-          title: "New text file",
-          description: "Create a new text file in this location.",
-          icon: LucideIcons.fileText,
-          onPressed: () => _showNewTextFileDialogForCurrentFilesLocation(context),
-        ),
-        AppMenuEntry(
-          title: "Upload files",
-          description: "Upload files to this folder.",
-          icon: LucideIcons.upload,
-          onPressed: () => _addFilesToFolder(folder),
-        ),
-      ],
-      constraints: const BoxConstraints(minWidth: 220),
-      childBuilder: (context, controller) => Tooltip(
-        message: "Create or upload",
-        child: ShadIconButton.outline(
-          icon: const Icon(LucideIcons.plus, size: paneHeaderIconButtonIconSize),
-          onPressed: controller.toggle,
-        ),
-      ),
-    );
   }
 
   Widget _buildMobileRoomLeadingAction(BuildContext context, {required bool filesVisible}) {
@@ -1976,35 +1833,111 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildMobilePlainHeaderTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: _mobilePlainHeaderTitleInset),
-      child: Text(title, style: meetingHeaderTitleStyle),
+  Widget _buildMobileRoomContextHeaderTitle(
+    BuildContext context, {
+    required List<ServiceSpec> supported,
+    required _MobileChatHeaderContext chatContext,
+    required double collapseProgress,
+  }) {
+    return PowerboardsMobileHeaderTrigger(
+      primaryText: chatContext.currentThreadLabel,
+      secondaryText: chatContext.agentName,
+      collapseProgress: collapseProgress,
+      showChevron: chatContext.canOpenContextSwitcher,
+      textAlign: TextAlign.left,
+      onPressed: !chatContext.canOpenContextSwitcher
+          ? null
+          : () => _showMobileRoomContextSwitcher(context: context, supported: supported, chatContext: chatContext),
     );
   }
 
-  List<Widget> _buildMobileEmptyRoomHeaderActions(BuildContext context, {required bool canManageAgents}) {
+  Widget _buildMobileFilesContextHeaderTitle(
+    BuildContext context, {
+    required _MobileFilesLocation filesLocation,
+    required double collapseProgress,
+  }) {
+    final menuEntries = _mobileFilesBackMenuEntries(context);
+    final title = PowerboardsMobileHeaderTrigger(
+      primaryText: filesLocation.title,
+      secondaryText: null,
+      collapseProgress: collapseProgress,
+      showChevron: menuEntries.isNotEmpty,
+      textAlign: TextAlign.left,
+    );
+
+    if (menuEntries.isEmpty) {
+      return title;
+    }
+
+    return AppContextMenuButton(
+      compact: true,
+      boundaryContext: context,
+      entries: menuEntries,
+      constraints: const BoxConstraints(minWidth: 220),
+      childBuilder: (context, controller) => PowerboardsMobileHeaderTrigger(
+        primaryText: filesLocation.title,
+        secondaryText: null,
+        collapseProgress: collapseProgress,
+        showChevron: true,
+        textAlign: TextAlign.left,
+        onPressed: controller.toggle,
+      ),
+    );
+  }
+
+  List<Widget> _buildMobileEmptyRoomHeaderActions(BuildContext context, {required bool canViewStorageAllowed}) {
+    return _buildMobileRoomHeaderActions(context, activePane: _MobileRoomPane.chat, canViewStorageAllowed: canViewStorageAllowed);
+  }
+
+  List<Widget> _buildMobileRoomHeaderActions(
+    BuildContext context, {
+    required _MobileRoomPane activePane,
+    required bool canViewStorageAllowed,
+    _MobileChatHeaderContext? chatContext,
+    _MobileFilesLocation? filesLocation,
+  }) {
+    final useDirectNewThreadAction = activePane == _MobileRoomPane.chat && chatContext != null;
+    final useDirectFileShareAction = activePane == _MobileRoomPane.files && filesLocation?.openedFile != null;
+
     return [
-      InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-      if (canManageAgents) _buildPaneHeaderIconButton(tooltip: "Manage agents", icon: LucideIcons.blocks, onPressed: showManageAgents),
+      _buildPaneHeaderIconButton(
+        tooltip: useDirectFileShareAction ? "Share" : (useDirectNewThreadAction ? "New thread" : "Create"),
+        icon: useDirectFileShareAction ? LucideIcons.share : (useDirectNewThreadAction ? LucideIcons.messageSquarePlus : LucideIcons.plus),
+        onPressed: useDirectFileShareAction
+            ? () => _filesHeaderController.shareOpenedFileInCurrentLocation()
+            : useDirectNewThreadAction
+            ? () {
+                _showChatPane(context);
+                _setSelectedThreadPath(chatContext.agentKey, null);
+              }
+            : () => _showMobileRoomCreateMenu(
+                context: context,
+                activePane: activePane,
+                canViewStorageAllowed: canViewStorageAllowed,
+                chatContext: chatContext,
+              ),
+      ),
+      RoomOptionsMenu(
+        projectId: widget.projectId,
+        room: widget.room,
+        roomController: controller,
+        isOwner: isOwner,
+        canViewDeveloperLogs: canViewDeveloperLogs,
+        boundaryContext: context,
+        showMeetingPaneEntriesInOverflow: true,
+        showFilesAction: canViewStorageAllowed,
+        showMeetAction: true,
+        onShowChat: () => _showChatPane(context),
+        onShowFiles: () => _showFilesPane(context),
+        onShowMeet: () => _showMeetingPane(context),
+      ),
     ];
   }
 
-  List<Widget> _buildMobileRoomHeaderActions(BuildContext context, {required bool canViewStorageAllowed, required bool filesVisible}) {
-    final pane = _mobileActivePane(filesVisible: filesVisible);
-    final filesLocation = pane == _MobileRoomPane.files ? _mobileFilesLocation(context) : null;
-    final showMeetingInviteAction = pane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
-    final showFilesHeaderStack = pane == _MobileRoomPane.files;
-    final showFilesCreateAction = showFilesHeaderStack && filesLocation?.openedFile == null;
-    final meetingSessionActive = _isMeetingSessionActive(context);
+  List<Widget> _buildLegacyMobileMeetingHeaderActions(BuildContext context, {required bool canViewStorageAllowed}) {
+    final showMeetingInviteAction = _isMeetingSessionActive(context);
 
     return [
-      if (showFilesCreateAction) _buildMobileFilesCreateMenuButton(context),
-      if (pane == _MobileRoomPane.chat) InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-      if (showFilesHeaderStack)
-        MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _showMeetingPane(context)),
-      if (pane == _MobileRoomPane.chat)
-        MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _showMeetingPane(context)),
       if (showMeetingInviteAction) InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
       RoomOptionsMenu(
         projectId: widget.projectId,
@@ -2222,6 +2155,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         joinMeeting: _joinMeeting,
         emptyState: meetingActiveSingleThreadEmptyState,
         hideChatInput: hideChatInput,
+        onInvite: () async {
+          final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
+          if (!context.mounted) {
+            return;
+          }
+          await showUpdateRoomPermsDialog(context, projectId: widget.projectId, room: room);
+        },
+        onOpenFiles: () => _showFilesPane(context),
+        onOpenMeet: () => _showMeetingPane(context),
         projectId: widget.projectId,
       ),
     );
@@ -2241,35 +2183,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           if (!isMobile || embedMobileChrome) ...[
             ActionsRow(actions: chatActions),
             _buildDesktopChatViewportCutoffSpacer(context),
-            _buildAgentsActionRow(
-              context,
-              mobileBelowDropdown: showMobileThreadActions
-                  ? _buildMobileThreadGetStartedActions(
-                      context,
-                      onNewThread: () => onSelectedThreadPathChanged?.call(null),
-                      isNewThreadSelected: selectedThreadPath == null,
-                      currentThreadLabel: currentThreadLabel,
-                      onManage: resolvedThreadListPath == null
-                          ? null
-                          : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
-                    )
-                  : null,
-            ),
-          ] else if (showMobileThreadActions)
-            SizedBox(
-              height: powerboardsMobileSecondaryRowHeight,
-              child: Center(
-                child: _buildMobileThreadGetStartedActions(
-                  context,
-                  onNewThread: () => onSelectedThreadPathChanged?.call(null),
-                  isNewThreadSelected: selectedThreadPath == null,
-                  currentThreadLabel: currentThreadLabel,
-                  onManage: resolvedThreadListPath == null
-                      ? null
-                      : () => _showMobileThreadPicker(threadListPath: resolvedThreadListPath, agentKey: agentKey, agentName: agentName),
-                ),
-              ),
-            ),
+            _buildAgentsActionRow(context),
+          ],
           Expanded(
             child: showThreadRail
                 ? _buildDesktopChatWithThreadRail(
@@ -2477,6 +2392,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 services: services,
                 hideSystem: true,
                 mobileShellOwnsHeader: isMobile && !embedMobileChrome,
+                controller: _filesHeaderController,
                 desktopHeaderActions: isMobile ? const [] : actions,
                 desktopHeaderActionLeadingWidthFloor: meetingSessionActive ? _meetingActivePaneActionLeadingWidthFloor : 0,
                 desktopHeaderActionMinimumLeadingWidth: meetingSessionActive ? 160 : 0,
@@ -2650,6 +2566,279 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   void _showMaximizedChat() {
     _showChatPane(context);
+  }
+
+  Widget _buildMobileContextSurfaceItem({
+    required String title,
+    String? description,
+    Widget? leading,
+    Widget? trailing,
+    required VoidCallback onTap,
+  }) {
+    final theme = ShadTheme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: theme.colorScheme.border.withValues(alpha: 0.8)),
+            color: theme.colorScheme.background.withValues(alpha: 0.84),
+          ),
+          child: PowerboardsMenuRow(title: title, description: description, leading: leading, trailing: trailing),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMobileRoomContextSwitcher({
+    required BuildContext context,
+    required List<ServiceSpec> supported,
+    required _MobileChatHeaderContext chatContext,
+  }) async {
+    final developmentParticipants = _developmentParticipants(supported);
+
+    await showPowerboardsFlowDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(dialogContext);
+        final items = <Widget>[];
+
+        void addGap([double height = 10]) {
+          if (items.isEmpty || items.last is SizedBox) {
+            return;
+          }
+          items.add(SizedBox(height: height));
+        }
+
+        if (chatContext.threadListPath != null) {
+          items.add(
+            _buildMobileContextSurfaceItem(
+              title: "Threads",
+              description: chatContext.currentThreadLabel,
+              leading: const Icon(LucideIcons.messageSquareText, size: 18),
+              trailing: const Icon(LucideIcons.chevronRight, size: 18),
+              onTap: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(
+                  _showMobileThreadPicker(
+                    threadListPath: chatContext.threadListPath!,
+                    agentKey: chatContext.agentKey,
+                    agentName: chatContext.agentName,
+                  ),
+                );
+              },
+            ),
+          );
+        }
+
+        if (chatContext.threadListPath != null && chatContext.selectedThreadPath != null) {
+          addGap();
+          items.add(
+            _buildMobileContextSurfaceItem(
+              title: "New thread",
+              description: "Start a fresh conversation.",
+              leading: const Icon(LucideIcons.sparkles, size: 18),
+              onTap: () {
+                _setSelectedThreadPath(chatContext.agentKey, null);
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          );
+        }
+
+        if (supported.isNotEmpty || developmentParticipants.isNotEmpty) {
+          addGap(18);
+          items.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                "Agents",
+                style: powerboardsMetaTextStyle(
+                  color: ShadTheme.of(dialogContext).colorScheme.mutedForeground,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          );
+          items.add(const SizedBox(height: 10));
+        }
+
+        for (final service in supported) {
+          items.add(
+            _buildMobileContextSurfaceItem(
+              title: service.metadata.name,
+              description: service.metadata.description,
+              leading: const Icon(LucideIcons.bot, size: 18),
+              trailing: chatContext.agentKey == _serviceId(service) ? const Icon(LucideIcons.check, size: 18) : null,
+              onTap: () {
+                Navigator.of(dialogContext).pop();
+                _navigateToAgentRoute(context, _serviceId(service));
+              },
+            ),
+          );
+          items.add(const SizedBox(height: 10));
+        }
+
+        for (final participant in developmentParticipants) {
+          final participantName = participantDisplayName(participant);
+          items.add(
+            _buildMobileContextSurfaceItem(
+              title: participantName ?? "Development agent",
+              description: "Development mode agent",
+              leading: Icon(_developmentAgentIcon(participant), size: 18),
+              trailing: chatContext.agentKey == developmentAgentRouteId(participantName ?? "")
+                  ? const Icon(LucideIcons.check, size: 18)
+                  : null,
+              onTap: () {
+                if (participantName == null) {
+                  return;
+                }
+
+                Navigator.of(dialogContext).pop();
+                _navigateToAgentRoute(context, developmentAgentRouteId(participantName));
+              },
+            ),
+          );
+          items.add(const SizedBox(height: 10));
+        }
+
+        if (isOwner.state.value == true) {
+          addGap(supported.isNotEmpty || developmentParticipants.isNotEmpty ? 8 : 0);
+          items.add(
+            _buildMobileContextSurfaceItem(
+              title: "Manage agents",
+              description: "Install or remove agents and services.",
+              leading: const Icon(LucideIcons.blocks, size: 18),
+              onTap: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(showManageAgents());
+              },
+            ),
+          );
+        }
+
+        if (items.isNotEmpty && items.last is SizedBox) {
+          items.removeLast();
+        }
+
+        return PowerboardsShadDialog.listPicker(
+          title: const Text("Room context"),
+          description: const Text("Switch agents or jump between threads."),
+          actions: [ShadButton.outline(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close"))],
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: double.infinity,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 360.0),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: items),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _runMobileCreateAction(BuildContext dialogContext, FutureOr<void> Function() action) async {
+    Navigator.of(dialogContext).pop();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) {
+      return;
+    }
+    await action();
+  }
+
+  Future<void> _showMobileRoomCreateMenu({
+    required BuildContext context,
+    required _MobileRoomPane activePane,
+    required bool canViewStorageAllowed,
+    _MobileChatHeaderContext? chatContext,
+  }) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (!mounted) {
+      return;
+    }
+
+    await showPowerboardsFlowDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(dialogContext);
+
+        return PowerboardsShadDialog.listPicker(
+          title: const Text('Create'),
+          description: Text(
+            activePane == _MobileRoomPane.files ? 'Choose something to add to this folder.' : 'Choose something to start in this room.',
+          ),
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: powerboardsUsesNativeMobileDialogLayout(dialogContext) ? EdgeInsets.zero : powerboardsDialogScrollableListPadding,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: double.infinity,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 360),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (activePane == _MobileRoomPane.files && canViewStorageAllowed) ...[
+                        _MobileRoomCreateActionRow(
+                          title: 'New folder',
+                          icon: LucideIcons.folderPlus,
+                          onPressed: () => _runMobileCreateAction(dialogContext, _filesHeaderController.createFolderInCurrentLocation),
+                        ),
+                        const ShadSeparator.horizontal(margin: EdgeInsets.zero),
+                        _MobileRoomCreateActionRow(
+                          title: 'New text file',
+                          icon: LucideIcons.fileText,
+                          onPressed: () => _runMobileCreateAction(dialogContext, () {
+                            _filesHeaderController.createTextFileInCurrentLocation();
+                          }),
+                        ),
+                        const ShadSeparator.horizontal(margin: EdgeInsets.zero),
+                        _MobileRoomCreateActionRow(
+                          title: 'Add files',
+                          icon: LucideIcons.upload,
+                          onPressed: () => _runMobileCreateAction(dialogContext, _filesHeaderController.addFilesInCurrentLocation),
+                        ),
+                      ] else ...[
+                        if (chatContext != null) ...[
+                          _MobileRoomCreateActionRow(
+                            title: 'New chat thread',
+                            icon: LucideIcons.messageSquarePlus,
+                            onPressed: () => _runMobileCreateAction(dialogContext, () {
+                              _showChatPane(context);
+                              _setSelectedThreadPath(chatContext.agentKey, null);
+                            }),
+                          ),
+                          const ShadSeparator.horizontal(margin: EdgeInsets.zero),
+                        ],
+                        _MobileRoomCreateActionRow(
+                          title: 'Invite someone',
+                          icon: LucideIcons.userPlus,
+                          onPressed: () => _runMobileCreateAction(dialogContext, () async {
+                            final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
+                            if (!context.mounted) {
+                              return;
+                            }
+                            await showUpdateRoomPermsDialog(context, projectId: widget.projectId, room: room);
+                          }),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // ignore: unused_element
@@ -2947,11 +3136,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
                 final cs = ShadTheme.of(context).colorScheme;
                 if (isMobile) {
-                  return _buildMobileRoomScaffold(
-                    context,
-                    leadingAction: BackButton(projectId: widget.projectId),
-                    title: const SizedBox.shrink(),
+                  return PowerboardsMobileOverlayScaffold(
+                    leading: BackButton(projectId: widget.projectId),
+                    titleBuilder: (_, _) => const SizedBox.shrink(),
                     trailingActions: const [],
+                    backgroundColor: cs.card,
+                    scrollIdentity: "room-loading",
                     body: _buildRoomLoading(context, title: "Loading room services"),
                   );
                 }
@@ -2983,6 +3173,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             final filesVisible = canViewStorageAllowed && controller.isFilesShown;
                             final supported = _supportedServices(services.state.value!);
                             final selected = _resolveSelectedAgent(supported);
+                            final roomCreateChatContext = _resolveMobileChatHeaderContext(supported, selected);
                             final meetingSessionActive = _isMeetingSessionActive(context);
                             final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;
                             final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
@@ -3066,18 +3257,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                               );
 
                               if (isMobile) {
-                                return ColoredBox(
-                                  color: cs.card,
-                                  child: _buildMobileRoomScaffold(
+                                return PowerboardsMobileOverlayScaffold(
+                                  leading: BackButton(projectId: widget.projectId),
+                                  titleBuilder: (_, _) => const SizedBox.shrink(),
+                                  trailingActions: _buildMobileEmptyRoomHeaderActions(
                                     context,
-                                    leadingAction: BackButton(projectId: widget.projectId),
-                                    title: const SizedBox.shrink(),
-                                    trailingActions: _buildMobileEmptyRoomHeaderActions(
-                                      context,
-                                      canManageAgents: isOwner.state.value == true,
-                                    ),
-                                    body: emptyStateBody,
+                                    canViewStorageAllowed: canViewStorageAllowed,
                                   ),
+                                  backgroundColor: cs.card,
+                                  scrollIdentity: "room-empty",
+                                  body: emptyStateBody,
                                 );
                               }
 
@@ -3104,47 +3293,78 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   final activePane = _mobileActivePane(filesVisible: filesVisible);
                                   final useMobileMeetingHeaderControls =
                                       activePane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
-                                  final centerMobileHeaderTitle = activePane == _MobileRoomPane.meeting && !useMobileMeetingHeaderControls;
-                                  final headerTitle = switch (activePane) {
-                                    _MobileRoomPane.chat => AgentsDropdown(
-                                      projectId: widget.projectId,
-                                      room: widget.room,
-                                      selectedService: selected.service,
-                                      selectedAgentRouteId: selected.routeId,
-                                      services: supported,
-                                      onOpen: services.refresh,
-                                      onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-                                      expandToAvailableWidth: true,
-                                    ),
-                                    _MobileRoomPane.files => _buildMobilePlainHeaderTitle(_mobileFilesLocation(context).title),
-                                    _MobileRoomPane.meeting =>
-                                      useMobileMeetingHeaderControls
-                                          ? _buildMobileMeetingHeaderTitle(context)
-                                          : Text("Get ready to meet", style: meetingHeaderTitleStyle),
-                                  };
-
                                   final mobileBody = controller.inMeeting
                                       ? _buildMeeting(context, null, const [], embedMobileChrome: false)
                                       : filesVisible
                                       ? _buildFilesArea(context, const [], embedMobileChrome: false)
                                       : _buildAgentArea(context, const [], embedMobileChrome: false);
 
-                                  return _buildMobileRoomScaffold(
-                                    context,
-                                    leadingAction: useMobileMeetingHeaderControls
-                                        ? const SizedBox.shrink()
-                                        : _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
-                                    title: headerTitle,
+                                  if (activePane == _MobileRoomPane.meeting) {
+                                    final headerTitle = useMobileMeetingHeaderControls
+                                        ? _buildMobileMeetingHeaderTitle(context)
+                                        : Text("Get ready to meet", style: meetingHeaderTitleStyle);
+
+                                    return _buildMobileRoomScaffold(
+                                      context,
+                                      leadingAction: useMobileMeetingHeaderControls
+                                          ? const SizedBox.shrink()
+                                          : _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
+                                      title: headerTitle,
+                                      trailingActions: _buildLegacyMobileMeetingHeaderActions(
+                                        context,
+                                        canViewStorageAllowed: canViewStorageAllowed,
+                                      ),
+                                      titleAlignment: !useMobileMeetingHeaderControls ? Alignment.center : Alignment.centerLeft,
+                                      body: mobileBody,
+                                      bottomActions: useMobileMeetingHeaderControls
+                                          ? const []
+                                          : (controller.inMeeting && meetingSessionActive ? meetingActions(context) : const []),
+                                    );
+                                  }
+
+                                  final filesLocation = activePane == _MobileRoomPane.files ? _mobileFilesLocation(context) : null;
+                                  final chatHeaderContext = activePane == _MobileRoomPane.chat
+                                      ? _resolveMobileChatHeaderContext(supported, selected)
+                                      : null;
+
+                                  return PowerboardsMobileOverlayScaffold(
+                                    leading: _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
+                                    titleAlignment: Alignment.centerLeft,
+                                    titleBuilder: (context, collapseProgress) {
+                                      if (activePane == _MobileRoomPane.files && filesLocation != null) {
+                                        return _buildMobileFilesContextHeaderTitle(
+                                          context,
+                                          filesLocation: filesLocation,
+                                          collapseProgress: collapseProgress,
+                                        );
+                                      }
+
+                                      if (chatHeaderContext != null) {
+                                        return _buildMobileRoomContextHeaderTitle(
+                                          context,
+                                          supported: supported,
+                                          chatContext: chatHeaderContext,
+                                          collapseProgress: collapseProgress,
+                                        );
+                                      }
+
+                                      return const SizedBox.shrink();
+                                    },
                                     trailingActions: _buildMobileRoomHeaderActions(
                                       context,
+                                      activePane: activePane,
                                       canViewStorageAllowed: canViewStorageAllowed,
-                                      filesVisible: filesVisible,
+                                      chatContext: roomCreateChatContext,
+                                      filesLocation: filesLocation,
                                     ),
-                                    titleAlignment: centerMobileHeaderTitle ? Alignment.center : Alignment.centerLeft,
+                                    backgroundColor: cs.card,
+                                    scrollIdentity: switch (activePane) {
+                                      _MobileRoomPane.chat =>
+                                        "chat:${chatHeaderContext?.agentKey ?? "none"}:${chatHeaderContext?.selectedThreadPath ?? "new"}",
+                                      _MobileRoomPane.files => "files:${filesLocation?.folder ?? ""}:${filesLocation?.openedFile ?? ""}",
+                                      _MobileRoomPane.meeting => "meeting",
+                                    },
                                     body: mobileBody,
-                                    bottomActions: useMobileMeetingHeaderControls
-                                        ? const []
-                                        : (controller.inMeeting && meetingSessionActive ? meetingActions(context) : const []),
                                   );
                                 }
 
