@@ -1849,7 +1849,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Widget _buildMobileMeetingHeaderTitle(BuildContext context) {
     final controls = _meetingToolbarControls(context, compact: true);
     if (controls.isEmpty) {
-      return Text("Get ready to meet", style: meetingHeaderTitleStyle);
+      final theme = ShadTheme.of(context);
+      return Text("Get ready to meet", style: powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground));
     }
 
     return Align(
@@ -3332,9 +3333,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                       : _buildAgentArea(context, const [], embedMobileChrome: false);
 
                                   if (activePane == _MobileRoomPane.meeting) {
+                                    final theme = ShadTheme.of(context);
                                     final headerTitle = useMobileMeetingHeaderControls
                                         ? _buildMobileMeetingHeaderTitle(context)
-                                        : Text("Get ready to meet", style: meetingHeaderTitleStyle);
+                                        : Text(
+                                            "Get ready to meet",
+                                            style: powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground),
+                                          );
 
                                     return _buildMobileRoomScaffold(
                                       context,

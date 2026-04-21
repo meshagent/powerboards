@@ -1973,26 +1973,29 @@ class _FileManagerViewState extends State<FileManagerView> {
       },
     );
 
-    return SizedBox(
-      height: powerboardsMobileSecondaryRowHeight,
-      child: Center(
-        child: Padding(
-          padding: powerboardsMobileSecondaryRowPadding,
-          child: Row(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: PowerboardsMobileActionPillStrip(
-                    items: [primaryPill, deletePill],
-                    textStyle: pillTextStyle,
-                    unselectedForegroundColor: theme.colorScheme.foreground,
-                    itemGap: 10,
-                    pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+    return Padding(
+      padding: const EdgeInsets.only(top: powerboardsMobileOverlaySecondaryRowLift),
+      child: SizedBox(
+        height: powerboardsMobileSecondaryRowHeight,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: powerboardsMobileShellHorizontalInset),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: PowerboardsMobileActionPillStrip(
+                      items: [primaryPill, deletePill],
+                      textStyle: pillTextStyle,
+                      unselectedForegroundColor: theme.colorScheme.foreground,
+                      itemGap: 10,
+                      pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -2540,17 +2543,12 @@ class _FileManagerViewState extends State<FileManagerView> {
               final hideEmbeddedMobileToolbar = isAdaptiveMobile && !hasOpenedFile;
               final showAdaptiveOpenedFileDivider = isAdaptiveMobile && hasOpenedFile;
               final adaptiveSecondaryRow = showAdaptiveOpenedFileDivider
-                  ? DecoratedBox(
-                      decoration: BoxDecoration(
-                        border: Border(bottom: BorderSide(color: shadBorder.withValues(alpha: 0.5))),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildToolbar(selected),
-                          const SizedBox(height: desktopPaneSecondaryRowContentGap),
-                        ],
-                      ),
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildToolbar(selected),
+                        const SizedBox(height: desktopPaneSecondaryRowContentGap),
+                      ],
                     )
                   : hideEmbeddedMobileToolbar
                   ? const SizedBox.shrink()
@@ -2889,46 +2887,49 @@ class _FileTableViewState extends State<FileTableView> {
     final selectionActions = _buildMobileSelectedActions();
     final showSelectionModeActions = widget.forceShowSelect;
 
-    return SizedBox(
-      height: powerboardsMobileSecondaryRowHeight,
-      child: Center(
-        child: Padding(
-          padding: powerboardsMobileSecondaryRowPadding,
-          child: Row(
-            children: [
-              if (showSelectColumn) ...[
-                SizedBox(
-                  width: 36,
-                  child: Center(
-                    child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
-                  ),
-                ),
-                const SizedBox(width: 4),
-              ],
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: PowerboardsMobileActionPillStrip(
-                    items: pills,
-                    textStyle: pillTextStyle,
-                    unselectedForegroundColor: theme.colorScheme.foreground,
-                    itemGap: 10,
-                    pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
-                  ),
-                ),
-              ),
-              if (showSelectionModeActions) selectionActions,
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (widget.isRefreshing)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+    return Padding(
+      padding: const EdgeInsets.only(top: powerboardsMobileOverlaySecondaryRowLift),
+      child: SizedBox(
+        height: powerboardsMobileSecondaryRowHeight,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: powerboardsMobileShellHorizontalInset),
+            child: Row(
+              children: [
+                if (showSelectColumn) ...[
+                  SizedBox(
+                    width: 36,
+                    child: Center(
+                      child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
                     ),
+                  ),
+                  const SizedBox(width: 4),
                 ],
-              ),
-            ],
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: PowerboardsMobileActionPillStrip(
+                      items: pills,
+                      textStyle: pillTextStyle,
+                      unselectedForegroundColor: theme.colorScheme.foreground,
+                      itemGap: 10,
+                      pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+                    ),
+                  ),
+                ),
+                if (showSelectionModeActions) selectionActions,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.isRefreshing)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -2965,7 +2966,6 @@ class _FileTableViewState extends State<FileTableView> {
       Column(
         children: [
           _buildScrollAwareMobileHeader(_buildMobileHeader(showSelectColumn, selectAllValue)),
-          const Divider(height: 1, color: shadBorder),
           Expanded(
             child: ListView.separated(
               itemCount: widget.entries.length,

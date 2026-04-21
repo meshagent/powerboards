@@ -860,7 +860,9 @@ class _NavBarTopState extends State<_NavBarTop> {
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final mobileHeaderControlSize = desktopPaneHeaderCompactButtonWidth;
     final displayName = selectedProject?.name ?? "Select project";
-    final projectTitleStyle = powerboardsSectionTitleStyle(color: theme.colorScheme.foreground, height: 1.2);
+    final projectTitleStyle = isSmallDisplay
+        ? powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground)
+        : powerboardsSectionTitleStyle(color: theme.colorScheme.foreground, height: 1.2);
 
     return Container(
       padding: isSmallDisplay ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),

@@ -12,6 +12,7 @@ import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/route_service_match.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
+import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:meshagent/meshagent.dart' as ma;
@@ -473,64 +474,81 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
     }
   }
 
-  Widget _screenBody({required BuildContext context, required Widget child, required bool installEnabled, bool showFooter = true}) {
-    final theme = ShadTheme.of(context);
-    final titleStyle = powerboardsSectionTitleStyle(color: theme.colorScheme.foreground);
-    final surfaceColor = theme.colorScheme.card;
+  Widget _buildAdaptiveMobileScreenFooter(BuildContext context, {required bool installEnabled}) {
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final collapseProgress = overlayHeaderScope?.collapseProgress ?? 0;
+    final hideForScroll = collapseProgress > 0.1;
 
-    return Scaffold(
-      backgroundColor: surfaceColor,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: powerboardsMobileHorizontalPadding,
-              child: SizedBox(
-                height: headerHeight,
-                child: Row(
-                  children: [
-                    PowerboardsBackIconButton(onPressed: () => Navigator.of(context).maybePop(), tooltip: "Close", icon: LucideIcons.x),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Center(
-                        child: Text('Agents & Services', maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IgnorePointer(
-                      child: Opacity(
-                        opacity: 0,
-                        child: PowerboardsBackIconButton(onPressed: () {}, tooltip: "Close", icon: LucideIcons.x),
-                      ),
-                    ),
-                  ],
+    return AnimatedSwitcher(
+      duration: powerboardsMobileOverlayHeaderTransitionDuration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) {
+        return AnimatedBuilder(
+          animation: animation,
+          child: child,
+          builder: (context, transitionChild) {
+            final offsetY = 16 * (1 - animation.value);
+            return Transform.translate(
+              offset: Offset(0, offsetY),
+              child: ClipRect(
+                child: FadeTransition(
+                  opacity: animation,
+                  child: SizeTransition(sizeFactor: animation, axisAlignment: 1.0, child: transitionChild),
                 ),
               ),
-            ),
-            Expanded(child: child),
-            if (showFooter)
-              Container(
-                color: surfaceColor,
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ShadButton.outline(onPressed: installEnabled ? _openCustomDialog : null, child: const Text('Install')),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ShadButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Close')),
-                        ),
-                      ],
-                    ),
+            );
+          },
+        );
+      },
+      child: hideForScroll
+          ? const SizedBox.shrink(key: ValueKey('manage-agents-mobile-footer-hidden'))
+          : KeyedSubtree(
+              key: const ValueKey('manage-agents-mobile-footer-visible'),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ShadButton.outline(onPressed: installEnabled ? _openCustomDialog : null, child: const Text('Install')),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ShadButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Close')),
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
+    );
+  }
+
+  Widget _screenBody({required BuildContext context, required Widget child, required bool installEnabled, bool showFooter = true}) {
+    final theme = ShadTheme.of(context);
+    final titleStyle = powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground);
+    final surfaceColor = theme.colorScheme.card;
+    final trailingPlaceholder = IgnorePointer(
+      child: Opacity(
+        opacity: 0,
+        child: PowerboardsBackIconButton(onPressed: () {}, tooltip: "Close", icon: LucideIcons.x),
+      ),
+    );
+
+    return ColoredBox(
+      color: surfaceColor,
+      child: PowerboardsMobileOverlayScaffold(
+        leading: PowerboardsBackIconButton(onPressed: () => Navigator.of(context).maybePop(), tooltip: "Close", icon: LucideIcons.x),
+        titleBuilder: (context, collapseProgress) =>
+            Text('Agents & Services', maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle),
+        trailingActions: [trailingPlaceholder],
+        backgroundColor: surfaceColor,
+        body: Column(
+          children: [
+            Expanded(child: child),
+            if (showFooter) Builder(builder: (context) => _buildAdaptiveMobileScreenFooter(context, installEnabled: installEnabled)),
           ],
         ),
       ),
