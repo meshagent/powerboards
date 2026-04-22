@@ -60,6 +60,12 @@ ShadDecoration? _powerboardsDecorationThemeForContext(BuildContext context) {
   return ShadDecoration(labelStyle: powerboardsMobileFieldLabelTextStyle(powerboardsShadColorScheme().foreground));
 }
 
+ShadCheckboxTheme _powerboardsCheckboxThemeForContext(BuildContext context) {
+  return ShadCheckboxTheme(
+    decoration: ShadDecoration(border: ShadBorder.all(radius: const BorderRadius.all(Radius.circular(6)))),
+  );
+}
+
 ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
   final mediaQuery = MediaQuery.maybeOf(context);
   final screenWidth = mediaQuery?.size.width ?? 1024.0;
@@ -250,6 +256,7 @@ class MyApp extends StatelessWidget {
         radius: _powerboardsButtonRadiusForContext(context),
         textTheme: powerboardsShadTextTheme(),
         decoration: _powerboardsDecorationThemeForContext(context),
+        checkboxTheme: _powerboardsCheckboxThemeForContext(context),
         primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
@@ -375,6 +382,7 @@ class _RootProvidersState extends State<_RootProviders> {
         radius: _powerboardsButtonRadiusForContext(context),
         textTheme: powerboardsShadTextTheme(),
         decoration: _powerboardsDecorationThemeForContext(context),
+        checkboxTheme: _powerboardsCheckboxThemeForContext(context),
         primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
