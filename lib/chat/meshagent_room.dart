@@ -2115,7 +2115,40 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   List<Widget> _buildMobileEmptyRoomHeaderActions(BuildContext context, {required bool canViewStorageAllowed}) {
-    return _buildMobileRoomHeaderActions(context, activePane: _MobileRoomPane.chat, canViewStorageAllowed: canViewStorageAllowed);
+    return [
+      InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+      if (isOwner.state.value == true)
+        _buildPaneHeaderIconButton(
+          context: context,
+          tooltip: "Manage agents",
+          icon: LucideIcons.blocks,
+          onPressed: () async {
+            await showManageAgentsSurface(
+              context: context,
+              room: widget.room,
+              projectId: widget.projectId,
+              onServiceChanged: () {
+                services.refresh();
+              },
+            );
+          },
+        )
+      else
+        RoomOptionsMenu(
+          projectId: widget.projectId,
+          room: widget.room,
+          roomController: controller,
+          isOwner: isOwner,
+          canViewDeveloperLogs: canViewDeveloperLogs,
+          boundaryContext: context,
+          showMeetingPaneEntriesInOverflow: true,
+          showFilesAction: canViewStorageAllowed,
+          showMeetAction: true,
+          onShowChat: () => _showChatPane(context),
+          onShowFiles: () => _showFilesPane(context),
+          onShowMeet: () => _showMeetingPane(context),
+        ),
+    ];
   }
 
   List<Widget> _buildMobileRoomHeaderActions(
@@ -3582,6 +3615,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                       action: !canInstallAgent
                                           ? null
                                           : ShadButton(
+                                              height: powerboardsFooterActionButtonHeight,
                                               onPressed: () async {
                                                 await showManageAgentsSurface(
                                                   context: context,
