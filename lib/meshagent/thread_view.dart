@@ -478,6 +478,7 @@ class MeshagentThreadListPane extends StatefulWidget {
     this.mobileRowVerticalPadding = 14,
     this.mobileUseDialogListStyle = false,
     this.showCreateItem = true,
+    this.mobileHideEmptyStateWhenNoEntries = false,
   });
 
   final RoomClient client;
@@ -491,6 +492,7 @@ class MeshagentThreadListPane extends StatefulWidget {
   final double mobileRowVerticalPadding;
   final bool mobileUseDialogListStyle;
   final bool showCreateItem;
+  final bool mobileHideEmptyStateWhenNoEntries;
   final ValueChanged<String?> onSelectedThreadPathChanged;
   final void Function(String? path, String? displayName)? onSelectedThreadResolved;
 
@@ -948,6 +950,10 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     }
 
     if (entries.isEmpty && isMobile && !showCreateItem) {
+      if (widget.mobileHideEmptyStateWhenNoEntries) {
+        return const SizedBox.expand();
+      }
+
       return _buildCenteredState(title: "No threads yet");
     }
 
