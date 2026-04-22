@@ -328,6 +328,8 @@ class ManageAgentsDialog extends StatefulWidget {
 }
 
 class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
+  static const double _mobileManageAgentsScrollBottomInset = 148.0;
+
   Timer? _pollTimer;
 
   String? _error;
@@ -670,7 +672,10 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                 context: context,
                 child: ScrollConfiguration(
                   behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                  child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 24), child: optionsList),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, _mobileManageAgentsScrollBottomInset),
+                    child: optionsList,
+                  ),
                 ),
                 installEnabled: true,
               );
