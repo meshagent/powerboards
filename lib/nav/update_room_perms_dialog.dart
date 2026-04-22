@@ -13,8 +13,7 @@ import 'package:powerboards/meshagent/user_builder.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
-
-import 'package:powerboards/widgets/select_users.dart';
+import 'package:meshagent_flutter_shadcn/forms/select_users.dart';
 
 enum _View { permissions, addUser }
 
@@ -613,7 +612,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                             const SizedBox(height: 8),
                             SelectUsers(
                               autofocus: true,
-                              projectUsers: projUsersMap.values.toList(),
+                              projectEmails: projUsersMap.values.map((user) => user.email).toList(),
                               controller: controller,
                               textController: textController,
                               onChanged: (value) {
