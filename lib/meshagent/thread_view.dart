@@ -138,10 +138,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
   String _chatPlaceholderText(String? agentName) {
     final normalizedAgentName = agentName?.trim();
     if (normalizedAgentName == null || normalizedAgentName.isEmpty) {
-      return "Type a message";
+      return "Message...";
     }
 
-    return "Type a message or @$normalizedAgentName";
+    return "Message $normalizedAgentName...";
   }
 
   Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description, required bool compact}) {
