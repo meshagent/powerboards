@@ -3692,6 +3692,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   return PowerboardsMobileOverlayScaffold(
                                     leading: _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
                                     titleAlignment: Alignment.centerLeft,
+                                    collapseBodyWithHeader: activePane != _MobileRoomPane.chat,
+                                    bodyTopPaddingOffset: 0,
                                     titleBuilder: (context, collapseProgress) {
                                       if (activePane == _MobileRoomPane.files && filesLocation != null) {
                                         return _buildMobileFilesContextHeaderTitle(

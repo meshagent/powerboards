@@ -33,6 +33,8 @@ class PowerboardsMobileOverlayScaffold extends StatefulWidget {
     required this.backgroundColor,
     this.scrollIdentity,
     this.titleAlignment = Alignment.center,
+    this.collapseBodyWithHeader = true,
+    this.bodyTopPaddingOffset = 0,
   });
 
   final Widget leading;
@@ -42,6 +44,8 @@ class PowerboardsMobileOverlayScaffold extends StatefulWidget {
   final Color backgroundColor;
   final Object? scrollIdentity;
   final Alignment titleAlignment;
+  final bool collapseBodyWithHeader;
+  final double bodyTopPaddingOffset;
 
   @override
   State<PowerboardsMobileOverlayScaffold> createState() => _PowerboardsMobileOverlayScaffoldState();
@@ -112,6 +116,9 @@ class _PowerboardsMobileOverlayScaffoldState extends State<PowerboardsMobileOver
           animation: _scrollStateAnimation,
           builder: (context, _) {
             final collapseProgress = _scrollStateAnimation.value;
+            final bodyTopPadding =
+                powerboardsMobileOverlayBodyTopPadding(context, widget.collapseBodyWithHeader ? collapseProgress : 0) +
+                widget.bodyTopPaddingOffset;
             final effectiveSafeAreaMinimum = EdgeInsets.only(
               top: powerboardsMobileScreenTopInset,
               bottom: ui.lerpDouble(powerboardsMobileScreenBottomInset, 0, collapseProgress)!,
@@ -126,7 +133,7 @@ class _PowerboardsMobileOverlayScaffoldState extends State<PowerboardsMobileOver
                   children: [
                     Positioned.fill(
                       child: Padding(
-                        padding: EdgeInsets.only(top: powerboardsMobileOverlayBodyTopPadding(context, collapseProgress)),
+                        padding: EdgeInsets.only(top: bodyTopPadding),
                         child: NotificationListener<ScrollNotification>(onNotification: _handleScrollNotification, child: widget.body),
                       ),
                     ),

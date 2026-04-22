@@ -58,13 +58,13 @@ Widget powerboardsAdaptiveInputContextMenuBuilder(BuildContext context, Editable
 }
 
 EditableTextContextMenuBuilder powerboardsThreadMobileAttachmentContextMenuBuilder({
-  required bool hasPasteableAttachment,
   required PowerboardsPasteFileHandler onPasteFile,
+  Future<bool> Function()? hasPasteableAttachment,
 }) {
-  return (context, editableTextState) => _buildPowerboardsThreadMobileAttachmentContextMenu(
-    context,
-    editableTextState,
-    hasPasteableAttachment: hasPasteableAttachment,
+  final checker = hasPasteableAttachment ?? powerboardsClipboardHasPasteableAttachment;
+  return (context, editableTextState) => _PowerboardsThreadMobileAttachmentContextMenu(
+    editableTextState: editableTextState,
+    hasPasteableAttachment: checker,
     onPasteFile: onPasteFile,
   );
 }
@@ -96,43 +96,85 @@ Future<bool> powerboardsClipboardHasPasteableAttachment() async {
   return false;
 }
 
-Widget _buildPowerboardsThreadMobileAttachmentContextMenu(
-  BuildContext context,
-  EditableTextState editableTextState, {
-  required bool hasPasteableAttachment,
-  required PowerboardsPasteFileHandler onPasteFile,
-}) {
-  if (!_usesMobileAttachmentPasteMenu(context) || !hasPasteableAttachment) {
-    return powerboardsAdaptiveInputContextMenuBuilder(context, editableTextState);
+class _PowerboardsThreadMobileAttachmentContextMenu extends StatefulWidget {
+  const _PowerboardsThreadMobileAttachmentContextMenu({
+    required this.editableTextState,
+    required this.hasPasteableAttachment,
+    required this.onPasteFile,
+  });
+
+  final EditableTextState editableTextState;
+  final Future<bool> Function() hasPasteableAttachment;
+  final PowerboardsPasteFileHandler onPasteFile;
+
+  @override
+  State<_PowerboardsThreadMobileAttachmentContextMenu> createState() => _PowerboardsThreadMobileAttachmentContextMenuState();
+}
+
+class _PowerboardsThreadMobileAttachmentContextMenuState extends State<_PowerboardsThreadMobileAttachmentContextMenu> {
+  int _clipboardCheckRequestId = 0;
+  bool _hasPasteableAttachment = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshPasteableAttachmentState();
   }
 
-  final buttonItems = editableTextState.contextMenuButtonItems.toList(growable: true);
-  final originalPasteItem = buttonItems.firstWhereOrNull((item) => item.type == ContextMenuButtonType.paste);
-  final pasteFileItem = ContextMenuButtonItem(
-    type: ContextMenuButtonType.paste,
-    label: 'Paste file',
-    onPressed: () {
-      editableTextState.hideToolbar();
-      unawaited(_handlePasteFile(editableTextState.context, originalPasteItem?.onPressed, onPasteFile));
-    },
-  );
-
-  final pasteIndex = buttonItems.indexWhere((item) => item.type == ContextMenuButtonType.paste);
-  if (pasteIndex != -1) {
-    buttonItems[pasteIndex] = pasteFileItem;
-  } else {
-    final selectAllIndex = buttonItems.indexWhere((item) => item.type == ContextMenuButtonType.selectAll);
-    if (selectAllIndex != -1) {
-      buttonItems.insert(selectAllIndex, pasteFileItem);
-    } else {
-      buttonItems.add(pasteFileItem);
+  @override
+  void didUpdateWidget(covariant _PowerboardsThreadMobileAttachmentContextMenu oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.editableTextState != widget.editableTextState || oldWidget.hasPasteableAttachment != widget.hasPasteableAttachment) {
+      _refreshPasteableAttachmentState();
     }
   }
 
-  return TextFieldTapRegion(
-    groupId: editableTextState.widget.groupId,
-    child: AdaptiveTextSelectionToolbar.buttonItems(anchors: editableTextState.contextMenuAnchors, buttonItems: buttonItems),
-  );
+  Future<void> _refreshPasteableAttachmentState() async {
+    final requestId = ++_clipboardCheckRequestId;
+    final hasPasteableAttachment = await widget.hasPasteableAttachment();
+    if (!mounted || requestId != _clipboardCheckRequestId) {
+      return;
+    }
+
+    setState(() {
+      _hasPasteableAttachment = hasPasteableAttachment;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_usesMobileAttachmentPasteMenu(context) || !_hasPasteableAttachment) {
+      return powerboardsAdaptiveInputContextMenuBuilder(context, widget.editableTextState);
+    }
+
+    final buttonItems = widget.editableTextState.contextMenuButtonItems.toList(growable: true);
+    final originalPasteItem = buttonItems.firstWhereOrNull((item) => item.type == ContextMenuButtonType.paste);
+    final pasteFileItem = ContextMenuButtonItem(
+      type: ContextMenuButtonType.paste,
+      label: 'Paste file',
+      onPressed: () {
+        widget.editableTextState.hideToolbar();
+        unawaited(_handlePasteFile(widget.editableTextState.context, originalPasteItem?.onPressed, widget.onPasteFile));
+      },
+    );
+
+    final pasteIndex = buttonItems.indexWhere((item) => item.type == ContextMenuButtonType.paste);
+    if (pasteIndex != -1) {
+      buttonItems[pasteIndex] = pasteFileItem;
+    } else {
+      final selectAllIndex = buttonItems.indexWhere((item) => item.type == ContextMenuButtonType.selectAll);
+      if (selectAllIndex != -1) {
+        buttonItems.insert(selectAllIndex, pasteFileItem);
+      } else {
+        buttonItems.add(pasteFileItem);
+      }
+    }
+
+    return TextFieldTapRegion(
+      groupId: widget.editableTextState.widget.groupId,
+      child: AdaptiveTextSelectionToolbar.buttonItems(anchors: widget.editableTextState.contextMenuAnchors, buttonItems: buttonItems),
+    );
+  }
 }
 
 bool _usesMobileAttachmentPasteMenu(BuildContext context) {

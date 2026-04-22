@@ -113,15 +113,12 @@ class MeshagentThreadView extends StatefulWidget {
   State createState() => _MeshagentThreadViewState();
 }
 
-class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsBindingObserver {
+class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
   static const double _mobileThreadEmptyStateWidthMax = 600;
-  static const Duration _mobileClipboardPollInterval = Duration(milliseconds: 750);
 
   late final ChatThreadController _chatController;
   String? _lastRestoredThreadScrollOffsetValue;
-  Timer? _mobileClipboardPollTimer;
-  bool _mobileClipboardHasPasteableAttachment = false;
 
   bool _usesCompactMobileThreadEmptyState(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -218,39 +215,25 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
     final hideForScroll = collapseProgress > 0.1 && !keyboardVisible;
     final expandedTopGap = 16 * (1 - Curves.easeOutCubic.transform(collapseProgress));
 
-    return IgnorePointer(
-      ignoring: hideForScroll,
-      child: AnimatedSwitcher(
-        duration: powerboardsMobileOverlayHeaderTransitionDuration,
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeOutCubic,
-        transitionBuilder: (child, animation) {
-          return AnimatedBuilder(
-            animation: animation,
-            child: child,
-            builder: (context, transitionChild) {
-              final offsetY = 18 * (1 - animation.value);
-              return Transform.translate(
-                offset: Offset(0, offsetY),
-                child: ClipRect(
-                  child: FadeTransition(
-                    opacity: animation,
-                    child: SizeTransition(sizeFactor: animation, axisAlignment: 1.0, child: transitionChild),
-                  ),
-                ),
-              );
-            },
-          );
-        },
-        child: hideForScroll
-            ? const SizedBox.shrink(key: ValueKey('mobile-chat-input-hidden'))
-            : KeyedSubtree(
-                key: const ValueKey('mobile-chat-input-visible'),
-                child: Padding(
-                  padding: EdgeInsets.only(top: expandedTopGap),
-                  child: chatBox,
-                ),
+    return Padding(
+      padding: EdgeInsets.only(top: expandedTopGap),
+      child: IgnorePointer(
+        ignoring: hideForScroll,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 1, end: hideForScroll ? 0 : 1),
+          duration: powerboardsMobileOverlayHeaderTransitionDuration,
+          curve: Curves.easeOutCubic,
+          builder: (context, visibility, child) {
+            final offsetY = 18 * (1 - visibility);
+            return Transform.translate(
+              offset: Offset(0, offsetY),
+              child: ClipRect(
+                child: Opacity(opacity: visibility, child: child),
               ),
+            );
+          },
+          child: KeyedSubtree(key: const ValueKey('mobile-chat-input'), child: chatBox),
+        ),
       ),
     );
   }
@@ -258,9 +241,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _chatController = MeshagentRoomChatThreadController(room: widget.client);
-    _startMobileClipboardMonitoring();
   }
 
   @override
@@ -271,17 +252,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _mobileClipboardPollTimer?.cancel();
     _chatController.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      unawaited(_refreshMobileClipboardAttachmentAvailability());
-    }
   }
 
   void _onMessageSent(ma.ChatMessage message) {}
@@ -366,33 +338,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
     WidgetsBinding.instance.addPostFrameCallback((_) => restore());
   }
 
-  void _startMobileClipboardMonitoring() {
-    if (!powerboardsUsesSystemAdaptiveTextSelectionToolbar()) {
-      return;
-    }
-
-    unawaited(_refreshMobileClipboardAttachmentAvailability());
-    _mobileClipboardPollTimer?.cancel();
-    _mobileClipboardPollTimer = Timer.periodic(_mobileClipboardPollInterval, (_) {
-      unawaited(_refreshMobileClipboardAttachmentAvailability());
-    });
-  }
-
-  Future<void> _refreshMobileClipboardAttachmentAvailability() async {
-    if (!mounted || !powerboardsUsesSystemAdaptiveTextSelectionToolbar()) {
-      return;
-    }
-
-    final hasPasteableAttachment = await powerboardsClipboardHasPasteableAttachment();
-    if (!mounted || hasPasteableAttachment == _mobileClipboardHasPasteableAttachment) {
-      return;
-    }
-
-    setState(() {
-      _mobileClipboardHasPasteableAttachment = hasPasteableAttachment;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final usesMobileLayout = _usesMobileThreadLayout(context);
@@ -448,7 +393,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> with WidgetsB
         emptyState: resolvedEmptyState,
         inputContextMenuBuilder: powerboardsUsesSystemAdaptiveTextSelectionToolbar()
             ? powerboardsThreadMobileAttachmentContextMenuBuilder(
-                hasPasteableAttachment: _mobileClipboardHasPasteableAttachment,
                 onPasteFile: (name, dataStream, size) => _chatController.uploadFile(name, dataStream, size),
               )
             : powerboardsAdaptiveInputContextMenuBuilder,
