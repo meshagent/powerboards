@@ -34,6 +34,19 @@ TextStyle powerboardsFileListMetadataStyle() {
   return powerboardsSecondaryTextStyle(color: shadMutedForeground);
 }
 
+Widget buildPowerboardsCurrentPill() {
+  return DecoratedBox(
+    decoration: const BoxDecoration(color: Colors.black, borderRadius: BorderRadius.all(Radius.circular(999))),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      child: Text(
+        "Current",
+        style: powerboardsInterTextStyle(fontSize: 11, fontWeight: FontWeight.w700, height: 1, color: Colors.white),
+      ),
+    ),
+  );
+}
+
 IconData? powerboardsFileIconDataForEntry(StorageEntry entry) {
   if (entry.isFolder) return LucideIcons.folder;
   if (isThreadFileName(entry.name)) return LucideIcons.messageSquare;

@@ -1207,7 +1207,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
 
   double _leadingWidth(bool isMobile) {
     if (isMobile && widget.mobileUseDialogListStyle) {
-      return 24;
+      return 0;
     }
 
     return _threadListLeadingWidth(isMobile);
@@ -1242,6 +1242,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
         final isMobile = ResponsiveBreakpoints.of(context).isMobile;
         final showMenuIcon = widget.selected || hovered || focused || isMobile || _menuController.isOpen;
         final selected = widget.selected;
+        final leadingWidth = _leadingWidth(isMobile);
         final textStyle = isMobile && widget.mobileUseDialogListStyle
             ? powerboardsFileListTitleStyle().copyWith(fontWeight: selected ? FontWeight.w700 : FontWeight.w400)
             : _MeshagentThreadListPaneState.threadNameStyle(
@@ -1274,40 +1275,52 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                           padding: _contentPadding(isMobile),
                           child: Row(
                             children: [
-                              SizedBox(
-                                width: _leadingWidth(isMobile),
-                                child: Center(
-                                  child: selected && !widget.threadStatus.hasStatus
-                                      ? const Icon(LucideIcons.check, size: 16, color: shadForeground)
-                                      : ma.ChatThreadStatusIndicator(
-                                          statusText: widget.threadStatus.text,
-                                          startedAt: widget.threadStatus.startedAt,
-                                          reserveSpace: true,
-                                          size: 14,
-                                          strokeWidth: 2,
-                                        ),
+                              if (leadingWidth > 0) ...[
+                                SizedBox(
+                                  width: leadingWidth,
+                                  child: Center(
+                                    child: selected && !widget.threadStatus.hasStatus
+                                        ? const Icon(LucideIcons.check, size: 16, color: shadForeground)
+                                        : ma.ChatThreadStatusIndicator(
+                                            statusText: widget.threadStatus.text,
+                                            startedAt: widget.threadStatus.startedAt,
+                                            reserveSpace: true,
+                                            size: 14,
+                                            strokeWidth: 2,
+                                          ),
+                                  ),
                                 ),
-                              ),
-                              SizedBox(width: _threadListGap(isMobile)),
+                                SizedBox(width: _threadListGap(isMobile)),
+                              ],
                               Expanded(
-                                child: isMobile && widget.mobileUseDialogListStyle
-                                    ? Text(
-                                        widget.entry.name,
-                                        style: textStyle,
-                                        textAlign: TextAlign.start,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        softWrap: false,
-                                      )
-                                    : ma.ChatThreadProcessingSweepText(
-                                        text: widget.entry.name,
-                                        style: textStyle,
-                                        animate: widget.threadStatus.hasStatus,
-                                        textAlign: TextAlign.start,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        softWrap: false,
-                                      ),
+                                child: Row(
+                                  children: [
+                                    Flexible(
+                                      child: isMobile && widget.mobileUseDialogListStyle
+                                          ? Text(
+                                              widget.entry.name,
+                                              style: textStyle,
+                                              textAlign: TextAlign.start,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              softWrap: false,
+                                            )
+                                          : ma.ChatThreadProcessingSweepText(
+                                              text: widget.entry.name,
+                                              style: textStyle,
+                                              animate: widget.threadStatus.hasStatus,
+                                              textAlign: TextAlign.start,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              softWrap: false,
+                                            ),
+                                    ),
+                                    if (selected && isMobile && widget.mobileUseDialogListStyle) ...[
+                                      const SizedBox(width: 12),
+                                      buildPowerboardsCurrentPill(),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -1396,7 +1409,7 @@ class _DraftThreadListItem extends StatelessWidget {
 
   double _leadingWidth(bool isMobile) {
     if (isMobile && mobileUseDialogListStyle) {
-      return 24;
+      return 0;
     }
 
     return _threadListLeadingWidth(isMobile);
@@ -1405,6 +1418,7 @@ class _DraftThreadListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final leadingWidth = _leadingWidth(isMobile);
     final textStyle = mobileUseDialogListStyle
         ? TextStyle(inherit: true, fontWeight: FontWeight.w700, color: shadForeground)
         : _MeshagentThreadListPaneState.threadNameStyle(context, fontWeight: FontWeight.w700, color: shadForeground);
@@ -1429,11 +1443,13 @@ class _DraftThreadListItem extends StatelessWidget {
               child: Row(
                 children: [
                   if (!isMobile) const SizedBox(width: _desktopThreadContentAlignmentOffset),
-                  SizedBox(
-                    width: _leadingWidth(isMobile),
-                    child: const Center(child: Icon(LucideIcons.check, size: 16, color: shadForeground)),
-                  ),
-                  SizedBox(width: _threadListGap(isMobile)),
+                  if (leadingWidth > 0) ...[
+                    SizedBox(
+                      width: leadingWidth,
+                      child: const Center(child: Icon(LucideIcons.check, size: 16, color: shadForeground)),
+                    ),
+                    SizedBox(width: _threadListGap(isMobile)),
+                  ],
                   Expanded(
                     child: Text("My new thread", maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: textStyle),
                   ),

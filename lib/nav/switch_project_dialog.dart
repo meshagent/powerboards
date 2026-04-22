@@ -164,6 +164,7 @@ class _ProjectListItemState extends State<_ProjectListItem> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
     final fontWeight = widget.selected || _hovered ? FontWeight.w700 : FontWeight.w400;
     final textStyle = powerboardsFileListTitleStyle().copyWith(fontWeight: fontWeight);
 
@@ -184,7 +185,14 @@ class _ProjectListItemState extends State<_ProjectListItem> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(widget.name, style: textStyle, overflow: TextOverflow.ellipsis, maxLines: 1),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(widget.name, style: textStyle, overflow: TextOverflow.ellipsis, maxLines: 1),
+                      ),
+                      if (widget.selected && isMobile) ...[const SizedBox(width: 12), buildPowerboardsCurrentPill()],
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 10),
                 SizedBox(

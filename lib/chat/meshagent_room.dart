@@ -31,6 +31,7 @@ import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
+import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/grant.dart' as grant;
@@ -2777,6 +2778,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
+    final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
     final avatarBackgroundColor = selected ? cs.foreground : cs.muted;
     final avatarIconColor = selected ? cs.background : cs.mutedForeground;
     final titleFontWeight = selected ? FontWeight.w700 : FontWeight.w600;
@@ -2813,11 +2815,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const SizedBox(height: 16),
-                    Text(
-                      title,
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                      style: powerboardsInterTextStyle(color: cs.foreground, fontWeight: titleFontWeight),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: powerboardsInterTextStyle(color: cs.foreground, fontWeight: titleFontWeight),
+                          ),
+                        ),
+                        if (selected && isMobile) ...[const SizedBox(width: 12), buildPowerboardsCurrentPill()],
+                      ],
                     ),
                     const SizedBox(height: 6),
                     Text(description, maxLines: 3, style: powerboardsInterTextStyle(color: theme.colorScheme.foreground)),
@@ -2999,7 +3008,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                           },
                           leadingIcon: selectedAgent.leadingIcon,
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 28),
+                        Text(
+                          "Threads",
+                          style: powerboardsSecondaryTextStyle(color: ShadTheme.of(dialogContext).colorScheme.mutedForeground),
+                        ),
+                        const SizedBox(height: 8),
                         Expanded(
                           child: MeshagentThreadListPane(
                             key: ValueKey("mobile-room-context-threads-${selectedAgent.routeId}"),
@@ -3041,7 +3055,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               title: Text(switcherState == _MobileRoomContextSwitcherState.threads ? "Browse all threads" : "Installed agents"),
               description: Text(
                 switcherState == _MobileRoomContextSwitcherState.threads
-                    ? "For selected agent"
+                    ? "By agent"
                     : "Select an agent installed in this room to create and browse threads.",
               ),
               onBack: switcherState == _MobileRoomContextSwitcherState.agents
