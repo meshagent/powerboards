@@ -2680,6 +2680,7 @@ class _FileTableViewState extends State<FileTableView> {
   static TextStyle get dataStyle => powerboardsFileListTitleStyle();
   static TextStyle get headerStyle => powerboardsFileListMetadataStyle();
   static const List<String> _sizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
+  static const BorderRadius _fileCheckboxRadius = BorderRadius.all(Radius.circular(6));
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
   final GlobalKey _tableCardKey = GlobalKey();
@@ -2849,43 +2850,41 @@ class _FileTableViewState extends State<FileTableView> {
   PowerboardsMobileActionPillItem _buildMobileSelectionHeaderPillItem() {
     final selectionActive = widget.forceShowSelect;
     return PowerboardsMobileActionPillItem(
-      label: 'Select',
+      label: selectionActive ? 'Exit' : 'Select',
       selected: selectionActive,
       onPressed: selectionActive ? widget.onClearSelectionMode : widget.onActivateSelectionMode,
     );
   }
 
-  PowerboardsMobileActionPillItem _buildMobileSortHeaderPillItem() {
+  PowerboardsMobileActionPillItem _buildMobileSortHeaderPillItem({String label = 'Sort by name'}) {
     final isNameSort = widget.sort.field == FileSortField.name;
     final descending = isNameSort && !widget.sort.ascending;
     return PowerboardsMobileActionPillItem(
-      label: 'Sort by name',
+      label: label,
       selected: descending,
       onPressed: () => widget.onSortChanged(FileSort(FileSortField.name, isNameSort ? !widget.sort.ascending : true)),
     );
   }
 
-  Widget _buildMobileSelectedActions() {
-    if (!widget.forceShowSelect) {
-      return const SizedBox.shrink();
-    }
-
-    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
-
-    return PowerboardsMobileActionPillStrip(
-      items: [PowerboardsMobileActionPillItem(label: "Delete", selected: true, destructive: true, onPressed: widget.onDeleteSelected)],
-      textStyle: pillTextStyle,
-      itemGap: 10,
-      pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
-    );
+  PowerboardsMobileActionPillItem _buildMobileDeleteHeaderPillItem() {
+    return PowerboardsMobileActionPillItem(label: "Delete", selected: true, destructive: true, onPressed: widget.onDeleteSelected);
   }
 
   Widget _buildMobileHeader(bool showSelectColumn, bool? selectAllValue) {
     final theme = ShadTheme.of(context);
-    final pills = <PowerboardsMobileActionPillItem>[_buildMobileSelectionHeaderPillItem(), _buildMobileSortHeaderPillItem()];
-    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
-    final selectionActions = _buildMobileSelectedActions();
     final showSelectionModeActions = widget.forceShowSelect;
+    final compactToolbarWidth = MediaQuery.sizeOf(context).width < 390;
+    final sortLabel = showSelectionModeActions && compactToolbarWidth ? 'Sort by…' : 'Sort by name';
+    final pills = <PowerboardsMobileActionPillItem>[
+      _buildMobileSelectionHeaderPillItem(),
+      _buildMobileSortHeaderPillItem(label: sortLabel),
+      if (showSelectionModeActions) _buildMobileDeleteHeaderPillItem(),
+    ];
+    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
+    final pillGap = showSelectionModeActions && compactToolbarWidth ? 8.0 : 10.0;
+    final pillPadding = showSelectionModeActions && compactToolbarWidth
+        ? const EdgeInsets.symmetric(horizontal: 14, vertical: 11)
+        : const EdgeInsets.symmetric(horizontal: 17, vertical: 11);
 
     return Padding(
       padding: const EdgeInsets.only(top: powerboardsMobileOverlaySecondaryRowLift),
@@ -2893,7 +2892,7 @@ class _FileTableViewState extends State<FileTableView> {
         height: powerboardsMobileSecondaryRowHeight,
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: powerboardsMobileShellHorizontalInset),
+            padding: powerboardsMobileSecondaryRowPadding,
             child: Row(
               children: [
                 if (showSelectColumn) ...[
@@ -2912,12 +2911,11 @@ class _FileTableViewState extends State<FileTableView> {
                       items: pills,
                       textStyle: pillTextStyle,
                       unselectedForegroundColor: theme.colorScheme.foreground,
-                      itemGap: 10,
-                      pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+                      itemGap: pillGap,
+                      pillPadding: pillPadding,
                     ),
                   ),
                 ),
-                if (showSelectionModeActions) selectionActions,
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -2975,7 +2973,9 @@ class _FileTableViewState extends State<FileTableView> {
                 final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
                 final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
                 final isSelected = widget.selected.contains(key);
-                final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+                final checkboxDecoration = ShadDecoration(
+                  border: ShadBorder.all(color: colorScheme.border, radius: _fileCheckboxRadius),
+                );
                 final showRowMenu = !widget.forceShowSelect;
                 final sizeLabel = showSize ? _formatEntrySize(entry) : null;
                 final modifiedLabel = entry.updatedAt?.modified() ?? '';
@@ -3068,7 +3068,9 @@ class _FileTableViewState extends State<FileTableView> {
           final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
           final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
           final isSelected = widget.selected.contains(key);
-          final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+          final checkboxDecoration = ShadDecoration(
+            border: ShadBorder.all(color: colorScheme.border, radius: _fileCheckboxRadius),
+          );
           final sizeLabel = showSize ? (_formatEntrySize(entry) ?? "") : "";
           final displayName = _displayNameForEntry(entry);
 
@@ -3381,7 +3383,9 @@ class ShadTriCheckbox extends StatelessWidget {
     final iconColor = theme.colorScheme.primaryForeground;
 
     final Widget? effectiveIcon = value == null ? Icon(LucideIcons.minus, size: effectiveSize, color: iconColor) : null;
-    final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border));
+    final checkboxDecoration = ShadDecoration(
+      border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border, radius: _FileTableViewState._fileCheckboxRadius),
+    );
     return Semantics(
       checked: value == true,
       mixed: value == null,
