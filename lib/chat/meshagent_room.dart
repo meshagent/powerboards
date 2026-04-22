@@ -48,6 +48,7 @@ import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/settings/selected_room.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
@@ -56,7 +57,6 @@ import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/meeting_view.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
-import 'package:powerboards/ui/powerboards_menu_row.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/resizable_split_view.dart';
@@ -170,6 +170,24 @@ class _MobileChatHeaderContext {
   final String? threadListPath;
 
   bool get canOpenContextSwitcher => threadListPath != null || agentKey != null;
+}
+
+enum _MobileRoomContextSwitcherState { threads, agents }
+
+class _MobileRoomContextAgentOption {
+  const _MobileRoomContextAgentOption({
+    required this.routeId,
+    required this.name,
+    required this.description,
+    required this.threadListPath,
+    required this.leadingIcon,
+  });
+
+  final String routeId;
+  final String name;
+  final String description;
+  final String? threadListPath;
+  final IconData leadingIcon;
 }
 
 class _MobileSelectedThreadLabelResolver extends StatefulWidget {
@@ -1004,6 +1022,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final MeshagentRoomController controller = MeshagentRoomController();
   int _newThreadResetVersion = 0;
   String _lastRoomStatusText = "Connecting to room";
+  String? _lastPersistedMobileAgentRouteId;
   String? _lastSyncedRoutePath;
   _MobileRoomPane? _lastSyncedRoutePane;
   _MobileMeetingOrigin? _mobileMeetingOrigin;
@@ -1172,15 +1191,88 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return participants;
   }
 
-  _ResolvedAgentSelection _resolveSelectedAgent(List<ServiceSpec> supported) {
-    final requestedRouteId = widget.service;
-    if (requestedRouteId != null) {
-      final service = supported.firstWhereOrNull((candidate) => _serviceId(candidate) == requestedRouteId);
+  bool _hasVisibleAgents(List<ServiceSpec> supported) {
+    if (supported.isNotEmpty) {
+      return true;
+    }
+
+    return _developmentParticipants(supported).isNotEmpty;
+  }
+
+  bool get _canPersistRoomContextSelection {
+    final roomName = widget.room.roomName;
+    return roomName != null && roomName.trim().isNotEmpty;
+  }
+
+  String? get _roomNameForSelectionPersistence {
+    final roomName = widget.room.roomName;
+    if (roomName == null) {
+      return null;
+    }
+
+    final trimmed = roomName.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  String? _persistedSelectedRoomAgentRouteId() {
+    final roomName = _roomNameForSelectionPersistence;
+    if (roomName == null) {
+      return null;
+    }
+
+    final stored = getLastSelectedRoomAgent(widget.projectId, roomName);
+    if (stored == null) {
+      return null;
+    }
+
+    final trimmed = stored.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  void _persistSelectedRoomAgentRouteId(String? routeId) {
+    if (!_canPersistRoomContextSelection || routeId == _lastPersistedMobileAgentRouteId) {
+      return;
+    }
+
+    final roomName = _roomNameForSelectionPersistence;
+    if (roomName == null) {
+      return;
+    }
+
+    if (routeId == null || routeId.trim().isEmpty) {
+      clearLastSelectedRoomAgent(widget.projectId, roomName);
+      _lastPersistedMobileAgentRouteId = null;
+      return;
+    }
+
+    setLastSelectedRoomAgent(widget.projectId, roomName, routeId);
+    _lastPersistedMobileAgentRouteId = routeId;
+  }
+
+  String? _persistedSelectedThreadPathForAgentKey(String? agentKey) {
+    final roomName = _roomNameForSelectionPersistence;
+    if (roomName == null || agentKey == null) {
+      return null;
+    }
+
+    final stored = getLastSelectedRoomThread(widget.projectId, roomName, agentKey);
+    if (stored == null) {
+      return null;
+    }
+
+    final trimmed = stored.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  _ResolvedAgentSelection _resolveSelectedAgent(List<ServiceSpec> supported, {String? requestedRouteId}) {
+    final resolvedRouteId = requestedRouteId ?? widget.service;
+    if (resolvedRouteId != null) {
+      final service = supported.firstWhereOrNull((candidate) => _serviceId(candidate) == resolvedRouteId);
       if (service != null) {
-        return _ResolvedAgentSelection(routeId: requestedRouteId, service: service, developmentParticipant: null);
+        return _ResolvedAgentSelection(routeId: resolvedRouteId, service: service, developmentParticipant: null);
       }
 
-      final participantName = developmentAgentNameFromRoute(requestedRouteId);
+      final participantName = developmentAgentNameFromRoute(resolvedRouteId);
       if (participantName != null) {
         final participant = _developmentParticipants(
           supported,
@@ -1192,20 +1284,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         );
       }
 
-      final legacyParticipantId = legacyDevelopmentAgentParticipantIdFromRoute(requestedRouteId);
+      final legacyParticipantId = legacyDevelopmentAgentParticipantIdFromRoute(resolvedRouteId);
       if (legacyParticipantId != null) {
         final participant = widget.room.messaging.remoteParticipants.firstWhereOrNull(
           (candidate) => candidate.id == legacyParticipantId && isChatOrVoiceBotParticipant(candidate),
         );
         final participantName = participant == null ? null : participantDisplayName(participant);
         return _ResolvedAgentSelection(
-          routeId: participantName == null ? requestedRouteId : developmentAgentRouteId(participantName),
+          routeId: participantName == null ? resolvedRouteId : developmentAgentRouteId(participantName),
           service: null,
           developmentParticipant: participant,
         );
       }
 
-      return _ResolvedAgentSelection(routeId: requestedRouteId, service: null, developmentParticipant: null);
+      return _ResolvedAgentSelection(routeId: resolvedRouteId, service: null, developmentParticipant: null);
     }
 
     final defaultService =
@@ -1229,24 +1321,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return const _ResolvedAgentSelection(routeId: null, service: null, developmentParticipant: null);
   }
 
-  bool _hasVisibleAgents(List<ServiceSpec> supported) {
-    if (supported.isNotEmpty) {
-      return true;
-    }
-
-    return _developmentParticipants(supported).isNotEmpty;
-  }
-
-  String? _selectedThreadAgentKey(List<ServiceSpec> supported) {
-    return _resolveSelectedAgent(supported).routeId;
-  }
-
-  String? _selectedThreadPathForAgentKey(String? agentKey) {
+  String? _selectedThreadPathForAgentKey(String? agentKey, {bool includePersistedMobileSelection = false}) {
     if (agentKey == null) {
       return null;
     }
 
-    return _selectedThreadPathByAgentKey[agentKey];
+    final inMemory = _selectedThreadPathByAgentKey[agentKey];
+    if (inMemory != null) {
+      return inMemory;
+    }
+
+    if (!includePersistedMobileSelection) {
+      return null;
+    }
+
+    return _persistedSelectedThreadPathForAgentKey(agentKey);
   }
 
   // ignore: unused_element
@@ -1293,6 +1382,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         }
       }
     });
+
+    final roomName = _roomNameForSelectionPersistence;
+    if (roomName == null) {
+      return;
+    }
+
+    if (resolvedPath == null) {
+      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
+      return;
+    }
+
+    setLastSelectedRoomThread(widget.projectId, roomName, agentKey, resolvedPath);
   }
 
   void updatePath(BuildContext context, String? path) {
@@ -1360,6 +1461,94 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return '.threads/main.thread';
   }
 
+  String? _preferredMobileAgentRouteId(BuildContext context) {
+    if (!_usesMobileRoomLayout(context)) {
+      return widget.service;
+    }
+
+    return widget.service ?? _persistedSelectedRoomAgentRouteId();
+  }
+
+  List<_MobileRoomContextAgentOption> _mobileRoomContextAgentOptions(List<ServiceSpec> supported) {
+    final options = <_MobileRoomContextAgentOption>[];
+
+    for (final service in supported) {
+      final descriptor = serviceConversationDescriptor(service, remoteParticipants: widget.room.messaging.remoteParticipants);
+      if (descriptor?.isChat != true) {
+        continue;
+      }
+
+      final serviceName = service.agents.firstOrNull?.name ?? service.metadata.name;
+      final rawServiceDescription = service.metadata.description;
+      final serviceDescription = rawServiceDescription == null || rawServiceDescription.trim().isEmpty
+          ? "Chat agent"
+          : rawServiceDescription;
+      options.add(
+        _MobileRoomContextAgentOption(
+          routeId: _serviceId(service),
+          name: serviceName,
+          description: serviceDescription,
+          threadListPath: _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: serviceName),
+          leadingIcon: LucideIcons.bot,
+        ),
+      );
+    }
+
+    for (final participant in _developmentParticipants(supported)) {
+      final descriptor = participantConversationDescriptor(participant);
+      if (descriptor?.isChat != true) {
+        continue;
+      }
+
+      final participantName = participantDisplayName(participant);
+      if (participantName == null) {
+        continue;
+      }
+
+      options.add(
+        _MobileRoomContextAgentOption(
+          routeId: developmentAgentRouteId(participantName),
+          name: participantName,
+          description: "Development mode agent",
+          threadListPath: _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: participantName),
+          leadingIcon: _developmentAgentIcon(participant),
+        ),
+      );
+    }
+
+    return options;
+  }
+
+  void _applyMobileRoomContextSelection({
+    required _MobileChatHeaderContext currentChatContext,
+    required _MobileRoomContextAgentOption agentOption,
+    required String? threadPath,
+    String? displayName,
+  }) {
+    _setSelectedThreadPath(agentOption.routeId, threadPath, displayName: displayName);
+    _persistSelectedRoomAgentRouteId(agentOption.routeId);
+
+    if (agentOption.routeId != currentChatContext.agentKey) {
+      _navigateToAgentRoute(context, agentOption.routeId);
+    }
+  }
+
+  Future<void> _commitMobileRoomContextSelection(
+    BuildContext dialogContext, {
+    required _MobileChatHeaderContext currentChatContext,
+    required _MobileRoomContextAgentOption agentOption,
+    required String? threadPath,
+    String? displayName,
+  }) async {
+    Navigator.of(dialogContext).pop();
+    _applyMobileRoomContextSelection(
+      currentChatContext: currentChatContext,
+      agentOption: agentOption,
+      threadPath: threadPath,
+      displayName: displayName,
+    );
+  }
+
   _MobileChatHeaderContext? _resolveMobileChatHeaderContext(List<ServiceSpec> supported, _ResolvedAgentSelection selection) {
     String? agentName;
     String? threadListPath;
@@ -1392,7 +1581,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final agentKey = selection.routeId;
-    final selectedThreadPath = _selectedThreadPathForAgentKey(agentKey);
+    final selectedThreadPath = _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: true);
     final currentThreadLabel = selectedThreadPath == null
         ? "New thread"
         : (_selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
@@ -1563,29 +1752,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Widget _buildAgentsActionRow(BuildContext context) {
     final isMobile = _usesMobileRoomLayout(context);
     if (!isMobile) return const SizedBox.shrink();
-
-    if (!services.state.isReady) return const SizedBox.shrink();
-
-    final supported = _supportedServices(services.state.value!);
-    final selected = _resolveSelectedAgent(supported);
-    final dropdown = AgentsDropdown(
-      projectId: widget.projectId,
-      room: widget.room,
-      selectedService: selected.service,
-      selectedAgentRouteId: selected.routeId,
-      services: supported,
-      onOpen: services.refresh,
-      onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-      boundaryContext: context,
-    );
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [dropdown]),
-      ),
-    );
+    return const SizedBox.shrink();
   }
 
   // ignore: unused_element
@@ -2126,6 +2293,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     BuildContext context,
     String? agentName,
     List<Widget> actions, {
+    required String? selectedAgentRouteId,
     bool showEmbeddedThreadList = true,
     ChatThreadDisplayMode threadDisplayMode = ChatThreadDisplayMode.singleThread,
     String? threadListPath,
@@ -2158,9 +2326,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         (_isMeetingSessionActive(context) && threadDisplayMode == ChatThreadDisplayMode.singleThread
             ? _buildMeetingSingleThreadChatEmptyState("Chat or share files")
             : null);
-    final agentKey = _selectedThreadAgentKey(
-      services.state.value == null ? const <ServiceSpec>[] : _supportedServices(services.state.value!),
-    );
+    final agentKey = selectedAgentRouteId;
     final currentThreadLabel = selectedThreadPath == null
         ? "New thread"
         : (_selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
@@ -2384,6 +2550,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     context,
                     null,
                     [],
+                    selectedAgentRouteId: null,
                     emptyState: !meetingIsActive
                         ? _buildMeetingTranscriberPreMeetingChatEmptyState()
                         : _buildMeetingTranscriberTitleOnlyEmptyState("Transcribe your meeting"),
@@ -2601,14 +2768,80 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _showChatPane(context);
   }
 
-  Widget _buildMobileContextSurfaceItem({
+  Widget _buildMobileContextAgentListItem({
     required String title,
-    String? description,
-    Widget? leading,
-    Widget? trailing,
+    required String description,
+    required IconData leadingIcon,
+    required bool selected,
     required VoidCallback onTap,
   }) {
     final theme = ShadTheme.of(context);
+    final cs = theme.colorScheme;
+    final avatarBackgroundColor = selected ? cs.foreground : cs.muted;
+    final avatarIconColor = selected ? cs.background : cs.mutedForeground;
+    final titleFontWeight = selected ? FontWeight.w700 : FontWeight.w600;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 80),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Container(
+                    width: userAvatarStandardDiameter,
+                    height: userAvatarStandardDiameter,
+                    decoration: BoxDecoration(color: avatarBackgroundColor, shape: BoxShape.circle),
+                    alignment: Alignment.center,
+                    child: Icon(leadingIcon, size: 16, color: avatarIconColor),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 16),
+                    Text(
+                      title,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: powerboardsInterTextStyle(color: cs.foreground, fontWeight: titleFontWeight),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(description, maxLines: 3, style: powerboardsInterTextStyle(color: theme.colorScheme.foreground)),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: 12),
+                const Padding(
+                  padding: EdgeInsets.only(top: 16),
+                  child: SizedBox(width: 24, height: 24, child: Center(child: Icon(LucideIcons.check, size: 18))),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileSelectedAgentContextCard({required String title, required IconData leadingIcon, required VoidCallback onTap}) {
+    final theme = ShadTheme.of(context);
+    final cs = theme.colorScheme;
 
     return Material(
       color: Colors.transparent,
@@ -2618,10 +2851,39 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: theme.colorScheme.border.withValues(alpha: 0.8)),
-            color: theme.colorScheme.background.withValues(alpha: 0.84),
+            border: Border.all(color: cs.foreground.withValues(alpha: 0.16)),
+            color: cs.card,
           ),
-          child: PowerboardsMenuRow(title: title, description: description, leading: leading, trailing: trailing),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Container(
+                    width: userAvatarStandardDiameter,
+                    height: userAvatarStandardDiameter,
+                    decoration: BoxDecoration(color: cs.foreground, shape: BoxShape.circle),
+                    alignment: Alignment.center,
+                    child: Icon(leadingIcon, size: 16, color: cs.background),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    title,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: powerboardsInterTextStyle(color: cs.foreground, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Icon(LucideIcons.chevronRight, size: 18),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -2632,148 +2894,193 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required List<ServiceSpec> supported,
     required _MobileChatHeaderContext chatContext,
   }) async {
-    final developmentParticipants = _developmentParticipants(supported);
+    final agentOptions = _mobileRoomContextAgentOptions(supported);
+    var selectedAgentRouteId = chatContext.agentKey ?? agentOptions.firstOrNull?.routeId;
+    var didCommitSelection = false;
 
     await showPowerboardsFlowDialog<void>(
       context: context,
       builder: (dialogContext) {
         final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(dialogContext);
-        final items = <Widget>[];
+        var switcherState = _MobileRoomContextSwitcherState.threads;
 
-        void addGap([double height = 10]) {
-          if (items.isEmpty || items.last is SizedBox) {
-            return;
-          }
-          items.add(SizedBox(height: height));
-        }
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final selectedAgent =
+                agentOptions.firstWhereOrNull((option) => option.routeId == selectedAgentRouteId) ?? agentOptions.firstOrNull;
+            selectedAgentRouteId = selectedAgent?.routeId;
 
-        if (chatContext.threadListPath != null) {
-          items.add(
-            _buildMobileContextSurfaceItem(
-              title: "Threads",
-              description: chatContext.currentThreadLabel,
-              leading: const Icon(LucideIcons.messageSquareText, size: 18),
-              trailing: const Icon(LucideIcons.chevronRight, size: 18),
-              onTap: () {
-                Navigator.of(dialogContext).pop();
-                unawaited(
-                  _showMobileThreadPicker(
-                    threadListPath: chatContext.threadListPath!,
-                    agentKey: chatContext.agentKey,
-                    agentName: chatContext.agentName,
-                  ),
-                );
-              },
-            ),
-          );
-        }
-
-        if (chatContext.threadListPath != null && chatContext.selectedThreadPath != null) {
-          addGap();
-          items.add(
-            _buildMobileContextSurfaceItem(
-              title: "New thread",
-              description: "Start a fresh conversation.",
-              leading: const Icon(LucideIcons.sparkles, size: 18),
-              onTap: () {
-                _setSelectedThreadPath(chatContext.agentKey, null);
-                Navigator.of(dialogContext).pop();
-              },
-            ),
-          );
-        }
-
-        if (supported.isNotEmpty || developmentParticipants.isNotEmpty) {
-          addGap(18);
-          items.add(
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                "Agents",
-                style: powerboardsMetaTextStyle(
-                  color: ShadTheme.of(dialogContext).colorScheme.mutedForeground,
-                  fontWeight: FontWeight.w700,
+            final selectedThreadPath = _selectedThreadPathForAgentKey(selectedAgentRouteId, includePersistedMobileSelection: true);
+            final actions = <Widget>[
+              if (switcherState == _MobileRoomContextSwitcherState.agents && isOwner.state.value == true)
+                ShadButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    unawaited(showManageAgents());
+                  },
+                  child: const Text("Manage agents"),
                 ),
+              if (switcherState == _MobileRoomContextSwitcherState.threads && selectedAgent != null && selectedAgent.threadListPath != null)
+                ShadButton(
+                  onPressed: () {
+                    didCommitSelection = true;
+                    unawaited(
+                      _commitMobileRoomContextSelection(
+                        dialogContext,
+                        currentChatContext: chatContext,
+                        agentOption: selectedAgent,
+                        threadPath: null,
+                      ),
+                    );
+                  },
+                  child: const Text("New thread"),
+                ),
+            ];
+
+            Widget body;
+            if (switcherState == _MobileRoomContextSwitcherState.agents) {
+              body = Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 360.0),
+                    child: ListView.separated(
+                      padding: const EdgeInsets.only(top: powerboardsDialogScrollViewportVerticalInset),
+                      itemCount: agentOptions.length,
+                      separatorBuilder: (_, _) =>
+                          Divider(height: 1, thickness: 1, color: ShadTheme.of(context).colorScheme.border.withValues(alpha: 0.5)),
+                      itemBuilder: (context, index) {
+                        final option = agentOptions[index];
+                        return _buildMobileContextAgentListItem(
+                          title: option.name,
+                          description: option.description,
+                          leadingIcon: option.leadingIcon,
+                          selected: selectedAgentRouteId == option.routeId,
+                          onTap: () {
+                            setDialogState(() {
+                              selectedAgentRouteId = option.routeId;
+                              switcherState = _MobileRoomContextSwitcherState.threads;
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              );
+            } else if (selectedAgent == null || selectedAgent.threadListPath == null) {
+              body = Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    "No thread-enabled agents are available in this room yet.",
+                    textAlign: TextAlign.center,
+                    style: powerboardsSecondaryTextStyle(color: ShadTheme.of(dialogContext).colorScheme.mutedForeground),
+                  ),
+                ),
+              );
+            } else {
+              body = Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 360.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildMobileSelectedAgentContextCard(
+                          title: selectedAgent.name,
+                          onTap: () {
+                            setDialogState(() {
+                              switcherState = _MobileRoomContextSwitcherState.agents;
+                            });
+                          },
+                          leadingIcon: selectedAgent.leadingIcon,
+                        ),
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: MeshagentThreadListPane(
+                            key: ValueKey("mobile-room-context-threads-${selectedAgent.routeId}"),
+                            client: widget.room,
+                            agentName: selectedAgent.name,
+                            threadListPath: selectedAgent.threadListPath!,
+                            selectedThreadPath: selectedThreadPath,
+                            newThreadResetVersion: _newThreadResetVersion,
+                            mobileListTopPadding: 0,
+                            mobileListBottomPadding: 0,
+                            mobileRowVerticalPadding: 16,
+                            mobileUseDialogListStyle: true,
+                            showCreateItem: false,
+                            onSelectedThreadPathChanged: (path) {
+                              final threadPath = path?.trim();
+                              didCommitSelection = true;
+                              unawaited(
+                                _commitMobileRoomContextSelection(
+                                  dialogContext,
+                                  currentChatContext: chatContext,
+                                  agentOption: selectedAgent,
+                                  threadPath: threadPath == null || threadPath.isEmpty ? null : threadPath,
+                                ),
+                              );
+                            },
+                            onSelectedThreadResolved: (path, displayName) {
+                              _setSelectedThreadPath(selectedAgent.routeId, path, displayName: displayName);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return PowerboardsShadDialog.listPicker(
+              title: Text(switcherState == _MobileRoomContextSwitcherState.threads ? "Browse all threads" : "Installed agents"),
+              description: Text(
+                switcherState == _MobileRoomContextSwitcherState.threads
+                    ? "For selected agent"
+                    : "Select an agent installed in this room to create and browse threads.",
               ),
-            ),
-          );
-          items.add(const SizedBox(height: 10));
-        }
-
-        for (final service in supported) {
-          items.add(
-            _buildMobileContextSurfaceItem(
-              title: service.metadata.name,
-              description: service.metadata.description,
-              leading: const Icon(LucideIcons.bot, size: 18),
-              trailing: chatContext.agentKey == _serviceId(service) ? const Icon(LucideIcons.check, size: 18) : null,
-              onTap: () {
-                Navigator.of(dialogContext).pop();
-                _navigateToAgentRoute(context, _serviceId(service));
-              },
-            ),
-          );
-          items.add(const SizedBox(height: 10));
-        }
-
-        for (final participant in developmentParticipants) {
-          final participantName = participantDisplayName(participant);
-          items.add(
-            _buildMobileContextSurfaceItem(
-              title: participantName ?? "Development agent",
-              description: "Development mode agent",
-              leading: Icon(_developmentAgentIcon(participant), size: 18),
-              trailing: chatContext.agentKey == developmentAgentRouteId(participantName ?? "")
-                  ? const Icon(LucideIcons.check, size: 18)
+              onBack: switcherState == _MobileRoomContextSwitcherState.agents
+                  ? () {
+                      setDialogState(() {
+                        switcherState = _MobileRoomContextSwitcherState.threads;
+                      });
+                    }
                   : null,
-              onTap: () {
-                if (participantName == null) {
-                  return;
-                }
-
-                Navigator.of(dialogContext).pop();
-                _navigateToAgentRoute(context, developmentAgentRouteId(participantName));
-              },
-            ),
-          );
-          items.add(const SizedBox(height: 10));
-        }
-
-        if (isOwner.state.value == true) {
-          addGap(supported.isNotEmpty || developmentParticipants.isNotEmpty ? 8 : 0);
-          items.add(
-            _buildMobileContextSurfaceItem(
-              title: "Manage agents",
-              description: "Install or remove agents and services.",
-              leading: const Icon(LucideIcons.blocks, size: 18),
-              onTap: () {
-                Navigator.of(dialogContext).pop();
-                unawaited(showManageAgents());
-              },
-            ),
-          );
-        }
-
-        if (items.isNotEmpty && items.last is SizedBox) {
-          items.removeLast();
-        }
-
-        return PowerboardsShadDialog.listPicker(
-          title: const Text("Room context"),
-          description: const Text("Switch agents or jump between threads."),
-          actions: [ShadButton.outline(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close"))],
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              width: double.infinity,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 360.0),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: items),
-              ),
-            ),
-          ),
+              actions: actions,
+              mobileFlowBodyBehavior: PowerboardsDialogMobileFlowBodyBehavior.fill,
+              child: body,
+            );
+          },
         );
       },
+    );
+
+    if (!context.mounted || didCommitSelection) {
+      return;
+    }
+
+    final selectedAgent = agentOptions.firstWhereOrNull((option) => option.routeId == selectedAgentRouteId);
+    if (selectedAgent == null) {
+      return;
+    }
+
+    final selectedThreadPath = _selectedThreadPathForAgentKey(selectedAgent.routeId, includePersistedMobileSelection: true);
+    final displayName = _selectedThreadLabelForAgentKey(selectedAgent.routeId);
+    final selectionChanged = selectedAgent.routeId != chatContext.agentKey || selectedThreadPath != chatContext.selectedThreadPath;
+    if (!selectionChanged) {
+      return;
+    }
+
+    _applyMobileRoomContextSelection(
+      currentChatContext: chatContext,
+      agentOption: selectedAgent,
+      threadPath: selectedThreadPath,
+      displayName: displayName,
     );
   }
 
@@ -2865,59 +3172,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       ],
                     ],
                   ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ignore: unused_element
-  Future<void> _showMobileThreadPicker({required String threadListPath, required String? agentKey, required String? agentName}) async {
-    await showPowerboardsFlowDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(dialogContext);
-        return PowerboardsShadDialog.listPicker(
-          title: const Text("All threads"),
-          description: const Text("Select a thread to view."),
-          actions: [
-            ShadButton.outline(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Close")),
-            ShadButton(
-              onPressed: () {
-                _setSelectedThreadPath(agentKey, null);
-                Navigator.of(dialogContext).pop();
-              },
-              child: const Text("New Thread"),
-            ),
-          ],
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: SizedBox(
-              width: double.infinity,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 360.0),
-                child: MeshagentThreadListPane(
-                  key: ValueKey("mobile-threads-${agentKey ?? "none"}"),
-                  client: widget.room,
-                  agentName: agentName,
-                  threadListPath: threadListPath,
-                  selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
-                  newThreadResetVersion: _newThreadResetVersion,
-                  mobileListTopPadding: 0,
-                  mobileListBottomPadding: 0,
-                  mobileRowVerticalPadding: 16,
-                  mobileUseDialogListStyle: true,
-                  showCreateItem: false,
-                  onSelectedThreadPathChanged: (path) {
-                    _setSelectedThreadPath(agentKey, path);
-                    Navigator.of(dialogContext).pop();
-                  },
-                  onSelectedThreadResolved: (path, displayName) {
-                    _setSelectedThreadPath(agentKey, path, displayName: displayName);
-                  },
                 ),
               ),
             ),
@@ -3024,12 +3278,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
             final all = services.state.value!;
             final supported = _supportedServices(all);
-            final selected = _resolveSelectedAgent(supported);
+            final selected = _resolveSelectedAgent(supported, requestedRouteId: _preferredMobileAgentRouteId(context));
             final service = selected.service;
             final developmentParticipant = selected.developmentParticipant;
 
             if (service == null && developmentParticipant == null) {
-              final requestedRouteId = widget.service;
+              final requestedRouteId = _preferredMobileAgentRouteId(context);
               final requestedDevelopmentParticipantName = requestedRouteId == null ? null : developmentAgentNameFromRoute(requestedRouteId);
               final requestedLegacyDevelopmentParticipantId = requestedRouteId == null
                   ? null
@@ -3067,11 +3321,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   context,
                   name,
                   actions,
+                  selectedAgentRouteId: agentKey,
                   showEmbeddedThreadList: showEmbeddedThreadList,
                   threadDisplayMode: descriptor!.chatThreadDisplayMode,
                   threadDir: descriptor.threadDir,
                   threadListPath: descriptor.threadListPath,
-                  selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
+                  selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
                   onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                   embedMobileChrome: embedMobileChrome,
                 );
@@ -3093,11 +3348,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 context,
                 service.agents[0].name,
                 actions,
+                selectedAgentRouteId: agentKey,
                 showEmbeddedThreadList: showEmbeddedThreadList,
                 threadDisplayMode: descriptor!.chatThreadDisplayMode,
                 threadDir: descriptor.threadDir,
                 threadListPath: descriptor.threadListPath,
-                selectedThreadPath: _selectedThreadPathForAgentKey(agentKey),
+                selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
                 onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                 embedMobileChrome: embedMobileChrome,
               );
@@ -3205,7 +3461,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             final canViewStorageAllowed = canViewStorage.state.value == true;
                             final filesVisible = canViewStorageAllowed && controller.isFilesShown;
                             final supported = _supportedServices(services.state.value!);
-                            final selected = _resolveSelectedAgent(supported);
+                            final selected = _resolveSelectedAgent(supported, requestedRouteId: _preferredMobileAgentRouteId(context));
+                            if (isMobile) {
+                              _persistSelectedRoomAgentRouteId(selected.routeId);
+                            }
                             final roomCreateChatContext = _resolveMobileChatHeaderContext(supported, selected);
                             final meetingSessionActive = _isMeetingSessionActive(context);
                             final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;

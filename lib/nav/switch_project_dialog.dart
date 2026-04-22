@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
+import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
@@ -163,8 +164,8 @@ class _ProjectListItemState extends State<_ProjectListItem> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
     final fontWeight = widget.selected || _hovered ? FontWeight.w700 : FontWeight.w400;
+    final textStyle = powerboardsFileListTitleStyle().copyWith(fontWeight: fontWeight);
 
     return Material(
       color: Colors.transparent,
@@ -183,19 +184,14 @@ class _ProjectListItemState extends State<_ProjectListItem> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    widget.name,
-                    style: TextStyle(inherit: true, fontWeight: fontWeight, color: theme.colorScheme.foreground),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
+                  child: Text(widget.name, style: textStyle, overflow: TextOverflow.ellipsis, maxLines: 1),
                 ),
                 const SizedBox(width: 10),
                 SizedBox(
                   width: 24,
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: widget.selected ? Icon(LucideIcons.check, size: 18, color: theme.colorScheme.foreground) : null,
+                    child: widget.selected ? Icon(LucideIcons.check, size: 18, color: textStyle.color) : null,
                   ),
                 ),
               ],

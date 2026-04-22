@@ -25,6 +25,7 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
+import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -1242,7 +1243,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
         final showMenuIcon = widget.selected || hovered || focused || isMobile || _menuController.isOpen;
         final selected = widget.selected;
         final textStyle = isMobile && widget.mobileUseDialogListStyle
-            ? TextStyle(inherit: true, fontWeight: selected ? FontWeight.w700 : FontWeight.w400, color: shadForeground)
+            ? powerboardsFileListTitleStyle().copyWith(fontWeight: selected ? FontWeight.w700 : FontWeight.w400)
             : _MeshagentThreadListPaneState.threadNameStyle(
                 context,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
