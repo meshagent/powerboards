@@ -3061,23 +3061,22 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                           leadingIcon: option.leadingIcon,
                           selected: selectedAgentRouteId == option.routeId,
                           onTap: () {
-                            if (!option.supportsThreads) {
-                              didCommitSelection = true;
-                              unawaited(
-                                _commitMobileRoomContextSelection(
-                                  dialogContext,
-                                  currentChatContext: chatContext,
-                                  agentOption: option,
-                                  threadPath: null,
-                                ),
-                              );
-                              return;
-                            }
+                            final rememberedThreadPath = _selectedThreadPathForAgentKey(
+                              option.routeId,
+                              includePersistedMobileSelection: true,
+                            );
+                            final rememberedThreadLabel = _selectedThreadLabelForAgentKey(option.routeId);
 
-                            setDialogState(() {
-                              selectedAgentRouteId = option.routeId;
-                              switcherState = _MobileRoomContextSwitcherState.threads;
-                            });
+                            didCommitSelection = true;
+                            unawaited(
+                              _commitMobileRoomContextSelection(
+                                dialogContext,
+                                currentChatContext: chatContext,
+                                agentOption: option,
+                                threadPath: option.supportsThreads ? rememberedThreadPath : null,
+                                displayName: option.supportsThreads ? rememberedThreadLabel : null,
+                              ),
+                            );
                           },
                         );
                       },
@@ -3162,12 +3161,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             }
 
             return PowerboardsShadDialog.listPicker(
-              title: Text(switcherState == _MobileRoomContextSwitcherState.threads ? "Browse all threads" : "Installed agents"),
-              description: Text(
-                switcherState == _MobileRoomContextSwitcherState.threads
-                    ? "By agent"
-                    : "Select an agent installed in this room to create and browse threads.",
-              ),
+              title: const Text("Switch"),
+              description: const Text("Agents"),
               onBack: switcherState == _MobileRoomContextSwitcherState.agents
                   ? () {
                       setDialogState(() {
