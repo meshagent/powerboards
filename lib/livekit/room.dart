@@ -1073,7 +1073,7 @@ class ChangeSettings extends StatelessWidget {
           message: "Device settings",
           child: ShadIconButton.outline(
             onPressed: onPressed,
-            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            decoration: powerboardsAdaptiveMeetingControlButtonDecoration(context),
             icon: const Icon(LucideIcons.settings),
           ),
         );
@@ -1094,6 +1094,9 @@ class RoomToolbarButton extends StatelessWidget {
     super.key,
     this.on = false,
     this.loading = false,
+    this.width,
+    this.height,
+    this.iconSize = 22,
   });
 
   final void Function()? onPressed;
@@ -1103,6 +1106,9 @@ class RoomToolbarButton extends StatelessWidget {
   final Color onForeground;
   final Color offForeground;
   final IconData icon;
+  final double? width;
+  final double? height;
+  final double iconSize;
 
   final bool on;
   final bool loading;
@@ -1117,7 +1123,9 @@ class RoomToolbarButton extends StatelessWidget {
       message: text,
       child: ShadIconButton(
         onPressed: onPressed,
-        decoration: powerboardsAdaptiveIconButtonDecoration(context),
+        width: width,
+        height: height,
+        decoration: powerboardsAdaptiveMeetingControlButtonDecoration(context),
         backgroundColor: on ? onColor : (disabled ? theme.colorScheme.destructive : offColor),
         foregroundColor: foregroundColor,
         icon: loading
@@ -1126,7 +1134,7 @@ class RoomToolbarButton extends StatelessWidget {
                 height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(foregroundColor)),
               )
-            : Icon(icon, size: 22),
+            : Icon(icon, size: iconSize),
       ),
     );
   }

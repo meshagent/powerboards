@@ -22,6 +22,8 @@ lk.LocalTrackPublication<lk.LocalVideoTrack>? _voiceCameraPublication(lk.LocalPa
 class VoiceMeetingControls extends StatelessWidget {
   const VoiceMeetingControls({super.key, required this.controller, this.spacing = 8});
 
+  static const double _compactControlSize = powerboardsFooterActionButtonHeight;
+
   final MeetingController controller;
   final double spacing;
 
@@ -32,8 +34,13 @@ class VoiceMeetingControls extends StatelessWidget {
         listenable: controller.livekitRoom,
         builder: (context, _) {
           final isCompact = constraints.maxWidth < 420;
-          final horizontalPadding = isCompact ? 40.0 : 12.0;
+          final compactSpacing = constraints.maxWidth < 340 ? 6.0 : spacing;
+          final horizontalPadding = isCompact ? (constraints.maxWidth < 340 ? 8.0 : 16.0) : 12.0;
           final helperMaxWidth = isCompact ? 320.0 : 560.0;
+          final compactButtonLabelWidth =
+              (constraints.maxWidth - (horizontalPadding * 2) - (_compactControlSize * 3) - (compactSpacing * 3) - 32.0)
+                  .clamp(44.0, 140.0)
+                  .toDouble();
           final titleStyle = powerboardsMenuRowTitleStyle().copyWith(fontWeight: FontWeight.w700);
           final descriptionStyle = powerboardsMenuRowDescriptionStyle().copyWith(fontWeight: FontWeight.w400, height: 1.45);
 
@@ -46,18 +53,42 @@ class VoiceMeetingControls extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: spacing,
-                  runSpacing: spacing,
-                  children: [
-                    _VoiceConnectionButton(controller: controller, compact: isCompact),
-                    _VoiceMicToggle(controller: controller),
-                    _VoiceCameraToggle(controller: controller),
-                    _VoiceChangeSettings(controller: controller),
-                  ],
-                ),
+                if (isCompact)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _VoiceConnectionButton(controller: controller, compact: true, compactLabelWidth: compactButtonLabelWidth),
+                      ),
+                      SizedBox(width: compactSpacing),
+                      SizedBox.square(
+                        dimension: _compactControlSize,
+                        child: _VoiceMicToggle(controller: controller),
+                      ),
+                      SizedBox(width: compactSpacing),
+                      SizedBox.square(
+                        dimension: _compactControlSize,
+                        child: _VoiceCameraToggle(controller: controller),
+                      ),
+                      SizedBox(width: compactSpacing),
+                      SizedBox.square(
+                        dimension: _compactControlSize,
+                        child: _VoiceChangeSettings(controller: controller),
+                      ),
+                    ],
+                  )
+                else
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: [
+                      _VoiceConnectionButton(controller: controller, compact: false),
+                      _VoiceMicToggle(controller: controller),
+                      _VoiceCameraToggle(controller: controller),
+                      _VoiceChangeSettings(controller: controller),
+                    ],
+                  ),
                 const SizedBox(height: 20),
                 ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: helperMaxWidth),
@@ -78,10 +109,11 @@ class VoiceMeetingControls extends StatelessWidget {
 }
 
 class _VoiceConnectionButton extends StatelessWidget {
-  const _VoiceConnectionButton({required this.controller, this.compact = false});
+  const _VoiceConnectionButton({required this.controller, this.compact = false, this.compactLabelWidth});
 
   final MeetingController controller;
   final bool compact;
+  final double? compactLabelWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -92,9 +124,16 @@ class _VoiceConnectionButton extends StatelessWidget {
       builder: (context, _) {
         return switch (room.connectionState) {
           lk.ConnectionState.connected => ShadButton.destructive(
-            padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 20, vertical: 14),
+            width: compact ? double.infinity : null,
+            height: powerboardsFooterActionButtonHeight,
+            padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 20),
             onPressed: () => unawaited(controller.disconnect()),
-            child: const Text("End session"),
+            child: compact
+                ? SizedBox(
+                    width: compactLabelWidth,
+                    child: const Text("End session", maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
+                  )
+                : const Text("End session"),
           ),
           lk.ConnectionState.disconnected => RoomToolbarButton(
             text: "Connect",
@@ -271,6 +310,9 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
       offColor: toggleColor,
       offForeground: toggleForeground,
       icon: showEnabled ? LucideIcons.mic : LucideIcons.micOff,
+      width: VoiceMeetingControls._compactControlSize,
+      height: VoiceMeetingControls._compactControlSize,
+      iconSize: 20,
       loading: _pending,
       onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleMicrophone(local, !_microphoneEnabled)),
     );
@@ -426,6 +468,9 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
       offColor: toggleColor,
       offForeground: toggleForeground,
       icon: showEnabled ? LucideIcons.video : LucideIcons.videoOff,
+      width: VoiceMeetingControls._compactControlSize,
+      height: VoiceMeetingControls._compactControlSize,
+      iconSize: 20,
       loading: _pending,
       onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleCamera(local, !_cameraEnabled)),
     );
@@ -511,7 +556,10 @@ class _VoiceChangeSettings extends StatelessWidget {
         message: "Device settings",
         child: ShadIconButton.outline(
           onPressed: onPressed,
-          decoration: powerboardsAdaptiveIconButtonDecoration(context),
+          width: VoiceMeetingControls._compactControlSize,
+          height: VoiceMeetingControls._compactControlSize,
+          iconSize: 20,
+          decoration: powerboardsAdaptiveMeetingControlButtonDecoration(context),
           icon: const Icon(LucideIcons.settings),
         ),
       ),

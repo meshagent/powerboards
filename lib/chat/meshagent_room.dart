@@ -2125,28 +2125,30 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _MobileChatHeaderContext? chatContext,
     _MobileFilesLocation? filesLocation,
   }) {
-    final useDirectNewThreadAction = activePane == _MobileRoomPane.chat && chatContext != null;
+    final hidePrimaryHeaderAction = activePane == _MobileRoomPane.chat && chatContext?.isVoiceOnly == true;
+    final useDirectNewThreadAction = activePane == _MobileRoomPane.chat && chatContext != null && !hidePrimaryHeaderAction;
     final useDirectFileShareAction = activePane == _MobileRoomPane.files && filesLocation?.openedFile != null;
 
     return [
-      _buildPaneHeaderIconButton(
-        context: context,
-        tooltip: useDirectFileShareAction ? "Share" : (useDirectNewThreadAction ? "New thread" : "Create"),
-        icon: useDirectFileShareAction ? LucideIcons.share : (useDirectNewThreadAction ? LucideIcons.squarePen : LucideIcons.plus),
-        onPressed: useDirectFileShareAction
-            ? () => _filesHeaderController.shareOpenedFileInCurrentLocation()
-            : useDirectNewThreadAction
-            ? () {
-                _showChatPane(context);
-                _setSelectedThreadPath(chatContext.agentKey, null);
-              }
-            : () => _showMobileRoomCreateMenu(
-                context: context,
-                activePane: activePane,
-                canViewStorageAllowed: canViewStorageAllowed,
-                chatContext: chatContext,
-              ),
-      ),
+      if (!hidePrimaryHeaderAction)
+        _buildPaneHeaderIconButton(
+          context: context,
+          tooltip: useDirectFileShareAction ? "Share" : (useDirectNewThreadAction ? "New thread" : "Create"),
+          icon: useDirectFileShareAction ? LucideIcons.share : (useDirectNewThreadAction ? LucideIcons.squarePen : LucideIcons.plus),
+          onPressed: useDirectFileShareAction
+              ? () => _filesHeaderController.shareOpenedFileInCurrentLocation()
+              : useDirectNewThreadAction
+              ? () {
+                  _showChatPane(context);
+                  _setSelectedThreadPath(chatContext.agentKey, null);
+                }
+              : () => _showMobileRoomCreateMenu(
+                  context: context,
+                  activePane: activePane,
+                  canViewStorageAllowed: canViewStorageAllowed,
+                  chatContext: chatContext,
+                ),
+        ),
       RoomOptionsMenu(
         projectId: widget.projectId,
         room: widget.room,
@@ -2524,25 +2526,47 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               builder: (context, participant) => Column(
                 children: [
                   Expanded(
-                    child: Center(
-                      child: participant == null
-                          ? ShadButton(child: Text("Start Voice Session"))
-                          : ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
-                              child: VoiceAgentCaller(
-                                meeting: MeetingController.of(context),
-                                participant: participant,
-                                showDisconnectedAction: !meetingSessionActive,
-                                allowToggleTranscribe: !meetingSessionActive,
-                                emptyStateTitle: meetingSessionActive ? "This voice agent is private" : "Start an audio session",
-                                emptyStateDescription: meetingSessionActive
-                                    ? "Start an audio session after this meeting to ask questions, or get hands free help."
-                                    : "Connect with this agent using your microphone.",
-                                emptyStateAvailableWidth: constraints.maxWidth,
-                                connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
-                              ),
-                            ),
-                    ),
+                    child: participant == null
+                        ? const Center(child: ShadButton(child: Text("Start Voice Session")))
+                        : (isMobile
+                              ? Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 500),
+                                    child: SizedBox(
+                                      height: constraints.maxHeight,
+                                      child: VoiceAgentCaller(
+                                        meeting: MeetingController.of(context),
+                                        participant: participant,
+                                        showDisconnectedAction: !meetingSessionActive,
+                                        allowToggleTranscribe: !meetingSessionActive,
+                                        emptyStateTitle: meetingSessionActive ? "This voice agent is private" : "Start an audio session",
+                                        emptyStateDescription: meetingSessionActive
+                                            ? "Start an audio session after this meeting to ask questions, or get hands free help."
+                                            : "Connect with this agent using your microphone.",
+                                        emptyStateAvailableWidth: constraints.maxWidth,
+                                        pinActionToMobileFooter: true,
+                                        connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
+                                    child: VoiceAgentCaller(
+                                      meeting: MeetingController.of(context),
+                                      participant: participant,
+                                      showDisconnectedAction: !meetingSessionActive,
+                                      allowToggleTranscribe: !meetingSessionActive,
+                                      emptyStateTitle: meetingSessionActive ? "This voice agent is private" : "Start an audio session",
+                                      emptyStateDescription: meetingSessionActive
+                                          ? "Start an audio session after this meeting to ask questions, or get hands free help."
+                                          : "Connect with this agent using your microphone.",
+                                      emptyStateAvailableWidth: constraints.maxWidth,
+                                      connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
+                                    ),
+                                  ),
+                                )),
                   ),
                 ],
               ),
@@ -3554,6 +3578,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                       title: "Welcome to your room",
                                       description: canInstallAgent ? "Install an agent in this room to get started" : null,
                                       showActionOnMobile: canInstallAgent,
+                                      pinActionToMobileFooterOnMobile: canInstallAgent,
                                       action: !canInstallAgent
                                           ? null
                                           : ShadButton(
