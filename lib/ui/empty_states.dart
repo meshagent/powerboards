@@ -210,12 +210,15 @@ class BalanceLowWarning extends StatelessWidget {
       return PaneEmptyState(
         title: 'Low balance',
         description: desktopDescription,
+        action: role == ProjectRole.admin ? ShadButton(onPressed: onAddCredits, child: const Text("Add Credits")) : null,
         icon: Container(
           width: 64.0,
           height: 64.0,
           decoration: BoxDecoration(color: cs.destructive, borderRadius: BorderRadius.circular(12)),
           child: Icon(LucideIcons.triangleAlert, size: 28.0, color: cs.destructiveForeground),
         ),
+        showActionOnMobile: true,
+        pinActionToMobileFooterOnMobile: true,
       );
     }
 

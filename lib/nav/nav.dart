@@ -61,6 +61,17 @@ class Nav extends StatefulWidget {
   State createState() => _NavState();
 }
 
+({String title, String description}) powerboardsMobileCreditBannerCopy({required bool outOfCredit, required ProjectRole? userRole}) {
+  if (!outOfCredit) {
+    return (title: "Low balance", description: "Add more credits to avoid service interruption.");
+  }
+
+  return (
+    title: "Out of credit",
+    description: userRole == ProjectRole.admin ? "Add more credits to re-enable rooms." : "Contact your project admin to add more credits.",
+  );
+}
+
 class _NavState extends State<Nav> {
   final resizeController = ShadResizableController();
   double? _navRatio;
@@ -533,7 +544,7 @@ class _NavState extends State<Nav> {
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
         child: isMobile
-            ? _buildMobileBalanceBannerText(context)
+            ? _buildMobileBalanceBannerText(context, outOfCredit: true, userRole: userRole)
             : Text.rich(
                 TextSpan(
                   children: [
@@ -567,7 +578,7 @@ class _NavState extends State<Nav> {
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Center(
         child: isMobile
-            ? _buildMobileBalanceBannerText(context)
+            ? _buildMobileBalanceBannerText(context, outOfCredit: false, userRole: null)
             : Row(
                 mainAxisSize: MainAxisSize.min,
                 spacing: 16,
@@ -593,22 +604,23 @@ class _NavState extends State<Nav> {
     );
   }
 
-  Widget _buildMobileBalanceBannerText(BuildContext context) {
+  Widget _buildMobileBalanceBannerText(BuildContext context, {required bool outOfCredit, required ProjectRole? userRole}) {
     final theme = ShadTheme.of(context);
     final tt = theme.textTheme;
     final cs = theme.colorScheme;
+    final copy = powerboardsMobileCreditBannerCopy(outOfCredit: outOfCredit, userRole: userRole);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          "Low balance",
+          copy.title,
           style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 2),
         Text(
-          "Add more credits to avoid service interruption.",
+          copy.description,
           style: tt.small.copyWith(fontSize: 12, color: cs.destructiveForeground, height: 1.5),
           textAlign: TextAlign.center,
         ),
