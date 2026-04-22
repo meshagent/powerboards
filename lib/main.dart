@@ -10,7 +10,6 @@ import 'package:localstorage/localstorage.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_shadcn/web_context_menu_manager.dart';
 import 'package:powerboards/ui/error_states.dart';
-import 'package:responsive_framework/responsive_framework.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -29,6 +28,7 @@ import 'nav/chrome_visibility.dart';
 import 'nav/nav.dart';
 import 'theme/theme.dart';
 import 'ui/incoming_share_watcher.dart';
+import 'ui/powerboards_breakpoints.dart';
 import 'ui/link_listener.dart';
 import 'ui/meeting_view.dart';
 import 'ui/powerboards_adaptive_input.dart';
@@ -37,22 +37,6 @@ import 'ui/routes.dart';
 import 'ui/top_banner.dart';
 
 final uiRoot = GlobalKey();
-
-const breakpoints = [
-  Breakpoint(start: 0, end: 600, name: MOBILE),
-  Breakpoint(start: 601, end: 960, name: TABLET),
-  Breakpoint(start: 961, end: 1250, name: "chromebook"),
-  Breakpoint(start: 961, end: 1920, name: DESKTOP),
-  Breakpoint(start: 1921, end: double.infinity, name: '4K'),
-];
-
-const breakpointsLandscape = [
-  Breakpoint(start: 0, end: 960, name: MOBILE),
-  Breakpoint(start: 961, end: 1920, name: TABLET),
-  Breakpoint(start: 1366, end: 1600, name: "chromebook"),
-  Breakpoint(start: 1601, end: 2560, name: DESKTOP),
-  Breakpoint(start: 2561, end: double.infinity, name: '4K'),
-];
 
 bool _isMobileToastLayout(BuildContext context) {
   final mediaQuery = MediaQuery.maybeOf(context);
@@ -94,6 +78,12 @@ ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
     removeBorderRadiusWhenTiny: false,
     closeIconPosition: ShadPosition(top: closeTop, right: closeEnd),
   );
+}
+
+BorderRadius _powerboardsButtonRadiusForContext(BuildContext context) {
+  final mediaQuery = MediaQuery.maybeOf(context);
+  final screenWidth = mediaQuery?.size.width ?? 1024.0;
+  return BorderRadius.circular(screenWidth < 600 ? 12 : 6);
 }
 
 void _configureDebugPrintFilter() {
@@ -257,6 +247,7 @@ class MyApp extends StatelessWidget {
       theme: ShadThemeData(
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
+        radius: _powerboardsButtonRadiusForContext(context),
         textTheme: powerboardsShadTextTheme(),
         decoration: _powerboardsDecorationThemeForContext(context),
         primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
@@ -381,6 +372,7 @@ class _RootProvidersState extends State<_RootProviders> {
       data: ShadThemeData(
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
+        radius: _powerboardsButtonRadiusForContext(context),
         textTheme: powerboardsShadTextTheme(),
         decoration: _powerboardsDecorationThemeForContext(context),
         primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
@@ -435,9 +427,7 @@ class _RootProvidersState extends State<_RootProviders> {
             child: Directionality(
               key: uiRoot,
               textDirection: TextDirection.ltr,
-              child: ResponsiveBreakpoints.builder(
-                breakpoints: breakpoints,
-                breakpointsLandscape: breakpointsLandscape,
+              child: powerboardsResponsiveBreakpoints(
                 child: ControllerProvider(
                   controller: navController,
                   child: ControllerProvider(

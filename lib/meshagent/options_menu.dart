@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:meshagent/meshagent.dart';
@@ -53,8 +54,14 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
   late final canViewDeveloperLogs = widget.canViewDeveloperLogs;
 
   bool _usesMobileRoomLayout(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    return ResponsiveBreakpoints.of(context).isMobile || (size.width > size.height && size.shortestSide < 600);
+    if (!kIsWeb) {
+      final size = MediaQuery.sizeOf(context);
+      if (size.width > size.height && size.shortestSide < 600) {
+        return true;
+      }
+    }
+
+    return ResponsiveBreakpoints.of(context).isMobile;
   }
 
   Future<void> _addAgent() async {

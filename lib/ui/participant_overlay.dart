@@ -23,10 +23,11 @@ bool _isMicrophoneEnabled(lk.Participant participant) {
 }
 
 class ParticipantOverlay extends StatefulWidget {
-  const ParticipantOverlay({super.key, required this.participant, this.showName = true});
+  const ParticipantOverlay({super.key, required this.participant, this.showName = true, this.expandSource = lk.TrackSource.camera});
 
   final lk.Participant participant;
   final bool showName;
+  final lk.TrackSource expandSource;
 
   @override
   State createState() => _ParticipantOverlayState();
@@ -110,7 +111,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
         final name = widget.participant.name;
 
         final expandController = Controller.ofType<ExpandParticipantController>(context);
-        final expanded = expandController.isExpanded(widget.participant.identity);
+        final expanded = expandController.isExpanded(widget.participant.identity, widget.expandSource);
         final iconColor = microphoneUnavailable ? _mutedIconColor : audioIconColor;
 
         return Container(
@@ -163,7 +164,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
                     shadows: _overlayElementShadows,
                   ),
                   onPressed: () {
-                    expandController.toggle(widget.participant.identity);
+                    expandController.toggle(widget.participant.identity, widget.expandSource);
                   },
                 ),
               ),

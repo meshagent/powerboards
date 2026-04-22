@@ -93,6 +93,12 @@ ShadDecoration? powerboardsAdaptiveIconButtonDecoration(BuildContext context) {
   return ResponsiveBreakpoints.of(context).isMobile ? const ShadDecoration(shape: BoxShape.circle) : null;
 }
 
+ShadDecoration? powerboardsAdaptiveMeetingControlButtonDecoration(BuildContext context) {
+  return ResponsiveBreakpoints.of(context).isMobile
+      ? ShadDecoration(border: ShadBorder.all(radius: const BorderRadius.all(Radius.circular(12))))
+      : null;
+}
+
 double _powerboardsClampUnit(double value) {
   return value.clamp(0.0, 1.0).toDouble();
 }

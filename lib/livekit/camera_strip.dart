@@ -39,6 +39,7 @@ class CameraStrip extends StatelessWidget {
                   child: ParticipantTrack(
                     showName: hovered,
                     participant: participant,
+                    expandSource: videoTrack.source,
                     track: lk.VideoTrackRenderer(
                       track,
                       fit: videoTrack.source == lk.TrackSource.screenShareVideo ? lk.VideoViewFit.contain : lk.VideoViewFit.cover,
@@ -64,6 +65,7 @@ class CameraStrip extends StatelessWidget {
         builder: (hovered) {
           return CameraBox(
             participant: participant,
+            expandSource: lk.TrackSource.camera,
             showName: hovered,
             camera: Container(
               color: const Color(0xFF2A2A2A),

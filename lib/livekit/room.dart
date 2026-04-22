@@ -617,41 +617,48 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
             if (enableLocalTracks) {
               final isVideoDisabled = !enableVideo;
               final isAudioDisabled = !enableAudio;
+              final mediaEnableFutures = <Future<void>>[];
 
               if (!isVideoDisabled) {
-                try {
-                  await room.localParticipant!.setCameraEnabled(true);
-                  pendingLocalMedia.setCameraUnavailable(false);
-                  final cameraPublication = _cameraPublication(room.localParticipant);
-                  if (cameraPublication?.muted == true) {
-                    debugPrint("camera was not enabled, restarting");
-                    await cameraPublication?.track?.restartTrack();
+                mediaEnableFutures.add(() async {
+                  try {
+                    await room.localParticipant!.setCameraEnabled(true);
+                    pendingLocalMedia.setCameraUnavailable(false);
+                    final cameraPublication = _cameraPublication(room.localParticipant);
+                    if (cameraPublication?.muted == true) {
+                      debugPrint("camera was not enabled, restarting");
+                      await cameraPublication?.track?.restartTrack();
+                    }
+                    _syncPendingLocalMediaState();
+                  } catch (err) {
+                    pendingLocalMedia.setCameraPending(false);
+                    pendingLocalMedia.setCameraUnavailable(true);
+                    debugPrint("Unable to enable video $err");
                   }
-                  _syncPendingLocalMediaState();
-                } catch (err) {
-                  pendingLocalMedia.setCameraPending(false);
-                  pendingLocalMedia.setCameraUnavailable(true);
-                  debugPrint("Unable to enable video $err");
-                }
+                }());
               } else {
                 pendingLocalMedia.setCameraPending(false);
                 pendingLocalMedia.setCameraUnavailable(videoUnavailable);
               }
 
               if (!isAudioDisabled) {
-                try {
-                  await room.localParticipant!.setMicrophoneEnabled(true);
-                  pendingLocalMedia.setMicrophoneUnavailable(false);
-                  _syncPendingLocalMediaState();
-                } catch (err) {
-                  pendingLocalMedia.setMicrophonePending(false);
-                  pendingLocalMedia.setMicrophoneUnavailable(true);
-                  debugPrint("Unable to enable audio $err");
-                }
+                mediaEnableFutures.add(() async {
+                  try {
+                    await room.localParticipant!.setMicrophoneEnabled(true);
+                    pendingLocalMedia.setMicrophoneUnavailable(false);
+                    _syncPendingLocalMediaState();
+                  } catch (err) {
+                    pendingLocalMedia.setMicrophonePending(false);
+                    pendingLocalMedia.setMicrophoneUnavailable(true);
+                    debugPrint("Unable to enable audio $err");
+                  }
+                }());
               } else {
                 pendingLocalMedia.setMicrophonePending(false);
                 pendingLocalMedia.setMicrophoneUnavailable(audioUnavailable);
               }
+
+              await Future.wait(mediaEnableFutures);
             }
 
             completer.complete(true);
@@ -779,14 +786,26 @@ class _CameraToggleState extends State<CameraToggle> {
     }
 
     final toaster = ShadToaster.maybeOf(context);
+    final enabling = value;
+    if (enabling) {
+      _model?.pendingLocalMedia.setCameraPending(true, awaitEnableConfirmation: true);
+    }
+
     setState(() {
       _processing = true;
     });
 
     try {
       await local.setCameraEnabled(value);
+      await _refreshDeviceAvailability();
       _model?.pendingLocalMedia.setCameraUnavailable(false);
+      if (!value || local.isCameraEnabled()) {
+        _model?.pendingLocalMedia.setCameraPending(false);
+      }
     } catch (error) {
+      if (enabling) {
+        _model?.pendingLocalMedia.setCameraPending(false);
+      }
       _model?.pendingLocalMedia.setCameraUnavailable(true);
       toaster?.show(ShadToast.destructive(description: Text(_describeCameraToggleError(error))));
     } finally {
@@ -812,7 +831,9 @@ class _CameraToggleState extends State<CameraToggle> {
         : ShadTheme.of(context).colorScheme.greenCustomForeground;
 
     return RoomToolbarButton(
-      text: showPending
+      text: unavailable
+          ? "Camera disabled"
+          : showPending
           ? "Starting camera"
           : state
           ? "Turn off camera"
@@ -933,14 +954,26 @@ class _MicToggleState extends State<MicToggle> {
     }
 
     final toaster = ShadToaster.maybeOf(context);
+    final enabling = value;
+    if (enabling) {
+      _model?.pendingLocalMedia.setMicrophonePending(true, awaitEnableConfirmation: true);
+    }
+
     setState(() {
       _processing = true;
     });
 
     try {
       await local.setMicrophoneEnabled(value);
+      await _refreshDeviceAvailability();
       _model?.pendingLocalMedia.setMicrophoneUnavailable(false);
+      if (!value || local.isMicrophoneEnabled()) {
+        _model?.pendingLocalMedia.setMicrophonePending(false);
+      }
     } catch (error) {
+      if (enabling) {
+        _model?.pendingLocalMedia.setMicrophonePending(false);
+      }
       _model?.pendingLocalMedia.setMicrophoneUnavailable(true);
       toaster?.show(ShadToast.destructive(description: Text(_describeMicrophoneToggleError(error))));
     } finally {
@@ -966,7 +999,9 @@ class _MicToggleState extends State<MicToggle> {
         : ShadTheme.of(context).colorScheme.greenCustomForeground;
 
     return RoomToolbarButton(
-      text: showPending
+      text: unavailable
+          ? "Microphone disabled"
+          : showPending
           ? "Starting microphone"
           : state
           ? "Turn off microphone"
@@ -1115,9 +1150,7 @@ class RoomToolbarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
-    final disabled = !on && onPressed == null;
-    final foregroundColor = on ? onForeground : (disabled ? Colors.white : offForeground);
+    final foregroundColor = on ? onForeground : offForeground;
 
     return Tooltip(
       message: text,
@@ -1126,7 +1159,7 @@ class RoomToolbarButton extends StatelessWidget {
         width: width,
         height: height,
         decoration: powerboardsAdaptiveMeetingControlButtonDecoration(context),
-        backgroundColor: on ? onColor : (disabled ? theme.colorScheme.destructive : offColor),
+        backgroundColor: on ? onColor : offColor,
         foregroundColor: foregroundColor,
         icon: loading
             ? SizedBox(

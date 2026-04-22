@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:http/http.dart';
@@ -643,15 +643,10 @@ class MeetButton extends StatelessWidget {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final compact = CompactHeaderActions.compactOf(context);
     final theme = ShadTheme.of(context);
-    final model = room.VideoRoomModel.maybeOf(context);
-    final pendingLocalMedia = model?.pendingLocalMedia;
 
     Widget buildMeetButton() {
-      final microphoneAvailable = !(pendingLocalMedia?.microphoneUnavailable ?? false);
-      final activeMeetingColor = microphoneAvailable ? theme.colorScheme.greenCustom : theme.colorScheme.destructive;
-      final activeMeetingForeground = microphoneAvailable
-          ? theme.colorScheme.greenCustomForeground
-          : theme.colorScheme.destructiveForeground;
+      final activeMeetingColor = theme.colorScheme.greenCustom;
+      final activeMeetingForeground = theme.colorScheme.greenCustomForeground;
       final buttonVariant = controller.inMeeting
           ? ShadButtonVariant.primary
           : meetingSessionActive
@@ -696,11 +691,7 @@ class MeetButton extends StatelessWidget {
       );
     }
 
-    if (pendingLocalMedia == null) {
-      return buildMeetButton();
-    }
-
-    return ListenableBuilder(listenable: pendingLocalMedia, builder: (context, _) => buildMeetButton());
+    return buildMeetButton();
   }
 }
 
@@ -1019,7 +1010,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final ResizableSplitViewController _meetingSplitViewController = ResizableSplitViewController();
   final FileManagerViewController _filesHeaderController = FileManagerViewController();
 
-  final videoChatKey = GlobalKey();
+  final videoChatKey = GlobalKey<room.VideoChatConnectionState>();
   final meetingViewKey = GlobalKey();
 
   final Map<String, String> _selectedThreadPathByAgentKey = <String, String>{};
@@ -1652,11 +1643,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             },
           ),
         ),
-      HangupButton(
-        onPressed: () {
-          _endMeeting();
-        },
-      ),
+      HangupButton(onPressed: _endMeeting),
       room.MicToggle(),
       room.CameraToggle(),
       room.ChangeSettings(),
@@ -2821,7 +2808,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final navController = Controller.ofType<NavController>(context);
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    context.findAncestorStateOfType<room.VideoChatConnectionState>()?.hangup();
+    videoChatKey.currentState?.hangup();
     meetingViewController.resetToLobby();
     navController.showNav();
 
@@ -2837,7 +2824,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final meetingViewController = Controller.ofType<MeetingViewController>(context);
     final navController = Controller.ofType<NavController>(context);
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-    context.findAncestorStateOfType<room.VideoChatConnectionState>()?.hangup();
+    videoChatKey.currentState?.hangup();
     meetingViewController.resetToLobby();
     navController.showNav();
     _meetingSplitViewController.expand();
@@ -3469,6 +3456,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   static const double _meetingActivePaneActionLeadingWidthFloor = 260;
 
   bool _isLandscapePhoneViewport(BuildContext context) {
+    if (kIsWeb) {
+      return false;
+    }
+
     final size = MediaQuery.sizeOf(context);
     return size.width > size.height && size.shortestSide < 600;
   }
