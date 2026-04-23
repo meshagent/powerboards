@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/ui/resizable_split_view.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 Widget _buildTestApp({
@@ -18,24 +19,29 @@ Widget _buildTestApp({
   Widget area2 = const ColoredBox(color: Colors.blue),
 }) {
   return ShadApp(
-    home: Scaffold(
-      body: Center(
-        child: SizedBox(
-          width: width,
-          height: 320,
-          child: ResizableSplitView(
-            key: const ValueKey('split-view'),
-            split: split,
-            allowCollapse: allowCollapse,
-            controller: controller,
-            minArea1Width: minArea1Width,
-            minArea2Width: minArea2Width,
-            preferredArea2Fraction: preferredArea2Fraction,
-            minArea2Fraction: minArea2Fraction,
-            collapseArea1Width: collapseArea1Width,
-            onCollapsedChanged: onCollapsedChanged,
-            area1: area1,
-            area2: area2,
+    home: MediaQuery(
+      data: MediaQueryData(size: Size(width, 320)),
+      child: powerboardsResponsiveBreakpoints(
+        child: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: width,
+              height: 320,
+              child: ResizableSplitView(
+                key: const ValueKey('split-view'),
+                split: split,
+                allowCollapse: allowCollapse,
+                controller: controller,
+                minArea1Width: minArea1Width,
+                minArea2Width: minArea2Width,
+                preferredArea2Fraction: preferredArea2Fraction,
+                minArea2Fraction: minArea2Fraction,
+                collapseArea1Width: collapseArea1Width,
+                onCollapsedChanged: onCollapsedChanged,
+                area1: area1,
+                area2: area2,
+              ),
+            ),
           ),
         ),
       ),

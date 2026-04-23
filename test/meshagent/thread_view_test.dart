@@ -12,6 +12,7 @@ import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class _ProtocolPair {
@@ -165,6 +166,13 @@ ChatThreadSnapshot _emptySnapshot({bool supportsMcp = false, bool agentOnline = 
   );
 }
 
+Widget _buildResponsiveTestApp({required Widget child, MediaQueryData? mediaQueryData}) {
+  final responsiveChild = powerboardsResponsiveBreakpoints(child: child);
+  return ShadApp(
+    home: mediaQueryData == null ? responsiveChild : MediaQuery(data: mediaQueryData, child: responsiveChild),
+  );
+}
+
 void main() {
   final previousRuntime = DocumentRuntime.instance;
 
@@ -244,8 +252,8 @@ void main() {
     });
 
     await tester.pumpWidget(
-      ShadApp(
-        home: Scaffold(
+      _buildResponsiveTestApp(
+        child: Scaffold(
           body: SizedBox.expand(child: _ThreadViewHarness(room: room)),
         ),
       ),
@@ -271,12 +279,10 @@ void main() {
 
     Future<void> pumpToolArea(Size size) {
       return tester.pumpWidget(
-        ShadApp(
-          home: MediaQuery(
-            data: MediaQueryData(size: size),
-            child: Builder(
-              builder: (context) => Material(child: buildTools(context, 'project', room, 'assistant', controller, _emptySnapshot())),
-            ),
+        _buildResponsiveTestApp(
+          mediaQueryData: MediaQueryData(size: size),
+          child: Builder(
+            builder: (context) => Material(child: buildTools(context, 'project', room, 'assistant', controller, _emptySnapshot())),
           ),
         ),
       );
@@ -299,12 +305,10 @@ void main() {
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
-      ShadApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(390, 844)),
-          child: Scaffold(
-            body: Center(child: PowerboardsMobileChatAttachButton(controller: controller)),
-          ),
+      _buildResponsiveTestApp(
+        mediaQueryData: const MediaQueryData(size: Size(390, 844)),
+        child: Scaffold(
+          body: Center(child: PowerboardsMobileChatAttachButton(controller: controller)),
         ),
       ),
     );
@@ -319,7 +323,7 @@ void main() {
     expect(find.text('MCP'), findsNothing);
   });
 
-  testWidgets('mobile thread empty state keeps descriptive copy when keyboard is down', (tester) async {
+  testWidgets('mobile thread empty state shows the mobile action pill row when keyboard is down', (tester) async {
     final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
     tester.view.devicePixelRatio = 1.0;
@@ -330,21 +334,20 @@ void main() {
     addTearDown(tester.view.resetViewInsets);
 
     await tester.pumpWidget(
-      ShadApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(390, 844)),
-          child: SizedBox.expand(child: _ThreadViewHarness(room: room)),
-        ),
+      _buildResponsiveTestApp(
+        mediaQueryData: const MediaQueryData(size: Size(390, 844)),
+        child: SizedBox.expand(child: _ThreadViewHarness(room: room)),
       ),
     );
 
     await tester.pump();
 
-    expect(find.text('Start a new thread'), findsOneWidget);
-    expect(find.text('Connect with this agent and your team'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Start a new thread'), findsNothing);
+    expect(find.text('Connect with this agent and your team'), findsNothing);
   });
 
-  testWidgets('mobile thread empty state uses title-only compact copy when keyboard is up', (tester) async {
+  testWidgets('mobile thread empty state keeps the mobile action pill row when keyboard is up', (tester) async {
     final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
     tester.view.devicePixelRatio = 1.0;
@@ -355,17 +358,16 @@ void main() {
     addTearDown(tester.view.resetViewInsets);
 
     await tester.pumpWidget(
-      ShadApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(390, 844)),
-          child: SizedBox.expand(child: _ThreadViewHarness(room: room)),
-        ),
+      _buildResponsiveTestApp(
+        mediaQueryData: const MediaQueryData(size: Size(390, 844)),
+        child: SizedBox.expand(child: _ThreadViewHarness(room: room)),
       ),
     );
 
     await tester.pump();
 
-    expect(find.text('Start a new thread'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Start a new thread'), findsNothing);
     expect(find.text('Connect with this agent and your team'), findsNothing);
   });
 }
