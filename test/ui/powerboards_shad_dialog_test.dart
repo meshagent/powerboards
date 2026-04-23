@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
+import 'package:meshagent_flutter_shadcn/forms/multi_select_autocomplete.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/ui/powerboards_mobile_field_suggestion_menu.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
-import 'package:powerboards/widgets/multi_select_autocomplete.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 Future<void> _pumpDialog(

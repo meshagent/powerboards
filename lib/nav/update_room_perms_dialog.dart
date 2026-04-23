@@ -18,10 +18,9 @@ import 'package:powerboards/meshagent/user_builder.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
-
-import 'package:powerboards/widgets/email_address.dart';
-import 'package:powerboards/widgets/select_users.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:meshagent_flutter_shadcn/forms/email_address.dart';
+import 'package:meshagent_flutter_shadcn/forms/select_users.dart';
 
 enum _View { permissions, addUser }
 
@@ -359,12 +358,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
           mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.ignore,
           actions: [
             ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Close')),
-            if (canEdit)
-              ShadButton(
-                onPressed: widget.onAddUser,
-                leading: isMobile ? null : const Icon(LucideIcons.userPlus, size: 16),
-                child: const Text('Add user'),
-              ),
+            if (canEdit) ShadButton(onPressed: widget.onAddUser, child: const Text('Add user')),
           ],
           child: isMobile
               ? ScrollConfiguration(
@@ -1208,7 +1202,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                 const SizedBox(height: 8),
                 SelectUsers(
                   autofocus: true,
-                  projectUsers: projUsersMap.values.toList(),
+                  projectEmails: projUsersMap.values.map((user) => user.email).toList(),
                   controller: controller,
                   textController: textController,
                   onChanged: (value) {
@@ -1455,7 +1449,11 @@ class _AddUserDialogState extends State<AddUserDialog> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: submitting
-                    ? [const Icon(Icons.hourglass_top, size: 16), const SizedBox(width: 6), const Text('Saving...')]
+                    ? [
+                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(width: 8),
+                        const Text('Saving...'),
+                      ]
                     : [const Text('Save')],
               ),
             ),
