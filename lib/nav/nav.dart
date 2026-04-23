@@ -15,12 +15,14 @@ import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/settings/selected_room.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/nav/switch_project_dialog.dart';
 import 'package:powerboards/ui/empty_states.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
 
@@ -35,8 +37,10 @@ const double navBarWidth = 280.0;
 
 class NavController extends Controller {
   bool _hideNav = false;
+  bool _mobileRoomListOpen = false;
 
   bool get isNavHidden => _hideNav;
+  bool get isMobileRoomListOpen => _mobileRoomListOpen;
 
   void hideNav() {
     _hideNav = true;
@@ -46,6 +50,33 @@ class NavController extends Controller {
   void showNav() {
     _hideNav = false;
     notifyListeners();
+  }
+
+  void openMobileRoomList() {
+    if (_mobileRoomListOpen) {
+      return;
+    }
+
+    _mobileRoomListOpen = true;
+    notifyListeners();
+  }
+
+  void closeMobileRoomList() {
+    if (!_mobileRoomListOpen) {
+      return;
+    }
+
+    _mobileRoomListOpen = false;
+    notifyListeners();
+  }
+
+  void toggleMobileRoomList() {
+    if (_mobileRoomListOpen) {
+      closeMobileRoomList();
+      return;
+    }
+
+    openMobileRoomList();
   }
 }
 
@@ -60,6 +91,8 @@ class Nav extends StatefulWidget {
   @override
   State createState() => _NavState();
 }
+
+enum _MobileRoomlessCloseAction { createRoom, switchProject }
 
 ({String title, String description}) powerboardsMobileCreditBannerCopy({required bool outOfCredit, required ProjectRole? userRole}) {
   if (!outOfCredit) {
@@ -112,11 +145,18 @@ class _NavState extends State<Nav> {
   }, source: role);
 
   String filter = "";
+  final _mobileRoomListProjectId = Signal<String?>(null);
+  final _mobileRoomListSelectedRoom = Signal<String?>(null);
   late final rooms = Resource<List<Room>>(() async {
     final projectId = widget.projectId ?? localStorage.getItem("lastProjectId");
 
     return projectId == null ? [] : await listMeshagentRooms(projectId);
   });
+  late final mobileRoomListRooms = Resource<List<Room>>(() async {
+    final projectId = _effectiveMobileRoomListProjectId;
+
+    return projectId == null ? [] : await listMeshagentRooms(projectId);
+  }, source: _mobileRoomListProjectId);
 
   late final canCreateRooms = Resource<bool>(() async {
     final projectId = widget.projectId;
@@ -138,6 +178,29 @@ class _NavState extends State<Nav> {
     setState(() {
       filter = value;
     });
+  }
+
+  String? get _effectiveMobileRoomListProjectId {
+    return _mobileRoomListProjectId.value ?? widget.projectId;
+  }
+
+  String? get _effectiveMobileRoomListSelectedRoom {
+    return _mobileRoomListSelectedRoom.value ?? widget.selectedRoom;
+  }
+
+  void _resetMobileRoomListBrowsingState() {
+    if (_mobileRoomListProjectId.value != null) {
+      _mobileRoomListProjectId.value = null;
+    }
+
+    if (_mobileRoomListSelectedRoom.value != null) {
+      _mobileRoomListSelectedRoom.value = null;
+    }
+  }
+
+  void _browseProjectInMobileRoomList(String projectId) {
+    _mobileRoomListProjectId.value = projectId;
+    _mobileRoomListSelectedRoom.value = getLastSelectedRoom(projectId);
   }
 
   void onAddCredits() {
@@ -248,6 +311,9 @@ class _NavState extends State<Nav> {
 
     if (oldWidget.projectId != widget.projectId || oldWidget.selectedRoom != widget.selectedRoom) {
       rooms.refresh();
+      if (_mobileRoomListProjectId.value == null) {
+        mobileRoomListRooms.refresh();
+      }
     }
 
     if (oldWidget.projectId != widget.projectId) {
@@ -256,19 +322,32 @@ class _NavState extends State<Nav> {
       canCreateRooms.refresh();
       role.refresh();
     }
+
+    if (oldWidget.projectId != widget.projectId || oldWidget.selectedRoom != widget.selectedRoom) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+
+        Controller.maybeOfType<NavController>(context)?.closeMobileRoomList();
+        _resetMobileRoomListBrowsingState();
+      });
+    }
   }
 
-  List<Room> get filteredRooms {
+  List<Room> _filteredRooms(List<Room> allRooms) {
     if (filter.isEmpty) {
-      return rooms.state.value ?? [];
+      return allRooms;
     }
 
-    return (rooms.state.value ?? []).where((room) {
+    return allRooms.where((room) {
       final roomName = room.name;
 
       return roomName.toLowerCase().contains(filter.toLowerCase());
     }).toList();
   }
+
+  List<Room> get filteredRooms => _filteredRooms(rooms.state.value ?? []);
 
   Future<void> onCreateProject() async {
     final p = await createMeshagentProject(context);
@@ -318,9 +397,12 @@ class _NavState extends State<Nav> {
   @override
   void dispose() {
     resizeController.dispose();
+    _mobileRoomListProjectId.dispose();
+    _mobileRoomListSelectedRoom.dispose();
     projects.dispose();
     isBalanceLowRes.dispose();
     rooms.dispose();
+    mobileRoomListRooms.dispose();
     role.dispose();
     balanceRes.dispose();
 
@@ -429,6 +511,9 @@ class _NavState extends State<Nav> {
   }
 
   Widget mobileView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
+    final navController = Controller.ofType<NavController>(context);
+    final isRoomlessProjectState = widget.projectId != null && widget.selectedRoom == null;
+
     if (userRole == ProjectRole.none) {
       return forbiddenView(context);
     }
@@ -453,38 +538,24 @@ class _NavState extends State<Nav> {
       );
     }
 
-    final mobileContent = widget.selectedRoom == null
+    final mobileContent = isRoomlessProjectState
+        ? KeyedSubtree(
+            key: ValueKey('mobile-roomless-${widget.projectId}'),
+            child: _buildMobileRoomlessProjectSurface(context, canCreateRooms: canCreateRooms, balanceLow: balanceLow),
+          )
+        : widget.selectedRoom == null
         ? KeyedSubtree(
             key: const ValueKey('mobile-room-list'),
-            child: ColoredBox(
-              color: ShadTheme.of(context).colorScheme.card,
-              child: SafeArea(
-                minimum: powerboardsMobileScreenSafeAreaMinimum,
-                child: Column(
-                  children: [
-                    _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
-
-                    SignalBuilder(
-                      builder: (context, _) => Expanded(
-                        child: _NavBar(
-                          projectId: widget.projectId,
-                          rooms: rooms.state.isReady ? filteredRooms : [],
-                          canCreateRooms: canCreateRooms,
-                          setFilter: setFilter,
-                          onSave: () => rooms.refresh(),
-                          onRefresh: () => rooms.refresh(),
-                          balanceLow: balanceLow,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            child: _buildMobileRoomListSurface(context, canCreateRooms: canCreateRooms, balanceLow: balanceLow),
           )
         : KeyedSubtree(
             key: ValueKey('mobile-room-${widget.selectedRoom}'),
-            child: ColoredBox(key: childKey, color: ShadTheme.of(context).colorScheme.card, child: widget.child),
+            child: _buildMobileRoomSurfaceWithSidetray(
+              context,
+              canCreateRooms: canCreateRooms,
+              balanceLow: balanceLow,
+              sidetrayOpen: navController.isMobileRoomListOpen,
+            ),
           );
 
     return ClipRect(
@@ -524,6 +595,243 @@ class _NavState extends State<Nav> {
           );
         },
         child: mobileContent,
+      ),
+    );
+  }
+
+  Widget _buildMobileRoomListSurface(
+    BuildContext context, {
+    required bool canCreateRooms,
+    required bool balanceLow,
+    VoidCallback? onClose,
+    String? projectIdOverride,
+    String? selectedRoomOverride,
+    Resource<List<Room>>? roomsOverride,
+    ValueChanged<Project>? onProjectSwitched,
+  }) {
+    final useOverlayChrome = onClose != null;
+    final closeTray = onClose;
+    final roomListProjectId = projectIdOverride ?? widget.projectId;
+    final roomListSelectedRoom = selectedRoomOverride ?? widget.selectedRoom;
+    final roomListRooms = roomsOverride ?? rooms;
+
+    return ColoredBox(
+      color: ShadTheme.of(context).colorScheme.card,
+      child: SafeArea(
+        minimum: powerboardsMobileScreenSafeAreaMinimum,
+        child: Column(
+          children: [
+            _NavBarTop(
+              projectId: roomListProjectId,
+              projects: projects,
+              onCreateProject: onCreateProject,
+              onSwitchProject: onProjectSwitched,
+              mobileLeading: !useOverlayChrome
+                  ? null
+                  : ShadIconButton.outline(
+                      icon: const Icon(LucideIcons.x, size: paneHeaderIconButtonIconSize),
+                      decoration: powerboardsAdaptiveIconButtonDecoration(context),
+                      onPressed: onClose,
+                    ),
+            ),
+            SignalBuilder(
+              builder: (context, _) => Expanded(
+                child: _NavBar(
+                  projectId: roomListProjectId,
+                  rooms: roomListRooms.state.isReady ? _filteredRooms(roomListRooms.state.value ?? []) : [],
+                  canCreateRooms: canCreateRooms,
+                  setFilter: setFilter,
+                  selectedRoom: roomListSelectedRoom,
+                  onSave: () {
+                    rooms.refresh();
+                    roomListRooms.refresh();
+                  },
+                  onRefresh: () async {
+                    await roomListRooms.refresh();
+                    if (roomListRooms != rooms) {
+                      rooms.refresh();
+                    }
+                  },
+                  balanceLow: balanceLow,
+                  onRoomSelected: !useOverlayChrome
+                      ? null
+                      : (room) {
+                          closeTray?.call();
+                          final currentProjectId = roomListProjectId;
+                          if (currentProjectId == null) {
+                            return;
+                          }
+
+                          final pid = fromUUID(currentProjectId);
+                          context.go("/p/$pid/r/${room.name}");
+                        },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileRoomlessProjectSurface(BuildContext context, {required bool canCreateRooms, required bool balanceLow}) {
+    final theme = ShadTheme.of(context);
+
+    return ColoredBox(
+      color: theme.colorScheme.card,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              const SizedBox.expand(),
+              SizedBox.expand(
+                child: ColoredBox(
+                  color: theme.colorScheme.background,
+                  child: _buildMobileRoomListSurface(
+                    context,
+                    canCreateRooms: canCreateRooms,
+                    balanceLow: balanceLow,
+                    onClose: () => _handleMobileRoomlessCloseAttempt(context, canCreateRooms: canCreateRooms),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleMobileRoomlessCloseAttempt(BuildContext context, {required bool canCreateRooms}) async {
+    final projectId = widget.projectId;
+    if (projectId == null) {
+      return;
+    }
+
+    final result = await showPowerboardsAlertDialog<_MobileRoomlessCloseAction?>(
+      context: context,
+      builder: (dialogContext) => PowerboardsShadDialog.compact(
+        title: const Text("No room selected"),
+        description: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            canCreateRooms
+                ? "Create a new room to work in this project, or switch to another project."
+                : "You need a room to work in this project. Switch to another project, or ask an admin to create a room.",
+          ),
+        ),
+        actions: [
+          ShadButton.outline(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text("Cancel")),
+          ShadButton.outline(
+            onPressed: () => Navigator.of(dialogContext).pop(_MobileRoomlessCloseAction.switchProject),
+            child: const Text("Switch Project"),
+          ),
+          if (canCreateRooms)
+            ShadButton(
+              onPressed: () => Navigator.of(dialogContext).pop(_MobileRoomlessCloseAction.createRoom),
+              child: const Text("Create Room"),
+            ),
+        ],
+        child: const SizedBox.shrink(),
+      ),
+    );
+
+    if (!mounted || !context.mounted) {
+      return;
+    }
+
+    if (result == _MobileRoomlessCloseAction.createRoom) {
+      final room = await createMeshagentRoom(context, projectId);
+      if (!mounted || !context.mounted || room == null) {
+        return;
+      }
+
+      context.go("/p/${fromUUID(projectId)}/r/${room.name}");
+      return;
+    }
+
+    if (result == _MobileRoomlessCloseAction.switchProject) {
+      if (!context.mounted) {
+        return;
+      }
+
+      await showSwitchProjectDialog(
+        context: context,
+        currentProjectId: projectId,
+        projects: projects,
+        onSwitch: (project) {
+          localStorage.setItem("lastProjectId", project.id);
+          context.go("/p/${fromUUID(project.id)}");
+        },
+        onNewProject: onCreateProject,
+      );
+    }
+  }
+
+  Widget _buildMobileRoomSurfaceWithSidetray(
+    BuildContext context, {
+    required bool canCreateRooms,
+    required bool balanceLow,
+    required bool sidetrayOpen,
+  }) {
+    final theme = ShadTheme.of(context);
+    final navController = Controller.ofType<NavController>(context);
+    void closeMobileRoomListOverlay() {
+      _resetMobileRoomListBrowsingState();
+      navController.closeMobileRoomList();
+    }
+
+    return ColoredBox(
+      key: childKey,
+      color: theme.colorScheme.card,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SignalBuilder(
+            builder: (context, _) => Stack(
+              fit: StackFit.expand,
+              children: [
+                widget.child,
+                IgnorePointer(
+                  ignoring: !sidetrayOpen,
+                  child: AnimatedOpacity(
+                    duration: powerboardsMobileTransitionDuration,
+                    curve: Curves.easeOut,
+                    opacity: sidetrayOpen ? 1 : 0,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: closeMobileRoomListOverlay,
+                      child: ColoredBox(color: Colors.black.withValues(alpha: 0.24)),
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  ignoring: !sidetrayOpen,
+                  child: AnimatedSlide(
+                    duration: powerboardsMobileTransitionDuration,
+                    curve: powerboardsMobileTransitionInCurve,
+                    offset: sidetrayOpen ? Offset.zero : const Offset(-1.02, 0),
+                    child: SizedBox.expand(
+                      child: ColoredBox(
+                        color: theme.colorScheme.background,
+                        child: _buildMobileRoomListSurface(
+                          context,
+                          canCreateRooms: canCreateRooms,
+                          balanceLow: balanceLow,
+                          onClose: closeMobileRoomListOverlay,
+                          projectIdOverride: _effectiveMobileRoomListProjectId,
+                          selectedRoomOverride: _effectiveMobileRoomListSelectedRoom,
+                          roomsOverride: mobileRoomListRooms,
+                          onProjectSwitched: (project) => _browseProjectInMobileRoomList(project.id),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -722,6 +1030,7 @@ class _NavBar extends StatelessWidget {
     required this.projectId,
     required this.balanceLow,
     required this.canCreateRooms,
+    this.onRoomSelected,
   });
 
   final String? selectedRoom;
@@ -732,6 +1041,7 @@ class _NavBar extends StatelessWidget {
   final String? projectId;
   final bool balanceLow;
   final bool canCreateRooms;
+  final ValueChanged<Room>? onRoomSelected;
 
   Future<void> addNewRoomDialog(BuildContext context) async {
     final room = await createMeshagentRoom(context, projectId!);
@@ -791,15 +1101,17 @@ class _NavBar extends StatelessWidget {
                     projectId: projectId!,
                     rooms: rooms,
                     selectedRoom: selectedRoom,
-                    onSelect: (room) async {
-                      final pid = fromUUID(projectId!);
+                    onSelect:
+                        onRoomSelected ??
+                        (room) async {
+                          final pid = fromUUID(projectId!);
 
-                      if (!context.mounted) {
-                        return;
-                      }
+                          if (!context.mounted) {
+                            return;
+                          }
 
-                      context.go("/p/$pid/r/${room.name}");
-                    },
+                          context.go("/p/$pid/r/${room.name}");
+                        },
                     onSave: onSave,
                     onRefresh: onRefresh,
                     balanceLow: balanceLow,
@@ -832,11 +1144,19 @@ class _NavBar extends StatelessWidget {
 }
 
 class _NavBarTop extends StatefulWidget {
-  const _NavBarTop({required this.projects, required this.projectId, required this.onCreateProject});
+  const _NavBarTop({
+    required this.projects,
+    required this.projectId,
+    required this.onCreateProject,
+    this.mobileLeading,
+    this.onSwitchProject,
+  });
 
   final String? projectId;
   final Resource<List<Project>> projects;
   final Future<void> Function() onCreateProject;
+  final Widget? mobileLeading;
+  final ValueChanged<Project>? onSwitchProject;
 
   @override
   State createState() => _NavBarTopState();
@@ -855,6 +1175,11 @@ class _NavBarTopState extends State<_NavBarTop> {
       currentProjectId: widget.projectId ?? "",
       projects: widget.projects,
       onSwitch: (project) {
+        if (widget.onSwitchProject != null) {
+          widget.onSwitchProject!(project);
+          return;
+        }
+
         localStorage.setItem("lastProjectId", project.id);
         context.go("/p/${fromUUID(project.id)}");
       },
@@ -896,7 +1221,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                       height: headerHeight,
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: NavMainLogo(size: mobileHeaderControlSize - 8),
+                        child: widget.mobileLeading ?? NavMainLogo(size: mobileHeaderControlSize - 8),
                       ),
                     ),
                   ),

@@ -1958,7 +1958,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final pane = _mobileActivePane(filesVisible: filesVisible);
 
     if (pane == _MobileRoomPane.chat) {
-      return BackButton(projectId: widget.projectId);
+      final navController = Controller.ofType<NavController>(context);
+      return PowerboardsBackIconButton(onPressed: navController.openMobileRoomList, tooltip: "Open rooms", icon: LucideIcons.menu);
     }
 
     if (pane == _MobileRoomPane.meeting) {
@@ -3490,7 +3491,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 final cs = ShadTheme.of(context).colorScheme;
                 if (isMobile) {
                   return PowerboardsMobileOverlayScaffold(
-                    leading: BackButton(projectId: widget.projectId),
+                    leading: _buildMobileRoomLeadingAction(context, filesVisible: false),
                     titleBuilder: (_, _) => const SizedBox.shrink(),
                     trailingActions: const [],
                     backgroundColor: cs.card,
@@ -3616,7 +3617,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
                               if (isMobile) {
                                 return PowerboardsMobileOverlayScaffold(
-                                  leading: BackButton(projectId: widget.projectId),
+                                  leading: _buildMobileRoomLeadingAction(context, filesVisible: false),
                                   titleBuilder: (_, _) => const SizedBox.shrink(),
                                   trailingActions: _buildMobileEmptyRoomHeaderActions(
                                     context,
