@@ -17,8 +17,10 @@ import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/room_ended_card.dart';
 import 'package:powerboards/meshagent/room_not_found.dart';
 import 'package:powerboards/oauth/oauth.dart';
+import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
 import 'package:powerboards/ui/main_wrapper.dart';
@@ -65,7 +67,17 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   bool _roomWasConnected = false;
 
   Widget _backHeader() {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+
+    if (isMobile) {
+      final navController = Controller.maybeOfType<NavController>(context);
+      if (navController == null) {
+        return const SizedBox.shrink();
+      }
+
+      return PowerboardsBackIconButton(onPressed: navController.openMobileRoomList, tooltip: "Open rooms", icon: LucideIcons.menu);
+    }
 
     if (isSmallDisplay) {
       return PowerboardsBackIconButton(onPressed: () => context.go("/"));
@@ -134,13 +146,28 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   Widget _withReservedRoomHeader(Widget child) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+    final navController = isMobile ? Controller.maybeOfType<NavController>(context) : null;
     final content = Column(
       children: [
         SizedBox(
           height: headerHeight,
-          child: isSmallDisplay
+          child: isMobile
               ? Padding(
-                  padding: isMobile ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: 20),
+                  padding: powerboardsMobileHorizontalPadding,
+                  child: Row(
+                    children: [
+                      if (navController != null)
+                        PowerboardsBackIconButton(
+                          onPressed: navController.openMobileRoomList,
+                          tooltip: "Open rooms",
+                          icon: LucideIcons.menu,
+                        ),
+                    ],
+                  ),
+                )
+              : isSmallDisplay
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(children: [PowerboardsBackIconButton(onPressed: () => context.go("/"))]),
                 )
               : null,
