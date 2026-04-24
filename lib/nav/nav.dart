@@ -130,7 +130,7 @@ class _MobileSidetrayCloseButton extends StatelessWidget {
   );
 }
 
-class _NavState extends State<Nav> {
+class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   final resizeController = ShadResizableController();
   double? _navRatio;
   bool _panelLayoutSyncScheduled = false;
@@ -143,6 +143,7 @@ class _NavState extends State<Nav> {
   String? _mobilePendingCreateRoomName;
   String? _mobilePendingDeleteProjectId;
   String? _mobilePendingDeleteRoomName;
+  late final AnimationController _mobileRoomListCloseAnimationController;
 
   final childKey = GlobalKey();
   Resource<List<Project>> get projects {
@@ -277,6 +278,15 @@ class _NavState extends State<Nav> {
     setState(() {
       _mobileRoomListDragOffset = 0;
     });
+  }
+
+  void _resetMobileRoomListCloseAnimation() {
+    if (_mobileRoomListCloseAnimationController.value == 0 && !_mobileRoomListCloseAnimationController.isAnimating) {
+      return;
+    }
+
+    _mobileRoomListCloseAnimationController.stop();
+    _mobileRoomListCloseAnimationController.value = 0;
   }
 
   void _updateMobileRoomListDrag(double delta, double maxWidth) {
@@ -492,6 +502,18 @@ class _NavState extends State<Nav> {
   void initState() {
     super.initState();
 
+    _mobileRoomListCloseAnimationController = AnimationController(vsync: this, duration: powerboardsMobileTransitionDuration)
+      ..addListener(() {
+        if (mounted) {
+          setState(() {});
+        }
+      })
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          _mobileRoomListCloseAnimationController.value = 0;
+        }
+      });
+
     projects.untilReady.then((list) async {
       final p = await list();
 
@@ -518,6 +540,7 @@ class _NavState extends State<Nav> {
 
   @override
   void dispose() {
+    _mobileRoomListCloseAnimationController.dispose();
     resizeController.dispose();
     _mobileRoomListProjectId.dispose();
     _mobileRoomListSelectedRoom.dispose();
@@ -738,6 +761,7 @@ class _NavState extends State<Nav> {
     required bool canCreateRooms,
     required bool balanceLow,
     VoidCallback? onClose,
+    VoidCallback? onAnimatedClose,
     String? projectIdOverride,
     String? selectedRoomOverride,
     Resource<List<Room>>? roomsOverride,
@@ -781,7 +805,7 @@ class _NavState extends State<Nav> {
                       boundaryContext: context,
                       avatarSize: desktopPaneHeaderCompactButtonWidth,
                     ),
-              mobileTrailing: !useOverlayChrome ? null : _MobileSidetrayCloseButton(onPressed: onClose),
+              mobileTrailing: !useOverlayChrome ? null : _MobileSidetrayCloseButton(onPressed: onAnimatedClose ?? onClose),
             ),
             SignalBuilder(
               builder: (context, _) => Expanded(
@@ -929,8 +953,16 @@ class _NavState extends State<Nav> {
     final theme = ShadTheme.of(context);
     final navController = Controller.ofType<NavController>(context);
     void closeMobileRoomListOverlay() {
+      _resetMobileRoomListCloseAnimation();
       _resetMobileRoomListDrag();
       _resetMobileRoomListBrowsingState();
+      navController.closeMobileRoomList();
+    }
+
+    void animateCloseMobileRoomListOverlay() {
+      _resetMobileRoomListDrag();
+      _resetMobileRoomListBrowsingState();
+      _mobileRoomListCloseAnimationController.forward(from: 0);
       navController.closeMobileRoomList();
     }
 
@@ -941,17 +973,54 @@ class _NavState extends State<Nav> {
         builder: (context, constraints) {
           final canSwipeDismiss = mobileRoomListRooms.state.isReady && (mobileRoomListRooms.state.value?.isNotEmpty ?? false);
           final dragProgress = constraints.maxWidth <= 0 ? 0.0 : (_mobileRoomListDragOffset.abs() / constraints.maxWidth).clamp(0.0, 1.0);
+          final closeProgress = sidetrayOpen ? 0.0 : _mobileRoomListCloseAnimationController.value;
+          final revealProgress = _mobileRoomListDragOffset != 0 ? dragProgress : closeProgress;
+          final isSwipeRevealActive = (_mobileRoomListDragOffset != 0 && sidetrayOpen) || closeProgress > 0;
           final overlayOpacity = sidetrayOpen ? (1 - dragProgress) : 0.0;
           final baseOffset = sidetrayOpen ? 0.0 : -1.02;
           final dragOffset = constraints.maxWidth <= 0 ? 0.0 : (_mobileRoomListDragOffset / constraints.maxWidth);
           final effectiveSlideOffset = baseOffset + dragOffset;
           final dragAnimationDuration = _mobileRoomListDragOffset == 0 ? powerboardsMobileTransitionDuration : Duration.zero;
+          final revealedRoomScale = 0.90 + (0.10 * revealProgress);
+          final revealedRoomInset = 16.0 * (1 - revealProgress);
+          final revealedRoomRadius = 28.0 * (1 - revealProgress);
+          final revealedRoomOpacity = ((revealProgress - 0.72) / 0.28).clamp(0.0, 1.0);
+          final revealedCardDimness = 0.20 * (1 - revealProgress);
 
           return SignalBuilder(
             builder: (context, _) => Stack(
               fit: StackFit.expand,
               children: [
-                widget.child,
+                if (!isSwipeRevealActive)
+                  widget.child
+                else
+                  ColoredBox(
+                    color: Colors.black,
+                    child: Padding(
+                      padding: EdgeInsets.all(revealedRoomInset),
+                      child: Transform.scale(
+                        scale: revealedRoomScale,
+                        alignment: Alignment.center,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(revealedRoomRadius),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ColoredBox(color: theme.colorScheme.card),
+                              if (revealedCardDimness > 0)
+                                IgnorePointer(
+                                  child: ColoredBox(color: Colors.black.withValues(alpha: revealedCardDimness)),
+                                ),
+                              if (revealedRoomOpacity > 0)
+                                IgnorePointer(
+                                  child: Opacity(opacity: revealedRoomOpacity, child: widget.child),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 IgnorePointer(
                   ignoring: !sidetrayOpen,
                   child: AnimatedOpacity(
@@ -961,7 +1030,7 @@ class _NavState extends State<Nav> {
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: closeMobileRoomListOverlay,
-                      child: ColoredBox(color: Colors.black.withValues(alpha: 0.24)),
+                      child: ColoredBox(color: isSwipeRevealActive ? Colors.transparent : Colors.black.withValues(alpha: 0.24)),
                     ),
                   ),
                 ),
@@ -996,6 +1065,7 @@ class _NavState extends State<Nav> {
                             canCreateRooms: canCreateRooms,
                             balanceLow: balanceLow,
                             onClose: closeMobileRoomListOverlay,
+                            onAnimatedClose: animateCloseMobileRoomListOverlay,
                             projectIdOverride: _effectiveMobileRoomListProjectId,
                             selectedRoomOverride: _effectiveMobileRoomListSelectedRoom,
                             roomsOverride: mobileRoomListRooms,
