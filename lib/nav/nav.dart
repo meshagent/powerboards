@@ -1103,25 +1103,25 @@ class _NavBar extends StatelessWidget {
             padding: horizontalPadding,
             child: Builder(
               builder: (context) {
-                final pillRadius = BorderRadius.circular(999);
-                final theme = ShadTheme.of(context);
                 final filterInput = PowerboardsAdaptiveInput(
                   padding: isMobile ? const EdgeInsets.fromLTRB(14, 8, 12, 8) : null,
-                  decoration: ShadDecoration(
-                    color: theme.colorScheme.input,
-                    border: ShadBorder.all(radius: pillRadius),
-                    focusedBorder: ShadBorder.all(radius: pillRadius),
-                    errorBorder: ShadBorder.all(radius: pillRadius),
-                    secondaryBorder: ShadBorder.all(radius: pillRadius),
-                    secondaryFocusedBorder: ShadBorder.all(radius: pillRadius),
-                    secondaryErrorBorder: ShadBorder.all(radius: pillRadius),
-                  ),
+                  decoration: !isMobile
+                      ? ShadDecoration(color: ShadTheme.of(context).colorScheme.input)
+                      : ShadDecoration(
+                          color: ShadTheme.of(context).colorScheme.input,
+                          border: ShadBorder.all(radius: BorderRadius.circular(999)),
+                          focusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                          errorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                          secondaryBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                          secondaryFocusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                          secondaryErrorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                        ),
                   key: const Key('room-list-search-field'),
                   onChanged: setFilter,
-                  leading: Icon(LucideIcons.search, size: 16, color: theme.colorScheme.mutedForeground),
-                  gap: 10,
+                  leading: !isMobile ? null : Icon(LucideIcons.search, size: 16, color: ShadTheme.of(context).colorScheme.mutedForeground),
+                  gap: !isMobile ? null : 10,
                   inputPadding: isMobile ? EdgeInsets.zero : null,
-                  placeholder: Text("Filter rooms..."),
+                  placeholder: const Text("Filter rooms..."),
                 );
 
                 if (isMobile) {
@@ -1167,12 +1167,23 @@ class _NavBar extends StatelessWidget {
                 isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
                 desktopPaneBottomInset,
               ),
-              child: ShadButton(
-                height: powerboardsFooterActionButtonHeight,
-                key: const Key('nav-create-room-button'),
-                onPressed: () => addNewRoomDialog(context),
-                child: const Text("New Room"),
-              ),
+              child: isMobile
+                  ? ShadButton(
+                      height: powerboardsFooterActionButtonHeight,
+                      key: const Key('nav-create-room-button'),
+                      onPressed: () => addNewRoomDialog(context),
+                      child: const Text("New Room"),
+                    )
+                  : ShadButton.outline(
+                      height: powerboardsFooterActionButtonHeight,
+                      decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
+                      backgroundColor: ShadTheme.of(context).colorScheme.background,
+                      hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
+                      hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
+                      key: const Key('nav-create-room-button'),
+                      onPressed: () => addNewRoomDialog(context),
+                      child: const Text("New Room"),
+                    ),
             ),
         ],
       ),
