@@ -22,6 +22,7 @@ import 'package:powerboards/ui/empty_states.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
+import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -93,6 +94,29 @@ class Nav extends StatefulWidget {
 }
 
 enum _MobileRoomlessCloseAction { createRoom, switchProject }
+
+class _MobileSidetrayCloseButton extends StatelessWidget {
+  const _MobileSidetrayCloseButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+
+    return ShadIconButton.ghost(
+      onPressed: onPressed,
+      width: desktopPaneHeaderCompactButtonWidth,
+      height: desktopPaneHeaderCompactButtonWidth,
+      padding: EdgeInsets.zero,
+      foregroundColor: theme.colorScheme.foreground.withValues(alpha: .58),
+      hoverBackgroundColor: Colors.transparent,
+      hoverForegroundColor: theme.colorScheme.foreground,
+      pressedForegroundColor: theme.colorScheme.foreground,
+      icon: const Icon(LucideIcons.x, size: 24),
+    );
+  }
+}
 
 ({String title, String description}) powerboardsMobileCreditBannerCopy({required bool outOfCredit, required ProjectRole? userRole}) {
   if (!outOfCredit) {
@@ -628,11 +652,13 @@ class _NavState extends State<Nav> {
               onSwitchProject: onProjectSwitched,
               mobileLeading: !useOverlayChrome
                   ? null
-                  : ShadIconButton.outline(
-                      icon: const Icon(LucideIcons.x, size: paneHeaderIconButtonIconSize),
-                      decoration: powerboardsAdaptiveIconButtonDecoration(context),
-                      onPressed: onClose,
+                  : UserAvatarMenuButton(
+                      projectId: roomListProjectId,
+                      projects: projects,
+                      boundaryContext: context,
+                      avatarSize: desktopPaneHeaderCompactButtonWidth,
                     ),
+              mobileTrailing: !useOverlayChrome ? null : _MobileSidetrayCloseButton(onPressed: onClose),
             ),
             SignalBuilder(
               builder: (context, _) => Expanded(
@@ -1072,21 +1098,37 @@ class _NavBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: desktopPaneSecondaryControlTopOffset),
+          SizedBox(height: isMobile ? powerboardsMobileOverlaySecondaryRowLift : desktopPaneSecondaryControlTopOffset),
           Padding(
             padding: horizontalPadding,
             child: Builder(
               builder: (context) {
+                final pillRadius = BorderRadius.circular(999);
+                final theme = ShadTheme.of(context);
                 final filterInput = PowerboardsAdaptiveInput(
-                  decoration: ShadDecoration(color: ShadTheme.of(context).colorScheme.input),
+                  padding: isMobile ? const EdgeInsets.fromLTRB(14, 8, 12, 8) : null,
+                  decoration: ShadDecoration(
+                    color: theme.colorScheme.input,
+                    border: ShadBorder.all(radius: pillRadius),
+                    focusedBorder: ShadBorder.all(radius: pillRadius),
+                    errorBorder: ShadBorder.all(radius: pillRadius),
+                    secondaryBorder: ShadBorder.all(radius: pillRadius),
+                    secondaryFocusedBorder: ShadBorder.all(radius: pillRadius),
+                    secondaryErrorBorder: ShadBorder.all(radius: pillRadius),
+                  ),
                   key: const Key('room-list-search-field'),
                   onChanged: setFilter,
-                  inputPadding: isMobile ? const EdgeInsets.only(left: 5) : null,
+                  leading: Icon(LucideIcons.search, size: 16, color: theme.colorScheme.mutedForeground),
+                  gap: 10,
+                  inputPadding: isMobile ? EdgeInsets.zero : null,
                   placeholder: Text("Filter rooms..."),
                 );
 
                 if (isMobile) {
-                  return filterInput;
+                  return SizedBox(
+                    height: powerboardsMobileSecondaryRowHeight,
+                    child: Center(child: filterInput),
+                  );
                 }
 
                 return SizedBox(height: desktopPaneSecondaryControlHeight, child: filterInput);
@@ -1125,14 +1167,9 @@ class _NavBar extends StatelessWidget {
                 isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
                 desktopPaneBottomInset,
               ),
-              child: ShadButton.outline(
+              child: ShadButton(
                 height: powerboardsFooterActionButtonHeight,
-                decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
-                backgroundColor: ShadTheme.of(context).colorScheme.background,
-                hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
-                hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
                 key: const Key('nav-create-room-button'),
-                leading: Icon(LucideIcons.packagePlus),
                 onPressed: () => addNewRoomDialog(context),
                 child: const Text("New Room"),
               ),
@@ -1149,6 +1186,7 @@ class _NavBarTop extends StatefulWidget {
     required this.projectId,
     required this.onCreateProject,
     this.mobileLeading,
+    this.mobileTrailing,
     this.onSwitchProject,
   });
 
@@ -1156,6 +1194,7 @@ class _NavBarTop extends StatefulWidget {
   final Resource<List<Project>> projects;
   final Future<void> Function() onCreateProject;
   final Widget? mobileLeading;
+  final Widget? mobileTrailing;
   final ValueChanged<Project>? onSwitchProject;
 
   @override
@@ -1232,12 +1271,14 @@ class _NavBarTopState extends State<_NavBarTop> {
                       height: headerHeight,
                       child: Align(
                         alignment: Alignment.centerRight,
-                        child: UserAvatarMenuButton(
-                          projectId: widget.projectId,
-                          projects: widget.projects,
-                          boundaryContext: context,
-                          avatarSize: mobileHeaderControlSize,
-                        ),
+                        child:
+                            widget.mobileTrailing ??
+                            UserAvatarMenuButton(
+                              projectId: widget.projectId,
+                              projects: widget.projects,
+                              boundaryContext: context,
+                              avatarSize: mobileHeaderControlSize,
+                            ),
                       ),
                     ),
                   ),
