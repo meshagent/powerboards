@@ -143,6 +143,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   String? _mobilePendingCreateRoomName;
   String? _mobilePendingDeleteProjectId;
   String? _mobilePendingDeleteRoomName;
+  bool _mobileRoomListFilterMode = false;
   late final AnimationController _mobileRoomListCloseAnimationController;
 
   final childKey = GlobalKey();
@@ -232,6 +233,16 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   void _browseProjectInMobileRoomList(String projectId) {
     _mobileRoomListProjectId.value = projectId;
     _mobileRoomListSelectedRoom.value = getLastSelectedRoom(projectId);
+  }
+
+  void _setMobileRoomListFilterMode(bool enabled) {
+    if (_mobileRoomListFilterMode == enabled) {
+      return;
+    }
+
+    setState(() {
+      _mobileRoomListFilterMode = enabled;
+    });
   }
 
   void _setMobilePendingCreateRoom(String projectId, String roomName) {
@@ -461,6 +472,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
           return;
         }
 
+        _setMobileRoomListFilterMode(false);
         Controller.maybeOfType<NavController>(context)?.closeMobileRoomList();
         _resetMobileRoomListBrowsingState();
       });
@@ -627,6 +639,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                           child: _NavBar(
                             projectId: widget.projectId,
                             rooms: rooms.state.isReady ? filteredRooms : [],
+                            currentFilter: filter,
                             canCreateRooms: canCreateRooms,
                             setFilter: setFilter,
                             selectedRoom: widget.selectedRoom,
@@ -769,6 +782,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   }) {
     final useOverlayChrome = onClose != null;
     final closeTray = onClose;
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final roomListProjectId = projectIdOverride ?? widget.projectId;
     final roomListSelectedRoom = selectedRoomOverride ?? widget.selectedRoom;
     final roomListRooms = roomsOverride ?? rooms;
@@ -792,30 +806,46 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
         minimum: powerboardsMobileScreenSafeAreaMinimum,
         child: Column(
           children: [
-            _NavBarTop(
-              projectId: roomListProjectId,
-              projects: projects,
-              onCreateProject: onCreateProject,
-              onSwitchProject: onProjectSwitched,
-              mobileLeading: !useOverlayChrome
-                  ? null
-                  : UserAvatarMenuButton(
+            AnimatedSwitcher(
+              duration: powerboardsMobileTransitionDuration,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => SizeTransition(
+                sizeFactor: animation,
+                axisAlignment: -1,
+                child: FadeTransition(opacity: animation, child: child),
+              ),
+              child: !(isMobile && _mobileRoomListFilterMode)
+                  ? _NavBarTop(
+                      key: const ValueKey('mobile-room-list-header'),
                       projectId: roomListProjectId,
                       projects: projects,
-                      boundaryContext: context,
-                      avatarSize: desktopPaneHeaderCompactButtonWidth,
-                    ),
-              mobileTrailing: !useOverlayChrome ? null : _MobileSidetrayCloseButton(onPressed: onAnimatedClose ?? onClose),
+                      onCreateProject: onCreateProject,
+                      onSwitchProject: onProjectSwitched,
+                      mobileLeading: !useOverlayChrome
+                          ? null
+                          : UserAvatarMenuButton(
+                              projectId: roomListProjectId,
+                              projects: projects,
+                              boundaryContext: context,
+                              avatarSize: desktopPaneHeaderCompactButtonWidth,
+                            ),
+                      mobileTrailing: !useOverlayChrome ? null : _MobileSidetrayCloseButton(onPressed: onAnimatedClose ?? onClose),
+                    )
+                  : const SizedBox(key: ValueKey('mobile-room-list-header-hidden')),
             ),
             SignalBuilder(
               builder: (context, _) => Expanded(
                 child: _NavBar(
                   projectId: roomListProjectId,
                   rooms: _filteredRooms(roomListItems),
+                  currentFilter: filter,
                   pendingCreateRoomName: pendingCreateRoomName,
                   pendingDeleteRoomName: pendingDeleteRoomName,
                   canCreateRooms: canCreateRooms,
                   setFilter: setFilter,
+                  mobileFilterMode: _mobileRoomListFilterMode,
+                  onMobileFilterModeChanged: isMobile ? _setMobileRoomListFilterMode : null,
                   selectedRoom: roomListSelectedRoom,
                   onSave: () {
                     rooms.refresh();
@@ -831,6 +861,9 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                   onRoomSelected: !useOverlayChrome
                       ? null
                       : (room) {
+                          if (filter.isNotEmpty) {
+                            setFilter('');
+                          }
                           closeTray?.call();
                           final currentProjectId = roomListProjectId;
                           if (currentProjectId == null) {
@@ -953,6 +986,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     final theme = ShadTheme.of(context);
     final navController = Controller.ofType<NavController>(context);
     void closeMobileRoomListOverlay() {
+      _setMobileRoomListFilterMode(false);
       _resetMobileRoomListCloseAnimation();
       _resetMobileRoomListDrag();
       _resetMobileRoomListBrowsingState();
@@ -960,6 +994,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     }
 
     void animateCloseMobileRoomListOverlay() {
+      _setMobileRoomListFilterMode(false);
       _resetMobileRoomListDrag();
       _resetMobileRoomListBrowsingState();
       _mobileRoomListCloseAnimationController.forward(from: 0);
@@ -1268,13 +1303,16 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   }
 }
 
-class _NavBar extends StatelessWidget {
+class _NavBar extends StatefulWidget {
   const _NavBar({
     this.selectedRoom,
     required this.rooms,
+    required this.currentFilter,
     this.pendingCreateRoomName,
     this.pendingDeleteRoomName,
     required this.setFilter,
+    this.mobileFilterMode = false,
+    this.onMobileFilterModeChanged,
     required this.onSave,
     required this.onRefresh,
     required this.projectId,
@@ -1285,9 +1323,12 @@ class _NavBar extends StatelessWidget {
 
   final String? selectedRoom;
   final List<Room> rooms;
+  final String currentFilter;
   final String? pendingCreateRoomName;
   final String? pendingDeleteRoomName;
   final void Function(String) setFilter;
+  final bool mobileFilterMode;
+  final ValueChanged<bool>? onMobileFilterModeChanged;
   final void Function() onSave;
   final Future<void> Function() onRefresh;
   final String? projectId;
@@ -1295,18 +1336,29 @@ class _NavBar extends StatelessWidget {
   final bool canCreateRooms;
   final ValueChanged<Room>? onRoomSelected;
 
+  @override
+  State<_NavBar> createState() => _NavBarState();
+}
+
+class _NavBarState extends State<_NavBar> {
+  late final TextEditingController _filterController;
+  late final FocusNode _filterFocusNode;
+
+  bool get _isMobile => ResponsiveBreakpoints.of(context).isMobile;
+  bool get _isMobileFilterMode => _isMobile && widget.mobileFilterMode;
+
   Future<void> addNewRoomDialog(BuildContext context) async {
     String? pendingRoomName;
     try {
       final room = await createMeshagentRoom(
         context,
-        projectId!,
-        onCreateStarted: onRoomSelected == null
+        widget.projectId!,
+        onCreateStarted: widget.onRoomSelected == null
             ? null
             : (name) {
                 pendingRoomName = name;
                 final navState = context.findAncestorStateOfType<_NavState>();
-                navState?._setMobilePendingCreateRoom(projectId!, name);
+                navState?._setMobilePendingCreateRoom(widget.projectId!, name);
               },
       );
       if (!context.mounted) {
@@ -1314,16 +1366,16 @@ class _NavBar extends StatelessWidget {
       }
 
       if (room != null) {
-        if (onRoomSelected != null) {
-          await waitForMeshagentRoomConnectionReady(projectId!, room.name);
+        if (widget.onRoomSelected != null) {
+          await waitForMeshagentRoomConnectionReady(widget.projectId!, room.name);
           if (!context.mounted) {
             return;
           }
-          onRoomSelected!(room);
+          widget.onRoomSelected!(room);
           return;
         }
 
-        final pid = fromUUID(projectId!);
+        final pid = fromUUID(widget.projectId!);
 
         if (!context.mounted) {
           return;
@@ -1340,9 +1392,46 @@ class _NavBar extends StatelessWidget {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _filterController = TextEditingController(text: widget.currentFilter);
+    _filterFocusNode = FocusNode()
+      ..addListener(() {
+        if (_filterFocusNode.hasFocus && _isMobile) {
+          widget.onMobileFilterModeChanged?.call(true);
+        }
+      });
+  }
+
+  @override
+  void didUpdateWidget(covariant _NavBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.currentFilter != _filterController.text) {
+      _filterController.value = TextEditingValue(
+        text: widget.currentFilter,
+        selection: TextSelection.collapsed(offset: widget.currentFilter.length),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _filterFocusNode.dispose();
+    _filterController.dispose();
+    super.dispose();
+  }
+
+  void _closeMobileFilterMode() {
+    widget.onMobileFilterModeChanged?.call(false);
+    _filterFocusNode.unfocus();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = _isMobile;
     final keyboardOpen = isMobile && (MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0.0) > 0;
+    final isCreatePending = widget.pendingCreateRoomName != null;
     final horizontalPadding = isMobile
         ? powerboardsMobileHorizontalPadding
         : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset);
@@ -1351,12 +1440,18 @@ class _NavBar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(height: isMobile ? powerboardsMobileOverlaySecondaryRowLift : desktopPaneSecondaryControlTopOffset),
+          AnimatedContainer(
+            duration: powerboardsMobileTransitionDuration,
+            curve: Curves.easeOutCubic,
+            height: isMobile ? (_isMobileFilterMode ? 0 : powerboardsMobileOverlaySecondaryRowLift) : desktopPaneSecondaryControlTopOffset,
+          ),
           Padding(
             padding: horizontalPadding,
             child: Builder(
               builder: (context) {
                 final filterInput = PowerboardsAdaptiveInput(
+                  controller: _filterController,
+                  focusNode: _filterFocusNode,
                   padding: isMobile ? const EdgeInsets.fromLTRB(14, 8, 12, 8) : null,
                   decoration: !isMobile
                       ? ShadDecoration(color: ShadTheme.of(context).colorScheme.input)
@@ -1370,7 +1465,7 @@ class _NavBar extends StatelessWidget {
                           secondaryErrorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
                         ),
                   key: const Key('room-list-search-field'),
-                  onChanged: setFilter,
+                  onChanged: widget.setFilter,
                   leading: !isMobile ? null : Icon(LucideIcons.search, size: 16, color: ShadTheme.of(context).colorScheme.mutedForeground),
                   gap: !isMobile ? null : 10,
                   inputPadding: isMobile ? EdgeInsets.zero : null,
@@ -1388,20 +1483,24 @@ class _NavBar extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(height: desktopPaneSecondaryRowContentGap),
+          AnimatedContainer(
+            duration: powerboardsMobileTransitionDuration,
+            curve: Curves.easeOutCubic,
+            height: _isMobileFilterMode ? 8 : desktopPaneSecondaryRowContentGap,
+          ),
           Expanded(
-            child: projectId == null
+            child: widget.projectId == null
                 ? Center(child: CircularProgressIndicator())
                 : NavRooms(
-                    projectId: projectId!,
-                    rooms: rooms,
-                    pendingCreateRoomName: pendingCreateRoomName,
-                    pendingDeleteRoomName: pendingDeleteRoomName,
-                    selectedRoom: selectedRoom,
+                    projectId: widget.projectId!,
+                    rooms: widget.rooms,
+                    pendingCreateRoomName: widget.pendingCreateRoomName,
+                    pendingDeleteRoomName: widget.pendingDeleteRoomName,
+                    selectedRoom: widget.selectedRoom,
                     onSelect:
-                        onRoomSelected ??
+                        widget.onRoomSelected ??
                         (room) async {
-                          final pid = fromUUID(projectId!);
+                          final pid = fromUUID(widget.projectId!);
 
                           if (!context.mounted) {
                             return;
@@ -1413,7 +1512,7 @@ class _NavBar extends StatelessWidget {
                         ? null
                         : (room) {
                             final navState = context.findAncestorStateOfType<_NavState>();
-                            navState?._setMobilePendingDeleteRoom(projectId!, room.name);
+                            navState?._setMobilePendingDeleteRoom(widget.projectId!, room.name);
                           },
                     onDeleteFinished: !isMobile
                         ? null
@@ -1423,42 +1522,80 @@ class _NavBar extends StatelessWidget {
                             }
 
                             final navState = context.findAncestorStateOfType<_NavState>();
-                            if (navState?._mobilePendingDeleteProjectId == projectId &&
+                            if (navState?._mobilePendingDeleteProjectId == widget.projectId &&
                                 navState?._mobilePendingDeleteRoomName == room.name) {
                               navState?._clearMobilePendingDeleteRoom();
                             }
                           },
-                    onSave: onSave,
-                    onRefresh: onRefresh,
-                    balanceLow: balanceLow,
+                    onSave: widget.onSave,
+                    onRefresh: widget.onRefresh,
+                    balanceLow: widget.balanceLow,
                   ),
           ),
-          if (canCreateRooms && !keyboardOpen)
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
-                10,
-                isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
-                desktopPaneBottomInset,
-              ),
-              child: isMobile
-                  ? ShadButton(
-                      height: powerboardsFooterActionButtonHeight,
-                      key: const Key('nav-create-room-button'),
-                      onPressed: () => addNewRoomDialog(context),
-                      child: const Text("New Room"),
-                    )
-                  : ShadButton.outline(
-                      height: powerboardsFooterActionButtonHeight,
-                      decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
-                      backgroundColor: ShadTheme.of(context).colorScheme.background,
-                      hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
-                      hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
-                      key: const Key('nav-create-room-button'),
-                      onPressed: () => addNewRoomDialog(context),
-                      child: const Text("New Room"),
-                    ),
+          AnimatedSwitcher(
+            duration: powerboardsMobileTransitionDuration,
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SizeTransition(sizeFactor: animation, axisAlignment: 1, child: child),
             ),
+            child: _isMobileFilterMode
+                ? Padding(
+                    key: const ValueKey('mobile-filter-actions'),
+                    padding: EdgeInsets.fromLTRB(
+                      powerboardsMobileShellHorizontalInset,
+                      10,
+                      powerboardsMobileShellHorizontalInset,
+                      desktopPaneBottomInset,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ShadButton.outline(
+                            height: powerboardsFooterActionButtonHeight,
+                            onPressed: _closeMobileFilterMode,
+                            child: const Text("Close"),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : widget.canCreateRooms && !keyboardOpen
+                ? Padding(
+                    key: const ValueKey('nav-create-room-action'),
+                    padding: EdgeInsets.fromLTRB(
+                      isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
+                      10,
+                      isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
+                      desktopPaneBottomInset,
+                    ),
+                    child: isMobile
+                        ? SizedBox(
+                            width: double.infinity,
+                            child: ShadButton(
+                              height: powerboardsFooterActionButtonHeight,
+                              key: const Key('nav-create-room-button'),
+                              onPressed: isCreatePending ? null : () => addNewRoomDialog(context),
+                              child: const Text("New Room"),
+                            ),
+                          )
+                        : SizedBox(
+                            width: double.infinity,
+                            child: ShadButton.outline(
+                              height: powerboardsFooterActionButtonHeight,
+                              decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
+                              backgroundColor: ShadTheme.of(context).colorScheme.background,
+                              hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
+                              hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
+                              key: const Key('nav-create-room-button'),
+                              onPressed: isCreatePending ? null : () => addNewRoomDialog(context),
+                              child: const Text("New Room"),
+                            ),
+                          ),
+                  )
+                : const SizedBox.shrink(key: ValueKey('nav-no-footer-action')),
+          ),
         ],
       ),
     );
@@ -1467,6 +1604,7 @@ class _NavBar extends StatelessWidget {
 
 class _NavBarTop extends StatefulWidget {
   const _NavBarTop({
+    super.key,
     required this.projects,
     required this.projectId,
     required this.onCreateProject,
