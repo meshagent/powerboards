@@ -21,17 +21,19 @@ String roomDisplayName(Room room) => (room.metadata['displayName'] as String? ??
 
 int _compareRoomNames(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
 
-class NavRooms extends StatelessWidget {
+class NavRooms extends StatefulWidget {
   const NavRooms({
     super.key,
     required this.projectId,
     required this.onSelect,
     required this.rooms,
+    this.contentPadding,
     this.pendingCreateRoomName,
     this.pendingDeleteRoomName,
     this.onCreateRoom,
     this.onDeleteStarted,
     this.onDeleteFinished,
+    this.onScrollActiveChanged,
     required this.onSave,
     required this.onRefresh,
     required this.balanceLow,
@@ -40,10 +42,12 @@ class NavRooms extends StatelessWidget {
 
   final ValueChanged<Room> onSelect;
   final List<Room> rooms;
+  final EdgeInsetsGeometry? contentPadding;
   final String? pendingCreateRoomName;
   final VoidCallback? onCreateRoom;
   final ValueChanged<Room>? onDeleteStarted;
   final void Function(Room room, bool deleted)? onDeleteFinished;
+  final ValueChanged<bool>? onScrollActiveChanged;
   final VoidCallback onSave;
   final Future<void> Function() onRefresh;
   final String? selectedRoom;
@@ -52,58 +56,134 @@ class NavRooms extends StatelessWidget {
   final String? pendingDeleteRoomName;
 
   @override
+  State<NavRooms> createState() => _NavRoomsState();
+}
+
+class _NavRoomsState extends State<NavRooms> {
+  final ScrollController _scrollController = ScrollController();
+  bool _hasScrollableExtent = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncScrollableExtent());
+  }
+
+  @override
+  void didUpdateWidget(covariant NavRooms oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rooms.length != widget.rooms.length ||
+        oldWidget.pendingCreateRoomName != widget.pendingCreateRoomName ||
+        oldWidget.pendingDeleteRoomName != widget.pendingDeleteRoomName) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _syncScrollableExtent());
+    }
+  }
+
+  void _syncScrollableExtent([double? maxScrollExtent]) {
+    if (!mounted) {
+      return;
+    }
+
+    final resolvedMaxScrollExtent =
+        maxScrollExtent ??
+        (_scrollController.hasClients && _scrollController.position.hasContentDimensions
+            ? _scrollController.position.maxScrollExtent
+            : 0.0);
+    final nextHasScrollableExtent = resolvedMaxScrollExtent > 0.5;
+
+    if (_hasScrollableExtent == nextHasScrollableExtent) {
+      return;
+    }
+
+    setState(() {
+      _hasScrollableExtent = nextHasScrollableExtent;
+    });
+
+    if (!nextHasScrollableExtent) {
+      widget.onScrollActiveChanged?.call(false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final trayBoundaryContext = context;
-    final pendingCreateIndex = pendingCreateRoomName == null
+    final pendingCreateIndex = widget.pendingCreateRoomName == null
         ? null
-        : rooms.indexWhere((room) => _compareRoomNames(pendingCreateRoomName!, roomDisplayName(room)) < 0);
-    final resolvedPendingCreateIndex = pendingCreateIndex == null ? null : (pendingCreateIndex == -1 ? rooms.length : pendingCreateIndex);
+        : widget.rooms.indexWhere((room) => _compareRoomNames(widget.pendingCreateRoomName!, roomDisplayName(room)) < 0);
+    final resolvedPendingCreateIndex = pendingCreateIndex == null
+        ? null
+        : (pendingCreateIndex == -1 ? widget.rooms.length : pendingCreateIndex);
+    const collapseThreshold = 12.0;
+
+    bool handleScrollNotification(ScrollNotification notification) {
+      if (notification.metrics.axis != Axis.vertical) {
+        return false;
+      }
+
+      _syncScrollableExtent(notification.metrics.maxScrollExtent);
+      widget.onScrollActiveChanged?.call(_hasScrollableExtent && notification.metrics.pixels > collapseThreshold);
+      return false;
+    }
 
     return Column(
       children: [
-        if (rooms.isEmpty)
+        if (widget.rooms.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
-              children: [if (onCreateRoom != null) ShadButton(onPressed: onCreateRoom, child: const Text('Create room'))],
+              children: [if (widget.onCreateRoom != null) ShadButton(onPressed: widget.onCreateRoom, child: const Text('Create room'))],
             ),
           )
         else
           Expanded(
-            child: RefreshIndicator(
-              onRefresh: onRefresh,
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(desktopPaneSideHorizontalInset, 10, desktopPaneSideHorizontalInset, 10),
-                itemCount: rooms.length + (pendingCreateRoomName != null ? 1 : 0),
-                separatorBuilder: (_, _) => const SizedBox(height: 6),
-                itemBuilder: (context, i) {
-                  if (pendingCreateRoomName != null && i == resolvedPendingCreateIndex) {
-                    return _PendingRoomTile(name: pendingCreateRoomName!);
-                  }
+            child: NotificationListener<ScrollNotification>(
+              onNotification: handleScrollNotification,
+              child: RefreshIndicator(
+                onRefresh: widget.onRefresh,
+                child: ListView.separated(
+                  controller: _scrollController,
+                  physics: _hasScrollableExtent ? null : const NeverScrollableScrollPhysics(),
+                  padding:
+                      widget.contentPadding ??
+                      const EdgeInsets.fromLTRB(desktopPaneSideHorizontalInset, 10, desktopPaneSideHorizontalInset, 10),
+                  itemCount: widget.rooms.length + (widget.pendingCreateRoomName != null ? 1 : 0),
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
+                  itemBuilder: (context, i) {
+                    if (widget.pendingCreateRoomName != null && i == resolvedPendingCreateIndex) {
+                      return _PendingRoomTile(name: widget.pendingCreateRoomName!);
+                    }
 
-                  final roomIndex = pendingCreateRoomName != null && resolvedPendingCreateIndex != null && i > resolvedPendingCreateIndex
-                      ? i - 1
-                      : i;
-                  final room = rooms[roomIndex];
-                  final selected = room.name == selectedRoom;
+                    final roomIndex =
+                        widget.pendingCreateRoomName != null && resolvedPendingCreateIndex != null && i > resolvedPendingCreateIndex
+                        ? i - 1
+                        : i;
+                    final room = widget.rooms[roomIndex];
+                    final selected = room.name == widget.selectedRoom;
 
-                  if (room.name == pendingDeleteRoomName) {
-                    return _PendingRoomTile(name: roomDisplayName(room));
-                  }
+                    if (room.name == widget.pendingDeleteRoomName) {
+                      return _PendingRoomTile(name: roomDisplayName(room));
+                    }
 
-                  return _RoomTile(
-                    key: ValueKey(room.name),
-                    projectId: projectId,
-                    room: room,
-                    selected: selected,
-                    menuBoundaryContext: trayBoundaryContext,
-                    onTap: () => onSelect(room),
-                    onSave: onSave,
-                    balanceLow: balanceLow,
-                    onDeleteStarted: onDeleteStarted,
-                    onDeleteFinished: onDeleteFinished,
-                  );
-                },
+                    return _RoomTile(
+                      key: ValueKey(room.name),
+                      projectId: widget.projectId,
+                      room: room,
+                      selected: selected,
+                      menuBoundaryContext: trayBoundaryContext,
+                      onTap: () => widget.onSelect(room),
+                      onSave: widget.onSave,
+                      balanceLow: widget.balanceLow,
+                      onDeleteStarted: widget.onDeleteStarted,
+                      onDeleteFinished: widget.onDeleteFinished,
+                    );
+                  },
+                ),
               ),
             ),
           ),

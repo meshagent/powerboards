@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -144,6 +146,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   String? _mobilePendingDeleteProjectId;
   String? _mobilePendingDeleteRoomName;
   bool _mobileRoomListFilterMode = false;
+  bool _mobileRoomListScrollCollapsed = false;
   late final AnimationController _mobileRoomListCloseAnimationController;
 
   final childKey = GlobalKey();
@@ -242,6 +245,19 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
     setState(() {
       _mobileRoomListFilterMode = enabled;
+      if (enabled) {
+        _mobileRoomListScrollCollapsed = false;
+      }
+    });
+  }
+
+  void _setMobileRoomListScrollCollapsed(bool collapsed) {
+    if (_mobileRoomListScrollCollapsed == collapsed) {
+      return;
+    }
+
+    setState(() {
+      _mobileRoomListScrollCollapsed = collapsed;
     });
   }
 
@@ -472,6 +488,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
           return;
         }
 
+        _setMobileRoomListScrollCollapsed(false);
         _setMobileRoomListFilterMode(false);
         Controller.maybeOfType<NavController>(context)?.closeMobileRoomList();
         _resetMobileRoomListBrowsingState();
@@ -783,6 +800,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     final useOverlayChrome = onClose != null;
     final closeTray = onClose;
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final mobileScrollCollapseProgress = isMobile && !_mobileRoomListFilterMode && _mobileRoomListScrollCollapsed ? 1.0 : 0.0;
     final roomListProjectId = projectIdOverride ?? widget.projectId;
     final roomListSelectedRoom = selectedRoomOverride ?? widget.selectedRoom;
     final roomListRooms = roomsOverride ?? rooms;
@@ -804,39 +822,11 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       color: ShadTheme.of(context).colorScheme.card,
       child: SafeArea(
         minimum: powerboardsMobileScreenSafeAreaMinimum,
-        child: Column(
+        child: Stack(
           children: [
-            AnimatedSwitcher(
-              duration: powerboardsMobileTransitionDuration,
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeInCubic,
-              transitionBuilder: (child, animation) => SizeTransition(
-                sizeFactor: animation,
-                axisAlignment: -1,
-                child: FadeTransition(opacity: animation, child: child),
-              ),
-              child: !(isMobile && _mobileRoomListFilterMode)
-                  ? _NavBarTop(
-                      key: const ValueKey('mobile-room-list-header'),
-                      projectId: roomListProjectId,
-                      projects: projects,
-                      onCreateProject: onCreateProject,
-                      onSwitchProject: onProjectSwitched,
-                      mobileLeading: !useOverlayChrome
-                          ? null
-                          : UserAvatarMenuButton(
-                              projectId: roomListProjectId,
-                              projects: projects,
-                              boundaryContext: context,
-                              avatarSize: desktopPaneHeaderCompactButtonWidth,
-                            ),
-                      mobileTrailing: !useOverlayChrome ? null : _MobileSidetrayCloseButton(onPressed: onAnimatedClose ?? onClose),
-                    )
-                  : const SizedBox(key: ValueKey('mobile-room-list-header-hidden')),
-            ),
-            SignalBuilder(
-              builder: (context, _) => Expanded(
-                child: _NavBar(
+            Positioned.fill(
+              child: SignalBuilder(
+                builder: (context, _) => _NavBar(
                   projectId: roomListProjectId,
                   rooms: _filteredRooms(roomListItems),
                   currentFilter: filter,
@@ -846,7 +836,10 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                   setFilter: setFilter,
                   mobileFilterMode: _mobileRoomListFilterMode,
                   onMobileFilterModeChanged: isMobile ? _setMobileRoomListFilterMode : null,
+                  mobileScrollCollapseProgress: mobileScrollCollapseProgress,
+                  onMobileScrollActiveChanged: isMobile ? _setMobileRoomListScrollCollapsed : null,
                   selectedRoom: roomListSelectedRoom,
+                  mobileHeaderInset: isMobile && !_mobileRoomListFilterMode ? powerboardsMobileOverlayHeaderExpandedHeight : 0,
                   onSave: () {
                     rooms.refresh();
                     roomListRooms.refresh();
@@ -874,6 +867,41 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                           context.go("/p/$pid/r/${room.name}");
                         },
                 ),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: AnimatedSwitcher(
+                duration: powerboardsMobileTransitionDuration,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) => SizeTransition(
+                  sizeFactor: animation,
+                  axisAlignment: -1,
+                  child: FadeTransition(opacity: animation, child: child),
+                ),
+                child: !(isMobile && _mobileRoomListFilterMode)
+                    ? _NavBarTop(
+                        key: const ValueKey('mobile-room-list-header'),
+                        projectId: roomListProjectId,
+                        projects: projects,
+                        onCreateProject: onCreateProject,
+                        onSwitchProject: onProjectSwitched,
+                        mobileCollapseProgress: mobileScrollCollapseProgress,
+                        onExpandCollapsedMobileChrome: () => _setMobileRoomListScrollCollapsed(false),
+                        mobileLeading: !useOverlayChrome
+                            ? null
+                            : UserAvatarMenuButton(
+                                projectId: roomListProjectId,
+                                projects: projects,
+                                boundaryContext: context,
+                                avatarSize: desktopPaneHeaderCompactButtonWidth,
+                              ),
+                        mobileTrailing: !useOverlayChrome ? null : _MobileSidetrayCloseButton(onPressed: onAnimatedClose ?? onClose),
+                      )
+                    : const SizedBox(key: ValueKey('mobile-room-list-header-hidden')),
               ),
             ),
           ],
@@ -986,6 +1014,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     final theme = ShadTheme.of(context);
     final navController = Controller.ofType<NavController>(context);
     void closeMobileRoomListOverlay() {
+      _setMobileRoomListScrollCollapsed(false);
       _setMobileRoomListFilterMode(false);
       _resetMobileRoomListCloseAnimation();
       _resetMobileRoomListDrag();
@@ -994,6 +1023,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     }
 
     void animateCloseMobileRoomListOverlay() {
+      _setMobileRoomListScrollCollapsed(false);
       _setMobileRoomListFilterMode(false);
       _resetMobileRoomListDrag();
       _resetMobileRoomListBrowsingState();
@@ -1265,7 +1295,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     return SignalBuilder(
       builder: (context, _) {
         if (!projects.state.isReady || !role.state.isReady || !isBalanceLowRes.state.isReady || !balanceRes.state.isReady) {
-          return const Center(child: CircularProgressIndicator());
+          return isSmallDisplay ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
         }
 
         if (projects.state.value!.isEmpty) {
@@ -1313,6 +1343,9 @@ class _NavBar extends StatefulWidget {
     required this.setFilter,
     this.mobileFilterMode = false,
     this.onMobileFilterModeChanged,
+    this.mobileScrollCollapseProgress = 0,
+    this.onMobileScrollActiveChanged,
+    this.mobileHeaderInset = 0,
     required this.onSave,
     required this.onRefresh,
     required this.projectId,
@@ -1329,6 +1362,9 @@ class _NavBar extends StatefulWidget {
   final void Function(String) setFilter;
   final bool mobileFilterMode;
   final ValueChanged<bool>? onMobileFilterModeChanged;
+  final double mobileScrollCollapseProgress;
+  final ValueChanged<bool>? onMobileScrollActiveChanged;
+  final double mobileHeaderInset;
   final void Function() onSave;
   final Future<void> Function() onRefresh;
   final String? projectId;
@@ -1432,106 +1468,331 @@ class _NavBarState extends State<_NavBar> {
     final isMobile = _isMobile;
     final keyboardOpen = isMobile && (MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0.0) > 0;
     final isCreatePending = widget.pendingCreateRoomName != null;
+    final mobileScrollCollapseProgress = isMobile && !_isMobileFilterMode ? widget.mobileScrollCollapseProgress : 0.0;
     final horizontalPadding = isMobile
         ? powerboardsMobileHorizontalPadding
         : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset);
+    const mobileFilterFocusTop = 0.0;
+    const mobileChromeCutoffGap = 18.0;
+    const mobileFooterChromeTopGap = 18.0;
+    final hasMobileFooterAction = _isMobileFilterMode || (widget.canCreateRooms && !keyboardOpen);
+    final mobileFilterTop = _isMobileFilterMode
+        ? mobileFilterFocusTop
+        : widget.mobileHeaderInset + powerboardsMobileOverlaySecondaryRowLift;
+    final mobileTopChromeHeight = mobileFilterTop + powerboardsMobileSecondaryRowHeight + mobileChromeCutoffGap;
+    final mobileBottomChromeHeight = hasMobileFooterAction
+        ? mobileFooterChromeTopGap + powerboardsFooterActionButtonHeight + desktopPaneBottomInset
+        : desktopPaneBottomInset + 10;
+
+    Widget buildNavRooms(EdgeInsetsGeometry? contentPadding) {
+      return widget.projectId == null
+          ? const SizedBox.shrink()
+          : NavRooms(
+              projectId: widget.projectId!,
+              rooms: widget.rooms,
+              contentPadding: contentPadding,
+              pendingCreateRoomName: widget.pendingCreateRoomName,
+              pendingDeleteRoomName: widget.pendingDeleteRoomName,
+              selectedRoom: widget.selectedRoom,
+              onSelect:
+                  widget.onRoomSelected ??
+                  (room) async {
+                    final pid = fromUUID(widget.projectId!);
+
+                    if (!context.mounted) {
+                      return;
+                    }
+
+                    context.go("/p/$pid/r/${room.name}");
+                  },
+              onDeleteStarted: !isMobile
+                  ? null
+                  : (room) {
+                      final navState = context.findAncestorStateOfType<_NavState>();
+                      navState?._setMobilePendingDeleteRoom(widget.projectId!, room.name);
+                    },
+              onDeleteFinished: !isMobile
+                  ? null
+                  : (room, deleted) {
+                      if (deleted) {
+                        return;
+                      }
+
+                      final navState = context.findAncestorStateOfType<_NavState>();
+                      if (navState?._mobilePendingDeleteProjectId == widget.projectId &&
+                          navState?._mobilePendingDeleteRoomName == room.name) {
+                        navState?._clearMobilePendingDeleteRoom();
+                      }
+                    },
+              onScrollActiveChanged: isMobile ? widget.onMobileScrollActiveChanged : null,
+              onSave: widget.onSave,
+              onRefresh: widget.onRefresh,
+              balanceLow: widget.balanceLow,
+            );
+    }
+
+    Widget buildFilterInput() {
+      return Builder(
+        builder: (context) {
+          final filterInput = PowerboardsAdaptiveInput(
+            controller: _filterController,
+            focusNode: _filterFocusNode,
+            padding: isMobile ? const EdgeInsets.fromLTRB(14, 8, 12, 8) : null,
+            decoration: !isMobile
+                ? ShadDecoration(color: ShadTheme.of(context).colorScheme.input)
+                : ShadDecoration(
+                    color: ShadTheme.of(context).colorScheme.input,
+                    border: ShadBorder.all(radius: BorderRadius.circular(999)),
+                    focusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                    errorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                    secondaryBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                    secondaryFocusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                    secondaryErrorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                  ),
+            key: const Key('room-list-search-field'),
+            onChanged: widget.setFilter,
+            leading: !isMobile ? null : Icon(LucideIcons.search, size: 16, color: ShadTheme.of(context).colorScheme.mutedForeground),
+            gap: !isMobile ? null : 10,
+            inputPadding: isMobile ? EdgeInsets.zero : null,
+            placeholder: const Text("Filter rooms..."),
+          );
+
+          if (isMobile) {
+            return SizedBox(
+              height: powerboardsMobileSecondaryRowHeight,
+              child: Center(child: filterInput),
+            );
+          }
+
+          return SizedBox(height: desktopPaneSecondaryControlHeight, child: filterInput);
+        },
+      );
+    }
+
+    Widget buildDesktopFooter() {
+      if (!(widget.canCreateRooms && !keyboardOpen)) {
+        return const SizedBox.shrink(key: ValueKey('nav-no-footer-action'));
+      }
+
+      return Padding(
+        key: const ValueKey('nav-create-room-action'),
+        padding: const EdgeInsets.fromLTRB(desktopPaneSideHorizontalInset, 10, desktopPaneSideHorizontalInset, desktopPaneBottomInset),
+        child: SizedBox(
+          width: double.infinity,
+          child: ShadButton.outline(
+            height: powerboardsFooterActionButtonHeight,
+            decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
+            backgroundColor: ShadTheme.of(context).colorScheme.background,
+            hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
+            hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
+            key: const Key('nav-create-room-button'),
+            onPressed: isCreatePending ? null : () => addNewRoomDialog(context),
+            child: const Text("New Room"),
+          ),
+        ),
+      );
+    }
+
+    Widget? buildMobileFooterAction() {
+      return _isMobileFilterMode
+          ? Row(
+              children: [
+                Expanded(
+                  child: ShadButton.outline(
+                    height: powerboardsFooterActionButtonHeight,
+                    onPressed: _closeMobileFilterMode,
+                    child: const Text("Close"),
+                  ),
+                ),
+              ],
+            )
+          : widget.canCreateRooms && !keyboardOpen
+          ? SizedBox(
+              width: double.infinity,
+              child: ShadButton(
+                height: powerboardsFooterActionButtonHeight,
+                key: const Key('nav-create-room-button'),
+                onPressed: isCreatePending ? null : () => addNewRoomDialog(context),
+                child: const Text("New Room"),
+              ),
+            )
+          : null;
+    }
+
+    Widget buildMobileTopChrome(double collapseProgress) {
+      final theme = ShadTheme.of(context);
+      final collapseCurve = Curves.easeInOutCubic.transform(collapseProgress);
+      final chromeHeight = ui.lerpDouble(mobileTopChromeHeight, powerboardsMobileOverlayHeaderCollapsedHeight, collapseCurve)!;
+      final filterVisibility = _isMobileFilterMode ? 1.0 : 1 - Curves.easeInCubic.transform(collapseProgress);
+      final animatedFilterTop = _isMobileFilterMode
+          ? mobileFilterTop
+          : ui.lerpDouble(mobileFilterTop, powerboardsMobileOverlayHeaderCollapsedHeight + 2, collapseCurve)!;
+      final solidStop = ui.lerpDouble(0.82, 0.24, collapseCurve)!;
+      final topColor = Color.lerp(
+        theme.colorScheme.card,
+        powerboardsMobileGlassColor(theme.colorScheme.card, tint: 0.92, alpha: 0.82),
+        collapseCurve,
+      )!;
+      final middleColor = Color.lerp(
+        theme.colorScheme.card,
+        powerboardsMobileGlassColor(theme.colorScheme.card, tint: 0.74, alpha: 0.62),
+        collapseCurve,
+      )!;
+      final edgeColor = Color.lerp(theme.colorScheme.card, theme.colorScheme.card.withValues(alpha: 0), collapseCurve)!;
+
+      return Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        child: SizedBox(
+          height: chromeHeight,
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            fit: StackFit.expand,
+            children: [
+              IgnorePointer(
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(
+                      sigmaX: ui.lerpDouble(10, 18, collapseCurve)!,
+                      sigmaY: ui.lerpDouble(10, 18, collapseCurve)!,
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [topColor, middleColor, edgeColor],
+                          stops: [0.0, solidStop, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: animatedFilterTop,
+                left: powerboardsMobileHorizontalPadding.left,
+                right: powerboardsMobileHorizontalPadding.right,
+                child: IgnorePointer(
+                  ignoring: !_isMobileFilterMode && filterVisibility < 0.1,
+                  child: Opacity(
+                    opacity: filterVisibility,
+                    child: Transform.translate(offset: Offset(0, -8 * collapseCurve), child: buildFilterInput()),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget buildMobileBottomChrome(double collapseProgress) {
+      final footerChild = buildMobileFooterAction();
+      final theme = ShadTheme.of(context);
+      final collapseCurve = Curves.easeInOutCubic.transform(collapseProgress);
+      final chromeHeight = ui.lerpDouble(mobileBottomChromeHeight, 0, collapseCurve)!;
+      final footerVisibility = _isMobileFilterMode ? 1.0 : 1 - Curves.easeOutCubic.transform(collapseProgress);
+      final solidStop = ui.lerpDouble(0.72, 0.42, collapseCurve)!;
+      final bottomColor = Color.lerp(
+        theme.colorScheme.card,
+        powerboardsMobileGlassColor(theme.colorScheme.card, tint: 0.88, alpha: 0.82),
+        collapseCurve,
+      )!;
+      final middleColor = Color.lerp(
+        theme.colorScheme.card,
+        powerboardsMobileGlassColor(theme.colorScheme.card, tint: 0.72, alpha: 0.62),
+        collapseCurve,
+      )!;
+      final edgeColor = Color.lerp(theme.colorScheme.card, theme.colorScheme.card.withValues(alpha: 0), collapseCurve)!;
+
+      return Positioned(
+        left: 0,
+        right: 0,
+        bottom: 0,
+        child: SizedBox(
+          height: chromeHeight,
+          child: Stack(
+            clipBehavior: Clip.hardEdge,
+            fit: StackFit.expand,
+            children: [
+              IgnorePointer(
+                child: ClipRect(
+                  child: BackdropFilter(
+                    filter: ui.ImageFilter.blur(
+                      sigmaX: ui.lerpDouble(10, 18, collapseCurve)!,
+                      sigmaY: ui.lerpDouble(10, 18, collapseCurve)!,
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [bottomColor, middleColor, edgeColor],
+                          stops: [0.0, solidStop, 1.0],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (footerChild != null)
+                Positioned(
+                  left: powerboardsMobileShellHorizontalInset,
+                  right: powerboardsMobileShellHorizontalInset,
+                  bottom: desktopPaneBottomInset,
+                  child: IgnorePointer(
+                    ignoring: !_isMobileFilterMode && footerVisibility < 0.1,
+                    child: Opacity(
+                      opacity: footerVisibility,
+                      child: Transform.translate(offset: Offset(0, 8 * collapseCurve), child: footerChild),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (isMobile) {
+      return KeyboardSafe(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: mobileScrollCollapseProgress),
+          duration: powerboardsMobileOverlayHeaderTransitionDuration,
+          curve: Curves.easeOutCubic,
+          builder: (context, animatedCollapseProgress, _) {
+            final filterCollapseProgress = _isMobileFilterMode ? 0.0 : animatedCollapseProgress;
+            final collapseCurve = Curves.easeInOutCubic.transform(filterCollapseProgress);
+            final listTopPadding = ui.lerpDouble(mobileTopChromeHeight, powerboardsMobileOverlayHeaderCollapsedHeight, collapseCurve)!;
+            final listBottomPadding = ui.lerpDouble(mobileBottomChromeHeight, 0, collapseCurve)!;
+            final navRooms = buildNavRooms(
+              EdgeInsets.fromLTRB(
+                powerboardsMobileShellHorizontalInset,
+                listTopPadding,
+                powerboardsMobileShellHorizontalInset,
+                listBottomPadding,
+              ),
+            );
+
+            return Stack(
+              fit: StackFit.expand,
+              children: [navRooms, buildMobileTopChrome(filterCollapseProgress), buildMobileBottomChrome(filterCollapseProgress)],
+            );
+          },
+        ),
+      );
+    }
 
     return KeyboardSafe(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AnimatedContainer(
-            duration: powerboardsMobileTransitionDuration,
-            curve: Curves.easeOutCubic,
-            height: isMobile ? (_isMobileFilterMode ? 0 : powerboardsMobileOverlaySecondaryRowLift) : desktopPaneSecondaryControlTopOffset,
-          ),
-          Padding(
-            padding: horizontalPadding,
-            child: Builder(
-              builder: (context) {
-                final filterInput = PowerboardsAdaptiveInput(
-                  controller: _filterController,
-                  focusNode: _filterFocusNode,
-                  padding: isMobile ? const EdgeInsets.fromLTRB(14, 8, 12, 8) : null,
-                  decoration: !isMobile
-                      ? ShadDecoration(color: ShadTheme.of(context).colorScheme.input)
-                      : ShadDecoration(
-                          color: ShadTheme.of(context).colorScheme.input,
-                          border: ShadBorder.all(radius: BorderRadius.circular(999)),
-                          focusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                          errorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                          secondaryBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                          secondaryFocusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                          secondaryErrorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                        ),
-                  key: const Key('room-list-search-field'),
-                  onChanged: widget.setFilter,
-                  leading: !isMobile ? null : Icon(LucideIcons.search, size: 16, color: ShadTheme.of(context).colorScheme.mutedForeground),
-                  gap: !isMobile ? null : 10,
-                  inputPadding: isMobile ? EdgeInsets.zero : null,
-                  placeholder: const Text("Filter rooms..."),
-                );
-
-                if (isMobile) {
-                  return SizedBox(
-                    height: powerboardsMobileSecondaryRowHeight,
-                    child: Center(child: filterInput),
-                  );
-                }
-
-                return SizedBox(height: desktopPaneSecondaryControlHeight, child: filterInput);
-              },
-            ),
-          ),
-          AnimatedContainer(
-            duration: powerboardsMobileTransitionDuration,
-            curve: Curves.easeOutCubic,
-            height: _isMobileFilterMode ? 8 : desktopPaneSecondaryRowContentGap,
-          ),
-          Expanded(
-            child: widget.projectId == null
-                ? Center(child: CircularProgressIndicator())
-                : NavRooms(
-                    projectId: widget.projectId!,
-                    rooms: widget.rooms,
-                    pendingCreateRoomName: widget.pendingCreateRoomName,
-                    pendingDeleteRoomName: widget.pendingDeleteRoomName,
-                    selectedRoom: widget.selectedRoom,
-                    onSelect:
-                        widget.onRoomSelected ??
-                        (room) async {
-                          final pid = fromUUID(widget.projectId!);
-
-                          if (!context.mounted) {
-                            return;
-                          }
-
-                          context.go("/p/$pid/r/${room.name}");
-                        },
-                    onDeleteStarted: !isMobile
-                        ? null
-                        : (room) {
-                            final navState = context.findAncestorStateOfType<_NavState>();
-                            navState?._setMobilePendingDeleteRoom(widget.projectId!, room.name);
-                          },
-                    onDeleteFinished: !isMobile
-                        ? null
-                        : (room, deleted) {
-                            if (deleted) {
-                              return;
-                            }
-
-                            final navState = context.findAncestorStateOfType<_NavState>();
-                            if (navState?._mobilePendingDeleteProjectId == widget.projectId &&
-                                navState?._mobilePendingDeleteRoomName == room.name) {
-                              navState?._clearMobilePendingDeleteRoom();
-                            }
-                          },
-                    onSave: widget.onSave,
-                    onRefresh: widget.onRefresh,
-                    balanceLow: widget.balanceLow,
-                  ),
-          ),
+          const SizedBox(height: desktopPaneSecondaryControlTopOffset),
+          Padding(padding: horizontalPadding, child: buildFilterInput()),
+          const SizedBox(height: desktopPaneSecondaryRowContentGap),
+          Expanded(child: buildNavRooms(null)),
           AnimatedSwitcher(
             duration: powerboardsMobileTransitionDuration,
             switchInCurve: Curves.easeOutCubic,
@@ -1540,61 +1801,7 @@ class _NavBarState extends State<_NavBar> {
               opacity: animation,
               child: SizeTransition(sizeFactor: animation, axisAlignment: 1, child: child),
             ),
-            child: _isMobileFilterMode
-                ? Padding(
-                    key: const ValueKey('mobile-filter-actions'),
-                    padding: EdgeInsets.fromLTRB(
-                      powerboardsMobileShellHorizontalInset,
-                      10,
-                      powerboardsMobileShellHorizontalInset,
-                      desktopPaneBottomInset,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ShadButton.outline(
-                            height: powerboardsFooterActionButtonHeight,
-                            onPressed: _closeMobileFilterMode,
-                            child: const Text("Close"),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : widget.canCreateRooms && !keyboardOpen
-                ? Padding(
-                    key: const ValueKey('nav-create-room-action'),
-                    padding: EdgeInsets.fromLTRB(
-                      isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
-                      10,
-                      isMobile ? powerboardsMobileShellHorizontalInset : desktopPaneSideHorizontalInset,
-                      desktopPaneBottomInset,
-                    ),
-                    child: isMobile
-                        ? SizedBox(
-                            width: double.infinity,
-                            child: ShadButton(
-                              height: powerboardsFooterActionButtonHeight,
-                              key: const Key('nav-create-room-button'),
-                              onPressed: isCreatePending ? null : () => addNewRoomDialog(context),
-                              child: const Text("New Room"),
-                            ),
-                          )
-                        : SizedBox(
-                            width: double.infinity,
-                            child: ShadButton.outline(
-                              height: powerboardsFooterActionButtonHeight,
-                              decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
-                              backgroundColor: ShadTheme.of(context).colorScheme.background,
-                              hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
-                              hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
-                              key: const Key('nav-create-room-button'),
-                              onPressed: isCreatePending ? null : () => addNewRoomDialog(context),
-                              child: const Text("New Room"),
-                            ),
-                          ),
-                  )
-                : const SizedBox.shrink(key: ValueKey('nav-no-footer-action')),
+            child: buildDesktopFooter(),
           ),
         ],
       ),
@@ -1608,6 +1815,8 @@ class _NavBarTop extends StatefulWidget {
     required this.projects,
     required this.projectId,
     required this.onCreateProject,
+    this.mobileCollapseProgress = 0,
+    this.onExpandCollapsedMobileChrome,
     this.mobileLeading,
     this.mobileTrailing,
     this.onSwitchProject,
@@ -1616,6 +1825,8 @@ class _NavBarTop extends StatefulWidget {
   final String? projectId;
   final Resource<List<Project>> projects;
   final Future<void> Function() onCreateProject;
+  final double mobileCollapseProgress;
+  final VoidCallback? onExpandCollapsedMobileChrome;
   final Widget? mobileLeading;
   final Widget? mobileTrailing;
   final ValueChanged<Project>? onSwitchProject;
@@ -1632,6 +1843,11 @@ class _NavBarTopState extends State<_NavBarTop> {
   }
 
   void _switchProject() {
+    if (widget.mobileCollapseProgress > 0.01 && widget.onExpandCollapsedMobileChrome != null) {
+      widget.onExpandCollapsedMobileChrome!();
+      return;
+    }
+
     showSwitchProjectDialog(
       context: context,
       currentProjectId: widget.projectId ?? "",
@@ -1659,6 +1875,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final mobileHeaderControlSize = desktopPaneHeaderCompactButtonWidth;
     final displayName = selectedProject?.name ?? "Select project";
+    final mobileCollapseProgress = isSmallDisplay ? widget.mobileCollapseProgress.clamp(0.0, 1.0) : 0.0;
     final projectTitleStyle = isSmallDisplay
         ? powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground)
         : powerboardsSectionTitleStyle(color: theme.colorScheme.foreground, height: 1.2);
@@ -1671,82 +1888,75 @@ class _NavBarTopState extends State<_NavBarTop> {
         spacing: 8,
         children: [
           if (isSmallDisplay)
-            SizedBox(
-              height: headerHeight,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Positioned(
-                    left: 0,
-                    child: SizedBox(
-                      width: mobileHeaderControlSize,
-                      height: headerHeight,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: widget.mobileLeading ?? NavMainLogo(size: mobileHeaderControlSize - 8),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 0,
-                    child: SizedBox(
-                      width: mobileHeaderControlSize,
-                      height: headerHeight,
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child:
-                            widget.mobileTrailing ??
-                            UserAvatarMenuButton(
-                              projectId: widget.projectId,
-                              projects: widget.projects,
-                              boundaryContext: context,
-                              avatarSize: mobileHeaderControlSize,
+            TweenAnimationBuilder<double>(
+              tween: Tween<double>(end: mobileCollapseProgress),
+              duration: powerboardsMobileOverlayHeaderTransitionDuration,
+              curve: Curves.easeOutCubic,
+              builder: (context, animatedCollapseProgress, _) {
+                final switchIconVisibility = (1 - Curves.easeOutCubic.transform(animatedCollapseProgress)).clamp(0.0, 1.0);
+                final title = ShadButton.ghost(
+                  expands: true,
+                  height: ui.lerpDouble(
+                    desktopPaneHeaderContentHeight,
+                    powerboardsMobileOverlayHeaderCollapsedHeight - 4,
+                    animatedCollapseProgress,
+                  )!,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  onPressed: _switchProject,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 340),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              displayName,
+                              style: projectTitleStyle,
+                              strutStyle: StrutStyle.fromTextStyle(projectTitleStyle, forceStrutHeight: true),
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
                             ),
-                      ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: mobileHeaderControlSize + 8),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          return SizedBox(
-                            width: constraints.maxWidth,
-                            child: ShadButton.ghost(
-                              expands: true,
-                              height: desktopPaneHeaderContentHeight,
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                              onPressed: _switchProject,
-                              child: Center(
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          displayName,
-                                          style: projectTitleStyle,
-                                          strutStyle: StrutStyle.fromTextStyle(projectTitleStyle, forceStrutHeight: true),
-                                          overflow: TextOverflow.ellipsis,
-                                          textAlign: TextAlign.center,
-                                          maxLines: 1,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
-                                    ],
-                                  ),
+                          ),
+                          ClipRect(
+                            child: Align(
+                              widthFactor: switchIconVisibility,
+                              child: Opacity(
+                                opacity: switchIconVisibility,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const SizedBox(width: 8),
+                                    Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                                  ],
                                 ),
                               ),
                             ),
-                          );
-                        },
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
+                );
+
+                return PowerboardsMobileOverlayHeader(
+                  leading: widget.mobileLeading ?? NavMainLogo(size: mobileHeaderControlSize - 8),
+                  title: title,
+                  trailingActions: [
+                    widget.mobileTrailing ??
+                        UserAvatarMenuButton(
+                          projectId: widget.projectId,
+                          projects: widget.projects,
+                          boundaryContext: context,
+                          avatarSize: mobileHeaderControlSize,
+                        ),
+                  ],
+                  backgroundColor: theme.colorScheme.card,
+                  collapseProgress: animatedCollapseProgress,
+                  titleAlignment: Alignment.center,
+                );
+              },
             ),
           if (!isSmallDisplay)
             SizedBox(
