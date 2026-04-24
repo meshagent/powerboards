@@ -15,6 +15,7 @@ import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/settings/mobile_room_list_intent.dart';
 import 'package:powerboards/settings/selected_room.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/nav/switch_project_dialog.dart';
@@ -137,6 +138,11 @@ class _NavState extends State<Nav> {
   double? _lastDesktopWidth;
   bool? _lastSmallDisplay;
   int _mobileNavigationDirection = 1;
+  double _mobileRoomListDragOffset = 0;
+  String? _mobilePendingCreateProjectId;
+  String? _mobilePendingCreateRoomName;
+  String? _mobilePendingDeleteProjectId;
+  String? _mobilePendingDeleteRoomName;
 
   final childKey = GlobalKey();
   Resource<List<Project>> get projects {
@@ -225,6 +231,84 @@ class _NavState extends State<Nav> {
   void _browseProjectInMobileRoomList(String projectId) {
     _mobileRoomListProjectId.value = projectId;
     _mobileRoomListSelectedRoom.value = getLastSelectedRoom(projectId);
+  }
+
+  void _setMobilePendingCreateRoom(String projectId, String roomName) {
+    setState(() {
+      _mobilePendingCreateProjectId = projectId;
+      _mobilePendingCreateRoomName = roomName;
+    });
+  }
+
+  void _clearMobilePendingCreateRoom() {
+    if (_mobilePendingCreateProjectId == null && _mobilePendingCreateRoomName == null) {
+      return;
+    }
+
+    setState(() {
+      _mobilePendingCreateProjectId = null;
+      _mobilePendingCreateRoomName = null;
+    });
+  }
+
+  void _setMobilePendingDeleteRoom(String projectId, String roomName) {
+    setState(() {
+      _mobilePendingDeleteProjectId = projectId;
+      _mobilePendingDeleteRoomName = roomName;
+    });
+  }
+
+  void _clearMobilePendingDeleteRoom() {
+    if (_mobilePendingDeleteProjectId == null && _mobilePendingDeleteRoomName == null) {
+      return;
+    }
+
+    setState(() {
+      _mobilePendingDeleteProjectId = null;
+      _mobilePendingDeleteRoomName = null;
+    });
+  }
+
+  void _resetMobileRoomListDrag() {
+    if (_mobileRoomListDragOffset == 0) {
+      return;
+    }
+
+    setState(() {
+      _mobileRoomListDragOffset = 0;
+    });
+  }
+
+  void _updateMobileRoomListDrag(double delta, double maxWidth) {
+    if (maxWidth <= 0) {
+      return;
+    }
+
+    final nextOffset = (_mobileRoomListDragOffset + delta).clamp(-maxWidth, 0.0).toDouble();
+    if (nextOffset == _mobileRoomListDragOffset) {
+      return;
+    }
+
+    setState(() {
+      _mobileRoomListDragOffset = nextOffset;
+    });
+  }
+
+  void _completeMobileRoomListDrag({required double maxWidth, required double velocityX, required VoidCallback onDismissed}) {
+    if (_mobileRoomListDragOffset == 0) {
+      return;
+    }
+
+    final draggedEnough = _mobileRoomListDragOffset.abs() > (maxWidth * 0.22);
+    final flungEnough = velocityX < -700;
+
+    if (draggedEnough || flungEnough) {
+      _resetMobileRoomListDrag();
+      onDismissed();
+      return;
+    }
+
+    _resetMobileRoomListDrag();
   }
 
   void onAddCredits() {
@@ -345,11 +429,25 @@ class _NavState extends State<Nav> {
       isBalanceLowRes.refresh();
       canCreateRooms.refresh();
       role.refresh();
+      if (_mobilePendingDeleteProjectId != widget.projectId) {
+        _clearMobilePendingDeleteRoom();
+      }
     }
+
+    final keepMobileRoomListOpen =
+        widget.projectId != null &&
+        oldWidget.selectedRoom != null &&
+        widget.selectedRoom == null &&
+        shouldStayOnMobileRoomList(widget.projectId!);
 
     if (oldWidget.projectId != widget.projectId || oldWidget.selectedRoom != widget.selectedRoom) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
+          return;
+        }
+
+        if (keepMobileRoomListOpen) {
+          Controller.maybeOfType<NavController>(context)?.openMobileRoomList();
           return;
         }
 
@@ -536,7 +634,14 @@ class _NavState extends State<Nav> {
 
   Widget mobileView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
     final navController = Controller.ofType<NavController>(context);
-    final isRoomlessProjectState = widget.projectId != null && widget.selectedRoom == null;
+    final roomItems = rooms.state.value ?? const <Room>[];
+    final isRoomlessProjectState = widget.projectId != null && widget.selectedRoom == null && rooms.state.isReady && roomItems.isEmpty;
+    final isStayOnTraySelectionState =
+        widget.projectId != null &&
+        widget.selectedRoom == null &&
+        rooms.state.isReady &&
+        roomItems.isNotEmpty &&
+        navController.isMobileRoomListOpen;
 
     if (userRole == ProjectRole.none) {
       return forbiddenView(context);
@@ -565,6 +670,11 @@ class _NavState extends State<Nav> {
     final mobileContent = isRoomlessProjectState
         ? KeyedSubtree(
             key: ValueKey('mobile-roomless-${widget.projectId}'),
+            child: _buildMobileRoomlessProjectSurface(context, canCreateRooms: canCreateRooms, balanceLow: balanceLow),
+          )
+        : isStayOnTraySelectionState
+        ? KeyedSubtree(
+            key: ValueKey('mobile-room-select-${widget.projectId}'),
             child: _buildMobileRoomlessProjectSurface(context, canCreateRooms: canCreateRooms, balanceLow: balanceLow),
           )
         : widget.selectedRoom == null
@@ -638,6 +748,19 @@ class _NavState extends State<Nav> {
     final roomListProjectId = projectIdOverride ?? widget.projectId;
     final roomListSelectedRoom = selectedRoomOverride ?? widget.selectedRoom;
     final roomListRooms = roomsOverride ?? rooms;
+    final pendingCreateRoomName = _mobilePendingCreateProjectId == roomListProjectId ? _mobilePendingCreateRoomName : null;
+    final pendingDeleteRoomName = _mobilePendingDeleteProjectId == roomListProjectId ? _mobilePendingDeleteRoomName : null;
+    final roomListItems = roomListRooms.state.value ?? const <Room>[];
+
+    if (pendingDeleteRoomName != null && roomListRooms.state.isReady && !roomListItems.any((room) => room.name == pendingDeleteRoomName)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _mobilePendingDeleteProjectId != roomListProjectId || _mobilePendingDeleteRoomName != pendingDeleteRoomName) {
+          return;
+        }
+
+        _clearMobilePendingDeleteRoom();
+      });
+    }
 
     return ColoredBox(
       color: ShadTheme.of(context).colorScheme.card,
@@ -664,7 +787,9 @@ class _NavState extends State<Nav> {
               builder: (context, _) => Expanded(
                 child: _NavBar(
                   projectId: roomListProjectId,
-                  rooms: roomListRooms.state.isReady ? _filteredRooms(roomListRooms.state.value ?? []) : [],
+                  rooms: _filteredRooms(roomListItems),
+                  pendingCreateRoomName: pendingCreateRoomName,
+                  pendingDeleteRoomName: pendingDeleteRoomName,
                   canCreateRooms: canCreateRooms,
                   setFilter: setFilter,
                   selectedRoom: roomListSelectedRoom,
@@ -804,6 +929,7 @@ class _NavState extends State<Nav> {
     final theme = ShadTheme.of(context);
     final navController = Controller.ofType<NavController>(context);
     void closeMobileRoomListOverlay() {
+      _resetMobileRoomListDrag();
       _resetMobileRoomListBrowsingState();
       navController.closeMobileRoomList();
     }
@@ -813,6 +939,14 @@ class _NavState extends State<Nav> {
       color: theme.colorScheme.card,
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final canSwipeDismiss = mobileRoomListRooms.state.isReady && (mobileRoomListRooms.state.value?.isNotEmpty ?? false);
+          final dragProgress = constraints.maxWidth <= 0 ? 0.0 : (_mobileRoomListDragOffset.abs() / constraints.maxWidth).clamp(0.0, 1.0);
+          final overlayOpacity = sidetrayOpen ? (1 - dragProgress) : 0.0;
+          final baseOffset = sidetrayOpen ? 0.0 : -1.02;
+          final dragOffset = constraints.maxWidth <= 0 ? 0.0 : (_mobileRoomListDragOffset / constraints.maxWidth);
+          final effectiveSlideOffset = baseOffset + dragOffset;
+          final dragAnimationDuration = _mobileRoomListDragOffset == 0 ? powerboardsMobileTransitionDuration : Duration.zero;
+
           return SignalBuilder(
             builder: (context, _) => Stack(
               fit: StackFit.expand,
@@ -821,9 +955,9 @@ class _NavState extends State<Nav> {
                 IgnorePointer(
                   ignoring: !sidetrayOpen,
                   child: AnimatedOpacity(
-                    duration: powerboardsMobileTransitionDuration,
+                    duration: dragAnimationDuration,
                     curve: Curves.easeOut,
-                    opacity: sidetrayOpen ? 1 : 0,
+                    opacity: overlayOpacity,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: closeMobileRoomListOverlay,
@@ -833,22 +967,40 @@ class _NavState extends State<Nav> {
                 ),
                 IgnorePointer(
                   ignoring: !sidetrayOpen,
-                  child: AnimatedSlide(
-                    duration: powerboardsMobileTransitionDuration,
-                    curve: powerboardsMobileTransitionInCurve,
-                    offset: sidetrayOpen ? Offset.zero : const Offset(-1.02, 0),
-                    child: SizedBox.expand(
-                      child: ColoredBox(
-                        color: theme.colorScheme.background,
-                        child: _buildMobileRoomListSurface(
-                          context,
-                          canCreateRooms: canCreateRooms,
-                          balanceLow: balanceLow,
-                          onClose: closeMobileRoomListOverlay,
-                          projectIdOverride: _effectiveMobileRoomListProjectId,
-                          selectedRoomOverride: _effectiveMobileRoomListSelectedRoom,
-                          roomsOverride: mobileRoomListRooms,
-                          onProjectSwitched: (project) => _browseProjectInMobileRoomList(project.id),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onHorizontalDragUpdate: !canSwipeDismiss
+                        ? null
+                        : (details) {
+                            _updateMobileRoomListDrag(details.delta.dx, constraints.maxWidth);
+                          },
+                    onHorizontalDragEnd: !canSwipeDismiss
+                        ? null
+                        : (details) {
+                            _completeMobileRoomListDrag(
+                              maxWidth: constraints.maxWidth,
+                              velocityX: details.primaryVelocity ?? 0,
+                              onDismissed: closeMobileRoomListOverlay,
+                            );
+                          },
+                    onHorizontalDragCancel: !canSwipeDismiss ? null : _resetMobileRoomListDrag,
+                    child: AnimatedSlide(
+                      duration: dragAnimationDuration,
+                      curve: powerboardsMobileTransitionInCurve,
+                      offset: Offset(effectiveSlideOffset, 0),
+                      child: SizedBox.expand(
+                        child: ColoredBox(
+                          color: theme.colorScheme.background,
+                          child: _buildMobileRoomListSurface(
+                            context,
+                            canCreateRooms: canCreateRooms,
+                            balanceLow: balanceLow,
+                            onClose: closeMobileRoomListOverlay,
+                            projectIdOverride: _effectiveMobileRoomListProjectId,
+                            selectedRoomOverride: _effectiveMobileRoomListSelectedRoom,
+                            roomsOverride: mobileRoomListRooms,
+                            onProjectSwitched: (project) => _browseProjectInMobileRoomList(project.id),
+                          ),
                         ),
                       ),
                     ),
@@ -1050,6 +1202,8 @@ class _NavBar extends StatelessWidget {
   const _NavBar({
     this.selectedRoom,
     required this.rooms,
+    this.pendingCreateRoomName,
+    this.pendingDeleteRoomName,
     required this.setFilter,
     required this.onSave,
     required this.onRefresh,
@@ -1061,6 +1215,8 @@ class _NavBar extends StatelessWidget {
 
   final String? selectedRoom;
   final List<Room> rooms;
+  final String? pendingCreateRoomName;
+  final String? pendingDeleteRoomName;
   final void Function(String) setFilter;
   final void Function() onSave;
   final Future<void> Function() onRefresh;
@@ -1070,19 +1226,46 @@ class _NavBar extends StatelessWidget {
   final ValueChanged<Room>? onRoomSelected;
 
   Future<void> addNewRoomDialog(BuildContext context) async {
-    final room = await createMeshagentRoom(context, projectId!);
-    if (!context.mounted) {
-      return;
-    }
-
-    if (room != null) {
-      final pid = fromUUID(projectId!);
-
+    String? pendingRoomName;
+    try {
+      final room = await createMeshagentRoom(
+        context,
+        projectId!,
+        onCreateStarted: onRoomSelected == null
+            ? null
+            : (name) {
+                pendingRoomName = name;
+                final navState = context.findAncestorStateOfType<_NavState>();
+                navState?._setMobilePendingCreateRoom(projectId!, name);
+              },
+      );
       if (!context.mounted) {
         return;
       }
 
-      context.go("/p/$pid/r/${room.name}");
+      if (room != null) {
+        if (onRoomSelected != null) {
+          await waitForMeshagentRoomConnectionReady(projectId!, room.name);
+          if (!context.mounted) {
+            return;
+          }
+          onRoomSelected!(room);
+          return;
+        }
+
+        final pid = fromUUID(projectId!);
+
+        if (!context.mounted) {
+          return;
+        }
+
+        context.go("/p/$pid/r/${room.name}");
+      }
+    } finally {
+      if (pendingRoomName != null && context.mounted) {
+        final navState = context.findAncestorStateOfType<_NavState>();
+        navState?._clearMobilePendingCreateRoom();
+      }
     }
   }
 
@@ -1142,6 +1325,8 @@ class _NavBar extends StatelessWidget {
                 : NavRooms(
                     projectId: projectId!,
                     rooms: rooms,
+                    pendingCreateRoomName: pendingCreateRoomName,
+                    pendingDeleteRoomName: pendingDeleteRoomName,
                     selectedRoom: selectedRoom,
                     onSelect:
                         onRoomSelected ??
@@ -1154,6 +1339,25 @@ class _NavBar extends StatelessWidget {
 
                           context.go("/p/$pid/r/${room.name}");
                         },
+                    onDeleteStarted: !isMobile
+                        ? null
+                        : (room) {
+                            final navState = context.findAncestorStateOfType<_NavState>();
+                            navState?._setMobilePendingDeleteRoom(projectId!, room.name);
+                          },
+                    onDeleteFinished: !isMobile
+                        ? null
+                        : (room, deleted) {
+                            if (deleted) {
+                              return;
+                            }
+
+                            final navState = context.findAncestorStateOfType<_NavState>();
+                            if (navState?._mobilePendingDeleteProjectId == projectId &&
+                                navState?._mobilePendingDeleteRoomName == room.name) {
+                              navState?._clearMobilePendingDeleteRoom();
+                            }
+                          },
                     onSave: onSave,
                     onRefresh: onRefresh,
                     balanceLow: balanceLow,
