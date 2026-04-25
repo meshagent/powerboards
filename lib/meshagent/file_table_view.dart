@@ -2383,7 +2383,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     return switch (fileKind) {
-      FileKind.pdf || FileKind.office || FileKind.code => false,
+      FileKind.pdf || FileKind.office || FileKind.code || FileKind.tsv => false,
       _ => true,
     };
   }
