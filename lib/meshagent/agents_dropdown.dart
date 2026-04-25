@@ -4,7 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:meshagent/meshagent.dart';
-import 'package:meshagent_flutter_shadcn/file_preview/markdown.dart';
+import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:responsive_framework/responsive_framework.dart';
