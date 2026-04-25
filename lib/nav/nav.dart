@@ -148,6 +148,8 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   bool _mobileRoomListFilterMode = false;
   bool _mobileRoomListScrollCollapsed = false;
   int _mobileRoomListInstance = 0;
+  String? _mobileRoomListRevealProjectId;
+  String? _mobileRoomListRevealRoomName;
   late final AnimationController _mobileRoomListCloseAnimationController;
 
   final childKey = GlobalKey();
@@ -266,6 +268,24 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     setState(() {
       _mobileRoomListScrollCollapsed = false;
       _mobileRoomListInstance++;
+    });
+  }
+
+  void _setMobileRoomListRevealTarget(String projectId, String roomName) {
+    setState(() {
+      _mobileRoomListRevealProjectId = projectId;
+      _mobileRoomListRevealRoomName = roomName;
+    });
+  }
+
+  void _clearMobileRoomListRevealTarget() {
+    if (_mobileRoomListRevealProjectId == null && _mobileRoomListRevealRoomName == null) {
+      return;
+    }
+
+    setState(() {
+      _mobileRoomListRevealProjectId = null;
+      _mobileRoomListRevealRoomName = null;
     });
   }
 
@@ -814,6 +834,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     final roomListRooms = roomsOverride ?? rooms;
     final pendingCreateRoomName = _mobilePendingCreateProjectId == roomListProjectId ? _mobilePendingCreateRoomName : null;
     final pendingDeleteRoomName = _mobilePendingDeleteProjectId == roomListProjectId ? _mobilePendingDeleteRoomName : null;
+    final revealRoomName = isMobile && _mobileRoomListRevealProjectId == roomListProjectId ? _mobileRoomListRevealRoomName : null;
     final roomListItems = roomListRooms.state.value ?? const <Room>[];
 
     if (pendingDeleteRoomName != null && roomListRooms.state.isReady && !roomListItems.any((room) => room.name == pendingDeleteRoomName)) {
@@ -847,6 +868,8 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                   onMobileFilterModeChanged: isMobile ? _setMobileRoomListFilterMode : null,
                   mobileScrollCollapseProgress: mobileScrollCollapseProgress,
                   onMobileScrollActiveChanged: isMobile ? _setMobileRoomListScrollCollapsed : null,
+                  initialRevealRoomName: revealRoomName,
+                  onInitialRevealComplete: _clearMobileRoomListRevealTarget,
                   selectedRoom: roomListSelectedRoom,
                   mobileHeaderInset: isMobile && !_mobileRoomListFilterMode ? powerboardsMobileOverlayHeaderExpandedHeight : 0,
                   onSave: () {
@@ -863,14 +886,16 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                   onRoomSelected: !useOverlayChrome
                       ? null
                       : (room) {
-                          if (filter.isNotEmpty) {
-                            setFilter('');
-                          }
-                          closeTray?.call();
                           final currentProjectId = roomListProjectId;
                           if (currentProjectId == null) {
                             return;
                           }
+
+                          _setMobileRoomListRevealTarget(currentProjectId, room.name);
+                          if (filter.isNotEmpty) {
+                            setFilter('');
+                          }
+                          closeTray?.call();
 
                           final pid = fromUUID(currentProjectId);
                           context.go("/p/$pid/r/${room.name}");
@@ -1355,6 +1380,8 @@ class _NavBar extends StatefulWidget {
     this.onMobileFilterModeChanged,
     this.mobileScrollCollapseProgress = 0,
     this.onMobileScrollActiveChanged,
+    this.initialRevealRoomName,
+    this.onInitialRevealComplete,
     this.mobileHeaderInset = 0,
     required this.onSave,
     required this.onRefresh,
@@ -1374,6 +1401,8 @@ class _NavBar extends StatefulWidget {
   final ValueChanged<bool>? onMobileFilterModeChanged;
   final double mobileScrollCollapseProgress;
   final ValueChanged<bool>? onMobileScrollActiveChanged;
+  final String? initialRevealRoomName;
+  final VoidCallback? onInitialRevealComplete;
   final double mobileHeaderInset;
   final void Function() onSave;
   final Future<void> Function() onRefresh;
@@ -1501,6 +1530,8 @@ class _NavBarState extends State<_NavBar> {
               projectId: widget.projectId!,
               rooms: widget.rooms,
               contentPadding: contentPadding,
+              initialRevealRoomName: isMobile ? widget.initialRevealRoomName : null,
+              onInitialRevealComplete: isMobile ? widget.onInitialRevealComplete : null,
               pendingCreateRoomName: widget.pendingCreateRoomName,
               pendingDeleteRoomName: widget.pendingDeleteRoomName,
               selectedRoom: widget.selectedRoom,
