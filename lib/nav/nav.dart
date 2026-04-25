@@ -147,6 +147,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   String? _mobilePendingDeleteRoomName;
   bool _mobileRoomListFilterMode = false;
   bool _mobileRoomListScrollCollapsed = false;
+  int _mobileRoomListInstance = 0;
   late final AnimationController _mobileRoomListCloseAnimationController;
 
   final childKey = GlobalKey();
@@ -258,6 +259,13 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
     setState(() {
       _mobileRoomListScrollCollapsed = collapsed;
+    });
+  }
+
+  void _reinitializeMobileRoomListScroll() {
+    setState(() {
+      _mobileRoomListScrollCollapsed = false;
+      _mobileRoomListInstance++;
     });
   }
 
@@ -488,7 +496,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
           return;
         }
 
-        _setMobileRoomListScrollCollapsed(false);
+        _reinitializeMobileRoomListScroll();
         _setMobileRoomListFilterMode(false);
         Controller.maybeOfType<NavController>(context)?.closeMobileRoomList();
         _resetMobileRoomListBrowsingState();
@@ -827,6 +835,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
             Positioned.fill(
               child: SignalBuilder(
                 builder: (context, _) => _NavBar(
+                  key: isMobile ? ValueKey('mobile-room-list-$roomListProjectId-$_mobileRoomListInstance') : null,
                   projectId: roomListProjectId,
                   rooms: _filteredRooms(roomListItems),
                   currentFilter: filter,
@@ -1014,7 +1023,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     final theme = ShadTheme.of(context);
     final navController = Controller.ofType<NavController>(context);
     void closeMobileRoomListOverlay() {
-      _setMobileRoomListScrollCollapsed(false);
+      _reinitializeMobileRoomListScroll();
       _setMobileRoomListFilterMode(false);
       _resetMobileRoomListCloseAnimation();
       _resetMobileRoomListDrag();
@@ -1023,7 +1032,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     }
 
     void animateCloseMobileRoomListOverlay() {
-      _setMobileRoomListScrollCollapsed(false);
+      _reinitializeMobileRoomListScroll();
       _setMobileRoomListFilterMode(false);
       _resetMobileRoomListDrag();
       _resetMobileRoomListBrowsingState();
@@ -1335,6 +1344,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
 class _NavBar extends StatefulWidget {
   const _NavBar({
+    super.key,
     this.selectedRoom,
     required this.rooms,
     required this.currentFilter,
@@ -1940,7 +1950,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                   ),
                 );
 
-                return PowerboardsMobileOverlayHeader(
+                final header = PowerboardsMobileOverlayHeader(
                   leading: widget.mobileLeading ?? NavMainLogo(size: mobileHeaderControlSize - 8),
                   title: title,
                   trailingActions: [
@@ -1955,6 +1965,19 @@ class _NavBarTopState extends State<_NavBarTop> {
                   backgroundColor: theme.colorScheme.card,
                   collapseProgress: animatedCollapseProgress,
                   titleAlignment: Alignment.center,
+                );
+
+                if (animatedCollapseProgress <= 0.01 || widget.onExpandCollapsedMobileChrome == null) {
+                  return header;
+                }
+
+                return Stack(
+                  children: [
+                    header,
+                    Positioned.fill(
+                      child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onExpandCollapsedMobileChrome),
+                    ),
+                  ],
                 );
               },
             ),
