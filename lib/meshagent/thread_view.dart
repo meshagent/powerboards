@@ -205,32 +205,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   Widget _buildAdaptiveMobileChatInputBox(BuildContext context, Widget chatBox) {
-    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
-    final collapseProgress = overlayHeaderScope?.collapseProgress ?? 0;
-    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
-    final hideForScroll = collapseProgress > 0.1 && !keyboardVisible;
-    final expandedTopGap = 16 * (1 - Curves.easeOutCubic.transform(collapseProgress));
-
     return Padding(
-      padding: EdgeInsets.only(top: expandedTopGap),
-      child: IgnorePointer(
-        ignoring: hideForScroll,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween<double>(begin: 1, end: hideForScroll ? 0 : 1),
-          duration: powerboardsMobileOverlayHeaderTransitionDuration,
-          curve: Curves.easeOutCubic,
-          builder: (context, visibility, child) {
-            final offsetY = 18 * (1 - visibility);
-            return Transform.translate(
-              offset: Offset(0, offsetY),
-              child: ClipRect(
-                child: Opacity(opacity: visibility, child: child),
-              ),
-            );
-          },
-          child: KeyedSubtree(key: const ValueKey('mobile-chat-input'), child: chatBox),
-        ),
-      ),
+      padding: const EdgeInsets.only(top: 8),
+      child: KeyedSubtree(key: const ValueKey('mobile-chat-input'), child: chatBox),
     );
   }
 
@@ -338,6 +315,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   Widget build(BuildContext context) {
     final usesMobileLayout = _usesMobileThreadLayout(context);
     final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final mobileUnderHeaderContentPadding = usesMobileLayout
+        ? 40.0 * Curves.easeOutCubic.transform(overlayHeaderScope?.collapseProgress ?? 0)
+        : null;
     final usesCompactNewThreadPrompt = usesMobileLayout && widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
     final emptyStateTitle = widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
         ? "Start a new thread"
@@ -394,6 +375,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             : powerboardsAdaptiveInputContextMenuBuilder,
         inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
         mobileStorageSaveSurfacePresenter: showPowerboardsThreadStorageSaveSurface,
+        mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
         centerComposer: false,
         hideChatInput: widget.hideChatInput,
         showThreadList: false,

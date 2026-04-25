@@ -2056,15 +2056,23 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required _MobileChatHeaderContext chatContext,
     required double collapseProgress,
   }) {
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final isMinimized = collapseProgress > 0.01;
+    final canOpenContextSwitcher = chatContext.canOpenContextSwitcher && !isMinimized;
+    VoidCallback? onPressed;
+    if (isMinimized) {
+      onPressed = overlayHeaderScope?.onRestoreChrome;
+    } else if (chatContext.canOpenContextSwitcher) {
+      onPressed = () => _showMobileRoomContextSwitcher(context: context, supported: supported, chatContext: chatContext);
+    }
+
     return PowerboardsMobileHeaderTrigger(
       primaryText: chatContext.currentThreadLabel,
       secondaryText: chatContext.agentName,
       collapseProgress: collapseProgress,
-      showChevron: chatContext.canOpenContextSwitcher,
+      showChevron: canOpenContextSwitcher,
       textAlign: TextAlign.left,
-      onPressed: !chatContext.canOpenContextSwitcher
-          ? null
-          : () => _showMobileRoomContextSwitcher(context: context, supported: supported, chatContext: chatContext),
+      onPressed: onPressed,
     );
   }
 
@@ -3693,8 +3701,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   return PowerboardsMobileOverlayScaffold(
                                     leading: _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
                                     titleAlignment: Alignment.centerLeft,
-                                    collapseBodyWithHeader: activePane != _MobileRoomPane.chat,
+                                    collapseBodyWithHeader: true,
                                     bodyTopPaddingOffset: 0,
+                                    restoreChromeAtMaxScrollExtent: activePane == _MobileRoomPane.chat,
+                                    collapseBottomSafeAreaWithHeader: activePane != _MobileRoomPane.chat,
                                     titleBuilder: (context, collapseProgress) {
                                       if (activePane == _MobileRoomPane.files && filesLocation != null) {
                                         return _buildMobileFilesContextHeaderTitle(

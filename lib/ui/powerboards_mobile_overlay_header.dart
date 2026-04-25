@@ -1,14 +1,12 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 const double powerboardsMobileOverlayHeaderExpandedHeight = headerHeight;
 const double powerboardsMobileOverlayHeaderCollapsedHeight = 48.0;
-const double powerboardsMobileOverlayHeaderContentOverlap = 12.0;
 const double powerboardsMobileOverlayContentEdgeGap = 12.0;
 const double powerboardsMobileOverlaySecondaryRowLift = 10.0;
 const Duration powerboardsMobileOverlayHeaderTransitionDuration = Duration(milliseconds: 280);
@@ -16,10 +14,7 @@ const Duration powerboardsMobileOverlayHeaderTransitionDuration = Duration(milli
 double powerboardsMobileOverlayBodyTopPadding(BuildContext context, double collapseProgress) {
   final expandedTopPadding =
       powerboardsMobileOverlayHeaderExpandedHeight + powerboardsMobileOverlayContentEdgeGap - powerboardsMobileOverlaySecondaryRowLift;
-  final collapsedTopPadding =
-      powerboardsMobileOverlayHeaderExpandedHeight -
-      powerboardsMobileOverlayHeaderContentOverlap -
-      powerboardsMobileOverlaySecondaryRowLift;
+  const collapsedTopPadding = powerboardsMobileOverlayHeaderCollapsedHeight;
   return ui.lerpDouble(expandedTopPadding, collapsedTopPadding, collapseProgress)!;
 }
 
@@ -35,6 +30,8 @@ class PowerboardsMobileOverlayScaffold extends StatefulWidget {
     this.titleAlignment = Alignment.center,
     this.collapseBodyWithHeader = true,
     this.bodyTopPaddingOffset = 0,
+    this.restoreChromeAtMaxScrollExtent = false,
+    this.collapseBottomSafeAreaWithHeader = true,
   });
 
   final Widget leading;
@@ -46,12 +43,20 @@ class PowerboardsMobileOverlayScaffold extends StatefulWidget {
   final Alignment titleAlignment;
   final bool collapseBodyWithHeader;
   final double bodyTopPaddingOffset;
+  final bool restoreChromeAtMaxScrollExtent;
+  final bool collapseBottomSafeAreaWithHeader;
 
   @override
   State<PowerboardsMobileOverlayScaffold> createState() => _PowerboardsMobileOverlayScaffoldState();
 }
 
 class _PowerboardsMobileOverlayScaffoldState extends State<PowerboardsMobileOverlayScaffold> with SingleTickerProviderStateMixin {
+  static const double _scrollableExtentThreshold = 0.5;
+  static const double _scrollMinRestoreThreshold = 12.0;
+  static const double _scrollMinCollapseThreshold = 24.0;
+  static const double _scrollMaxRestoreThreshold = 64.0;
+  static const double _scrollMaxCollapseThreshold = 96.0;
+
   late final AnimationController _scrollStateController = AnimationController(
     vsync: this,
     duration: powerboardsMobileOverlayHeaderTransitionDuration,
@@ -62,42 +67,60 @@ class _PowerboardsMobileOverlayScaffoldState extends State<PowerboardsMobileOver
     curve: Curves.easeOutCubic,
     reverseCurve: Curves.easeOutCubic,
   );
+  bool _hasScrollableExtent = false;
+  bool _scrollChromeCollapsed = false;
 
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.vertical) {
       return false;
     }
 
-    if (notification is UserScrollNotification) {
-      _setScrollActive(notification.direction != ScrollDirection.idle);
-      return false;
-    }
-
-    if (notification is ScrollStartNotification || notification is ScrollUpdateNotification || notification is OverscrollNotification) {
-      _setScrollActive(true);
-      return false;
-    }
-
-    if (notification is ScrollEndNotification) {
-      _setScrollActive(false);
-    }
+    _syncScrollChromeState(notification.metrics);
 
     return false;
   }
 
-  void _setScrollActive(bool active) {
-    if (active) {
+  void _syncScrollChromeState(ScrollMetrics metrics) {
+    final nextHasScrollableExtent = metrics.maxScrollExtent > _scrollableExtentThreshold;
+    if (_hasScrollableExtent != nextHasScrollableExtent) {
+      _hasScrollableExtent = nextHasScrollableExtent;
+    }
+
+    final minThreshold = _scrollChromeCollapsed ? _scrollMinRestoreThreshold : _scrollMinCollapseThreshold;
+    final maxThreshold = _scrollChromeCollapsed ? _scrollMaxRestoreThreshold : _scrollMaxCollapseThreshold;
+    final nearMinScrollExtent = metrics.pixels <= metrics.minScrollExtent + minThreshold;
+    final nearMaxScrollExtent = widget.restoreChromeAtMaxScrollExtent && metrics.pixels >= metrics.maxScrollExtent - maxThreshold;
+    final shouldCollapse = nextHasScrollableExtent && !nearMinScrollExtent && !nearMaxScrollExtent;
+    _setScrollCollapsed(shouldCollapse);
+  }
+
+  void _setScrollCollapsed(bool collapsed) {
+    if (_scrollChromeCollapsed == collapsed) {
+      return;
+    }
+
+    _scrollChromeCollapsed = collapsed;
+    if (collapsed) {
       _scrollStateController.forward();
     } else {
       _scrollStateController.reverse();
     }
   }
 
+  void _restoreChrome() {
+    _scrollChromeCollapsed = false;
+    _scrollStateController.reverse();
+  }
+
   @override
   void didUpdateWidget(covariant PowerboardsMobileOverlayScaffold oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.scrollIdentity != widget.scrollIdentity && _scrollStateController.value != 0) {
-      _scrollStateController.value = 0;
+    if (oldWidget.scrollIdentity != widget.scrollIdentity) {
+      _hasScrollableExtent = false;
+      _scrollChromeCollapsed = false;
+      if (_scrollStateController.value != 0) {
+        _scrollStateController.value = 0;
+      }
     }
   }
 
@@ -121,14 +144,17 @@ class _PowerboardsMobileOverlayScaffoldState extends State<PowerboardsMobileOver
                 widget.bodyTopPaddingOffset;
             final effectiveSafeAreaMinimum = EdgeInsets.only(
               top: powerboardsMobileScreenTopInset,
-              bottom: ui.lerpDouble(powerboardsMobileScreenBottomInset, 0, collapseProgress)!,
+              bottom: widget.collapseBottomSafeAreaWithHeader
+                  ? ui.lerpDouble(powerboardsMobileScreenBottomInset, 0, collapseProgress)!
+                  : powerboardsMobileScreenBottomInset,
             );
 
             return SafeArea(
-              bottom: collapseProgress < 0.1,
+              bottom: !widget.collapseBottomSafeAreaWithHeader || collapseProgress < 0.1,
               minimum: effectiveSafeAreaMinimum,
               child: PowerboardsMobileOverlayHeaderScope(
                 collapseProgress: collapseProgress,
+                onRestoreChrome: _restoreChrome,
                 child: Stack(
                   children: [
                     Positioned.fill(
@@ -141,13 +167,15 @@ class _PowerboardsMobileOverlayScaffoldState extends State<PowerboardsMobileOver
                       top: 0,
                       left: 0,
                       right: 0,
-                      child: PowerboardsMobileOverlayHeader(
-                        leading: widget.leading,
-                        title: widget.titleBuilder(context, collapseProgress),
-                        trailingActions: widget.trailingActions,
-                        backgroundColor: widget.backgroundColor,
-                        collapseProgress: collapseProgress,
-                        titleAlignment: widget.titleAlignment,
+                      child: Builder(
+                        builder: (context) => PowerboardsMobileOverlayHeader(
+                          leading: widget.leading,
+                          title: widget.titleBuilder(context, collapseProgress),
+                          trailingActions: widget.trailingActions,
+                          backgroundColor: widget.backgroundColor,
+                          collapseProgress: collapseProgress,
+                          titleAlignment: widget.titleAlignment,
+                        ),
                       ),
                     ),
                   ],
@@ -162,9 +190,15 @@ class _PowerboardsMobileOverlayScaffoldState extends State<PowerboardsMobileOver
 }
 
 class PowerboardsMobileOverlayHeaderScope extends InheritedWidget {
-  const PowerboardsMobileOverlayHeaderScope({super.key, required this.collapseProgress, required super.child});
+  const PowerboardsMobileOverlayHeaderScope({
+    super.key,
+    required this.collapseProgress,
+    required this.onRestoreChrome,
+    required super.child,
+  });
 
   final double collapseProgress;
+  final VoidCallback onRestoreChrome;
 
   static PowerboardsMobileOverlayHeaderScope? maybeOf(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<PowerboardsMobileOverlayHeaderScope>();
@@ -172,7 +206,7 @@ class PowerboardsMobileOverlayHeaderScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(PowerboardsMobileOverlayHeaderScope oldWidget) {
-    return oldWidget.collapseProgress != collapseProgress;
+    return oldWidget.collapseProgress != collapseProgress || oldWidget.onRestoreChrome != onRestoreChrome;
   }
 }
 
@@ -198,18 +232,19 @@ class PowerboardsMobileOverlayHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
     final titleCollapseAlignment = Alignment.lerp(titleAlignment, Alignment.center, Curves.easeOut.transform(collapseProgress))!;
+    final collapseCurve = Curves.easeInOutCubic.transform(collapseProgress);
     final headerHeight = ui.lerpDouble(
       powerboardsMobileOverlayHeaderExpandedHeight,
       powerboardsMobileOverlayHeaderCollapsedHeight,
       collapseProgress,
     )!;
-    final backgroundTopAlpha = ui.lerpDouble(0.96, 0.82, collapseProgress)!;
-    final backgroundBottomAlpha = ui.lerpDouble(0.82, 0.62, collapseProgress)!;
-    final blur = ui.lerpDouble(26, 18, collapseProgress)!;
-    final borderOpacity = ui.lerpDouble(0.5, 0.22, collapseProgress)!;
-    final shadowOpacity = ui.lerpDouble(0.12, 0.04, collapseProgress)!;
+    final blur = ui.lerpDouble(10, 18, collapseCurve)!;
+    final topFadeStop = ui.lerpDouble(0.001, 0.32, collapseCurve)!;
+    final solidStop = ui.lerpDouble(0.82, 0.58, collapseCurve)!;
+    final topColor = Color.lerp(backgroundColor, powerboardsMobileGlassColor(backgroundColor, tint: 0.92, alpha: 0.82), collapseCurve)!;
+    final middleColor = Color.lerp(backgroundColor, powerboardsMobileGlassColor(backgroundColor, tint: 0.74, alpha: 0.62), collapseCurve)!;
+    final edgeColor = Color.lerp(backgroundColor, backgroundColor.withValues(alpha: 0), collapseCurve)!;
     final actionVisibility = 1 - Curves.easeOut.transform(collapseProgress);
 
     return ClipRect(
@@ -217,17 +252,12 @@ class PowerboardsMobileOverlayHeader extends StatelessWidget {
         filter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            gradient: powerboardsMobileGlassGradient(
-              backgroundColor,
-              topTint: 0.92,
-              bottomTint: 0.74,
-              topAlpha: backgroundTopAlpha,
-              bottomAlpha: backgroundBottomAlpha,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [backgroundColor, topColor, middleColor, edgeColor],
+              stops: [0.0, topFadeStop, solidStop, 1.0],
             ),
-            border: Border(
-              bottom: BorderSide(color: powerboardsMobileGlassBorderColor(theme.colorScheme.border, alpha: borderOpacity)),
-            ),
-            boxShadow: powerboardsMobileGlassShadows(opacity: shadowOpacity),
           ),
           child: SizedBox(
             height: headerHeight,
