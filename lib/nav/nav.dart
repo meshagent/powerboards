@@ -38,6 +38,8 @@ const double _navBarMaxWidth = 560.0;
 
 const double balanceLowThreshold = 200.0;
 const double navBarWidth = 280.0;
+final double _mobileSidetrayContentHorizontalInset = powerboardsMobileFlowDialogCompactPadding.left;
+final EdgeInsets _mobileSidetrayHorizontalPadding = EdgeInsets.symmetric(horizontal: _mobileSidetrayContentHorizontalInset);
 
 class NavController extends Controller {
   bool _hideNav = false;
@@ -907,6 +909,8 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                         projects: projects,
                         onCreateProject: onCreateProject,
                         onSwitchProject: onProjectSwitched,
+                        mobileHorizontalPadding: _mobileSidetrayHorizontalPadding,
+                        mobileHeaderContentHorizontalInset: 0,
                         mobileCollapseProgress: mobileScrollCollapseProgress,
                         onExpandCollapsedMobileChrome: () => _setMobileRoomListScrollCollapsed(false),
                         mobileLeading: !useOverlayChrome
@@ -1488,7 +1492,7 @@ class _NavBarState extends State<_NavBar> {
     final isCreatePending = widget.pendingCreateRoomName != null;
     final mobileScrollCollapseProgress = isMobile && !_isMobileFilterMode ? widget.mobileScrollCollapseProgress : 0.0;
     final horizontalPadding = isMobile
-        ? powerboardsMobileHorizontalPadding
+        ? _mobileSidetrayHorizontalPadding
         : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset);
     const mobileFilterFocusTop = 0.0;
     const mobileChromeCutoffGap = 18.0;
@@ -1690,8 +1694,8 @@ class _NavBarState extends State<_NavBar> {
               ),
               Positioned(
                 top: animatedFilterTop,
-                left: powerboardsMobileHorizontalPadding.left,
-                right: powerboardsMobileHorizontalPadding.right,
+                left: _mobileSidetrayContentHorizontalInset,
+                right: _mobileSidetrayContentHorizontalInset,
                 child: IgnorePointer(
                   ignoring: !_isMobileFilterMode && filterVisibility < 0.1,
                   child: Opacity(
@@ -1757,8 +1761,8 @@ class _NavBarState extends State<_NavBar> {
               ),
               if (footerChild != null)
                 Positioned(
-                  left: powerboardsMobileShellHorizontalInset,
-                  right: powerboardsMobileShellHorizontalInset,
+                  left: _mobileSidetrayContentHorizontalInset,
+                  right: _mobileSidetrayContentHorizontalInset,
                   bottom: desktopPaneBottomInset,
                   child: IgnorePointer(
                     ignoring: !_isMobileFilterMode && footerVisibility < 0.1,
@@ -1787,9 +1791,9 @@ class _NavBarState extends State<_NavBar> {
             final listBottomPadding = ui.lerpDouble(mobileBottomChromeHeight, 0, collapseCurve)!;
             final navRooms = buildNavRooms(
               EdgeInsets.fromLTRB(
-                powerboardsMobileShellHorizontalInset,
+                _mobileSidetrayContentHorizontalInset,
                 listTopPadding,
-                powerboardsMobileShellHorizontalInset,
+                _mobileSidetrayContentHorizontalInset,
                 listBottomPadding,
               ),
             );
@@ -1838,6 +1842,8 @@ class _NavBarTop extends StatefulWidget {
     this.mobileLeading,
     this.mobileTrailing,
     this.onSwitchProject,
+    this.mobileHorizontalPadding = powerboardsMobileHorizontalPadding,
+    this.mobileHeaderContentHorizontalInset = powerboardsMobileShellHorizontalInset,
   });
 
   final String? projectId;
@@ -1848,6 +1854,8 @@ class _NavBarTop extends StatefulWidget {
   final Widget? mobileLeading;
   final Widget? mobileTrailing;
   final ValueChanged<Project>? onSwitchProject;
+  final EdgeInsetsGeometry mobileHorizontalPadding;
+  final double mobileHeaderContentHorizontalInset;
 
   @override
   State createState() => _NavBarTopState();
@@ -1899,7 +1907,7 @@ class _NavBarTopState extends State<_NavBarTop> {
         : powerboardsSectionTitleStyle(color: theme.colorScheme.foreground, height: 1.2);
 
     return Container(
-      padding: isSmallDisplay ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
+      padding: isSmallDisplay ? widget.mobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: desktopPaneSideHorizontalInset),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -1973,6 +1981,7 @@ class _NavBarTopState extends State<_NavBarTop> {
                   backgroundColor: theme.colorScheme.card,
                   collapseProgress: animatedCollapseProgress,
                   titleAlignment: Alignment.center,
+                  horizontalInset: widget.mobileHeaderContentHorizontalInset,
                 );
 
                 if (animatedCollapseProgress <= 0.01 || widget.onExpandCollapsedMobileChrome == null) {

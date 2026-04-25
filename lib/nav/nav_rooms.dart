@@ -8,7 +8,9 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 
+import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
@@ -20,6 +22,10 @@ import 'update_room_perms_dialog.dart';
 String roomDisplayName(Room room) => (room.metadata['displayName'] as String? ?? room.name).trim();
 
 int _compareRoomNames(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+
+const double _mobileRoomTileTextLeadingInset = desktopPaneHeaderCompactButtonWidth / 2;
+const double _mobileRoomTileActionSlotSize = 24;
+const EdgeInsets _mobileRoomTilePadding = EdgeInsets.fromLTRB(_mobileRoomTileTextLeadingInset, 0, 12, 0);
 
 class NavRooms extends StatefulWidget {
   const NavRooms({
@@ -200,21 +206,26 @@ class _PendingRoomTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
-    final textStyle = theme.textTheme.p.copyWith(color: theme.colorScheme.foreground.withValues(alpha: 0.68));
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final textStyle = isMobile
+        ? powerboardsFileListTitleStyle().copyWith(color: theme.colorScheme.foreground.withValues(alpha: 0.68))
+        : theme.textTheme.p.copyWith(color: theme.colorScheme.foreground.withValues(alpha: 0.68));
 
     return Container(
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: theme.colorScheme.muted),
+      constraints: isMobile ? const BoxConstraints(minHeight: powerboardsFooterActionButtonHeight) : null,
+      decoration: BoxDecoration(borderRadius: isMobile ? theme.radius : BorderRadius.circular(4), color: theme.colorScheme.muted),
       child: Padding(
-        padding: const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
+        padding: isMobile ? _mobileRoomTilePadding : const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
         child: Row(
           children: [
             Expanded(
               child: Text(name, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
-            const SizedBox(
-              width: 40,
-              height: 40,
-              child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+            if (isMobile) const SizedBox(width: 10),
+            SizedBox(
+              width: isMobile ? _mobileRoomTileActionSlotSize : 40,
+              height: isMobile ? _mobileRoomTileActionSlotSize : 40,
+              child: const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
             ),
           ],
         ),
@@ -375,23 +386,31 @@ class _RoomTileState extends State<_RoomTile> {
           final bg = widget.balanceLow
               ? cs.background
               : (_isDeleting ? cs.muted : (widget.selected ? cs.secondaryForeground : Colors.transparent));
-          final baseTextStyle = widget.balanceLow
+          final desktopTextStyle = widget.balanceLow
               ? tt.p.copyWith(color: cs.mutedForeground)
               : (widget.selected ? tt.p.copyWith(color: cs.secondary) : tt.p);
+          final mobileReferenceTextStyle = powerboardsFileListTitleStyle().copyWith(
+            fontWeight: widget.selected || hovered ? FontWeight.w700 : FontWeight.w400,
+          );
+          final mobileTextStyle = widget.balanceLow
+              ? mobileReferenceTextStyle.copyWith(color: cs.mutedForeground)
+              : (widget.selected ? mobileReferenceTextStyle.copyWith(color: cs.secondary) : mobileReferenceTextStyle);
+          final baseTextStyle = isMobile ? mobileTextStyle : desktopTextStyle;
           final textColor = (baseTextStyle.color ?? cs.foreground).withValues(alpha: _isDeleting ? 0.55 : (menuOpen ? 0.5 : 1.0));
           final textStyle = baseTextStyle.copyWith(color: textColor);
           final settingsColor = hovered || isMobile ? baseTextStyle.color : Colors.transparent;
           final menuItems = _buildContextMenuItems(context);
 
           return Container(
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(4), color: bg),
+            constraints: isMobile ? const BoxConstraints(minHeight: powerboardsFooterActionButtonHeight) : null,
+            decoration: BoxDecoration(borderRadius: isMobile ? theme.radius : BorderRadius.circular(4), color: bg),
 
             child: ShadGestureDetector(
               behavior: HitTestBehavior.opaque,
               cursor: widget.balanceLow ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
               onTap: widget.balanceLow || _isDeleting ? null : widget.onTap,
               child: Padding(
-                padding: const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
+                padding: isMobile ? _mobileRoomTilePadding : const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
                 child: Row(
                   children: [
                     Expanded(
@@ -399,12 +418,13 @@ class _RoomTileState extends State<_RoomTile> {
                     ),
 
                     if (_isDeleting)
-                      const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
+                      SizedBox(
+                        width: isMobile ? _mobileRoomTileActionSlotSize : 40,
+                        height: isMobile ? _mobileRoomTileActionSlotSize : 40,
+                        child: const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
                       )
-                    else if (!widget.balanceLow)
+                    else if (!widget.balanceLow) ...[
+                      if (isMobile) const SizedBox(width: 10),
                       AdaptiveShadContextMenu(
                         controller: controller,
                         boundaryContext: widget.menuBoundaryContext,
@@ -416,12 +436,15 @@ class _RoomTileState extends State<_RoomTile> {
                           behavior: HitTestBehavior.opaque,
                           onTap: controller.toggle,
                           child: SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: Center(child: Icon(LucideIcons.ellipsis, size: 20, color: settingsColor)),
+                            width: isMobile ? _mobileRoomTileActionSlotSize : 40,
+                            height: isMobile ? _mobileRoomTileActionSlotSize : 40,
+                            child: Center(
+                              child: Icon(LucideIcons.ellipsis, size: isMobile ? 18 : 20, color: settingsColor),
+                            ),
                           ),
                         ),
                       ),
+                    ],
                   ],
                 ),
               ),

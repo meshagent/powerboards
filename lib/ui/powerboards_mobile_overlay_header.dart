@@ -185,6 +185,7 @@ class PowerboardsMobileOverlayHeader extends StatelessWidget {
     required this.backgroundColor,
     required this.collapseProgress,
     this.titleAlignment = Alignment.center,
+    this.horizontalInset = powerboardsMobileShellHorizontalInset,
   });
 
   final Widget leading;
@@ -193,6 +194,7 @@ class PowerboardsMobileOverlayHeader extends StatelessWidget {
   final Color backgroundColor;
   final double collapseProgress;
   final Alignment titleAlignment;
+  final double horizontalInset;
 
   @override
   Widget build(BuildContext context) {
@@ -230,7 +232,7 @@ class PowerboardsMobileOverlayHeader extends StatelessWidget {
           child: SizedBox(
             height: headerHeight,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: powerboardsMobileShellHorizontalInset),
+              padding: EdgeInsets.symmetric(horizontal: horizontalInset),
               child: Row(
                 spacing: 8,
                 children: [
