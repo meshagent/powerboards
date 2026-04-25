@@ -853,6 +853,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                   pendingDeleteRoomName: pendingDeleteRoomName,
                   canCreateRooms: canCreateRooms,
                   setFilter: setFilter,
+                  hasProjectRooms: roomListItems.isNotEmpty || pendingCreateRoomName != null || pendingDeleteRoomName != null,
                   mobileFilterMode: _mobileRoomListFilterMode,
                   onMobileFilterModeChanged: isMobile ? _setMobileRoomListFilterMode : null,
                   mobileScrollCollapseProgress: mobileScrollCollapseProgress,
@@ -1363,6 +1364,7 @@ class _NavBar extends StatefulWidget {
     this.pendingCreateRoomName,
     this.pendingDeleteRoomName,
     required this.setFilter,
+    this.hasProjectRooms = true,
     this.mobileFilterMode = false,
     this.onMobileFilterModeChanged,
     this.mobileScrollCollapseProgress = 0,
@@ -1382,6 +1384,7 @@ class _NavBar extends StatefulWidget {
   final String? pendingCreateRoomName;
   final String? pendingDeleteRoomName;
   final void Function(String) setFilter;
+  final bool hasProjectRooms;
   final bool mobileFilterMode;
   final ValueChanged<bool>? onMobileFilterModeChanged;
   final double mobileScrollCollapseProgress;
@@ -1490,6 +1493,8 @@ class _NavBarState extends State<_NavBar> {
     final isMobile = _isMobile;
     final keyboardOpen = isMobile && (MediaQuery.maybeOf(context)?.viewInsets.bottom ?? 0.0) > 0;
     final isCreatePending = widget.pendingCreateRoomName != null;
+    final hideMobileFilterForEmptyProject = isMobile && !widget.hasProjectRooms;
+    final effectiveMobileFilterMode = _isMobileFilterMode && !hideMobileFilterForEmptyProject;
     final mobileScrollCollapseProgress = isMobile && !_isMobileFilterMode ? widget.mobileScrollCollapseProgress : 0.0;
     final horizontalPadding = isMobile
         ? _mobileSidetrayHorizontalPadding
@@ -1497,11 +1502,13 @@ class _NavBarState extends State<_NavBar> {
     const mobileFilterFocusTop = 0.0;
     const mobileChromeCutoffGap = 18.0;
     const mobileFooterChromeTopGap = 18.0;
-    final hasMobileFooterAction = _isMobileFilterMode || (widget.canCreateRooms && !keyboardOpen);
-    final mobileFilterTop = _isMobileFilterMode
+    final hasMobileFooterAction = effectiveMobileFilterMode || (widget.canCreateRooms && !keyboardOpen);
+    final mobileFilterTop = effectiveMobileFilterMode
         ? mobileFilterFocusTop
         : widget.mobileHeaderInset + powerboardsMobileOverlaySecondaryRowLift;
-    final mobileTopChromeHeight = mobileFilterTop + powerboardsMobileSecondaryRowHeight + mobileChromeCutoffGap;
+    final mobileTopChromeHeight = hideMobileFilterForEmptyProject
+        ? widget.mobileHeaderInset + mobileChromeCutoffGap
+        : mobileFilterTop + powerboardsMobileSecondaryRowHeight + mobileChromeCutoffGap;
     final mobileBottomChromeHeight = hasMobileFooterAction
         ? mobileFooterChromeTopGap + powerboardsFooterActionButtonHeight + desktopPaneBottomInset
         : desktopPaneBottomInset + 10;
@@ -1616,7 +1623,7 @@ class _NavBarState extends State<_NavBar> {
     }
 
     Widget? buildMobileFooterAction() {
-      return _isMobileFilterMode
+      return effectiveMobileFilterMode
           ? Row(
               children: [
                 Expanded(
@@ -1645,8 +1652,8 @@ class _NavBarState extends State<_NavBar> {
       final theme = ShadTheme.of(context);
       final collapseCurve = Curves.easeInOutCubic.transform(collapseProgress);
       final chromeHeight = ui.lerpDouble(mobileTopChromeHeight, powerboardsMobileOverlayHeaderCollapsedHeight, collapseCurve)!;
-      final filterVisibility = _isMobileFilterMode ? 1.0 : 1 - Curves.easeInCubic.transform(collapseProgress);
-      final animatedFilterTop = _isMobileFilterMode
+      final filterVisibility = effectiveMobileFilterMode ? 1.0 : 1 - Curves.easeInCubic.transform(collapseProgress);
+      final animatedFilterTop = effectiveMobileFilterMode
           ? mobileFilterTop
           : ui.lerpDouble(mobileFilterTop, powerboardsMobileOverlayHeaderCollapsedHeight + 2, collapseCurve)!;
       final solidStop = ui.lerpDouble(0.82, 0.24, collapseCurve)!;
@@ -1692,18 +1699,19 @@ class _NavBarState extends State<_NavBar> {
                   ),
                 ),
               ),
-              Positioned(
-                top: animatedFilterTop,
-                left: _mobileSidetrayContentHorizontalInset,
-                right: _mobileSidetrayContentHorizontalInset,
-                child: IgnorePointer(
-                  ignoring: !_isMobileFilterMode && filterVisibility < 0.1,
-                  child: Opacity(
-                    opacity: filterVisibility,
-                    child: Transform.translate(offset: Offset(0, -8 * collapseCurve), child: buildFilterInput()),
+              if (!hideMobileFilterForEmptyProject)
+                Positioned(
+                  top: animatedFilterTop,
+                  left: _mobileSidetrayContentHorizontalInset,
+                  right: _mobileSidetrayContentHorizontalInset,
+                  child: IgnorePointer(
+                    ignoring: !_isMobileFilterMode && filterVisibility < 0.1,
+                    child: Opacity(
+                      opacity: filterVisibility,
+                      child: Transform.translate(offset: Offset(0, -8 * collapseCurve), child: buildFilterInput()),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ),
@@ -1715,7 +1723,7 @@ class _NavBarState extends State<_NavBar> {
       final theme = ShadTheme.of(context);
       final collapseCurve = Curves.easeInOutCubic.transform(collapseProgress);
       final chromeHeight = ui.lerpDouble(mobileBottomChromeHeight, 0, collapseCurve)!;
-      final footerVisibility = _isMobileFilterMode ? 1.0 : 1 - Curves.easeOutCubic.transform(collapseProgress);
+      final footerVisibility = effectiveMobileFilterMode ? 1.0 : 1 - Curves.easeOutCubic.transform(collapseProgress);
       final solidStop = ui.lerpDouble(0.72, 0.42, collapseCurve)!;
       final bottomColor = Color.lerp(
         theme.colorScheme.card,
@@ -1785,7 +1793,7 @@ class _NavBarState extends State<_NavBar> {
           duration: powerboardsMobileOverlayHeaderTransitionDuration,
           curve: Curves.easeOutCubic,
           builder: (context, animatedCollapseProgress, _) {
-            final filterCollapseProgress = _isMobileFilterMode ? 0.0 : animatedCollapseProgress;
+            final filterCollapseProgress = effectiveMobileFilterMode ? 0.0 : animatedCollapseProgress;
             final collapseCurve = Curves.easeInOutCubic.transform(filterCollapseProgress);
             final listTopPadding = ui.lerpDouble(mobileTopChromeHeight, powerboardsMobileOverlayHeaderCollapsedHeight, collapseCurve)!;
             final listBottomPadding = ui.lerpDouble(mobileBottomChromeHeight, 0, collapseCurve)!;

@@ -138,15 +138,31 @@ class _NavRoomsState extends State<NavRooms> {
       return false;
     }
 
-    return Column(
-      children: [
-        if (widget.rooms.isEmpty)
-          Padding(
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final emptyRoomsChild = isMobile
+        ? Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: _mobileRoomTileTextLeadingInset),
+                child: Text(
+                  'Your project is ready for a room',
+                  textAlign: TextAlign.center,
+                  style: powerboardsSectionTitleStyle(color: ShadTheme.of(context).colorScheme.foreground),
+                ),
+              ),
+            ),
+          )
+        : Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
               children: [if (widget.onCreateRoom != null) ShadButton(onPressed: widget.onCreateRoom, child: const Text('Create room'))],
             ),
-          )
+          );
+
+    return Column(
+      children: [
+        if (widget.rooms.isEmpty)
+          emptyRoomsChild
         else
           Expanded(
             child: NotificationListener<ScrollNotification>(
