@@ -148,8 +148,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   bool _mobileRoomListFilterMode = false;
   bool _mobileRoomListScrollCollapsed = false;
   int _mobileRoomListInstance = 0;
-  String? _mobileRoomListRevealProjectId;
-  String? _mobileRoomListRevealRoomName;
   late final AnimationController _mobileRoomListCloseAnimationController;
 
   final childKey = GlobalKey();
@@ -268,24 +266,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     setState(() {
       _mobileRoomListScrollCollapsed = false;
       _mobileRoomListInstance++;
-    });
-  }
-
-  void _setMobileRoomListRevealTarget(String projectId, String roomName) {
-    setState(() {
-      _mobileRoomListRevealProjectId = projectId;
-      _mobileRoomListRevealRoomName = roomName;
-    });
-  }
-
-  void _clearMobileRoomListRevealTarget() {
-    if (_mobileRoomListRevealProjectId == null && _mobileRoomListRevealRoomName == null) {
-      return;
-    }
-
-    setState(() {
-      _mobileRoomListRevealProjectId = null;
-      _mobileRoomListRevealRoomName = null;
     });
   }
 
@@ -764,7 +744,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
             child: _buildMobileRoomListSurface(context, canCreateRooms: canCreateRooms, balanceLow: balanceLow),
           )
         : KeyedSubtree(
-            key: ValueKey('mobile-room-${widget.selectedRoom}'),
+            key: ValueKey('mobile-active-room-${widget.selectedRoom}'),
             child: _buildMobileRoomSurfaceWithSidetray(
               context,
               canCreateRooms: canCreateRooms,
@@ -779,7 +759,15 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
         switchInCurve: powerboardsMobileTransitionInCurve,
         switchOutCurve: powerboardsMobileTransitionOutCurve,
         layoutBuilder: (currentChild, previousChildren) {
-          return Stack(fit: StackFit.expand, children: [...previousChildren, if (currentChild != null) currentChild]);
+          bool isActiveRoomChild(Widget child) {
+            final key = child.key;
+            return key is ValueKey<String> && key.value.startsWith('mobile-active-room-');
+          }
+
+          final includesActiveRoom = (currentChild != null && isActiveRoomChild(currentChild)) || previousChildren.any(isActiveRoomChild);
+          final retainedPreviousChildren = includesActiveRoom ? const <Widget>[] : previousChildren;
+
+          return Stack(fit: StackFit.expand, children: [...retainedPreviousChildren, if (currentChild != null) currentChild]);
         },
         transitionBuilder: (child, animation) {
           final isCurrentChild = child.key == mobileContent.key;
@@ -834,7 +822,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     final roomListRooms = roomsOverride ?? rooms;
     final pendingCreateRoomName = _mobilePendingCreateProjectId == roomListProjectId ? _mobilePendingCreateRoomName : null;
     final pendingDeleteRoomName = _mobilePendingDeleteProjectId == roomListProjectId ? _mobilePendingDeleteRoomName : null;
-    final revealRoomName = isMobile && _mobileRoomListRevealProjectId == roomListProjectId ? _mobileRoomListRevealRoomName : null;
     final roomListItems = roomListRooms.state.value ?? const <Room>[];
 
     if (pendingDeleteRoomName != null && roomListRooms.state.isReady && !roomListItems.any((room) => room.name == pendingDeleteRoomName)) {
@@ -868,8 +855,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                   onMobileFilterModeChanged: isMobile ? _setMobileRoomListFilterMode : null,
                   mobileScrollCollapseProgress: mobileScrollCollapseProgress,
                   onMobileScrollActiveChanged: isMobile ? _setMobileRoomListScrollCollapsed : null,
-                  initialRevealRoomName: revealRoomName,
-                  onInitialRevealComplete: _clearMobileRoomListRevealTarget,
                   selectedRoom: roomListSelectedRoom,
                   mobileHeaderInset: isMobile && !_mobileRoomListFilterMode ? powerboardsMobileOverlayHeaderExpandedHeight : 0,
                   onSave: () {
@@ -891,7 +876,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                             return;
                           }
 
-                          _setMobileRoomListRevealTarget(currentProjectId, room.name);
                           if (filter.isNotEmpty) {
                             setFilter('');
                           }
@@ -1066,7 +1050,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     }
 
     return ColoredBox(
-      key: childKey,
       color: theme.colorScheme.card,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1380,8 +1363,6 @@ class _NavBar extends StatefulWidget {
     this.onMobileFilterModeChanged,
     this.mobileScrollCollapseProgress = 0,
     this.onMobileScrollActiveChanged,
-    this.initialRevealRoomName,
-    this.onInitialRevealComplete,
     this.mobileHeaderInset = 0,
     required this.onSave,
     required this.onRefresh,
@@ -1401,8 +1382,6 @@ class _NavBar extends StatefulWidget {
   final ValueChanged<bool>? onMobileFilterModeChanged;
   final double mobileScrollCollapseProgress;
   final ValueChanged<bool>? onMobileScrollActiveChanged;
-  final String? initialRevealRoomName;
-  final VoidCallback? onInitialRevealComplete;
   final double mobileHeaderInset;
   final void Function() onSave;
   final Future<void> Function() onRefresh;
@@ -1530,8 +1509,6 @@ class _NavBarState extends State<_NavBar> {
               projectId: widget.projectId!,
               rooms: widget.rooms,
               contentPadding: contentPadding,
-              initialRevealRoomName: isMobile ? widget.initialRevealRoomName : null,
-              onInitialRevealComplete: isMobile ? widget.onInitialRevealComplete : null,
               pendingCreateRoomName: widget.pendingCreateRoomName,
               pendingDeleteRoomName: widget.pendingDeleteRoomName,
               selectedRoom: widget.selectedRoom,

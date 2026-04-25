@@ -20,8 +20,6 @@ import 'update_room_perms_dialog.dart';
 String roomDisplayName(Room room) => (room.metadata['displayName'] as String? ?? room.name).trim();
 
 int _compareRoomNames(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
-const double _roomTileExtent = 40.0;
-const double _roomTileSeparatorExtent = 6.0;
 
 class NavRooms extends StatefulWidget {
   const NavRooms({
@@ -30,8 +28,6 @@ class NavRooms extends StatefulWidget {
     required this.onSelect,
     required this.rooms,
     this.contentPadding,
-    this.initialRevealRoomName,
-    this.onInitialRevealComplete,
     this.pendingCreateRoomName,
     this.pendingDeleteRoomName,
     this.onCreateRoom,
@@ -47,8 +43,6 @@ class NavRooms extends StatefulWidget {
   final ValueChanged<Room> onSelect;
   final List<Room> rooms;
   final EdgeInsetsGeometry? contentPadding;
-  final String? initialRevealRoomName;
-  final VoidCallback? onInitialRevealComplete;
   final String? pendingCreateRoomName;
   final VoidCallback? onCreateRoom;
   final ValueChanged<Room>? onDeleteStarted;
@@ -68,14 +62,11 @@ class NavRooms extends StatefulWidget {
 class _NavRoomsState extends State<NavRooms> {
   final ScrollController _scrollController = ScrollController();
   bool _hasScrollableExtent = true;
-  bool _suppressScrollCollapse = false;
-  String? _revealedInitialRoomName;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncScrollableExtent());
-    WidgetsBinding.instance.addPostFrameCallback((_) => _revealInitialRoom());
   }
 
   @override
@@ -85,10 +76,6 @@ class _NavRoomsState extends State<NavRooms> {
         oldWidget.pendingCreateRoomName != widget.pendingCreateRoomName ||
         oldWidget.pendingDeleteRoomName != widget.pendingDeleteRoomName) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _syncScrollableExtent());
-    }
-
-    if (oldWidget.initialRevealRoomName != widget.initialRevealRoomName || oldWidget.rooms != widget.rooms) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _revealInitialRoom());
     }
   }
 
@@ -117,57 +104,6 @@ class _NavRoomsState extends State<NavRooms> {
     }
   }
 
-  Future<void> _revealInitialRoom() async {
-    final roomName = widget.initialRevealRoomName;
-    if (!mounted || roomName == null || _revealedInitialRoomName == roomName) {
-      return;
-    }
-
-    final roomIndex = widget.rooms.indexWhere((room) => room.name == roomName);
-    if (roomIndex == -1) {
-      return;
-    }
-
-    if (!_scrollController.hasClients || !_scrollController.position.hasContentDimensions) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _revealInitialRoom());
-      return;
-    }
-
-    final pendingCreateIndex = widget.pendingCreateRoomName == null
-        ? null
-        : widget.rooms.indexWhere((room) => _compareRoomNames(widget.pendingCreateRoomName!, roomDisplayName(room)) < 0);
-    final resolvedPendingCreateIndex = pendingCreateIndex == null
-        ? null
-        : (pendingCreateIndex == -1 ? widget.rooms.length : pendingCreateIndex);
-    final listIndex = widget.pendingCreateRoomName != null && resolvedPendingCreateIndex != null && roomIndex >= resolvedPendingCreateIndex
-        ? roomIndex + 1
-        : roomIndex;
-    final position = _scrollController.position;
-    final targetOffset = (listIndex * (_roomTileExtent + _roomTileSeparatorExtent))
-        .clamp(position.minScrollExtent, position.maxScrollExtent)
-        .toDouble();
-
-    _revealedInitialRoomName = roomName;
-    _suppressScrollCollapse = true;
-    widget.onScrollActiveChanged?.call(false);
-    _scrollController.jumpTo(targetOffset);
-
-    if (!mounted) {
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-
-      _suppressScrollCollapse = false;
-      widget.onScrollActiveChanged?.call(false);
-      widget.onInitialRevealComplete?.call();
-      _syncScrollableExtent();
-    });
-  }
-
   @override
   void dispose() {
     _scrollController.dispose();
@@ -191,10 +127,6 @@ class _NavRoomsState extends State<NavRooms> {
       }
 
       _syncScrollableExtent(notification.metrics.maxScrollExtent);
-      if (_suppressScrollCollapse) {
-        return false;
-      }
-
       widget.onScrollActiveChanged?.call(_hasScrollableExtent && notification.metrics.pixels > collapseThreshold);
       return false;
     }
