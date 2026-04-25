@@ -12,6 +12,7 @@ import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
+import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 
@@ -383,9 +384,10 @@ class _RoomTileState extends State<_RoomTile> {
           final breakpoints = ResponsiveBreakpoints.of(context);
           final isMobile = breakpoints.isMobile;
           final menuOpen = controller.isOpen;
+          final selectedBackground = isMobile ? powerboardsAvatarAccentColor : cs.secondaryForeground;
           final bg = widget.balanceLow
               ? cs.background
-              : (_isDeleting ? cs.muted : (widget.selected ? cs.secondaryForeground : Colors.transparent));
+              : (_isDeleting ? cs.muted : (widget.selected ? selectedBackground : Colors.transparent));
           final desktopTextStyle = widget.balanceLow
               ? tt.p.copyWith(color: cs.mutedForeground)
               : (widget.selected ? tt.p.copyWith(color: cs.secondary) : tt.p);
@@ -394,11 +396,16 @@ class _RoomTileState extends State<_RoomTile> {
           );
           final mobileTextStyle = widget.balanceLow
               ? mobileReferenceTextStyle.copyWith(color: cs.mutedForeground)
-              : (widget.selected ? mobileReferenceTextStyle.copyWith(color: cs.secondary) : mobileReferenceTextStyle);
+              : mobileReferenceTextStyle;
           final baseTextStyle = isMobile ? mobileTextStyle : desktopTextStyle;
           final textColor = (baseTextStyle.color ?? cs.foreground).withValues(alpha: _isDeleting ? 0.55 : (menuOpen ? 0.5 : 1.0));
           final textStyle = baseTextStyle.copyWith(color: textColor);
-          final settingsColor = hovered || isMobile ? baseTextStyle.color : Colors.transparent;
+          final settingsIcon = isMobile && !widget.selected ? LucideIcons.chevronRight : LucideIcons.ellipsis;
+          final settingsIconSize = isMobile && !widget.selected ? 20.0 : (isMobile ? 18.0 : 20.0);
+          final unselectedMobileIconColor = Color.lerp(cs.border, cs.mutedForeground, 0.36)!;
+          final settingsColor = isMobile && !widget.selected
+              ? unselectedMobileIconColor
+              : (hovered || isMobile ? baseTextStyle.color : Colors.transparent);
           final menuItems = _buildContextMenuItems(context);
 
           return Container(
@@ -439,7 +446,7 @@ class _RoomTileState extends State<_RoomTile> {
                             width: isMobile ? _mobileRoomTileActionSlotSize : 40,
                             height: isMobile ? _mobileRoomTileActionSlotSize : 40,
                             child: Center(
-                              child: Icon(LucideIcons.ellipsis, size: isMobile ? 18 : 20, color: settingsColor),
+                              child: Icon(settingsIcon, size: settingsIconSize, color: settingsColor),
                             ),
                           ),
                         ),

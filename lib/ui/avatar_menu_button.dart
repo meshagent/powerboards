@@ -36,6 +36,7 @@ String userAvatarInitialsFromEmail(String email) {
 
 enum UserAvatarVariant { header, standard, menu }
 
+const Color powerboardsAvatarAccentColor = Color(0xFFE4E4FF);
 const double userAvatarHeaderDiameter = 40;
 const double userAvatarStandardDiameter = 32;
 const double userAvatarMenuDiameter = 24;
@@ -376,13 +377,12 @@ class UserAvatarCircle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const avatarAccent = Color(0xFFE4E4FF);
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
     final tt = theme.textTheme;
     final buttonTheme = theme.outlineButtonTheme;
-    final hoverBackgroundColor = buttonTheme.hoverBackgroundColor ?? avatarAccent;
-    final backgroundColor = avatarAccent;
+    final hoverBackgroundColor = buttonTheme.hoverBackgroundColor ?? powerboardsAvatarAccentColor;
+    const backgroundColor = powerboardsAvatarAccentColor;
     final diameter = size ?? userAvatarDiameter(variant);
     final fontSize = userAvatarInitialsFontSize(diameter);
 
