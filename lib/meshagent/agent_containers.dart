@@ -240,16 +240,16 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
         }
 
         for (final agent in service.agents) {
-          final databaseAnnotation = agent.annotations['meshagent.agent.database.schema'];
-          if (databaseAnnotation == null) {
+          final datasetAnnotation = agent.annotations['meshagent.agent.dataset.schema'];
+          if (datasetAnnotation == null) {
             continue;
           }
 
-          final databaseDef = jsonDecode(databaseAnnotation);
-          if (databaseDef is! Map<String, dynamic>) {
+          final datasetDef = jsonDecode(datasetAnnotation);
+          if (datasetDef is! Map<String, dynamic>) {
             continue;
           }
-          final tables = databaseDef['tables'];
+          final tables = datasetDef['tables'];
           if (tables is! List) {
             continue;
           }
