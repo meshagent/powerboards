@@ -208,7 +208,7 @@ Before building, replace the `--dart-define` values for:
 - `OAUTH_MOBILE_CLIENT_ID`
 
 ```dockerfile
-FROM ghcr.io/cirruslabs/flutter:3.38.10 AS flutter
+FROM ghcr.io/cirruslabs/flutter:3.41.7 AS flutter
 RUN apt update && apt install -y git
 
 COPY . /powerboards

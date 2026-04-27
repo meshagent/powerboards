@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
@@ -11,6 +10,7 @@ import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:powerboards/ui/powerboards_mobile_action_pills.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
@@ -128,8 +128,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   bool _usesMobileThreadLayout(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    return ResponsiveBreakpoints.of(context).isMobile || (size.width > size.height && size.shortestSide < 600);
+    return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
   }
 
   String _chatPlaceholderText(String? agentName) {

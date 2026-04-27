@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
@@ -24,6 +23,7 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 
 const _railGap = 16.0;
 const _compactControlWidth = 48.0;
@@ -335,12 +335,7 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
   late final toolkits = Resource<List<ToolkitDescription>>(() => widget.room.agents.listToolkits());
 
   bool _isLandscapePhoneViewport(BuildContext context) {
-    if (kIsWeb) {
-      return false;
-    }
-
-    final size = MediaQuery.sizeOf(context);
-    return size.width > size.height && size.shortestSide < 600;
+    return powerboardsIsLandscapePhoneViewport(context);
   }
 
   double _mobileTranscriptionButtonWidth(BuildContext context) {

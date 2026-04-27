@@ -333,7 +333,6 @@ class PowerboardsAdaptiveInputFormField extends ShadInputFormField {
     super.error,
     super.description,
     super.onChanged,
-    super.valueTransformer,
     super.toValueTransformer,
     super.fromValueTransformer,
     super.onReset,

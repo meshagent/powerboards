@@ -23,5 +23,10 @@ Future<void> shareRemoteStorageFileImpl({required BuildContext context, required
   final file = File(p.join(tempDirectory.path, filename));
   await file.writeAsBytes(response.bodyBytes, flush: true);
 
-  await Share.shareXFiles([XFile(file.path, mimeType: lookupMimeType(filename))], sharePositionOrigin: sharePositionOrigin);
+  await SharePlus.instance.share(
+    ShareParams(
+      files: [XFile(file.path, mimeType: lookupMimeType(filename))],
+      sharePositionOrigin: sharePositionOrigin,
+    ),
+  );
 }

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:meshagent/meshagent.dart';
@@ -11,6 +10,7 @@ import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'agent_option.dart';
@@ -54,14 +54,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
   late final canViewDeveloperLogs = widget.canViewDeveloperLogs;
 
   bool _usesMobileRoomLayout(BuildContext context) {
-    if (!kIsWeb) {
-      final size = MediaQuery.sizeOf(context);
-      if (size.width > size.height && size.shortestSide < 600) {
-        return true;
-      }
-    }
-
-    return ResponsiveBreakpoints.of(context).isMobile;
+    return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
   }
 
   Future<void> _addAgent() async {

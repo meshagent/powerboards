@@ -90,7 +90,7 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
   }
 
   Future<void> _onSelectAttachment() async {
-    final picked = await FilePicker.platform.pickFiles(dialogTitle: 'Select files', allowMultiple: true, withReadStream: true);
+    final picked = await FilePicker.pickFiles(dialogTitle: 'Select files', allowMultiple: true, withReadStream: true);
 
     if (picked == null) {
       return;

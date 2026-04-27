@@ -2,7 +2,6 @@ import 'dart:core';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
@@ -12,6 +11,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/device_manager.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 
 import 'room.dart';
 
@@ -98,12 +98,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   }
 
   bool _isLandscapePhoneViewport(BuildContext context) {
-    if (kIsWeb) {
-      return false;
-    }
-
-    final size = MediaQuery.sizeOf(context);
-    return size.width > size.height && size.shortestSide < 600;
+    return powerboardsIsLandscapePhoneViewport(context);
   }
 
   Future<void> _runWithMinimumProcessingDuration(Future<void> Function() action) async {

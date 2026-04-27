@@ -38,6 +38,7 @@ import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:powerboards/ui/powerboards_mobile_action_pills.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/text_validators.dart';
@@ -49,14 +50,7 @@ const String placeholderFileName = ".placeholder";
 const double filePaneTableHeaderHeight = 48;
 
 bool _usesAdaptiveMobileLayout(BuildContext context) {
-  if (!kIsWeb) {
-    final size = MediaQuery.sizeOf(context);
-    if (size.width > size.height && size.shortestSide < 600) {
-      return true;
-    }
-  }
-
-  return ResponsiveBreakpoints.of(context).isMobile;
+  return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
 }
 
 String _displayFileName(String fileName) {

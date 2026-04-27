@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 const powerboardsBreakpoints = [
@@ -25,4 +25,20 @@ Widget powerboardsResponsiveBreakpoints({required Widget child}) {
     landscapePlatforms: kIsWeb ? const <ResponsiveTargetPlatform>[] : null,
     child: child,
   );
+}
+
+bool powerboardsIsMobileTargetPlatform(BuildContext context) {
+  return switch (Theme.of(context).platform) {
+    TargetPlatform.android || TargetPlatform.iOS => true,
+    TargetPlatform.fuchsia || TargetPlatform.linux || TargetPlatform.macOS || TargetPlatform.windows => false,
+  };
+}
+
+bool powerboardsIsLandscapePhoneViewport(BuildContext context) {
+  if (kIsWeb || !powerboardsIsMobileTargetPlatform(context)) {
+    return false;
+  }
+
+  final size = MediaQuery.sizeOf(context);
+  return size.width > size.height && size.shortestSide < 600;
 }

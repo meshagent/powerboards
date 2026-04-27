@@ -39,6 +39,10 @@ class MeshagentConnectionResponse {
   final String roomType;
 }
 
+class _RoomConnectionScopeGlobalKey extends GlobalObjectKey {
+  const _RoomConnectionScopeGlobalKey(super.value);
+}
+
 class MeshagentConnectionBuilder extends StatefulWidget {
   const MeshagentConnectionBuilder({
     super.key,
@@ -62,9 +66,20 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   static const String _defaultConnectionStatusText = "Connecting to room";
 
   Exception? error;
-  int conectionNumber = 0;
+  Object _roomConnectionScopeIdentity = Object();
   String _lastConnectionStatusText = _defaultConnectionStatusText;
   bool _roomWasConnected = false;
+
+  @override
+  void didUpdateWidget(covariant MeshagentConnectionBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.projectId != widget.projectId || oldWidget.roomName != widget.roomName) {
+      _roomConnectionScopeIdentity = Object();
+      _lastConnectionStatusText = _defaultConnectionStatusText;
+      _roomWasConnected = false;
+    }
+  }
 
   Widget _backHeader() {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
@@ -181,7 +196,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   void _reconnect() {
     setState(() {
       _roomWasConnected = false;
-      conectionNumber += 1;
+      _roomConnectionScopeIdentity = Object();
     });
   }
 
@@ -207,7 +222,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   Widget build(BuildContext context) {
     return ShadToaster(
       child: RoomConnectionScope(
-        key: ValueKey("room-connection-${widget.roomName}-$conectionNumber"),
+        key: _RoomConnectionScopeGlobalKey(_roomConnectionScopeIdentity),
         authorization: () {
           _lastConnectionStatusText = _defaultConnectionStatusText;
           _roomWasConnected = false;

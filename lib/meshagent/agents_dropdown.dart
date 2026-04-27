@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
@@ -12,6 +11,7 @@ import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
@@ -121,12 +121,7 @@ class AgentsDropdown extends StatelessWidget {
   }
 
   bool _isLandscapePhoneViewport(BuildContext context) {
-    if (kIsWeb) {
-      return false;
-    }
-
-    final size = MediaQuery.sizeOf(context);
-    return size.width > size.height && size.shortestSide < 600;
+    return powerboardsIsLandscapePhoneViewport(context);
   }
 
   @override

@@ -543,6 +543,7 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
           connection: Duration(seconds: 30),
           debounce: Duration(milliseconds: 100),
           publish: Duration(seconds: 10),
+          subscribe: Duration(seconds: 10),
           peerConnection: Duration(seconds: 30),
           iceRestart: Duration(seconds: 30),
         ),

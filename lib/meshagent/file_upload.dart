@@ -83,12 +83,7 @@ class FileUploadHelper {
     required String path,
     required Future<void> Function(Stream<Uint8List> stream, String fileName, int size) onUpload,
   }) async {
-    final picked = await FilePicker.platform.pickFiles(
-      dialogTitle: "Select files",
-      allowMultiple: true,
-      withReadStream: true,
-      withData: kIsWeb,
-    );
+    final picked = await FilePicker.pickFiles(dialogTitle: "Select files", allowMultiple: true, withReadStream: true, withData: kIsWeb);
     if (picked == null) return;
 
     for (final file in picked.files) {

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:http/http.dart';
@@ -58,6 +58,7 @@ import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/meeting_view.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/resizable_split_view.dart';
@@ -3465,12 +3466,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   static const double _meetingActivePaneActionLeadingWidthFloor = 260;
 
   bool _isLandscapePhoneViewport(BuildContext context) {
-    if (kIsWeb) {
-      return false;
-    }
-
-    final size = MediaQuery.sizeOf(context);
-    return size.width > size.height && size.shortestSide < 600;
+    return powerboardsIsLandscapePhoneViewport(context);
   }
 
   bool _usesMobileRoomLayout(BuildContext context) {
