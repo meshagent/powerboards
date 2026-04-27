@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class NewProjectDialog extends StatelessWidget {
@@ -9,8 +10,7 @@ class NewProjectDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tt = ShadTheme.of(context).textTheme;
-    final labelStyle = tt.small.copyWith(fontWeight: FontWeight.w600);
+    final labelStyle = powerboardsFieldLabelTextStyle(context);
 
     return PowerboardsShadDialog.compact(
       title: Text("New Project"),
@@ -26,7 +26,7 @@ class NewProjectDialog extends StatelessWidget {
               Navigator.of(context).pop(name);
             }
           },
-          child: const Text('Create Project'),
+          child: const Text('Create'),
         ),
       ],
       child: ShadForm(
@@ -36,7 +36,7 @@ class NewProjectDialog extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              ShadInputFormField(
+              PowerboardsAdaptiveInputFormField(
                 id: 'name',
                 label: Text('Name', style: labelStyle),
                 placeholder: Text('e.g. General'),
@@ -63,7 +63,7 @@ class NewProjectDialog extends StatelessWidget {
 Future<String?> showNewProjectDialog(BuildContext context) {
   final formKey = GlobalKey<ShadFormState>();
 
-  return showShadDialog<String?>(
+  return showPowerboardsAlertDialog<String?>(
     context: context,
     builder: (context) => NewProjectDialog(formKey: formKey),
   );

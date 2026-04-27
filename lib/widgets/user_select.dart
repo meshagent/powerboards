@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class UserSelect extends StatefulWidget {
@@ -121,7 +122,7 @@ class _UserSelectState extends State<UserSelect> {
                     onPointerDown: (event) {
                       popoverController.setOpen(true);
                     },
-                    child: ShadInput(
+                    child: PowerboardsAdaptiveInput(
                       textInputAction: TextInputAction.done,
                       padding: const EdgeInsets.all(8),
                       decoration: ShadDecoration.none,
@@ -145,7 +146,7 @@ class _UserSelectState extends State<UserSelect> {
                     child: ShadBadge(
                       padding: const EdgeInsets.all(4),
                       child: Padding(
-                        padding: const EdgeInsets.only(left: 10, right: 6),
+                        padding: const EdgeInsets.only(left: 16, right: 6),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           spacing: 8,

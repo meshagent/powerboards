@@ -5,14 +5,12 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:file_icon/file_icon.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/document.dart';
@@ -27,6 +25,8 @@ import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
+import 'package:powerboards/meshagent/file_list_primitives.dart';
+import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
@@ -37,6 +37,9 @@ import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
+import 'package:powerboards/ui/powerboards_mobile_action_pills.dart';
+import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/text_validators.dart';
 
 import 'file_upload.dart';
@@ -165,11 +168,47 @@ class _FilePathKey {
   static bool isFolderKey(String key) => key.endsWith('/');
 }
 
+class FileManagerViewController {
+  Future<void> Function()? _createFolderInCurrentLocation;
+  void Function()? _createTextFileInCurrentLocation;
+  Future<void> Function()? _addFilesInCurrentLocation;
+  Future<void> Function()? _shareOpenedFileInCurrentLocation;
+
+  Future<void> createFolderInCurrentLocation() async {
+    final action = _createFolderInCurrentLocation;
+    if (action == null) {
+      return;
+    }
+    await action();
+  }
+
+  void createTextFileInCurrentLocation() {
+    _createTextFileInCurrentLocation?.call();
+  }
+
+  Future<void> addFilesInCurrentLocation() async {
+    final action = _addFilesInCurrentLocation;
+    if (action == null) {
+      return;
+    }
+    await action();
+  }
+
+  Future<void> shareOpenedFileInCurrentLocation() async {
+    final action = _shareOpenedFileInCurrentLocation;
+    if (action == null) {
+      return;
+    }
+    await action();
+  }
+}
+
 class FileManagerView extends StatefulWidget {
   final RoomClient client;
   final Resource<List<ServiceSpec>>? services;
   final bool hideSystem;
   final bool mobileShellOwnsHeader;
+  final FileManagerViewController? controller;
   final List<Widget> desktopHeaderActions;
   final double desktopHeaderActionLeadingWidthFloor;
   final double desktopHeaderActionMinimumLeadingWidth;
@@ -181,6 +220,7 @@ class FileManagerView extends StatefulWidget {
     this.services,
     this.hideSystem = false,
     this.mobileShellOwnsHeader = false,
+    this.controller,
     this.desktopHeaderActions = const [],
     this.desktopHeaderActionLeadingWidthFloor = 0,
     this.desktopHeaderActionMinimumLeadingWidth = 0,
@@ -192,7 +232,7 @@ class FileManagerView extends StatefulWidget {
 }
 
 class _FileManagerViewState extends State<FileManagerView> {
-  static TextStyle breadcrumbLinkStyle = GoogleFonts.inter(fontSize: 16, fontWeight: .w600);
+  static TextStyle breadcrumbLinkStyle = powerboardsSectionTitleStyle();
   static const String _threadIndexFileName = 'index.threadl';
 
   _FileLocation _location = const _FileLocation(folder: "", openedFile: null);
@@ -257,6 +297,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   void initState() {
     super.initState();
     roomSub = widget.client.listen(_onRoomEvent);
+    _bindController(widget.controller);
     unawaited(_rebindThreadIndexDocument());
   }
 
@@ -267,7 +308,17 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   @override
+  void didUpdateWidget(covariant FileManagerView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      _unbindController(oldWidget.controller);
+      _bindController(widget.controller);
+    }
+  }
+
+  @override
   void dispose() {
+    _unbindController(widget.controller);
     _isDisposing = true;
     roomSub.cancel();
 
@@ -289,6 +340,34 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     widget.client.localParticipant?.setAttribute("current_file", null);
     super.dispose();
+  }
+
+  void _bindController(FileManagerViewController? controller) {
+    if (controller == null) {
+      return;
+    }
+
+    controller._createFolderInCurrentLocation = () => _addFolder(_folderSig.value);
+    controller._createTextFileInCurrentLocation = _showNewTextFileDialog;
+    controller._addFilesInCurrentLocation = () => _addFiles(_folderSig.value);
+    controller._shareOpenedFileInCurrentLocation = () async {
+      final openedFile = _openedFile;
+      if (openedFile == null || !supportsNativeFileShare) {
+        return;
+      }
+      await _shareFile(openedFile);
+    };
+  }
+
+  void _unbindController(FileManagerViewController? controller) {
+    if (controller == null) {
+      return;
+    }
+
+    controller._createFolderInCurrentLocation = null;
+    controller._createTextFileInCurrentLocation = null;
+    controller._addFilesInCurrentLocation = null;
+    controller._shareOpenedFileInCurrentLocation = null;
   }
 
   void _setLocation() {
@@ -481,7 +560,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   String _displayNameForPath(String path) {
     final fileName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
     if (isThreadPath(path)) {
-      return threadFileDisplayNameFromPath(path, threadDisplayName: _threadDisplayNamesByPath[path]);
+      final normalizedPath = normalizeThreadStoragePath(path);
+      return threadFileDisplayNameFromPath(path, threadDisplayName: _threadDisplayNamesByPath[normalizedPath]);
     }
     return _displayFileName(fileName);
   }
@@ -518,14 +598,12 @@ class _FileManagerViewState extends State<FileManagerView> {
       return;
     }
     _refreshThreadDisplayNames();
-    unawaited(_backfillThreadDisplayNames());
   }
 
   Future<void> _rebindThreadIndexDocument() async {
     final nextThreadIndexPath = _threadIndexPathForFolder(_folderSig.value);
     if (_threadIndexPath == nextThreadIndexPath && _threadIndexDocument != null) {
       _refreshThreadDisplayNames();
-      unawaited(_backfillThreadDisplayNames());
       return;
     }
 
@@ -555,7 +633,6 @@ class _FileManagerViewState extends State<FileManagerView> {
       _threadIndexDocument = document;
       _threadIndexPath = nextThreadIndexPath;
       _refreshThreadDisplayNames();
-      unawaited(_backfillThreadDisplayNames());
     } catch (_) {
       if (!_canUpdateUi) {
         return;
@@ -579,7 +656,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         if (rawPath is! String) {
           continue;
         }
-        final path = rawPath.trim();
+        final path = normalizeThreadStoragePath(rawPath);
         if (path.isEmpty) {
           continue;
         }
@@ -608,74 +685,18 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
   }
 
-  Future<void> _backfillThreadDisplayNames() async {
-    if (!_canUpdateUi) {
-      return;
-    }
-
-    final entries = storageEntries.state.value;
-    if (entries == null) {
-      return;
-    }
-
-    final currentFolder = _folderSig.value;
-    for (final entry in entries) {
-      if (entry.isFolder || !isThreadFileName(entry.name)) {
-        continue;
-      }
-
-      final path = joinPaths(currentFolder, entry.name);
-      if (!shouldReadThreadDocumentForDisplayName(path)) {
-        continue;
-      }
-
-      final currentDisplayName = _threadDisplayNamesByPath[path];
-      if (!shouldBackfillThreadDisplayName(currentDisplayName) || _threadTitleResolutionsInFlight.contains(path)) {
-        continue;
-      }
-
-      _threadTitleResolutionsInFlight.add(path);
-      unawaited(_resolveAndStoreThreadDisplayName(path: path));
-    }
-  }
-
   MeshElement? _threadNodeForPath(String path) {
     final document = _threadIndexDocument;
     if (document == null) {
       return null;
     }
 
+    final normalizedPath = normalizeThreadStoragePath(path);
+
     return document.root.getChildren().whereType<MeshElement>().firstWhereOrNull((node) {
-      return node.tagName == 'thread' && node.getAttribute('path') == path;
+      final nodePath = node.getAttribute('path');
+      return node.tagName == 'thread' && nodePath is String && normalizeThreadStoragePath(nodePath) == normalizedPath;
     });
-  }
-
-  Future<void> _resolveAndStoreThreadDisplayName({required String path}) async {
-    try {
-      final document = await widget.client.sync.open(path);
-      try {
-        final resolvedName = deriveThreadDisplayNameFromDocument(document);
-        if (!_canUpdateUi || resolvedName == null || resolvedName.trim().isEmpty) {
-          return;
-        }
-
-        final latestNode = _threadNodeForPath(path);
-        if (latestNode != null && shouldBackfillThreadDisplayName(latestNode.getAttribute('name') as String?)) {
-          latestNode.setAttribute('name', resolvedName);
-        }
-        setState(() {
-          _threadDisplayNamesByPath = <String, String>{..._threadDisplayNamesByPath, path: resolvedName};
-        });
-      } finally {
-        try {
-          await widget.client.sync.close(path);
-        } catch (_) {}
-      }
-    } catch (_) {
-      return;
-    } finally {
-      _threadTitleResolutionsInFlight.remove(path);
-    }
   }
 
   void _removePath(String path, {isFolder = false}) {
@@ -701,7 +722,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     } else if (!hasThreadIndex && _threadIndexPath == expectedThreadIndexPath && _threadIndexDocument != null) {
       unawaited(_closeThreadIndexDocument());
     }
-    unawaited(_backfillThreadDisplayNames());
   }
 
   void _setSort(FileSort sort) {
@@ -765,6 +785,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
     updatedQueryParameters['p'] = path.isEmpty ? '' : (isFolder ? '$path/' : path);
+    updatedQueryParameters.remove(filePreviewOriginQueryParameter);
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
     context.go(newUri.toString());
@@ -783,7 +804,17 @@ class _FileManagerViewState extends State<FileManagerView> {
     _openEntry(files[nextIndex], false);
   }
 
-  void _closeFile() => _openEntry(_folderSig.value, true);
+  void _closeFile() {
+    final currentUri = PathRouteMatch.of(context).uri;
+    final previewOrigin = currentUri.queryParameters[filePreviewOriginQueryParameter];
+    if (previewOrigin != null && previewOrigin.isNotEmpty && previewOrigin != currentUri.toString()) {
+      context.go(previewOrigin);
+      return;
+    }
+
+    _openEntry(_folderSig.value, true);
+  }
+
   void _previousFile() => _cycleFile(-1);
   void _nextFile() => _cycleFile(1);
 
@@ -863,9 +894,32 @@ class _FileManagerViewState extends State<FileManagerView> {
     return null;
   }
 
+  bool _usesThreadDisplayNameRename(String fullPath, {required bool isFolder}) {
+    return !isFolder && isThreadPath(fullPath);
+  }
+
+  String _renameFieldInitialValue(String fullPath, {required bool isFolder}) {
+    if (_usesThreadDisplayNameRename(fullPath, isFolder: isFolder)) {
+      final normalizedPath = normalizeThreadStoragePath(fullPath);
+      return threadFileDisplayNameFromPath(fullPath, threadDisplayName: _threadDisplayNamesByPath[normalizedPath]);
+    }
+
+    return p.basename(fullPath);
+  }
+
+  String _renameConflictDisplayName(String nextName, {required bool isFolder}) {
+    if (!isFolder && isThreadFileName(nextName)) {
+      return threadFileDisplayNameFromPath(nextName);
+    }
+
+    return nextName;
+  }
+
   Future<String?> _promptRenamePath(String fullPath, {required bool isFolder}) async {
-    final currentName = p.basename(fullPath);
-    return await showShadDialog<String>(
+    final initialValue = _renameFieldInitialValue(fullPath, isFolder: isFolder);
+    final usesThreadDisplayNameRename = _usesThreadDisplayNameRename(fullPath, isFolder: isFolder);
+
+    return await showPowerboardsAlertDialog<String>(
       context: context,
       builder: (context) {
         return ControlledForm(
@@ -882,7 +936,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
             return PowerboardsShadDialog.compact(
               crossAxisAlignment: CrossAxisAlignment.start,
-              title: Text(isFolder ? "Rename folder" : "Rename file"),
+              title: Text(isFolder ? "Rename folder" : (usesThreadDisplayNameRename ? "Rename thread" : "Rename file")),
               actions: [
                 ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
                 ShadButton(onPressed: submit, child: const Text("Rename")),
@@ -894,9 +948,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
                   children: [
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
                       id: "name",
-                      initialValue: currentName,
+                      initialValue: initialValue,
                       validator: _validateRenameInput,
                       label: const Text("Name"),
                       autofocus: true,
@@ -913,16 +967,39 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _renamePath(String fullPath, {required bool isFolder}) async {
+    final usesThreadDisplayNameRename = _usesThreadDisplayNameRename(fullPath, isFolder: isFolder);
     final currentName = p.basename(fullPath);
     final nextName = await _promptRenamePath(fullPath, isFolder: isFolder);
     if (!mounted) {
       return;
     }
-    if (nextName == null || nextName == currentName) {
+    if (nextName == null) {
       return;
     }
 
-    final destinationPath = joinPaths(parentPath(fullPath), nextName);
+    if (usesThreadDisplayNameRename) {
+      final currentDisplayName = _renameFieldInitialValue(fullPath, isFolder: isFolder);
+      if (nextName == currentDisplayName) {
+        return;
+      }
+
+      final threadNode = _threadNodeForPath(fullPath);
+      if (threadNode != null) {
+        threadNode.setAttribute('name', nextName);
+        final normalizedPath = normalizeThreadStoragePath(fullPath);
+        setState(() {
+          _threadDisplayNamesByPath = <String, String>{..._threadDisplayNamesByPath, normalizedPath: nextName};
+        });
+        return;
+      }
+    }
+
+    final resolvedNextName = usesThreadDisplayNameRename ? threadFileNameFromDisplayName(nextName) : nextName;
+    if (resolvedNextName == currentName) {
+      return;
+    }
+
+    final destinationPath = joinPaths(parentPath(fullPath), resolvedNextName);
     final toaster = ShadToaster.of(context);
 
     try {
@@ -934,7 +1011,9 @@ class _FileManagerViewState extends State<FileManagerView> {
         toaster.show(
           ShadToast.destructive(
             title: const Text("Rename failed"),
-            description: Text("${isFolder ? 'Folder' : 'File'} `$nextName` already exists in this location."),
+            description: Text(
+              "${isFolder ? 'Folder' : 'File'} `${_renameConflictDisplayName(resolvedNextName, isFolder: isFolder)}` already exists in this location.",
+            ),
             duration: const Duration(seconds: 5),
           ),
         );
@@ -1051,7 +1130,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _addFolder(String path) async {
-    final result = await showShadDialog<String>(
+    final result = await showPowerboardsAlertDialog<String>(
       context: context,
       builder: (context) {
         return ControlledForm(
@@ -1087,7 +1166,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
                   children: [
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
                       initialValue: "",
                       validator: TextValidators.folder,
                       id: "name",
@@ -1114,7 +1193,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   Future<bool> _confirmAndDelete(String fullPath, bool isFolder) async {
     final name = fullPath.split('/').where((s) => s.isNotEmpty).last;
     final displayName = isFolder ? name : _displayNameForPath(fullPath);
-    final bool? confirmDelete = await showShadDialog<bool>(
+    final bool? confirmDelete = await showPowerboardsAlertDialog<bool>(
       context: context,
       builder: (context) => PowerboardsShadDialog.compactAlert(
         title: const Text("Confirm Delete"),
@@ -1157,7 +1236,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       return _displayNameForPath(path);
     }).toList();
 
-    final confirmDelete = await showShadDialog<bool>(
+    final confirmDelete = await showPowerboardsAlertDialog<bool>(
       context: context,
       builder: (context) => PowerboardsShadDialog.compactAlert(
         title: const Text("Confirm Delete"),
@@ -1263,7 +1342,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _showNewTextFileDialog() {
-    showShadDialog<String>(
+    showPowerboardsAlertDialog<String>(
       context: context,
       builder: (context) {
         return ControlledForm(
@@ -1279,7 +1358,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               String? resolvedName = trimmedName;
 
               if (!trimmedName.contains('.')) {
-                resolvedName = await showShadDialog<String>(
+                resolvedName = await showPowerboardsAlertDialog<String>(
                   context: context,
                   builder: (context) {
                     return PowerboardsShadDialog.compact(
@@ -1319,7 +1398,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   mainAxisSize: MainAxisSize.min,
                   spacing: 16,
                   children: [
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
                       id: "name",
                       initialValue: "",
                       validator: (value) => value.trim().isEmpty ? "File name cannot be empty" : null,
@@ -1436,6 +1515,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildActionsMenu(BuildContext? boundaryContext, String fullPath, bool isFolder, bool showTrigger) {
+    final isAdaptiveMobile = _usesAdaptiveMobileLayout(context);
+
     Future<void> onAction(_FileAction action) async {
       switch (action) {
         case _FileAction.open:
@@ -1497,7 +1578,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             onPressed: () => onAction(_FileAction.open),
             child: const Text('Open'),
           ),
-        if (!isFolder)
+        if (!isFolder && !isAdaptiveMobile)
           ShadContextMenuItem(
             height: 40.0,
             leading: const Icon(LucideIcons.download, size: 16),
@@ -1583,6 +1664,33 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     return _buildMobileToolbar(selected);
+  }
+
+  Widget _buildAdaptiveMobileScrollAwareSecondaryRow(Widget child) {
+    if (!(widget.mobileShellOwnsHeader && _usesAdaptiveMobileLayout(context))) {
+      return child;
+    }
+
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final collapseProgress = overlayHeaderScope?.collapseProgress ?? 0;
+    final hideForScroll = collapseProgress > 0.1;
+
+    return AnimatedSwitcher(
+      duration: powerboardsMobileOverlayHeaderTransitionDuration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) {
+        return ClipRect(
+          child: FadeTransition(
+            opacity: animation,
+            child: SizeTransition(sizeFactor: animation, axisAlignment: -1.0, child: child),
+          ),
+        );
+      },
+      child: hideForScroll
+          ? const SizedBox.shrink(key: ValueKey('files-mobile-secondary-row-hidden'))
+          : KeyedSubtree(key: const ValueKey('files-mobile-secondary-row-visible'), child: child),
+    );
   }
 
   Widget _buildDesktopToolbar(Set<String> selected) {
@@ -1816,10 +1924,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  TextStyle _mobileOpenedFileTextActionStyle(Color color) {
-    return GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: color);
-  }
-
   Future<void> _saveAdaptiveMobileEdits() async {
     await _codePreviewController.save();
 
@@ -1842,94 +1946,62 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  Widget _buildAdaptiveMobileOpenedFileIconButton({
-    required String tooltip,
-    required IconData icon,
-    required VoidCallback onPressed,
-    bool destructive = false,
-  }) {
-    final button = destructive
-        ? ShadIconButton.destructive(
-            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
-            onPressed: onPressed,
-          )
-        : ShadIconButton.outline(
-            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
-            onPressed: onPressed,
-          );
-
-    return Tooltip(message: tooltip, child: button);
-  }
-
-  Widget _buildAdaptiveMobileOpenedFileTextAction() {
+  PowerboardsMobileActionPillItem _buildAdaptiveMobileOpenedFilePrimaryPillItem() {
     if (!_openedFileSupportsEditTabs) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        child: Text("Preview", style: _mobileOpenedFileTextActionStyle(shadForeground)),
-      );
+      return const PowerboardsMobileActionPillItem(label: "Preview", selected: true);
     }
 
     if (_tab != 'edit') {
-      return ShadButton.ghost(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        onPressed: () => setState(() => _tab = 'edit'),
-        child: Text("Edit this file", style: _mobileOpenedFileTextActionStyle(shadForeground)),
-      );
+      return PowerboardsMobileActionPillItem(label: "Edit this file", onPressed: () => setState(() => _tab = 'edit'));
     }
 
-    return AnimatedBuilder(
-      animation: _codePreviewController,
-      builder: (context, _) {
-        return ShadButton.ghost(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          onPressed: _saveAdaptiveMobileEdits,
-          child: Text("Save your edits", style: _mobileOpenedFileTextActionStyle(shadDestructive)),
-        );
-      },
-    );
+    return PowerboardsMobileActionPillItem(label: "Save your edits", selected: true, onPressed: _saveAdaptiveMobileEdits);
   }
 
   Widget _buildAdaptiveMobileOpenedFileToolbar() {
-    return SizedBox(
-      height: powerboardsMobileSecondaryRowHeight,
-      child: Center(
-        child: Padding(
-          padding: powerboardsMobileSecondaryRowPadding,
-          child: Row(
-            children: [
-              _buildAdaptiveMobileOpenedFileTextAction(),
-              const Spacer(),
-              if (supportsNativeFileShare) ...[
-                _buildAdaptiveMobileOpenedFileIconButton(
-                  tooltip: "Share",
-                  icon: LucideIcons.share,
-                  onPressed: () => _shareFile(_openedFile!),
-                ),
-                const SizedBox(width: 8),
-              ],
-              _buildAdaptiveMobileOpenedFileIconButton(
-                tooltip: "Download",
-                icon: LucideIcons.download,
-                onPressed: () => _downloadFile(_openedFile!),
-              ),
-              const SizedBox(width: 8),
-              _buildAdaptiveMobileOpenedFileIconButton(
-                tooltip: "Delete file",
-                icon: LucideIcons.trash,
-                destructive: true,
-                onPressed: () async {
-                  final openedFile = _openedFile;
-                  if (openedFile == null) {
-                    return;
-                  }
+    final theme = ShadTheme.of(context);
+    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
+    final primaryPill = _buildAdaptiveMobileOpenedFilePrimaryPillItem();
+    final deletePill = PowerboardsMobileActionPillItem(
+      label: "Delete",
+      selected: true,
+      destructive: true,
+      onPressed: () async {
+        final openedFile = _openedFile;
+        if (openedFile == null) {
+          return;
+        }
 
-                  final confirmDelete = await _confirmAndDelete(openedFile, false);
-                  if (confirmDelete == true) {
-                    _openEntry(_folderSig.value, true);
-                  }
-                },
-              ),
-            ],
+        final confirmDelete = await _confirmAndDelete(openedFile, false);
+        if (confirmDelete == true) {
+          _openEntry(_folderSig.value, true);
+        }
+      },
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(top: powerboardsMobileOverlaySecondaryRowLift),
+      child: SizedBox(
+        height: powerboardsMobileSecondaryRowHeight,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: powerboardsMobileShellHorizontalInset),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: PowerboardsMobileActionPillStrip(
+                      items: [primaryPill, deletePill],
+                      textStyle: pillTextStyle,
+                      unselectedForegroundColor: theme.colorScheme.foreground,
+                      itemGap: 10,
+                      pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1944,6 +2016,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       message: "Select items",
       child: (_forceShowSelect ? ShadIconButton.new : ShadIconButton.outline)(
         icon: const Icon(LucideIcons.squareCheckBig),
+        decoration: powerboardsAdaptiveIconButtonDecoration(context),
         onPressed: _toggleForceShowSelect,
       ),
     );
@@ -1982,7 +2055,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     return [
       Tooltip(
         message: "Close file",
-        child: ShadIconButton.ghost(icon: const Icon(LucideIcons.x), onPressed: _closeFile),
+        child: ShadIconButton.ghost(
+          icon: const Icon(LucideIcons.x),
+          decoration: powerboardsAdaptiveIconButtonDecoration(context),
+          onPressed: _closeFile,
+        ),
       ),
     ];
   }
@@ -1994,12 +2071,20 @@ class _FileManagerViewState extends State<FileManagerView> {
       if (canCycleFiles)
         Tooltip(
           message: "Previous file",
-          child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronLeft), onPressed: _previousFile),
+          child: ShadIconButton.outline(
+            icon: const Icon(LucideIcons.chevronLeft),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: _previousFile,
+          ),
         ),
       if (canCycleFiles)
         Tooltip(
           message: "Next file",
-          child: ShadIconButton.outline(icon: const Icon(LucideIcons.chevronRight), onPressed: _nextFile),
+          child: ShadIconButton.outline(
+            icon: const Icon(LucideIcons.chevronRight),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: _nextFile,
+          ),
         ),
     ];
   }
@@ -2012,29 +2097,33 @@ class _FileManagerViewState extends State<FileManagerView> {
       return [
         if (showLegacyMobileEditActions && _openedFileSupportsEditTabs) _buildOpenFileTabs(),
         if (showLegacyMobileEditActions && _openedFileSupportsExternalSave) _buildExternalSaveButton(compact: true),
-        if (supportsNativeFileShare)
+        if (supportsNativeFileShare && !widget.mobileShellOwnsHeader)
           Tooltip(
             message: "Share",
             child: ShadIconButton.outline(
               icon: const Icon(LucideIcons.share),
+              decoration: powerboardsAdaptiveIconButtonDecoration(context),
               onPressed: () {
                 _shareFile(_openedFile!);
               },
             ),
           ),
-        Tooltip(
-          message: "Download",
-          child: ShadIconButton.outline(
-            icon: const Icon(LucideIcons.download),
-            onPressed: () {
-              _downloadFile(_openedFile!);
-            },
+        if (!isMobile)
+          Tooltip(
+            message: "Download",
+            child: ShadIconButton.outline(
+              icon: const Icon(LucideIcons.download),
+              decoration: powerboardsAdaptiveIconButtonDecoration(context),
+              onPressed: () {
+                _downloadFile(_openedFile!);
+              },
+            ),
           ),
-        ),
         Tooltip(
           message: "Delete file",
           child: ShadIconButton.outline(
             icon: const Icon(LucideIcons.trash),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
             onPressed: () async {
               final confirmDelete = await _confirmAndDelete(_openedFile!, false);
               if (confirmDelete == true) {
@@ -2050,6 +2139,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           message: "New folder",
           child: ShadIconButton.outline(
             icon: const Icon(LucideIcons.folderPlus),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
             onPressed: () {
               _addFolder(_folderSig.value);
             },
@@ -2061,6 +2151,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             message: "Upload photo",
             child: ShadIconButton.outline(
               icon: const Icon(LucideIcons.imagePlus),
+              decoration: powerboardsAdaptiveIconButtonDecoration(context),
               onPressed: () {
                 _addPhotos(_folderSig.value);
               },
@@ -2094,7 +2185,11 @@ class _FileManagerViewState extends State<FileManagerView> {
       childBuilder: (context, controller) {
         return Tooltip(
           message: "Upload file",
-          child: ShadIconButton.outline(icon: const Icon(LucideIcons.upload), onPressed: controller.toggle),
+          child: ShadIconButton.outline(
+            icon: const Icon(LucideIcons.upload),
+            decoration: powerboardsAdaptiveIconButtonDecoration(context),
+            onPressed: controller.toggle,
+          ),
         );
       },
     );
@@ -2210,7 +2305,11 @@ class _FileManagerViewState extends State<FileManagerView> {
           .toList(growable: false),
       child: Tooltip(
         message: "Browse collapsed path",
-        child: ShadIconButton.outline(icon: const Icon(LucideIcons.folderTree), onPressed: _collapsedBreadcrumbMenuController.toggle),
+        child: ShadIconButton.outline(
+          icon: const Icon(LucideIcons.folderTree),
+          decoration: powerboardsAdaptiveIconButtonDecoration(context),
+          onPressed: _collapsedBreadcrumbMenuController.toggle,
+        ),
       ),
     );
   }
@@ -2449,26 +2548,27 @@ class _FileManagerViewState extends State<FileManagerView> {
               final hasOpenedFile = _openedFile != null;
               final hideEmbeddedMobileToolbar = isAdaptiveMobile && !hasOpenedFile;
               final showAdaptiveOpenedFileDivider = isAdaptiveMobile && hasOpenedFile;
+              final adaptiveSecondaryRow = showAdaptiveOpenedFileDivider
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildToolbar(selected),
+                        const SizedBox(height: desktopPaneSecondaryRowContentGap),
+                      ],
+                    )
+                  : hideEmbeddedMobileToolbar
+                  ? const SizedBox.shrink()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildToolbar(selected),
+                        const SizedBox(height: desktopPaneSecondaryRowContentGap),
+                      ],
+                    );
               return Column(
                 crossAxisAlignment: .start,
                 children: [
-                  if (showAdaptiveOpenedFileDivider)
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        border: Border(bottom: BorderSide(color: shadBorder.withValues(alpha: 0.5))),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildToolbar(selected),
-                          const SizedBox(height: desktopPaneSecondaryRowContentGap),
-                        ],
-                      ),
-                    )
-                  else ...[
-                    _buildToolbar(selected),
-                    if (!hideEmbeddedMobileToolbar) const SizedBox(height: desktopPaneSecondaryRowContentGap),
-                  ],
+                  _buildAdaptiveMobileScrollAwareSecondaryRow(adaptiveSecondaryRow),
                   Expanded(
                     child: IndexedStack(
                       index: _openedFile == null ? 0 : 1,
@@ -2583,9 +2683,10 @@ class FileTableView extends StatefulWidget {
 }
 
 class _FileTableViewState extends State<FileTableView> {
-  static TextStyle dataStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x22, 0x22, 0x22));
-  static TextStyle headerStyle = GoogleFonts.inter(fontSize: 14, fontWeight: .w500, color: .fromARGB(255, 0x66, 0x66, 0x66));
+  static TextStyle get dataStyle => powerboardsFileListTitleStyle();
+  static TextStyle get headerStyle => powerboardsFileListMetadataStyle();
   static const List<String> _sizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
+  static const BorderRadius _fileCheckboxRadius = BorderRadius.all(Radius.circular(6));
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
   final GlobalKey _tableCardKey = GlobalKey();
@@ -2697,33 +2798,8 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
-  IconData? _iconDataFor(StorageEntry entry) {
-    if (entry.isFolder) return LucideIcons.folder;
-    if (entry.name.endsWith('presentation')) return LucideIcons.presentation;
-    if (entry.name.endsWith('document')) return LucideIcons.fileText;
-    if (entry.name.endsWith('gallery')) return LucideIcons.image;
-
-    return null;
-  }
-
   Widget _getIcon(StorageEntry entry) {
-    final iconData = _iconDataFor(entry);
-    const iconSize = 34.0;
-    const paddedIconSize = 24.0;
-
-    return SizedBox(
-      width: iconSize,
-      height: iconSize,
-      child: iconData != null
-          ? Center(
-              child: Icon(
-                iconData,
-                size: paddedIconSize,
-                color: entry.isFolder ? ShadTheme.of(context).colorScheme.secondaryForeground : null,
-              ),
-            )
-          : FileIcon(entry.name, size: iconSize),
-    );
+    return buildPowerboardsFileListIcon(context, entry);
   }
 
   Widget _getLabel(String text) {
@@ -2766,10 +2842,6 @@ class _FileTableViewState extends State<FileTableView> {
     return MouseRegion(opaque: true, onEnter: (_) => _setHovered(rowKey), onExit: (_) => _clearHoveredIf(rowKey), child: child);
   }
 
-  Icon _sortIcon(bool ascending, {Color color = shadMutedForeground}) {
-    return Icon(ascending ? LucideIcons.arrowUp : LucideIcons.arrowDown, size: 16, color: color);
-  }
-
   Widget _fileSelectionCheckbox({required bool value, required ShadDecoration decoration, ValueChanged<bool?>? onChanged}) {
     final checkboxForeground = ShadTheme.of(context).colorScheme.primaryForeground;
 
@@ -2781,121 +2853,113 @@ class _FileTableViewState extends State<FileTableView> {
     );
   }
 
-  Widget _buildMobileHeaderActionButton({
-    required String tooltip,
-    required IconData icon,
-    required VoidCallback onPressed,
-    bool destructive = false,
-  }) {
-    final button = destructive
-        ? ShadIconButton.destructive(
-            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
-            onPressed: onPressed,
-          )
-        : ShadIconButton.outline(
-            icon: Icon(icon, size: paneHeaderIconButtonIconSize),
-            onPressed: onPressed,
-          );
-
-    return Tooltip(message: tooltip, child: button);
-  }
-
-  Widget _buildMobileSelectionHeaderButton() {
+  PowerboardsMobileActionPillItem _buildMobileSelectionHeaderPillItem() {
     final selectionActive = widget.forceShowSelect;
-    final label = selectionActive ? 'Cancel' : 'Select';
-    final textColor = selectionActive ? shadDestructive : shadForeground;
-
-    return ShadButton.ghost(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+    return PowerboardsMobileActionPillItem(
+      label: selectionActive ? 'Exit' : 'Select',
+      selected: selectionActive,
       onPressed: selectionActive ? widget.onClearSelectionMode : widget.onActivateSelectionMode,
-      child: Text(
-        label,
-        style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: textColor),
-      ),
     );
   }
 
-  Widget _buildMobileSortHeaderButton() {
+  PowerboardsMobileActionPillItem _buildMobileSortHeaderPillItem({String label = 'Sort by name'}) {
     final isNameSort = widget.sort.field == FileSortField.name;
-
-    return ShadButton.ghost(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+    final descending = isNameSort && !widget.sort.ascending;
+    return PowerboardsMobileActionPillItem(
+      label: label,
+      selected: descending,
       onPressed: () => widget.onSortChanged(FileSort(FileSortField.name, isNameSort ? !widget.sort.ascending : true)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Sort by name', style: headerStyle.copyWith(color: shadMutedForeground)),
-          const SizedBox(width: 6),
-          _sortIcon(widget.sort.ascending, color: shadMutedForeground),
-        ],
-      ),
     );
   }
 
-  Widget _buildMobileSelectedActions() {
-    if (!widget.forceShowSelect) {
-      return const SizedBox.shrink();
-    }
-
-    final showDownloadAction = widget.selected.isNotEmpty && widget.selected.every((key) => !_FilePathKey.isFolderKey(key));
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (showDownloadAction) ...[
-          _buildMobileHeaderActionButton(tooltip: "Download selected", icon: LucideIcons.download, onPressed: widget.onDownloadSelected),
-          const SizedBox(width: 8),
-        ],
-        _buildMobileHeaderActionButton(
-          tooltip: "Delete selected",
-          icon: LucideIcons.trash,
-          onPressed: widget.onDeleteSelected,
-          destructive: true,
-        ),
-      ],
-    );
+  PowerboardsMobileActionPillItem _buildMobileDeleteHeaderPillItem() {
+    return PowerboardsMobileActionPillItem(label: "Delete", selected: true, destructive: true, onPressed: widget.onDeleteSelected);
   }
 
   Widget _buildMobileHeader(bool showSelectColumn, bool? selectAllValue) {
-    final selectButton = _buildMobileSelectionHeaderButton();
-    final sortButton = _buildMobileSortHeaderButton();
-    final selectionActions = _buildMobileSelectedActions();
+    final theme = ShadTheme.of(context);
     final showSelectionModeActions = widget.forceShowSelect;
+    final compactToolbarWidth = MediaQuery.sizeOf(context).width < 390;
+    final sortLabel = showSelectionModeActions && compactToolbarWidth ? 'Sort by…' : 'Sort by name';
+    final pills = <PowerboardsMobileActionPillItem>[
+      _buildMobileSelectionHeaderPillItem(),
+      _buildMobileSortHeaderPillItem(label: sortLabel),
+      if (showSelectionModeActions) _buildMobileDeleteHeaderPillItem(),
+    ];
+    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
+    final pillGap = showSelectionModeActions && compactToolbarWidth ? 8.0 : 10.0;
+    final pillPadding = showSelectionModeActions && compactToolbarWidth
+        ? const EdgeInsets.symmetric(horizontal: 14, vertical: 11)
+        : const EdgeInsets.symmetric(horizontal: 17, vertical: 11);
 
-    return SizedBox(
-      height: powerboardsMobileSecondaryRowHeight,
-      child: Center(
-        child: Padding(
-          padding: powerboardsMobileSecondaryRowPadding,
-          child: Row(
-            children: [
-              if (showSelectColumn) ...[
-                SizedBox(
-                  width: 36,
-                  child: Center(
-                    child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+    return Padding(
+      padding: const EdgeInsets.only(top: powerboardsMobileOverlaySecondaryRowLift),
+      child: SizedBox(
+        height: powerboardsMobileSecondaryRowHeight,
+        child: Center(
+          child: Padding(
+            padding: powerboardsMobileSecondaryRowPadding,
+            child: Row(
+              children: [
+                if (showSelectColumn) ...[
+                  SizedBox(
+                    width: 36,
+                    child: Center(
+                      child: ShadTriCheckbox(value: selectAllValue, onChanged: (v) => widget.onToggleAllSelected(v == true)),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: PowerboardsMobileActionPillStrip(
+                      items: pills,
+                      textStyle: pillTextStyle,
+                      unselectedForegroundColor: theme.colorScheme.foreground,
+                      itemGap: pillGap,
+                      pillPadding: pillPadding,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.isRefreshing)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                      ),
+                  ],
+                ),
               ],
-              selectButton,
-              const Spacer(),
-              if (showSelectionModeActions) selectionActions,
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (widget.isRefreshing)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 8),
-                      child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-                    ),
-                  if (!showSelectionModeActions) sortButton,
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildScrollAwareMobileHeader(Widget child) {
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final collapseProgress = overlayHeaderScope?.collapseProgress ?? 0;
+    final hideForScroll = collapseProgress > 0.1;
+
+    return AnimatedSwitcher(
+      duration: powerboardsMobileOverlayHeaderTransitionDuration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) {
+        return ClipRect(
+          child: FadeTransition(
+            opacity: animation,
+            child: SizeTransition(sizeFactor: animation, axisAlignment: -1.0, child: child),
+          ),
+        );
+      },
+      child: hideForScroll
+          ? const SizedBox.shrink(key: ValueKey('file-browser-mobile-header-hidden'))
+          : KeyedSubtree(key: const ValueKey('file-browser-mobile-header-visible'), child: child),
     );
   }
 
@@ -2905,8 +2969,7 @@ class _FileTableViewState extends State<FileTableView> {
     return _buildTableCard(
       Column(
         children: [
-          _buildMobileHeader(showSelectColumn, selectAllValue),
-          const Divider(height: 1, color: shadBorder),
+          _buildScrollAwareMobileHeader(_buildMobileHeader(showSelectColumn, selectAllValue)),
           Expanded(
             child: ListView.separated(
               itemCount: widget.entries.length,
@@ -2916,7 +2979,9 @@ class _FileTableViewState extends State<FileTableView> {
                 final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
                 final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
                 final isSelected = widget.selected.contains(key);
-                final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+                final checkboxDecoration = ShadDecoration(
+                  border: ShadBorder.all(color: colorScheme.border, radius: _fileCheckboxRadius),
+                );
                 final showRowMenu = !widget.forceShowSelect;
                 final sizeLabel = showSize ? _formatEntrySize(entry) : null;
                 final modifiedLabel = entry.updatedAt?.modified() ?? '';
@@ -2929,12 +2994,7 @@ class _FileTableViewState extends State<FileTableView> {
                   child: InkWell(
                     onTap: () => widget.onOpen(fullPath, entry.isFolder),
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        powerboardsMobileSecondaryRowLeadingInset,
-                        14,
-                        powerboardsMobileSecondaryRowTrailingInset,
-                        14,
-                      ),
+                      padding: powerboardsFileListRowPadding,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -3014,7 +3074,9 @@ class _FileTableViewState extends State<FileTableView> {
           final fullPath = _FilePathKey.pathForEntry(widget.currentPath, entry);
           final key = _FilePathKey.keyForEntry(widget.currentPath, entry);
           final isSelected = widget.selected.contains(key);
-          final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: colorScheme.border));
+          final checkboxDecoration = ShadDecoration(
+            border: ShadBorder.all(color: colorScheme.border, radius: _fileCheckboxRadius),
+          );
           final sizeLabel = showSize ? (_formatEntrySize(entry) ?? "") : "";
           final displayName = _displayNameForEntry(entry);
 
@@ -3327,7 +3389,9 @@ class ShadTriCheckbox extends StatelessWidget {
     final iconColor = theme.colorScheme.primaryForeground;
 
     final Widget? effectiveIcon = value == null ? Icon(LucideIcons.minus, size: effectiveSize, color: iconColor) : null;
-    final checkboxDecoration = ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border));
+    final checkboxDecoration = ShadDecoration(
+      border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border, radius: _FileTableViewState._fileCheckboxRadius),
+    );
     return Semantics(
       checked: value == true,
       mixed: value == null,

@@ -1,3 +1,3 @@
 import 'package:flutter/widgets.dart';
 
-final loadingKey = GlobalKey();
+const loadingKey = ValueKey("meshagent-loading");

@@ -6,6 +6,7 @@ import 'package:meshagent/client.dart' as meshagent_client;
 import 'package:meshagent/protocol.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart' as dev;
+import 'package:powerboards/theme/theme.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
@@ -13,7 +14,108 @@ import 'package:powerboards/meshagent/meshagent.dart';
 
 typedef ConfigureServiceTemplateDone = void Function(BuildContext context, String serviceId);
 
-class ConfigureServiceTemplateDialog extends StatelessWidget {
+const double _mobileConfigureFlowSectionGap = powerboardsMobileFlowDialogContentSectionGap * 3;
+
+String powerboardsDisplayServiceName(String rawName) {
+  final trimmed = rawName.trim();
+  if (trimmed.isEmpty) {
+    return trimmed;
+  }
+
+  return '${trimmed[0].toUpperCase()}${trimmed.substring(1)}';
+}
+
+TextStyle powerboardsAgentCardTitleTextStyle(BuildContext context) {
+  final theme = ShadTheme.of(context);
+  return powerboardsEmphasizedTitleStyle(color: theme.colorScheme.foreground);
+}
+
+ServiceTemplateSpec powerboardsDisplayServiceTemplateSpec(ServiceTemplateSpec manifest) {
+  return ServiceTemplateSpec(
+    version: manifest.version,
+    kind: manifest.kind,
+    variables: manifest.variables,
+    metadata: ServiceTemplateMetadata(
+      name: powerboardsDisplayServiceName(manifest.metadata.name),
+      description: manifest.metadata.description,
+      icon: manifest.metadata.icon,
+      repo: manifest.metadata.repo,
+      annotations: Map<String, String>.from(manifest.metadata.annotations),
+    ),
+    ports: manifest.ports,
+    container: manifest.container,
+    external: manifest.external,
+    agents: manifest.agents,
+  );
+}
+
+TextStyle powerboardsAgentCardDescriptionTextStyle(BuildContext context) {
+  final theme = ShadTheme.of(context);
+  final descriptionStyle = theme.decoration.descriptionStyle ?? theme.textTheme.muted;
+  return descriptionStyle.copyWith(color: descriptionStyle.color ?? theme.colorScheme.mutedForeground);
+}
+
+class PowerboardsServiceNameCard extends StatelessWidget {
+  const PowerboardsServiceNameCard({super.key, required this.manifest});
+
+  final ServiceTemplateSpec manifest;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
+    final titleStyle = powerboardsAgentCardTitleTextStyle(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: theme.colorScheme.border, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(manifest.metadata.name, style: titleStyle, overflow: TextOverflow.ellipsis),
+                if (manifest.metadata.description case final description? when description.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(description, maxLines: 2, overflow: TextOverflow.ellipsis, style: descriptionStyle),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: theme.colorScheme.foreground, shape: BoxShape.circle),
+            alignment: Alignment.center,
+            child: Icon(LucideIcons.bot, color: theme.colorScheme.background, size: 22),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+BoxConstraints? _desktopConfigureAgentDialogConstraints(BuildContext context, BoxConstraints constraints) {
+  if (powerboardsUsesNativeMobileDialogLayout(context)) {
+    return null;
+  }
+
+  final maxViewportHeight = constraints.maxHeight;
+  final maxHeight = maxViewportHeight.isFinite ? (maxViewportHeight * 0.7).clamp(0.0, 860.0).toDouble() : 620.0;
+  return BoxConstraints(maxWidth: 500.0, maxHeight: maxHeight);
+}
+
+Widget _desktopConfigureDialogBodyViewport({required Widget child}) {
+  return Padding(padding: powerboardsDialogScrollViewportPadding, child: child);
+}
+
+class ConfigureServiceTemplateDialog extends StatefulWidget {
   const ConfigureServiceTemplateDialog({
     super.key,
     required this.template,
@@ -33,43 +135,74 @@ class ConfigureServiceTemplateDialog extends StatelessWidget {
   final ServiceTemplateSpec manifest;
   final String? roomName;
   final String title;
-  final String? description;
+  final Widget? description;
+
+  @override
+  State<ConfigureServiceTemplateDialog> createState() => _ConfigureServiceTemplateDialogState();
+}
+
+class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplateDialog> {
+  final ValueNotifier<PowerboardsDialogChrome> _mobileChrome = ValueNotifier((
+    signature: 'initial',
+    actions: const <Widget>[],
+    onBack: null,
+  ));
+
+  @override
+  void dispose() {
+    _mobileChrome.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isInstalled = serviceId != null;
+    final isInstalled = widget.serviceId != null;
+    final displayManifest = powerboardsDisplayServiceTemplateSpec(widget.manifest);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxHeight = constraints.maxHeight;
-        final height = !maxHeight.isFinite ? 500.0 : (maxHeight - 100.0).clamp(0.0, 500.0).toDouble();
+        final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+        final content = ConfigureServiceTemplate(
+          template: widget.template,
+          header: [
+            PowerboardsServiceNameCard(manifest: displayManifest),
+            if (!isInstalled && !isMobile) ...[
+              SizedBox(height: isMobile ? _mobileConfigureFlowSectionGap : 12),
+              dev.ServiceInfoCard(manifest: displayManifest, desktopContentGroupGap: isMobile ? null : 24),
+            ],
+          ],
+          projectId: widget.projectId,
+          serviceId: widget.serviceId,
+          manifest: widget.manifest,
+          roomName: widget.roomName,
+          prefilledVars: widget.prefilledVars,
+          mobileDialogChrome: _mobileChrome,
+          onDone: (context, _) {
+            Navigator.of(context).pop(true);
+          },
+        );
 
-        return PowerboardsShadDialog.task(
-          scrollable: false,
-          constraints: BoxConstraints(minWidth: 600.0, maxWidth: 600.0, minHeight: height, maxHeight: height),
-          title: Text(isInstalled ? 'Edit agent' : 'Install agent'),
-          description: Text(
-            isInstalled
-                ? 'Update variables or uninstall this agent.'
-                : 'Installing this agent will grant it access to your room. Review the details before continuing.',
-          ),
-          child: SizedBox.expand(
-            child: ConfigureServiceTemplate(
-              template: template,
-              header: [
-                const SizedBox(height: 8),
-                dev.ServiceNameCard(manifest: manifest),
-                if (!isInstalled) ...[const SizedBox(height: 8), dev.ServiceInfoCard(manifest: manifest)],
-              ],
-              projectId: projectId,
-              serviceId: serviceId,
-              manifest: manifest,
-              roomName: roomName,
-              prefilledVars: prefilledVars,
-              onDone: (context, _) {
-                Navigator.of(context).pop(true);
-              },
-            ),
-          ),
+        return ValueListenableBuilder<PowerboardsDialogChrome>(
+          valueListenable: _mobileChrome,
+          builder: (context, chrome, _) {
+            return PowerboardsShadDialog(
+              scrollable: false,
+              constraints: _desktopConfigureAgentDialogConstraints(context, constraints),
+              expandDesktopActions: true,
+              stackActionsOnMobile: true,
+              gap: isMobile ? 8 : null,
+              padding: isMobile ? powerboardsMobileFlowDialogCompactPadding : null,
+              mobilePresentation: PowerboardsDialogMobilePresentation.flowSheet,
+              mobileFlowBodyBehavior: isMobile
+                  ? PowerboardsDialogMobileFlowBodyBehavior.formScrollable
+                  : PowerboardsDialogMobileFlowBodyBehavior.fill,
+              mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.avoid,
+              title: Text(widget.title),
+              description: widget.description,
+              actions: chrome.actions,
+              onBack: isMobile ? chrome.onBack : null,
+              child: isMobile ? content : _desktopConfigureDialogBodyViewport(child: content),
+            );
+          },
         );
       },
     );
@@ -88,6 +221,9 @@ class ConfigureServiceTemplate extends StatefulWidget {
     this.prefilledVars,
     this.customActions = const [],
     this.header = const [],
+    this.mobileDialogChrome,
+    this.mobileOnBack,
+    this.dialogChromeSignaturePrefix,
   });
 
   final ServiceTemplateSpec manifest;
@@ -99,15 +235,34 @@ class ConfigureServiceTemplate extends StatefulWidget {
   final List<Widget> header;
   final String template;
   final ConfigureServiceTemplateDone onDone;
+  final ValueNotifier<PowerboardsDialogChrome>? mobileDialogChrome;
+  final VoidCallback? mobileOnBack;
+  final String? dialogChromeSignaturePrefix;
 
   @override
   State<ConfigureServiceTemplate> createState() => _ConfigureServiceTemplateState();
 }
 
-class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
+class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> with SingleTickerProviderStateMixin {
   bool _saving = false;
   bool _removing = false;
   String? _error;
+  Map<String, String> _latestFormVars = const <String, String>{};
+  bool Function()? _latestFormValidate;
+  String? _lastPublishedMobileChromeSignature;
+  late final AnimationController _loaderController;
+
+  @override
+  void initState() {
+    super.initState();
+    _loaderController = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat();
+  }
+
+  @override
+  void dispose() {
+    _loaderController.dispose();
+    super.dispose();
+  }
 
   String _requireRoomName() {
     final roomName = widget.roomName;
@@ -381,7 +536,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
         if (!mounted) {
           return;
         }
-        final confirmed = await showShadDialog<bool>(
+        final confirmed = await showPowerboardsAlertDialog<bool>(
           context: context,
           builder: (context) => PowerboardsShadDialog.compactAlert(
             title: const Text('Delete routes?'),
@@ -470,10 +625,10 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
     });
   }
 
-  Widget _buildError(BuildContext context) {
+  Widget? _buildError(BuildContext context) {
     final error = _error;
     if (error == null) {
-      return const SizedBox.shrink();
+      return null;
     }
     return Padding(
       key: const ValueKey('error-alert'),
@@ -501,8 +656,11 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
     );
   }
 
-  List<Widget> _actions(BuildContext context, Map<String, String> vars, bool Function() validate) {
+  bool _validateMobileForm() => _latestFormValidate?.call() ?? true;
+
+  List<Widget> _actions(BuildContext context) {
     final isInstalled = widget.serviceId != null;
+    final progressLabel = isInstalled ? 'Updating' : 'Installing';
 
     return [
       if (isInstalled)
@@ -517,29 +675,72 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> {
           child: Text(_removing ? 'Uninstalling' : 'Uninstall'),
         ),
       ShadButton(
-        leading: Icon(LucideIcons.download),
+        leading: _saving
+            ? RotationTransition(turns: _loaderController, child: const Icon(LucideIcons.loaderCircle))
+            : const Icon(LucideIcons.download),
         onPressed: _saving
             ? null
             : () {
                 if (!_removing && !_saving) {
-                  _saveOrUpdate(vars, validate);
+                  _saveOrUpdate(_latestFormVars, _validateMobileForm);
                 }
               },
-        child: Text(_saving ? (isInstalled ? 'Updating' : 'Installing') : (isInstalled ? 'Update' : 'Install')),
+        child: Text(_saving ? progressLabel : (isInstalled ? 'Update' : 'Install')),
       ),
     ];
   }
 
+  void _publishDialogChrome() {
+    final notifier = widget.mobileDialogChrome;
+    if (notifier == null) {
+      return;
+    }
+
+    final chrome = (
+      signature:
+          '${widget.dialogChromeSignaturePrefix ?? ''}service:${widget.serviceId != null}:saving:$_saving:removing:$_removing:error:${_error != null}:back:${widget.mobileOnBack != null}',
+      actions: [...widget.customActions, ..._actions(context)],
+      onBack: powerboardsUsesNativeMobileDialogLayout(context) ? widget.mobileOnBack : null,
+    );
+
+    if (_lastPublishedMobileChromeSignature == chrome.signature) {
+      return;
+    }
+
+    _lastPublishedMobileChromeSignature = chrome.signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      notifier.value = chrome;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _publishDialogChrome();
     final routeDomains = MeshagentConfig.current?.domains ?? const <String>[];
+    final errorAlert = _buildError(context);
     return dev.ConfigureServiceTemplate(
       spec: widget.manifest,
       prefilledVars: widget.prefilledVars,
       routeDomains: routeDomains,
+      desktopHorizontalPadding: 0,
+      desktopSectionSpacing: 20,
+      desktopHeaderBottomSpacing: 44,
       customActions: widget.customActions,
-      header: [_buildError(context), ...widget.header],
-      actionsBuilder: (context, vars, validate) => _actions(context, vars, validate),
+      header: [if (errorAlert != null) errorAlert, ...widget.header],
+      showActionRow: widget.mobileDialogChrome == null,
+      onFormStateChanged: (vars, validate) {
+        _latestFormVars = vars;
+        _latestFormValidate = validate;
+      },
+      actionsBuilder: (context, vars, validate) {
+        _latestFormVars = vars;
+        _latestFormValidate = validate;
+        return _actions(context);
+      },
     );
   }
 }

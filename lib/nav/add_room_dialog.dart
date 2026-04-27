@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:meshagent/client.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 class RoomNameResult {
@@ -12,17 +13,16 @@ class RoomNameResult {
 
 Future<RoomNameResult?> showRoomNameDialog(
   BuildContext context, {
-  String title = 'Create room',
+  String title = 'Create Room',
   String description = 'Give this a short, memorable name.',
   String initialValue = '',
   String label = 'Name',
   String placeholder = 'e.g. General',
 }) {
   final formKey = GlobalKey<ShadFormState>();
-  final tt = ShadTheme.of(context).textTheme;
-  final labelStyle = tt.small.copyWith(fontWeight: FontWeight.w600);
+  final labelStyle = powerboardsFieldLabelTextStyle(context);
 
-  return showShadDialog<RoomNameResult?>(
+  return showPowerboardsAlertDialog<RoomNameResult?>(
     context: context,
     builder: (ctx) {
       void submit() {
@@ -39,7 +39,7 @@ Future<RoomNameResult?> showRoomNameDialog(
         description: Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(description)),
         actions: [
           ShadButton.outline(onPressed: () => Navigator.of(ctx).pop(null), child: const Text('Cancel')),
-          ShadButton(onPressed: submit, child: const Text('Continue')),
+          ShadButton(onPressed: submit, child: const Text('Create')),
         ],
         child: ShadForm(
           key: formKey,
@@ -48,7 +48,7 @@ Future<RoomNameResult?> showRoomNameDialog(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ShadInputFormField(
+                PowerboardsAdaptiveInputFormField(
                   id: 'name',
                   label: Text('Name', style: labelStyle),
                   placeholder: Text(placeholder),
@@ -88,7 +88,7 @@ Future<void> showRoomCreationErrorDialog(BuildContext context, Object error) {
 
   debugPrint('Room creation error: $error');
 
-  return showShadDialog(
+  return showPowerboardsAlertDialog(
     context: context,
     builder: (context) {
       return PowerboardsShadDialog.compactAlert(

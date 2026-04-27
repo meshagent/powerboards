@@ -3,10 +3,10 @@ import 'dart:math';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
@@ -33,6 +33,7 @@ class AgentsDropdown extends StatelessWidget {
   final VoidCallback? onOpen;
   final VoidCallback? onManageAgents;
   final BuildContext? boundaryContext;
+  final bool expandToAvailableWidth;
 
   const AgentsDropdown({
     super.key,
@@ -44,6 +45,7 @@ class AgentsDropdown extends StatelessWidget {
     this.onOpen,
     this.onManageAgents,
     this.boundaryContext,
+    this.expandToAvailableWidth = false,
   });
 
   String _serviceId(ServiceSpec service) => service.metadata.annotations["meshagent.service.id"] ?? "";
@@ -178,37 +180,64 @@ class AgentsDropdown extends StatelessWidget {
 
         final mobileMenuWidth = max(240.0, min(size.width - 32, 420.0));
         final mobileMenuHeight = max(220.0, size.height - 96.0);
+        final usesExpandedTrigger = expandToAvailableWidth;
 
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AppContextMenuButton(
-              anchor: isMobileAdaptive ? null : const ShadAnchor(childAlignment: Alignment.topLeft),
-              boundaryContext: boundaryContext,
-              constraints: isMobileAdaptive
-                  ? BoxConstraints(minWidth: mobileMenuWidth, maxWidth: mobileMenuWidth)
-                  : const BoxConstraints(minWidth: 320, maxWidth: 420),
-              maxMenuHeight: isMobileAdaptive ? mobileMenuHeight : null,
-              centerHorizontallyInBoundary: centerMenuInViewport,
-              entries: entries,
-              childBuilder: (context, controller) {
-                return ShadButton.ghost(
-                  trailing: const Icon(LucideIcons.chevronDown, size: 18),
-                  onPressed: () {
-                    onOpen?.call();
-                    controller.toggle();
-                  },
-                  leading: isMobileAdaptive
-                      ? null
-                      : selectedDevelopmentAgent == null
-                      ? const Icon(LucideIcons.bot, size: 18)
-                      : Opacity(opacity: 0.25, child: Icon(_developmentAgentIcon(selectedDevelopmentAgent.participant), size: 18)),
-                  child: Text(label, style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600)),
-                );
+        final menuButton = AppContextMenuButton(
+          anchor: isMobileAdaptive ? null : const ShadAnchor(childAlignment: Alignment.topLeft),
+          boundaryContext: boundaryContext,
+          constraints: isMobileAdaptive
+              ? BoxConstraints(minWidth: mobileMenuWidth, maxWidth: mobileMenuWidth)
+              : const BoxConstraints(minWidth: 320, maxWidth: 420),
+          maxMenuHeight: isMobileAdaptive ? mobileMenuHeight : null,
+          centerHorizontallyInBoundary: centerMenuInViewport,
+          entries: entries,
+          childBuilder: (context, controller) {
+            return ShadButton.ghost(
+              expands: usesExpandedTrigger,
+              mainAxisAlignment: usesExpandedTrigger ? MainAxisAlignment.start : MainAxisAlignment.center,
+              trailing: usesExpandedTrigger ? null : const Icon(LucideIcons.chevronDown, size: 18),
+              onPressed: () {
+                onOpen?.call();
+                controller.toggle();
               },
-            ),
-            if (readme != null)
-              ShadButton.ghost(
+              leading: usesExpandedTrigger
+                  ? null
+                  : isMobileAdaptive
+                  ? null
+                  : selectedDevelopmentAgent == null
+                  ? const Icon(LucideIcons.bot, size: 18)
+                  : Opacity(opacity: 0.25, child: Icon(_developmentAgentIcon(selectedDevelopmentAgent.participant), size: 18)),
+              child: usesExpandedTrigger
+                  ? Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.left,
+                            style: powerboardsSectionTitleStyle(),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(LucideIcons.chevronDown, size: 18),
+                      ],
+                    )
+                  : Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.left,
+                      style: powerboardsSectionTitleStyle(),
+                    ),
+            );
+          },
+        );
+
+        final readmeButton = readme == null
+            ? null
+            : ShadButton.ghost(
                 onPressed: () {
                   showShadDialog(
                     context: context,
@@ -222,7 +251,13 @@ class AgentsDropdown extends StatelessWidget {
                   );
                 },
                 child: const Icon(LucideIcons.info),
-              ),
+              );
+
+        return Row(
+          mainAxisSize: expandToAvailableWidth ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            if (expandToAvailableWidth) Expanded(child: menuButton) else menuButton,
+            if (readmeButton != null) ...[if (expandToAvailableWidth) const SizedBox(width: 4), readmeButton],
           ],
         );
       },

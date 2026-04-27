@@ -4,8 +4,8 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:powerboards/theme/theme.dart';
-import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:powerboards/ui/powerboards_menu_row.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
@@ -306,7 +306,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
       return;
     }
 
-    await showShadDialog<void>(
+    await showPowerboardsFlowDialog<void>(
       context: context,
       builder: (dialogContext) {
         return _ChangeDeviceDialog(
@@ -594,6 +594,7 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final usesMobileDialogLayout = powerboardsUsesNativeMobileDialogLayout(context);
     final videoInput = widget.selectedVideoInputDeviceId?.call() ?? widget.preferences.getString("videoInput");
     final audioInput = widget.selectedAudioInputDeviceId?.call() ?? widget.preferences.getString("audioInput");
     final audioOutput = widget.selectedAudioOutputDeviceId?.call() ?? widget.preferences.getString("audioOutput");
@@ -626,7 +627,7 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
         ),
       ],
       child: Padding(
-        padding: powerboardsDialogScrollableListPadding,
+        padding: usesMobileDialogLayout ? EdgeInsets.zero : powerboardsDialogScrollableListPadding,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -720,6 +721,8 @@ class _DeviceSettingsRow extends StatefulWidget {
 class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
   static const BoxConstraints _menuConstraints = BoxConstraints(minWidth: 260, maxWidth: 420);
   static const double _rowIconSize = 20;
+  static const double _leadingSlotWidth = 32;
+  static const double _rowMinHeight = 80;
   final ShadContextMenuController _controller = ShadContextMenuController();
 
   @override
@@ -733,6 +736,7 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
     final selectedLabel = _deviceLabel(widget.selectedDevice, widget.label);
     final hasOptions = !widget.unavailable && widget.selectedDevice != null && widget.devices.isNotEmpty;
     final theme = ShadTheme.of(context);
+    final usesMobileDialogLayout = powerboardsUsesNativeMobileDialogLayout(context);
     final isDisabled = widget.selectedDevice == null || widget.unavailable;
     final disabledColor = theme.colorScheme.destructive;
 
@@ -763,18 +767,75 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
               }
             : null,
         borderRadius: BorderRadius.circular(12),
-        child: PowerboardsMenuRow(
-          title: isDisabled ? widget.disabledLabel : widget.label,
-          description: isDisabled ? widget.disabledDescription : selectedLabel,
-          titleColor: isDisabled ? disabledColor : null,
-          descriptionColor: isDisabled ? disabledColor : null,
-          leading: Icon(
-            isDisabled ? widget.disabledIcon : widget.icon,
-            size: _rowIconSize,
-            color: isDisabled ? disabledColor : shadForeground,
-          ),
-          trailing: hasOptions ? Icon(LucideIcons.chevronsUpDown, size: 21, color: shadSecondaryForeground) : null,
-        ),
+        child: usesMobileDialogLayout
+            ? ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: _rowMinHeight),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: SizedBox(
+                        width: _leadingSlotWidth,
+                        height: _leadingSlotWidth,
+                        child: Center(
+                          child: Icon(
+                            isDisabled ? widget.disabledIcon : widget.icon,
+                            size: _rowIconSize,
+                            color: isDisabled ? disabledColor : shadForeground,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 18),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: 16),
+                          Text(
+                            isDisabled ? widget.disabledLabel : widget.label,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: powerboardsInterTextStyle(
+                              color: isDisabled ? disabledColor : theme.colorScheme.foreground,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            isDisabled ? widget.disabledDescription : selectedLabel,
+                            maxLines: 4,
+                            style: powerboardsInterTextStyle(color: isDisabled ? disabledColor : theme.colorScheme.foreground),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                    if (hasOptions) ...[
+                      const SizedBox(width: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Icon(LucideIcons.chevronsUpDown, size: 21, color: shadSecondaryForeground),
+                      ),
+                    ],
+                  ],
+                ),
+              )
+            : PowerboardsMenuRow(
+                title: isDisabled ? widget.disabledLabel : widget.label,
+                description: isDisabled ? widget.disabledDescription : selectedLabel,
+                titleColor: isDisabled ? disabledColor : null,
+                descriptionColor: isDisabled ? disabledColor : null,
+                leading: Icon(
+                  isDisabled ? widget.disabledIcon : widget.icon,
+                  size: _rowIconSize,
+                  color: isDisabled ? disabledColor : shadForeground,
+                ),
+                trailing: hasOptions ? Icon(LucideIcons.chevronsUpDown, size: 21, color: shadSecondaryForeground) : null,
+              ),
       ),
     );
   }

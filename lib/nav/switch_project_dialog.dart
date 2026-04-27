@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
+import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
@@ -14,7 +15,7 @@ Future<void> showSwitchProjectDialog({
 }) {
   projects.refresh();
 
-  return showShadDialog<void>(
+  return showPowerboardsFlowDialog<void>(
     context: context,
     builder: (context) =>
         SwitchProjectDialog(currentProjectId: currentProjectId, projects: projects, onSwitch: onSwitch, onNewProject: onNewProject),
@@ -64,45 +65,84 @@ class SwitchProjectDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+    final usesLandscapeMobileDialogLayout = powerboardsUsesLandscapeMobileDialogLayout(context);
+    final actions = isMobile
+        ? [
+            ShadButton.outline(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ShadButton(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              onPressed: () {
+                Navigator.of(context).pop();
+                onNewProject();
+              },
+              child: const Text('New Project'),
+            ),
+          ]
+        : [
+            ShadButton.outline(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ShadButton(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              onPressed: () {
+                Navigator.of(context).pop();
+                onNewProject();
+              },
+              child: const Text('New Project'),
+            ),
+          ];
+
     return PowerboardsShadDialog.listPicker(
       title: const Text('Switch Project'),
       description: const Text('Select a project to switch to:'),
-      actions: [
-        ShadButton.outline(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        ShadButton(
-          leading: const Icon(LucideIcons.clipboardPlus),
-          onPressed: () {
-            Navigator.of(context).pop();
-            onNewProject();
-          },
-          child: const Text('New Project'),
-        ),
-      ],
-      child: Padding(
-        padding: powerboardsDialogScrollableListPadding,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320, maxHeight: 420),
-          child: SignalBuilder(
-            builder: (context, _) {
-              final items = projects.state.value;
+      constraints: isMobile ? const BoxConstraints(maxWidth: 421) : const BoxConstraints(maxWidth: 400),
+      actions: actions,
+      child: SignalBuilder(
+        builder: (context, _) {
+          final items = projects.state.value;
 
-              if (items == null) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          if (items == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-              return ScrollConfiguration(
-                behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: _buildProjectItems(context, items),
+          final projectList = Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: _buildProjectItems(context, items),
+          );
+
+          return ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+            child: isMobile
+                ? Align(
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: usesLandscapeMobileDialogLayout ? double.infinity : 320),
+                        child: projectList,
+                      ),
+                    ),
+                  )
+                : Padding(
+                    padding: powerboardsDialogScrollViewportPadding,
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 320, maxHeight: 420),
+                        child: SingleChildScrollView(child: projectList),
+                      ),
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -124,8 +164,9 @@ class _ProjectListItemState extends State<_ProjectListItem> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShadTheme.of(context);
+    final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
     final fontWeight = widget.selected || _hovered ? FontWeight.w700 : FontWeight.w400;
+    final textStyle = powerboardsFileListTitleStyle().copyWith(fontWeight: fontWeight);
 
     return Material(
       color: Colors.transparent,
@@ -144,11 +185,13 @@ class _ProjectListItemState extends State<_ProjectListItem> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    widget.name,
-                    style: TextStyle(inherit: true, fontWeight: fontWeight, color: theme.colorScheme.foreground),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(widget.name, style: textStyle, overflow: TextOverflow.ellipsis, maxLines: 1),
+                      ),
+                      if (widget.selected && isMobile) ...[const SizedBox(width: 12), buildPowerboardsCurrentPill()],
+                    ],
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -156,7 +199,7 @@ class _ProjectListItemState extends State<_ProjectListItem> {
                   width: 24,
                   child: Align(
                     alignment: Alignment.centerRight,
-                    child: widget.selected ? Icon(LucideIcons.check, size: 18, color: theme.colorScheme.foreground) : null,
+                    child: widget.selected ? Icon(LucideIcons.check, size: 18, color: textStyle.color) : null,
                   ),
                 ),
               ],

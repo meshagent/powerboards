@@ -10,13 +10,28 @@ bool isThreadFileName(String fileName) => fileName.toLowerCase().endsWith('.thre
 
 bool isThreadPath(String path) => isThreadFileName(p.posix.basename(path));
 
+String normalizeThreadStoragePath(String path) {
+  final trimmed = path.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+
+  final normalized = p.posix.normalize(trimmed);
+  return normalized.startsWith('/') ? normalized.substring(1) : normalized;
+}
+
 bool shouldReadThreadDocumentForDisplayName(String path) {
   return p.posix.basename(path).toLowerCase() != 'main.thread';
 }
 
 String threadFileDisplayNameFromPath(String path, {String? threadDisplayName}) {
   final resolvedName = (threadDisplayName?.trim().isNotEmpty ?? false) ? threadDisplayName!.trim() : defaultThreadDisplayNameFromPath(path);
-  return resolvedName.toLowerCase().endsWith('.thread') ? resolvedName : '$resolvedName.thread';
+  return _stripThreadExtension(resolvedName);
+}
+
+String threadFileNameFromDisplayName(String value) {
+  final trimmed = value.trim();
+  return trimmed.toLowerCase().endsWith('.thread') ? trimmed : '$trimmed.thread';
 }
 
 String defaultThreadDisplayNameFromPath(String path) {
@@ -84,4 +99,8 @@ String? deriveThreadDisplayNameFromDocument(MeshDocument document) {
 
 bool _isUuidLike(String value) {
   return _uuidPattern.hasMatch(value);
+}
+
+String _stripThreadExtension(String value) {
+  return value.toLowerCase().endsWith('.thread') ? value.substring(0, value.length - '.thread'.length) : value;
 }

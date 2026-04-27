@@ -11,6 +11,7 @@ import 'package:meshagent_flutter_shadcn/viewers/gallery.dart';
 import 'package:meshagent_flutter_shadcn/viewers/presentation.dart';
 import 'package:meshagent_flutter_shadcn/viewers/transcript.dart';
 import 'package:path/path.dart' as p;
+import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
@@ -70,6 +71,7 @@ class _DocumentPane extends State<DocumentPane> {
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
     updatedQueryParameters['p'] = path;
+    updatedQueryParameters[filePreviewOriginQueryParameter] = currentUri.toString();
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
 
@@ -164,6 +166,8 @@ class _DocumentPane extends State<DocumentPane> {
   }
 
   Widget _noPreview({String? subtitle}) {
+    final isMobile = MediaQuery.sizeOf(context).width < 600;
+
     return PaneEmptyState(
       title: "No preview available",
       description: subtitle,
@@ -172,12 +176,13 @@ class _DocumentPane extends State<DocumentPane> {
       action: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Tooltip(
-            message: "Download",
-            child: ShadButton.outline(leading: const Icon(LucideIcons.download), onPressed: _download, child: const Text("Download")),
-          ),
+          if (!isMobile)
+            Tooltip(
+              message: "Download",
+              child: ShadButton.outline(leading: const Icon(LucideIcons.download), onPressed: _download, child: const Text("Download")),
+            ),
           if (supportsNativeFileShare) ...[
-            const SizedBox(width: 8),
+            if (!isMobile) const SizedBox(width: 8),
             Tooltip(
               message: "Share",
               child: ShadButton.outline(leading: const Icon(LucideIcons.share), onPressed: _share, child: const Text("Share")),
