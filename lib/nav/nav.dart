@@ -611,7 +611,11 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       );
     }
 
-    return Container(key: childKey, child: widget.child);
+    return _buildRoomContent();
+  }
+
+  Widget _buildRoomContent() {
+    return KeyedSubtree(key: childKey, child: widget.child);
   }
 
   Widget desktopView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
@@ -1079,7 +1083,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
               fit: StackFit.expand,
               children: [
                 if (!isSwipeRevealActive)
-                  widget.child
+                  _buildRoomContent()
                 else
                   ColoredBox(
                     color: Colors.black,
@@ -1100,7 +1104,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                                 ),
                               if (revealedRoomOpacity > 0)
                                 IgnorePointer(
-                                  child: Opacity(opacity: revealedRoomOpacity, child: widget.child),
+                                  child: Opacity(opacity: revealedRoomOpacity, child: _buildRoomContent()),
                                 ),
                             ],
                           ),
