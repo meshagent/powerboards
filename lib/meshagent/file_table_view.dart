@@ -2979,7 +2979,7 @@ class _FileTableViewState extends State<FileTableView> {
                 final showRowMenu = !widget.forceShowSelect;
                 final sizeLabel = showSize ? _formatEntrySize(entry) : null;
                 final modifiedLabel = entry.updatedAt?.modified() ?? '';
-                final metadataLabel = <String>[if (sizeLabel != null) sizeLabel, if (modifiedLabel.isNotEmpty) modifiedLabel].join(' • ');
+                final metadataLabel = <String>[?sizeLabel, if (modifiedLabel.isNotEmpty) modifiedLabel].join(' • ');
                 final showMetadataLabel = metadataLabel.isNotEmpty;
                 final displayName = _displayNameForEntry(entry);
 

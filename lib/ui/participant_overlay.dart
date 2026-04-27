@@ -96,7 +96,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
     final pendingLocalMedia = roomModel?.pendingLocalMedia;
 
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.participant, if (pendingLocalMedia != null) pendingLocalMedia]),
+      listenable: Listenable.merge([widget.participant, ?pendingLocalMedia]),
       builder: (context, _) {
         final localParticipant = roomModel?.localParticipant;
         final isLocalParticipant =

@@ -730,7 +730,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
       desktopSectionSpacing: 20,
       desktopHeaderBottomSpacing: 44,
       customActions: widget.customActions,
-      header: [if (errorAlert != null) errorAlert, ...widget.header],
+      header: [?errorAlert, ...widget.header],
       showActionRow: widget.mobileDialogChrome == null,
       onFormStateChanged: (vars, validate) {
         _latestFormVars = vars;

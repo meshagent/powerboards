@@ -70,7 +70,7 @@ class PowerboardsMenuRow extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            if (leadingWidget != null) leadingWidget,
+            ?leadingWidget,
             if (leadingWidget != null) SizedBox(width: itemGap),
             Expanded(
               child: Column(

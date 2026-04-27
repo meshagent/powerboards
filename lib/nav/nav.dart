@@ -769,7 +769,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
           final includesActiveRoom = (currentChild != null && isActiveRoomChild(currentChild)) || previousChildren.any(isActiveRoomChild);
           final retainedPreviousChildren = includesActiveRoom ? const <Widget>[] : previousChildren;
 
-          return Stack(fit: StackFit.expand, children: [...retainedPreviousChildren, if (currentChild != null) currentChild]);
+          return Stack(fit: StackFit.expand, children: [...retainedPreviousChildren, ?currentChild]);
         },
         transitionBuilder: (child, animation) {
           final isCurrentChild = child.key == mobileContent.key;
