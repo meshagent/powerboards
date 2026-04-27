@@ -135,7 +135,7 @@ class ChangeDeviceButton extends StatefulWidget {
   final Future<void> Function(MediaDevice device) onChangeVideoInput;
   final Future<void> Function(MediaDevice device) onChangeAudioInput;
   final Future<void> Function(MediaDevice device) onChangeAudioOutput;
-  final Widget Function(VoidCallback onPressed) renderButton;
+  final Widget Function(VoidCallback? onPressed) renderButton;
   final ChangeDeviceButtonPresentation presentation;
   final String? Function()? selectedVideoInputDeviceId;
   final String? Function()? selectedAudioInputDeviceId;
@@ -346,7 +346,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
   @override
   Widget build(BuildContext context) {
     if (!_loaded) {
-      return SizedBox(width: 40);
+      return widget.renderButton(null);
     }
 
     final videoInput = _selectedDeviceIdForPreferenceKey("videoInput");

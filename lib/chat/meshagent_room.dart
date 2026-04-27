@@ -1250,16 +1250,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return '.threads/main.thread';
   }
 
-  List<Widget> _meetingToolbarControls(BuildContext context, {bool compact = false}) {
+  List<Widget> _meetingHeaderPrimaryControls(BuildContext context) {
     final model = room.VideoRoomModel.maybeOf(context);
     if (model?.room == null) {
       return [];
     }
     final usesMobileRoomLayout = _usesMobileRoomLayout(context);
-    final isLandscapePhone = _isLandscapePhoneViewport(context);
     final meetingSessionActive = _isMeetingSessionActive(context);
     final showExpandSplitButton = !usesMobileRoomLayout && meetingSessionActive && _meetingSplitViewController.collapsed;
-    final compactTranscriptionControl = compact && !isLandscapePhone;
 
     return [
       if (showExpandSplitButton)
@@ -1277,6 +1275,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       room.MicToggle(),
       room.CameraToggle(),
       room.ChangeSettings(),
+    ];
+  }
+
+  List<Widget> _meetingToolbarControls(BuildContext context, {bool compact = false}) {
+    final primaryControls = _meetingHeaderPrimaryControls(context);
+    if (primaryControls.isEmpty) {
+      return [];
+    }
+
+    final usesMobileRoomLayout = _usesMobileRoomLayout(context);
+    final isLandscapePhone = _isLandscapePhoneViewport(context);
+    final compactTranscriptionControl = compact && !isLandscapePhone;
+
+    return [
+      ...primaryControls,
       if (!usesMobileRoomLayout) room.ShareScreen(compact: compact),
       MeetingToolkits(room: widget.room, compact: compactTranscriptionControl),
     ];
@@ -2394,6 +2407,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 services: services,
                 hideSystem: true,
                 mobileShellOwnsHeader: isMobile && !embedMobileChrome,
+                desktopHeaderLeadingActions: isMobile || !meetingSessionActive ? const [] : _meetingHeaderPrimaryControls(context),
                 desktopHeaderActions: isMobile ? const [] : actions,
                 desktopHeaderActionLeadingWidthFloor: meetingSessionActive ? _meetingActivePaneActionLeadingWidthFloor : 0,
                 desktopHeaderActionMinimumLeadingWidth: meetingSessionActive ? 160 : 0,

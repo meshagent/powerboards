@@ -170,6 +170,7 @@ class FileManagerView extends StatefulWidget {
   final Resource<List<ServiceSpec>>? services;
   final bool hideSystem;
   final bool mobileShellOwnsHeader;
+  final List<Widget> desktopHeaderLeadingActions;
   final List<Widget> desktopHeaderActions;
   final double desktopHeaderActionLeadingWidthFloor;
   final double desktopHeaderActionMinimumLeadingWidth;
@@ -181,6 +182,7 @@ class FileManagerView extends StatefulWidget {
     this.services,
     this.hideSystem = false,
     this.mobileShellOwnsHeader = false,
+    this.desktopHeaderLeadingActions = const [],
     this.desktopHeaderActions = const [],
     this.desktopHeaderActionLeadingWidthFloor = 0,
     this.desktopHeaderActionMinimumLeadingWidth = 0,
@@ -1647,16 +1649,36 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  Widget _buildDesktopHeaderLeadingRow({required List<Widget> trailing}) {
+    final leadingActions = widget.desktopHeaderLeadingActions;
+    return Row(
+      spacing: desktopPaneHeaderButtonGap,
+      children: [
+        if (leadingActions.isNotEmpty) Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: leadingActions),
+        ...trailing,
+      ],
+    );
+  }
+
   Widget _buildDesktopHeaderLeading() {
     if (_openedFile == null) {
-      return _buildBreadcrumb();
+      if (widget.desktopHeaderLeadingActions.isEmpty) {
+        return _buildBreadcrumb();
+      }
+
+      return _buildDesktopHeaderLeadingRow(
+        trailing: [
+          Expanded(
+            child: Align(alignment: Alignment.centerLeft, child: _buildBreadcrumb()),
+          ),
+        ],
+      );
     }
 
     final fileName = _displayNameForPath(_openedFile!);
 
-    return Row(
-      spacing: desktopPaneHeaderButtonGap,
-      children: [
+    return _buildDesktopHeaderLeadingRow(
+      trailing: [
         ..._buildFileCloseAction(),
         Expanded(
           child: Text(fileName, style: breadcrumbLinkStyle, maxLines: 1, overflow: .ellipsis),
