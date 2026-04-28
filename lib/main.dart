@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_portal/flutter_portal.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_shadcn/web_context_menu_manager.dart';
@@ -30,6 +29,7 @@ import 'ui/incoming_share_watcher.dart';
 import 'ui/powerboards_breakpoints.dart';
 import 'ui/link_listener.dart';
 import 'ui/meeting_view.dart';
+import 'ui/powerboards_adaptive_input.dart';
 import 'ui/powerboards_shad_dialog.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
@@ -50,6 +50,20 @@ ShadToastTheme? _powerboardsToastThemeForContext(BuildContext context) {
   return const ShadToastTheme(alignment: Alignment.topCenter);
 }
 
+ShadDecoration? _powerboardsDecorationThemeForContext(BuildContext context) {
+  if (!powerboardsUsesMobileFieldLabelStyle(context)) {
+    return null;
+  }
+
+  return ShadDecoration(labelStyle: powerboardsMobileFieldLabelTextStyle(powerboardsShadColorScheme().foreground));
+}
+
+ShadCheckboxTheme _powerboardsCheckboxThemeForContext(BuildContext context) {
+  return ShadCheckboxTheme(
+    decoration: ShadDecoration(border: ShadBorder.all(radius: const BorderRadius.all(Radius.circular(6)))),
+  );
+}
+
 ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
   final mediaQuery = MediaQuery.maybeOf(context);
   final screenWidth = mediaQuery?.size.width ?? 1024.0;
@@ -68,6 +82,12 @@ ShadDialogTheme _powerboardsDialogThemeForContext(BuildContext context) {
     removeBorderRadiusWhenTiny: false,
     closeIconPosition: ShadPosition(top: closeTop, right: closeEnd),
   );
+}
+
+BorderRadius _powerboardsButtonRadiusForContext(BuildContext context) {
+  final mediaQuery = MediaQuery.maybeOf(context);
+  final screenWidth = mediaQuery?.size.width ?? 1024.0;
+  return BorderRadius.circular(screenWidth < 600 ? 12 : 6);
 }
 
 void _configureDebugPrintFilter() {
@@ -133,6 +153,7 @@ void main() async {
       options.tracesSampleRate = 1.0;
       // The sampling rate for profiling is relative to tracesSampleRate
       // Setting to 1.0 will profile 100% of sampled transactions:
+      // ignore: experimental_member_use
       options.profilesSampleRate = 1.0;
     }, appRunner: startApp);
   } else {
@@ -233,7 +254,14 @@ class MyApp extends StatelessWidget {
       theme: ShadThemeData(
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
+        radius: _powerboardsButtonRadiusForContext(context),
         textTheme: powerboardsShadTextTheme(),
+        decoration: _powerboardsDecorationThemeForContext(context),
+        checkboxTheme: _powerboardsCheckboxThemeForContext(context),
+        primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        outlineBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         primaryToastTheme: _powerboardsToastThemeForContext(context),
         destructiveToastTheme: _powerboardsToastThemeForContext(context),
         selectTheme: ShadSelectTheme(
@@ -283,7 +311,7 @@ class MyApp extends StatelessWidget {
           child: MediaQuery(
             data: media.copyWith(textScaler: const TextScaler.linear(textScale)),
             child: DefaultTextStyle(
-              style: GoogleFonts.inter(fontSize: 14),
+              style: powerboardsInterTextStyle(fontSize: 14),
               child: ShadToaster(
                 child: _RootProviders(
                   child: IncomingShareWatcher(
@@ -352,7 +380,14 @@ class _RootProvidersState extends State<_RootProviders> {
       data: ShadThemeData(
         colorScheme: powerboardsShadColorScheme(),
         brightness: Brightness.light,
+        radius: _powerboardsButtonRadiusForContext(context),
         textTheme: powerboardsShadTextTheme(),
+        decoration: _powerboardsDecorationThemeForContext(context),
+        checkboxTheme: _powerboardsCheckboxThemeForContext(context),
+        primaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
+        outlineBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         primaryToastTheme: _powerboardsToastThemeForContext(context),
         destructiveToastTheme: _powerboardsToastThemeForContext(context),
         selectTheme: ShadSelectTheme(

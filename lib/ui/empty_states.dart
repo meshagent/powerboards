@@ -7,10 +7,12 @@ import 'package:localstorage/localstorage.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent/client.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/ui/pane_empty_state.dart';
 
 class EmptyRooms extends StatelessWidget {
   const EmptyRooms({
@@ -197,49 +199,61 @@ class BalanceLowWarning extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
-    final tt = theme.textTheme;
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final desktopDescription = switch (role) {
+      ProjectRole.admin when kIsWeb => 'Your credit balance is low. Please purchase credits to continue using Powerboards features.',
+      ProjectRole.admin => 'Your credit balance is low. Please use web browser to purchase more credits.',
+      _ => 'Your credit balance is low. Please contact an admin to resolve this issue.',
+    };
+
+    if (isMobile) {
+      return PaneEmptyState(
+        title: 'Low balance',
+        description: desktopDescription,
+        action: role == ProjectRole.admin ? ShadButton(onPressed: onAddCredits, child: const Text("Add Credits")) : null,
+        icon: Container(
+          width: 64.0,
+          height: 64.0,
+          decoration: BoxDecoration(color: cs.destructive, borderRadius: BorderRadius.circular(12)),
+          child: Icon(LucideIcons.triangleAlert, size: 28.0, color: cs.destructiveForeground),
+        ),
+        showActionOnMobile: true,
+        pinActionToMobileFooterOnMobile: true,
+      );
+    }
 
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Padding(
-          padding: const .all(20),
-          child: ShadCard(
-            child: Column(
-              mainAxisSize: .min,
-              children: [
-                Container(
-                  width: 64.0,
-                  height: 64.0,
-                  decoration: BoxDecoration(color: cs.destructiveForeground, borderRadius: .circular(12)),
-                  child: Icon(LucideIcons.triangleAlert, size: 28.0, color: cs.destructive),
-                ),
-                const SizedBox(height: 16),
-
-                // Title & description
-                Text("Low Credit Balance", style: tt.h4, textAlign: .center),
-                const SizedBox(height: 8),
-
-                if (role == ProjectRole.admin && kIsWeb)
-                  Text(
-                    "Your credit balance is low. Please purchase credits to continue using Powerboards features.",
-                    style: tt.muted,
-                    textAlign: .center,
-                  )
-                else if (role == ProjectRole.admin)
-                  Text("Your credit balance is low. Please use web browser to purchase more credits.", style: tt.muted, textAlign: .center)
-                else
-                  Text("Your credit balance is low. Please contact an admin to resolve this issue.", style: tt.muted, textAlign: .center),
-                if (role == ProjectRole.admin && kIsWeb) ...[
-                  const SizedBox(height: 20),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    alignment: .center,
-                    children: [ShadButton(onPressed: onAddCredits, child: Text("Add Credits"))],
+          padding: const EdgeInsets.all(20),
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: cs.background, borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64.0,
+                    height: 64.0,
+                    decoration: BoxDecoration(color: cs.destructive, borderRadius: BorderRadius.circular(12)),
+                    child: Icon(LucideIcons.triangleAlert, size: 28.0, color: cs.destructiveForeground),
                   ),
+                  const SizedBox(height: 16),
+                  const ChatThreadEmptyStateContent(title: "Low balance"),
+                  const SizedBox(height: 8),
+                  Text(
+                    desktopDescription,
+                    style: theme.textTheme.p.copyWith(height: 24 / 16),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (role == ProjectRole.admin && kIsWeb) ...[
+                    const SizedBox(height: 24),
+                    ShadButton(onPressed: onAddCredits, child: const Text("Add Credits")),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -316,9 +330,55 @@ class UserForbiddenWarning extends StatelessWidget {
     final isMobile = context.breakpoint < theme.breakpoints.sm;
 
     if (isMobile) {
+      final user = MeshagentAuth.current.getUser();
+
       return Padding(
-        padding: const .all(20),
-        child: Center(child: _body(context, cs, tt)),
+        padding: const EdgeInsets.all(20),
+        child: PaneEmptyState(
+          title: 'Access Denied',
+          descriptionWidget: RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              style: tt.p.copyWith(color: tt.muted.color, height: 24 / 16),
+              children: [
+                const TextSpan(text: 'Your user '),
+                TextSpan(
+                  text: user?['email'],
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const TextSpan(
+                  text:
+                      ' does not have permission to access this project. Please check user\'s permissions or contact an admin for assistance.',
+                ),
+              ],
+            ),
+          ),
+          icon: Container(
+            width: 64.0,
+            height: 64.0,
+            decoration: BoxDecoration(color: cs.destructiveForeground, borderRadius: BorderRadius.circular(12)),
+            child: Icon(LucideIcons.x, size: 28.0, color: cs.destructive),
+          ),
+          showActionOnMobile: true,
+          action: ShadButton(
+            onPressed: () {
+              MeshagentAuth.current.signOut();
+              localStorage.clear();
+
+              final returnUrl = MeshagentConfig.current!.appUrl;
+              final signOutUrl = MeshagentConfig.current!.serverUrl
+                  .resolve("/signout")
+                  .replace(queryParameters: {if (MeshagentConfig.current?.appUrl != null) "return_url": returnUrl.toString()});
+
+              if (kIsWeb) {
+                launchUrl(signOutUrl, webOnlyWindowName: "_self");
+              } else {
+                context.go("/");
+              }
+            },
+            child: const Text("Sign out"),
+          ),
+        ),
       );
     }
 

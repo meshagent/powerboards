@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:meshagent/meshagent.dart';
@@ -138,11 +139,13 @@ Meshagent getMeshagentClient() {
   );
 }
 
-Future<Room?> createMeshagentRoom(BuildContext context, String projectId) async {
+Future<Room?> createMeshagentRoom(BuildContext context, String projectId, {ValueChanged<String>? onCreateStarted}) async {
   final res = await showRoomNameDialog(context);
 
   if (!context.mounted) return null;
   if (res == null) return null; // user cancelled
+
+  onCreateStarted?.call(res.name);
 
   final client = getMeshagentClient();
   final user = MeshagentAuth.current.getUser();
@@ -203,6 +206,31 @@ Future<List<Room>> listMeshagentRooms(String projectId) async {
   final grants = await client.listRoomGrantsByUser(projectId: projectId, userId: "me");
 
   return grants.map((g) => g.room).toList();
+}
+
+Future<bool> waitForMeshagentRoomConnectionReady(
+  String projectId,
+  String roomName, {
+  Duration timeout = const Duration(seconds: 12),
+  Duration retryInterval = const Duration(milliseconds: 600),
+}) async {
+  final client = getMeshagentClient();
+  final deadline = DateTime.now().add(timeout);
+
+  while (DateTime.now().isBefore(deadline)) {
+    try {
+      await client.connectRoom(projectId: projectId, roomName: roomName);
+      return true;
+    } catch (_) {
+      if (DateTime.now().isAfter(deadline)) {
+        break;
+      }
+
+      await Future.delayed(retryInterval);
+    }
+  }
+
+  return false;
 }
 
 Map<String, dynamic> getMeUser() {

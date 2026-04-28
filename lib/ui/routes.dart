@@ -509,16 +509,16 @@ final routes = [
       final projectId = toUUID(pid);
 
       return loginRequiredBuilder(context, (context) {
-        return NavPage(
+        return RoomsListBuilder(
           projectId: projectId,
-          builder: (context, projects) => RoomsListBuilder(
-            projectId: projectId,
-            builder: (context, rooms) {
-              return PreselectRoom(
-                key: ValueKey("preselect-$projectId"),
+          builder: (context, rooms) {
+            return PreselectRoom(
+              key: ValueKey("preselect-$projectId"),
+              projectId: projectId,
+              rooms: rooms,
+              child: NavPage(
                 projectId: projectId,
-                rooms: rooms,
-                child: FutureBuilder<bool>(
+                builder: (context, projects) => FutureBuilder<bool>(
                   future: getMeshagentClient().canCreateRooms(projectId),
                   builder: (context, snapshot) {
                     final canCreateRooms = snapshot.data ?? false;
@@ -539,9 +539,9 @@ final routes = [
                     );
                   },
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         );
       }, args.uri);
     }),

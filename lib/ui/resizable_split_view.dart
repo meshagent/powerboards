@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 const double _collapsedWidth = 58;
@@ -692,7 +693,11 @@ class _ResizableSplitViewState extends State<ResizableSplitView> {
                           right: 10,
                           child: Tooltip(
                             message: 'Collapse',
-                            child: ShadIconButton.ghost(icon: Icon(LucideIcons.panelLeftClose), onPressed: _toggleCollapsed),
+                            child: ShadIconButton.ghost(
+                              icon: Icon(LucideIcons.panelLeftClose),
+                              decoration: powerboardsAdaptiveIconButtonDecoration(context),
+                              onPressed: _toggleCollapsed,
+                            ),
                           ),
                         ),
                     ],

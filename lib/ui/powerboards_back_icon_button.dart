@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/theme/theme.dart';
 
 class PowerboardsBackIconButton extends StatelessWidget {
   const PowerboardsBackIconButton({
@@ -22,6 +23,7 @@ class PowerboardsBackIconButton extends StatelessWidget {
       message: tooltip,
       child: ShadIconButton.outline(
         icon: Icon(icon, size: paneHeaderIconButtonIconSize),
+        decoration: powerboardsAdaptiveIconButtonDecoration(context),
         onPressed: onPressed,
       ),
     );

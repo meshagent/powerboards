@@ -2,9 +2,7 @@ import 'dart:core';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +10,8 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/device_manager.dart';
+import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 
 import 'room.dart';
 
@@ -98,12 +98,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   }
 
   bool _isLandscapePhoneViewport(BuildContext context) {
-    if (kIsWeb) {
-      return false;
-    }
-
-    final size = MediaQuery.sizeOf(context);
-    return size.width > size.height && size.shortestSide < 600;
+    return powerboardsIsLandscapePhoneViewport(context);
   }
 
   Future<void> _runWithMinimumProcessingDuration(Future<void> Function() action) async {
@@ -409,7 +404,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final isLandscapePhone = _isLandscapePhoneViewport(context);
         final isMobile = size.width < 600;
         final useMobileLobbyLayout = isMobile || isLandscapePhone;
-        final statusTextStyle = GoogleFonts.inter(fontSize: useMobileLobbyLayout ? 17.6 : 16, fontWeight: FontWeight.w600);
+        final statusTextStyle = powerboardsInterTextStyle(fontSize: useMobileLobbyLayout ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
         final contentHorizontalInset = switch (maxWidth) {
           >= 850 => 0.0,
@@ -450,7 +445,11 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
               return Tooltip(
                 message: "Device settings",
-                child: ShadIconButton.outline(onPressed: onPressed, icon: const Icon(LucideIcons.settings)),
+                child: ShadIconButton.outline(
+                  onPressed: onPressed,
+                  decoration: powerboardsAdaptiveMeetingControlButtonDecoration(context),
+                  icon: const Icon(LucideIcons.settings),
+                ),
               );
             },
           );
@@ -461,8 +460,8 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final unavailableToggleColor = ShadTheme.of(context).colorScheme.destructive;
         final unavailableToggleForeground = ShadTheme.of(context).colorScheme.destructiveForeground;
         final meetNowPending = audioPending || videoPending;
-        final meetNowButtonColor = availableToggleColor;
-        final meetNowButtonForeground = availableToggleForeground;
+        final meetNowButtonColor = microphoneAvailable ? availableToggleColor : unavailableToggleColor;
+        final meetNowButtonForeground = microphoneAvailable ? availableToggleForeground : unavailableToggleForeground;
 
         Widget buildMeetNowButtonChild() {
           if (!meetNowPending) {
@@ -572,6 +571,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
                 Widget buildCancelButton() {
                   final button = ShadButton.outline(
+                    height: powerboardsFooterActionButtonHeight,
                     padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
                     onPressed: () {
                       widget.onCancel?.call();
@@ -592,6 +592,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
                 Widget buildJoinButton() {
                   final button = ShadButton(
+                    height: powerboardsFooterActionButtonHeight,
                     padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
                     backgroundColor: meetNowButtonColor,
                     hoverBackgroundColor: meetNowButtonColor,
@@ -664,6 +665,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                           children: [
                             if (widget.onJoin != null)
                               ShadButton(
+                                height: powerboardsFooterActionButtonHeight,
                                 backgroundColor: meetNowButtonColor,
                                 hoverBackgroundColor: meetNowButtonColor,
                                 pressedBackgroundColor: meetNowButtonColor,
@@ -684,6 +686,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
                               ),
                             if (widget.onCancel != null)
                               ShadButton.outline(
+                                height: powerboardsFooterActionButtonHeight,
                                 onPressed: () {
                                   widget.onCancel?.call();
                                 },
@@ -729,6 +732,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
 
                     Widget buildCancelButton() {
                       final button = ShadButton.outline(
+                        height: powerboardsFooterActionButtonHeight,
                         padding: compactActionButtons ? const EdgeInsets.symmetric(horizontal: 12) : null,
                         onPressed: () {
                           widget.onCancel?.call();

@@ -48,7 +48,7 @@ class AskUserForFile extends FunctionTool {
               ),
               ShadButton(
                 onPressed: () async {
-                  final result = await FilePicker.platform.pickFiles(dialogTitle: arguments["title"], withData: true);
+                  final result = await FilePicker.pickFiles(dialogTitle: arguments["title"], withData: true);
                   if (context.mounted) {
                     Navigator.of(context).pop(result);
                   }

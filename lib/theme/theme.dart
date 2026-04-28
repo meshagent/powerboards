@@ -51,6 +51,7 @@ const shadDarkSelection = Color(0xFF473A77);
 const double powerboardsMobileScreenTopInset = 10.0;
 const double powerboardsMobileScreenBottomInset = 15.0;
 const double powerboardsMobileShellHorizontalInset = 15.0;
+const double powerboardsFooterActionButtonHeight = 44.0;
 const double powerboardsMobileSecondaryRowHeight = 68.0;
 const double powerboardsMobileSecondaryRowLeadingInset = 22.0;
 const double powerboardsMobileSecondaryRowTrailingInset = 15.0;
@@ -71,9 +72,10 @@ const EdgeInsets powerboardsMobileScreenSafeAreaMinimum = EdgeInsets.only(
   top: powerboardsMobileScreenTopInset,
   bottom: powerboardsMobileScreenBottomInset,
 );
-const powerboardsMobileTransitionDuration = Duration(milliseconds: 320);
-const Curve powerboardsMobileTransitionInCurve = Curves.easeInOutCubicEmphasized;
-const Curve powerboardsMobileTransitionOutCurve = Curves.easeInOutCubic;
+const powerboardsMobileTransitionDuration = Duration(milliseconds: 380);
+const Curve powerboardsMobileTransitionInCurve = Curves.easeOutCubic;
+const Curve powerboardsMobileTransitionOutCurve = Curves.easeInOutCubicEmphasized;
+const double powerboardsPressedOpacity = 0.5;
 
 Duration powerboardsAdaptiveTransitionDuration(BuildContext context, {Duration desktop = const Duration(milliseconds: 180)}) {
   return ResponsiveBreakpoints.of(context).isMobile ? powerboardsMobileTransitionDuration : desktop;
@@ -85,6 +87,63 @@ Curve powerboardsAdaptiveTransitionInCurve(BuildContext context, {Curve desktop 
 
 Curve powerboardsAdaptiveTransitionOutCurve(BuildContext context, {Curve desktop = Curves.easeInCubic}) {
   return ResponsiveBreakpoints.of(context).isMobile ? powerboardsMobileTransitionOutCurve : desktop;
+}
+
+ShadDecoration? powerboardsAdaptiveIconButtonDecoration(BuildContext context) {
+  return ResponsiveBreakpoints.of(context).isMobile ? const ShadDecoration(shape: BoxShape.circle) : null;
+}
+
+ShadDecoration? powerboardsAdaptiveMeetingControlButtonDecoration(BuildContext context) {
+  return ResponsiveBreakpoints.of(context).isMobile
+      ? ShadDecoration(border: ShadBorder.all(radius: const BorderRadius.all(Radius.circular(12))))
+      : null;
+}
+
+double _powerboardsClampUnit(double value) {
+  return value.clamp(0.0, 1.0).toDouble();
+}
+
+Color powerboardsMobileGlassColor(Color baseColor, {double tint = 0.8, double alpha = 0.82}) {
+  final tinted = Color.lerp(baseColor, Colors.white, _powerboardsClampUnit(tint)) ?? baseColor;
+  return tinted.withValues(alpha: _powerboardsClampUnit(alpha));
+}
+
+Color powerboardsMobileGlassBorderColor(Color baseColor, {double tint = 0.58, double alpha = 0.5}) {
+  final tinted = Color.lerp(baseColor, Colors.white, _powerboardsClampUnit(tint)) ?? baseColor;
+  return tinted.withValues(alpha: _powerboardsClampUnit(alpha));
+}
+
+LinearGradient powerboardsMobileGlassGradient(
+  Color baseColor, {
+  double topTint = 0.9,
+  double bottomTint = 0.72,
+  double topAlpha = 0.94,
+  double bottomAlpha = 0.76,
+}) {
+  return LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      powerboardsMobileGlassColor(baseColor, tint: topTint, alpha: topAlpha),
+      powerboardsMobileGlassColor(baseColor, tint: bottomTint, alpha: bottomAlpha),
+    ],
+  );
+}
+
+List<BoxShadow> powerboardsMobileGlassShadows({double opacity = 0.12}) {
+  final shadowOpacity = _powerboardsClampUnit(opacity);
+  return [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: shadowOpacity * 0.42),
+      blurRadius: 28,
+      offset: const Offset(0, 12),
+    ),
+    BoxShadow(
+      color: Colors.black.withValues(alpha: shadowOpacity * 0.2),
+      blurRadius: 10,
+      offset: const Offset(0, 2),
+    ),
+  ];
 }
 
 ShadColorScheme powerboardsShadColorScheme() {
@@ -157,6 +216,62 @@ ShadTextTheme powerboardsShadTextTheme() {
   );
 }
 
+TextStyle powerboardsInterTextStyle({
+  TextStyle? textStyle,
+  Color? color,
+  FontWeight? fontWeight,
+  double? fontSize,
+  double? height,
+  double? letterSpacing,
+}) {
+  return GoogleFonts.inter(
+    textStyle: textStyle,
+    color: color,
+    fontWeight: fontWeight,
+    fontSize: fontSize,
+    height: height,
+    letterSpacing: letterSpacing,
+  );
+}
+
+TextStyle powerboardsSectionTitleStyle({Color color = shadForeground, double? height}) {
+  return powerboardsInterTextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: color, height: height);
+}
+
+TextStyle powerboardsSecondaryTextStyle({Color color = shadSecondaryForeground, double? height}) {
+  return powerboardsInterTextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: color, height: height);
+}
+
+TextStyle powerboardsActionLabelStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: color);
+}
+
+TextStyle powerboardsMetaTextStyle({required Color color, FontWeight fontWeight = FontWeight.w500, double? height}) {
+  return powerboardsInterTextStyle(fontSize: 13, fontWeight: fontWeight, color: color, height: height);
+}
+
+TextStyle powerboardsEmphasizedTitleStyle({required Color color, double height = 1.15}) {
+  return powerboardsInterTextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: color, height: height);
+}
+
+TextStyle powerboardsMobileHeaderSecondaryTextStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color, height: 1.0, letterSpacing: 0.1);
+}
+
+TextStyle powerboardsMobileHeaderPrimaryTextStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: color, height: 1.0, letterSpacing: -0.2);
+}
+
+TextStyle powerboardsMobileDialogTitleStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: color, height: 1.05, letterSpacing: -0.3);
+}
+
+TextStyle powerboardsMobileDialogDescriptionStyle({required Color color}) {
+  return powerboardsInterTextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: color, height: 1.35, letterSpacing: -0.05);
+}
+
+const EdgeInsets powerboardsBadgePadding = EdgeInsets.symmetric(horizontal: 16, vertical: 2);
+
 const filledButtonColor = shadPrimary;
 const agentBackgroundColor = Colors.grey;
 const toolIconColor = Color(0xFF47484A);
@@ -200,7 +315,7 @@ String timeAgo(DateTime d) {
 }
 
 final menuItemButtonStyle = ButtonStyle(
-  textStyle: WidgetStatePropertyAll<TextStyle>(GoogleFonts.inter(fontSize: 14, color: Colors.black, letterSpacing: 0.4)),
+  textStyle: WidgetStatePropertyAll<TextStyle>(powerboardsInterTextStyle(fontSize: 14, color: Colors.black, letterSpacing: 0.4)),
 
   elevation: const WidgetStatePropertyAll(20),
 );

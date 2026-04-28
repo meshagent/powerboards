@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:meshagent/meshagent.dart';
@@ -8,8 +7,10 @@ import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
+import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'agent_option.dart';
@@ -53,21 +54,11 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
   late final canViewDeveloperLogs = widget.canViewDeveloperLogs;
 
   bool _usesMobileRoomLayout(BuildContext context) {
-    if (!kIsWeb) {
-      final size = MediaQuery.sizeOf(context);
-      if (size.width > size.height && size.shortestSide < 600) {
-        return true;
-      }
-    }
-
-    return ResponsiveBreakpoints.of(context).isMobile;
+    return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
   }
 
   Future<void> _addAgent() async {
-    await showShadDialog<void>(
-      context: context,
-      builder: (context) => ManageAgentsDialog(projectId: widget.projectId, room: widget.room),
-    );
+    await showManageAgentsSurface(context: context, projectId: widget.projectId, room: widget.room);
   }
 
   Future<void> _openPermissions() async {
@@ -213,6 +204,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
               message: "Room options",
               child: ShadIconButton.outline(
                 icon: const Icon(LucideIcons.ellipsis, size: paneHeaderIconButtonIconSize),
+                decoration: powerboardsAdaptiveIconButtonDecoration(context),
                 onPressed: controller.toggle,
               ),
             );

@@ -6,6 +6,7 @@ import 'package:meshagent/meshagent.dart';
 
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/settings/mobile_room_list_intent.dart';
 import 'package:powerboards/settings/selected_room.dart';
 
 class PreselectRoom extends StatefulWidget {
@@ -30,6 +31,13 @@ class _PreselectRoomState extends State<PreselectRoom> {
     final items = widget.rooms.state.value ?? [];
 
     if (!mounted) {
+      return;
+    }
+
+    if (consumeStayOnMobileRoomList(widget.projectId)) {
+      setState(() {
+        isLoading = false;
+      });
       return;
     }
 

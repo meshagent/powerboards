@@ -11,6 +11,8 @@ import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/route_service_match.dart';
+import 'package:powerboards/ui/powerboards_back_icon_button.dart';
+import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:meshagent/meshagent.dart' as ma;
@@ -45,6 +47,16 @@ class AgentOption {
     this.iconColor = Colors.white,
     this.canChange = true,
   });
+}
+
+String _agentDisplayTitle(String rawTitle) {
+  final normalized = rawTitle.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (normalized.isEmpty) {
+    return rawTitle.trim();
+  }
+
+  final lowerCased = normalized.toLowerCase();
+  return '${lowerCased[0].toUpperCase()}${lowerCased.substring(1)}';
 }
 
 class AgentOptionTile extends StatefulWidget {
@@ -121,12 +133,15 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
   @override
   Widget build(BuildContext context) {
     const radius = 12.0;
+    final theme = ShadTheme.of(context);
+    final titleStyle = powerboardsAgentCardTitleTextStyle(context);
+    final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: ShadTheme.of(context).colorScheme.border),
+        border: Border.all(color: theme.colorScheme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -139,18 +154,9 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
                   spacing: 6,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.option.title,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text(_agentDisplayTitle(widget.option.title), style: titleStyle, overflow: TextOverflow.ellipsis),
 
-                    Text(
-                      widget.option.subtitle,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.8)),
-                    ),
+                    Text(widget.option.subtitle, style: descriptionStyle),
 
                     if (widget.mailboxes.isNotEmpty || widget.routes.isNotEmpty) SizedBox(height: 0),
 
@@ -165,6 +171,7 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
                           width: 22,
                           height: 22,
                           padding: EdgeInsets.zero,
+                          decoration: powerboardsAdaptiveIconButtonDecoration(context),
                           onPressed: () {
                             Clipboard.setData(ClipboardData(text: mailbox.address));
                           },
@@ -183,6 +190,7 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
                           width: 22,
                           height: 22,
                           padding: EdgeInsets.zero,
+                          decoration: powerboardsAdaptiveIconButtonDecoration(context),
                           onPressed: () {
                             Clipboard.setData(ClipboardData(text: "https://${route.domain}"));
                           },
@@ -265,18 +273,63 @@ class _InstallAgentDialog extends StatelessWidget {
   }
 }
 
+class _NoTransitionPageRoute<T> extends PageRouteBuilder<T> {
+  _NoTransitionPageRoute({required this.builder})
+    : super(
+        pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      );
+
+  final WidgetBuilder builder;
+
+  @override
+  Widget buildTransitions(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    return child;
+  }
+}
+
+Future<void> showManageAgentsSurface({
+  required BuildContext context,
+  required String projectId,
+  required RoomClient room,
+  void Function()? onServiceChanged,
+}) async {
+  if (powerboardsUsesNativeMobileDialogLayout(context)) {
+    await dismissBackgroundKeyboardBeforeAdaptiveSurface(context);
+    if (!context.mounted) {
+      return;
+    }
+
+    await Navigator.of(context).push<void>(
+      _NoTransitionPageRoute(
+        builder: (_) => ManageAgentsDialog(projectId: projectId, room: room, onServiceChanged: onServiceChanged, asScreen: true),
+      ),
+    );
+    return;
+  }
+
+  await showPowerboardsFlowDialog<void>(
+    context: context,
+    builder: (_) => ManageAgentsDialog(projectId: projectId, room: room, onServiceChanged: onServiceChanged),
+  );
+}
+
 class ManageAgentsDialog extends StatefulWidget {
   final RoomClient room;
   final String projectId;
   final void Function()? onServiceChanged;
+  final bool asScreen;
 
-  const ManageAgentsDialog({super.key, required this.room, required this.projectId, this.onServiceChanged});
+  const ManageAgentsDialog({super.key, required this.room, required this.projectId, this.onServiceChanged, this.asScreen = false});
 
   @override
   State<ManageAgentsDialog> createState() => _ManageAgentsDialogState();
 }
 
 class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
+  static const double _mobileManageAgentsScrollBottomInset = 148.0;
+
   Timer? _pollTimer;
 
   String? _error;
@@ -364,7 +417,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
   }
 
   Future<void> _openCustomDialog() async {
-    final changed = await showShadDialog<bool>(
+    final changed = await showPowerboardsFlowDialog<bool>(
       context: context,
       builder: (dialogContext) => _InstallAgentDialog(projectId: widget.projectId, roomName: widget.room.roomName),
     );
@@ -398,14 +451,14 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
     if (!mounted) {
       return;
     }
-    final changed = await showShadDialog<bool?>(
+    final changed = await showPowerboardsFlowDialog<bool?>(
       context: context,
       barrierDismissible: true,
       builder: (context) => existing != null
           ? ConfigureServiceTemplateDialog(
               prefilledVars: prefilled,
-              title: "Change Agent",
-              description: "Change the properties of this agent",
+              title: "Change agent",
+              description: const Text("Change the properties of this agent"),
               template: option.template ?? "",
               projectId: widget.projectId,
               serviceId: existing.id!,
@@ -428,133 +481,237 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
     }
   }
 
+  Widget _buildAdaptiveMobileScreenFooter(BuildContext context, {required bool installEnabled}) {
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final collapseProgress = overlayHeaderScope?.collapseProgress ?? 0;
+    final hideForScroll = collapseProgress > 0.1;
+
+    return AnimatedSwitcher(
+      duration: powerboardsMobileOverlayHeaderTransitionDuration,
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) {
+        return AnimatedBuilder(
+          animation: animation,
+          child: child,
+          builder: (context, transitionChild) {
+            final offsetY = 16 * (1 - animation.value);
+            return Transform.translate(
+              offset: Offset(0, offsetY),
+              child: ClipRect(
+                child: FadeTransition(
+                  opacity: animation,
+                  child: SizeTransition(sizeFactor: animation, axisAlignment: 1.0, child: transitionChild),
+                ),
+              ),
+            );
+          },
+        );
+      },
+      child: hideForScroll
+          ? const SizedBox.shrink(key: ValueKey('manage-agents-mobile-footer-hidden'))
+          : KeyedSubtree(
+              key: const ValueKey('manage-agents-mobile-footer-visible'),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ShadButton.outline(onPressed: installEnabled ? _openCustomDialog : null, child: const Text('Install')),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ShadButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Close')),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _screenBody({required BuildContext context, required Widget child, required bool installEnabled, bool showFooter = true}) {
+    final theme = ShadTheme.of(context);
+    final titleStyle = powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground);
+    final surfaceColor = theme.colorScheme.card;
+    final trailingPlaceholder = IgnorePointer(
+      child: Opacity(
+        opacity: 0,
+        child: PowerboardsBackIconButton(onPressed: () {}, tooltip: "Close", icon: LucideIcons.x),
+      ),
+    );
+
+    return ColoredBox(
+      color: surfaceColor,
+      child: PowerboardsMobileOverlayScaffold(
+        leading: PowerboardsBackIconButton(onPressed: () => Navigator.of(context).maybePop(), tooltip: "Close", icon: LucideIcons.x),
+        titleBuilder: (context, collapseProgress) =>
+            Text('Agents & Services', maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle),
+        trailingActions: [trailingPlaceholder],
+        backgroundColor: surfaceColor,
+        body: Column(
+          children: [
+            Expanded(child: child),
+            if (showFooter) Builder(builder: (context) => _buildAdaptiveMobileScreenFooter(context, installEnabled: installEnabled)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context, _) {
-        if (availableAgents.state.value == null ||
-            services.state.value == null ||
-            mailboxes.state.value == null ||
-            routes.state.value == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final optionsToShow = <AgentOption>[
-          for (final service in services.state.value!)
-            if (availableAgents.state.value!.templates.firstWhereOrNull(
-                  (x) => x.parsed.metadata.annotations["meshagent.service.id"] == service.metadata.annotations["meshagent.service.id"],
-                ) ==
-                null)
-              AgentOption(
-                id: service.metadata.annotations["meshagent.service.id"] ?? "",
-                readme: service.metadata.annotations["meshagent.service.readme"],
-                title: service.metadata.name,
-                subtitle: service.metadata.description ?? "",
-                icon: LucideIcons.puzzle,
-                color: const Color(0xFF222222),
-                canChange: true,
-                template: null,
-                parsed: null,
-              ),
-
-          for (final available in availableAgents.state.value!.templates)
-            AgentOption(
-              readme: available.parsed.metadata.annotations["meshagent.service.readme"],
-              id: available.parsed.metadata.annotations["meshagent.service.id"] ?? "",
-              title: available.parsed.metadata.name,
-              subtitle: available.parsed.metadata.description ?? "",
-              template: available.template,
-              icon: LucideIcons.bot,
-              color: const Color(0xFF222222),
-              parsed: available.parsed,
-            ),
-        ];
-
         return LayoutBuilder(
           builder: (context, constraints) {
+            final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+            final isScreen = widget.asScreen && isMobile;
+            final isLoading =
+                availableAgents.state.value == null ||
+                services.state.value == null ||
+                mailboxes.state.value == null ||
+                routes.state.value == null;
+
+            if (isLoading) {
+              final loadingBody = const Center(child: CircularProgressIndicator());
+
+              if (isScreen) {
+                return _screenBody(context: context, child: loadingBody, installEnabled: false, showFooter: false);
+              }
+
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final optionsToShow = <AgentOption>[
+              for (final service in services.state.value!)
+                if (availableAgents.state.value!.templates.firstWhereOrNull(
+                      (x) => x.parsed.metadata.annotations["meshagent.service.id"] == service.metadata.annotations["meshagent.service.id"],
+                    ) ==
+                    null)
+                  AgentOption(
+                    id: service.metadata.annotations["meshagent.service.id"] ?? "",
+                    readme: service.metadata.annotations["meshagent.service.readme"],
+                    title: service.metadata.name,
+                    subtitle: service.metadata.description ?? "",
+                    icon: LucideIcons.puzzle,
+                    color: const Color(0xFF222222),
+                    canChange: true,
+                    template: null,
+                    parsed: null,
+                  ),
+
+              for (final available in availableAgents.state.value!.templates)
+                AgentOption(
+                  readme: available.parsed.metadata.annotations["meshagent.service.readme"],
+                  id: available.parsed.metadata.annotations["meshagent.service.id"] ?? "",
+                  title: available.parsed.metadata.name,
+                  subtitle: available.parsed.metadata.description ?? "",
+                  template: available.template,
+                  icon: LucideIcons.bot,
+                  color: const Color(0xFF222222),
+                  parsed: available.parsed,
+                ),
+            ];
+
             final maxViewportHeight = constraints.maxHeight;
             final maxHeight = maxViewportHeight.isFinite ? (maxViewportHeight * 0.7).clamp(0.0, 860.0).toDouble() : 620.0;
+            final optionsList = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildError(context),
+                const SizedBox(height: 12),
+                for (var i = 0; i < optionsToShow.length; i++) ...[
+                  Builder(
+                    builder: (context) {
+                      final option = optionsToShow[i];
+                      final service = services.state.value?.firstWhereOrNull(
+                        (s) => s.metadata.annotations["meshagent.service.id"] == option.id,
+                      );
+                      final serviceRoutes = service == null
+                          ? const <ma.Route>[]
+                          : routesForService(routes: routes.state.value ?? const <ma.Route>[], service: service);
+                      final inRoom = service != null;
+                      final identity = service?.agents.firstOrNull?.name;
+                      final hasMessaging = service != null && hasMessagingParticipant(service);
+
+                      final status = !hasMessaging
+                          ? AgentRuntimeStatus.running
+                          : (identity == null ||
+                                    widget.room.messaging.remoteParticipants.firstWhereOrNull((x) => x.getAttribute("name") == identity) ==
+                                        null
+                                ? AgentRuntimeStatus.notRunning
+                                : AgentRuntimeStatus.running);
+                      return AgentOptionTile(
+                        option: option,
+                        inRoom: inRoom,
+                        status: status,
+                        mailboxes:
+                            (mailboxes.state.value
+                                ?.where(
+                                  (x) =>
+                                      x.annotations["meshagent.service.id"] != null &&
+                                      x.annotations["meshagent.service.id"] == service?.metadata.annotations["meshagent.service.id"],
+                                )
+                                .toList()) ??
+                            [],
+                        routes: serviceRoutes,
+                        busy: false,
+                        version: null,
+                        versionHasUpdate: false,
+                        onPrimaryTap: () => _openManageDialog(option: option, existing: service),
+                      );
+                    },
+                  ),
+                  if (i < optionsToShow.length - 1) const SizedBox(height: 16),
+                ],
+              ],
+            );
+
+            if (isScreen) {
+              return _screenBody(
+                context: context,
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, _mobileManageAgentsScrollBottomInset),
+                    child: optionsList,
+                  ),
+                ),
+                installEnabled: true,
+              );
+            }
 
             return PowerboardsShadDialog.task(
               scrollable: false,
-              constraints: BoxConstraints(maxWidth: 500.0, maxHeight: maxHeight),
+              constraints: isMobile ? null : BoxConstraints(maxWidth: 500.0, maxHeight: maxHeight),
               crossAxisAlignment: CrossAxisAlignment.start,
               title: const Text('Agents & Services'),
               actions: [
                 ShadButton.outline(onPressed: _openCustomDialog, child: const Text('Install')),
                 ShadButton(onPressed: () => Navigator.of(context).maybePop(), child: const Text('Close')),
               ],
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
-                  Flexible(
-                    fit: FlexFit.loose,
-                    child: ScrollConfiguration(
-                      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildError(context),
-                            const SizedBox(height: 12),
-                            for (var i = 0; i < optionsToShow.length; i++) ...[
-                              Builder(
-                                builder: (context) {
-                                  final option = optionsToShow[i];
-                                  final service = services.state.value?.firstWhereOrNull(
-                                    (s) => s.metadata.annotations["meshagent.service.id"] == option.id,
-                                  );
-                                  final serviceRoutes = service == null
-                                      ? const <ma.Route>[]
-                                      : routesForService(routes: routes.state.value ?? const <ma.Route>[], service: service);
-                                  final inRoom = service != null;
-                                  final identity = service?.agents.firstOrNull?.name;
-                                  final hasMessaging = service != null && hasMessagingParticipant(service);
-
-                                  final status = !hasMessaging
-                                      ? AgentRuntimeStatus.running
-                                      : (identity == null ||
-                                                widget.room.messaging.remoteParticipants.firstWhereOrNull(
-                                                      (x) => x.getAttribute("name") == identity,
-                                                    ) ==
-                                                    null
-                                            ? AgentRuntimeStatus.notRunning
-                                            : AgentRuntimeStatus.running);
-                                  return AgentOptionTile(
-                                    option: option,
-                                    inRoom: inRoom,
-                                    status: status,
-                                    mailboxes:
-                                        (mailboxes.state.value
-                                            ?.where(
-                                              (x) =>
-                                                  x.annotations["meshagent.service.id"] != null &&
-                                                  x.annotations["meshagent.service.id"] ==
-                                                      service?.metadata.annotations["meshagent.service.id"],
-                                            )
-                                            .toList()) ??
-                                        [],
-                                    routes: serviceRoutes,
-                                    busy: false,
-                                    version: "latest",
-                                    versionHasUpdate: false,
-                                    onPrimaryTap: () => _openManageDialog(option: option, existing: service),
-                                  );
-                                },
-                              ),
-                              if (i < optionsToShow.length - 1) const SizedBox(height: 16),
-                            ],
-                          ],
+              child: isMobile
+                  ? optionsList
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: ScrollConfiguration(
+                            behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                            child: SingleChildScrollView(child: optionsList),
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
-                ],
-              ),
             );
           },
         );
@@ -570,6 +727,7 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ShadTheme.of(context);
     return Row(
       children: [
         Container(
@@ -578,10 +736,7 @@ class _StatusChip extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: const Color(0xFF111827), fontWeight: FontWeight.w600),
-        ),
+        Text(label, style: theme.textTheme.small.copyWith(color: color)),
       ],
     );
   }

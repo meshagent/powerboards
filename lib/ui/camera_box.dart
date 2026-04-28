@@ -26,7 +26,7 @@ class CameraBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = ColoredBox(
       color: const Color(0xFF222222),
-      child: interactive ? InteractiveViewer2(minScale: 1, maxScale: 5, child: camera) : camera,
+      child: interactive ? InteractiveViewer2(minScale: 1, maxScale: 5, constrained: true, child: camera) : camera,
     );
 
     return Stack(

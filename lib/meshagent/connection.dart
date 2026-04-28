@@ -6,6 +6,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -16,8 +17,10 @@ import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/room_ended_card.dart';
 import 'package:powerboards/meshagent/room_not_found.dart';
 import 'package:powerboards/oauth/oauth.dart';
+import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
 import 'package:powerboards/ui/main_wrapper.dart';
@@ -32,6 +35,10 @@ class MeshagentConnectionResponse {
   final String url;
   final String token;
   final String roomType;
+}
+
+class _RoomConnectionScopeGlobalKey extends GlobalObjectKey {
+  const _RoomConnectionScopeGlobalKey(super.value);
 }
 
 class MeshagentConnectionBuilder extends StatefulWidget {
@@ -57,12 +64,33 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   static const String _defaultConnectionStatusText = "Connecting to room";
 
   Exception? error;
-  int conectionNumber = 0;
+  Object _roomConnectionScopeIdentity = Object();
   String _lastConnectionStatusText = _defaultConnectionStatusText;
   bool _roomWasConnected = false;
 
+  @override
+  void didUpdateWidget(covariant MeshagentConnectionBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.projectId != widget.projectId || oldWidget.roomName != widget.roomName) {
+      _roomConnectionScopeIdentity = Object();
+      _lastConnectionStatusText = _defaultConnectionStatusText;
+      _roomWasConnected = false;
+    }
+  }
+
   Widget _backHeader() {
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+
+    if (isMobile) {
+      final navController = Controller.maybeOfType<NavController>(context);
+      if (navController == null) {
+        return const SizedBox.shrink();
+      }
+
+      return PowerboardsBackIconButton(onPressed: navController.openMobileRoomList, tooltip: "Open rooms", icon: LucideIcons.menu);
+    }
 
     if (isSmallDisplay) {
       return PowerboardsBackIconButton(onPressed: () => context.go("/"));
@@ -131,13 +159,28 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   Widget _withReservedRoomHeader(Widget child) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+    final navController = isMobile ? Controller.maybeOfType<NavController>(context) : null;
     final content = Column(
       children: [
         SizedBox(
           height: headerHeight,
-          child: isSmallDisplay
+          child: isMobile
               ? Padding(
-                  padding: isMobile ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: 20),
+                  padding: powerboardsMobileHorizontalPadding,
+                  child: Row(
+                    children: [
+                      if (navController != null)
+                        PowerboardsBackIconButton(
+                          onPressed: navController.openMobileRoomList,
+                          tooltip: "Open rooms",
+                          icon: LucideIcons.menu,
+                        ),
+                    ],
+                  ),
+                )
+              : isSmallDisplay
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(children: [PowerboardsBackIconButton(onPressed: () => context.go("/"))]),
                 )
               : null,
@@ -151,7 +194,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   void _reconnect() {
     setState(() {
       _roomWasConnected = false;
-      conectionNumber += 1;
+      _roomConnectionScopeIdentity = Object();
     });
   }
 
@@ -177,7 +220,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   Widget build(BuildContext context) {
     return ShadToaster(
       child: RoomConnectionScope(
-        key: ValueKey("room-connection-${widget.roomName}-$conectionNumber"),
+        key: _RoomConnectionScopeGlobalKey(_roomConnectionScopeIdentity),
         authorization: () {
           _lastConnectionStatusText = _defaultConnectionStatusText;
           _roomWasConnected = false;
@@ -190,7 +233,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
         },
         notFoundBuilder: (context) => RoomNotFound(),
         oauthTokenRequestHandler: (RoomClient client, request) async {
-          showShadDialog(
+          showPowerboardsAlertDialog(
             context: context,
             builder: (context) => PowerboardsShadDialog.compact(
               title: Text("An agent would like permission to use one of your accounts"),
@@ -230,7 +273,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
 
           if (request.type == "git") {
             final secretValue = {};
-            final value = await showShadDialog<Map>(
+            final value = await showPowerboardsAlertDialog<Map>(
               context: context,
               builder: (context) => PowerboardsShadDialog.alert(
                 title: Text("Secret requested"),
@@ -241,8 +284,12 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
                   children: [
                     Text("An agent requested credentials for ${request.url}"),
                     SizedBox(height: 8),
-                    ShadInputFormField(label: Text("Username"), obscureText: false, onChanged: (value) => secretValue["username"] = value),
-                    ShadInputFormField(
+                    PowerboardsAdaptiveInputFormField(
+                      label: Text("Username"),
+                      obscureText: false,
+                      onChanged: (value) => secretValue["username"] = value,
+                    ),
+                    PowerboardsAdaptiveInputFormField(
                       label: Text("Password / Personal Access Token"),
                       obscureText: true,
                       onChanged: (value) => secretValue["password"] = value,
@@ -263,7 +310,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
             }
           } else {
             String secretValue = "";
-            final value = await showShadDialog<String>(
+            final value = await showPowerboardsAlertDialog<String>(
               context: context,
               builder: (context) => PowerboardsShadDialog.alert(
                 title: Text("Secret requested"),
@@ -276,7 +323,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
                     Text("Key: ${request.url}"),
                     Text("Type: ${request.type}"),
                     SizedBox(height: 16),
-                    ShadInputFormField(label: Text("Secret"), obscureText: true, onChanged: (value) => secretValue = value),
+                    PowerboardsAdaptiveInputFormField(label: Text("Secret"), obscureText: true, onChanged: (value) => secretValue = value),
                   ],
                 ),
                 actions: [

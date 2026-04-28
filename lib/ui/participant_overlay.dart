@@ -7,6 +7,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/livekit/expand_participant_controller.dart';
 import 'package:powerboards/livekit/room.dart';
+import 'package:powerboards/theme/theme.dart';
 
 const audioIconSize = 16.0;
 const audioIconColor = Colors.white;
@@ -95,7 +96,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
     final pendingLocalMedia = roomModel?.pendingLocalMedia;
 
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.participant, if (pendingLocalMedia != null) pendingLocalMedia]),
+      listenable: Listenable.merge([widget.participant, ?pendingLocalMedia]),
       builder: (context, _) {
         final localParticipant = roomModel?.localParticipant;
         final isLocalParticipant =
@@ -154,6 +155,7 @@ class _ParticipantOverlayState extends State<ParticipantOverlay> with SingleTick
                 child: ShadIconButton.ghost(
                   width: 20.0,
                   height: 20.0,
+                  decoration: powerboardsAdaptiveIconButtonDecoration(context),
                   hoverBackgroundColor: Colors.transparent,
                   icon: Icon(
                     expanded ? LucideIcons.minimize2 : LucideIcons.expand,

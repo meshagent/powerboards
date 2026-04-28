@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 Future<String?> showRenameRoomDialog(
   BuildContext context, {
   String title = 'Rename room',
-  String description = 'Use this a short, memorable name.',
+  String description = 'Use a short memorable name.',
   String initialValue = '',
   String label = 'Name',
   String placeholder = 'e.g. General',
 }) {
   final formKey = GlobalKey<ShadFormState>();
-  final tt = ShadTheme.of(context).textTheme;
-  final labelStyle = tt.small.copyWith(fontWeight: FontWeight.w600);
+  final labelStyle = powerboardsFieldLabelTextStyle(context);
 
-  return showShadDialog<String?>(
+  return showPowerboardsAlertDialog<String?>(
     context: context,
     builder: (ctx) {
       void submit() {
@@ -40,7 +40,7 @@ Future<String?> showRenameRoomDialog(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                ShadInputFormField(
+                PowerboardsAdaptiveInputFormField(
                   id: 'name',
                   label: Text('New Name', style: labelStyle),
                   placeholder: Text(placeholder),

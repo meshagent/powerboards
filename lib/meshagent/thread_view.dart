@@ -1,28 +1,37 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
+import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
+import 'package:powerboards/ui/powerboards_mobile_action_pills.dart';
+import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat_bot_view.dart';
 import 'package:meshagent_flutter_shadcn/chat_bubble_markdown_config.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/agent_participants.dart';
+import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
+import 'package:powerboards/meshagent/file_list_primitives.dart';
+import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
+import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
@@ -69,6 +78,10 @@ class MeshagentThreadView extends StatefulWidget {
     this.emptyState,
     this.newThreadEmptyStateVerticalOffset = 0,
     this.hideChatInput = false,
+    this.onConnectAgents,
+    this.onInvite,
+    this.onOpenFiles,
+    this.onOpenMeet,
   });
 
   final String projectId;
@@ -91,6 +104,10 @@ class MeshagentThreadView extends StatefulWidget {
   final Widget? emptyState;
   final double newThreadEmptyStateVerticalOffset;
   final bool hideChatInput;
+  final VoidCallback? onConnectAgents;
+  final VoidCallback? onInvite;
+  final VoidCallback? onOpenFiles;
+  final VoidCallback? onOpenMeet;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -98,20 +115,40 @@ class MeshagentThreadView extends StatefulWidget {
 
 class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
+  static const double _mobileThreadEmptyStateWidthMax = 600;
+
+  late final ChatThreadController _chatController;
+  String? _lastRestoredThreadScrollOffsetValue;
+
+  bool _usesCompactMobileThreadEmptyState(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final view = View.of(context);
+    final bottomInset = view.viewInsets.bottom / view.devicePixelRatio;
+    return mediaQuery.size.width < _mobileThreadEmptyStateWidthMax && bottomInset > 0;
+  }
+
+  bool _usesMobileThreadLayout(BuildContext context) {
+    return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
+  }
 
   String _chatPlaceholderText(String? agentName) {
     final normalizedAgentName = agentName?.trim();
     if (normalizedAgentName == null || normalizedAgentName.isEmpty) {
-      return "Type a message";
+      return "Message...";
     }
 
-    return "Type a message or @$normalizedAgentName";
+    return "Message $normalizedAgentName...";
   }
 
-  Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description}) {
+  Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description, required bool compact}) {
     final content = Padding(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
-      child: ChatThreadEmptyStateContent(title: title, description: description),
+      child: compact
+          ? ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Text(title, textAlign: TextAlign.center, style: powerboardsSectionTitleStyle()),
+            )
+          : ChatThreadEmptyStateContent(title: title, description: description),
     );
 
     final verticalOffset = widget.newThreadEmptyStateVerticalOffset;
@@ -122,7 +159,56 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     return Transform.translate(offset: Offset(0, verticalOffset), child: content);
   }
 
-  late final ChatThreadController _chatController;
+  Widget _buildMobileNewThreadEmptyState(BuildContext context) {
+    const horizontalInset = powerboardsMobileShellHorizontalInset;
+    final theme = ShadTheme.of(context);
+    final inactivePillColor = theme.colorScheme.foreground;
+    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
+    final items = <PowerboardsMobileActionPillItem>[
+      const PowerboardsMobileActionPillItem(label: "Chat", selected: true),
+      if (widget.onOpenFiles != null) PowerboardsMobileActionPillItem(label: "Share files", onPressed: widget.onOpenFiles),
+      if (widget.onOpenMeet != null) PowerboardsMobileActionPillItem(label: "Meet", onPressed: widget.onOpenMeet),
+    ];
+
+    Widget content = Align(
+      alignment: Alignment.topCenter,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (items.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: powerboardsMobileOverlaySecondaryRowLift),
+              child: SizedBox(
+                height: powerboardsMobileSecondaryRowHeight,
+                width: double.infinity,
+                child: PowerboardsMobileActionPillStrip(
+                  items: items,
+                  viewportPadding: const EdgeInsets.symmetric(horizontal: horizontalInset),
+                  textStyle: pillTextStyle,
+                  unselectedForegroundColor: inactivePillColor,
+                  itemGap: 10,
+                  pillPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    final verticalOffset = widget.newThreadEmptyStateVerticalOffset;
+    if (verticalOffset != 0) {
+      content = Transform.translate(offset: Offset(0, verticalOffset), child: content);
+    }
+
+    return content;
+  }
+
+  Widget _buildAdaptiveMobileChatInputBox(BuildContext context, Widget chatBox) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: KeyedSubtree(key: const ValueKey('mobile-chat-input'), child: chatBox),
+    );
+  }
 
   @override
   void initState() {
@@ -131,9 +217,25 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _restoreThreadScrollOffsetFromRoute();
+  }
+
+  @override
   void dispose() {
     _chatController.dispose();
     super.dispose();
+  }
+
+  void _onMessageSent(ma.ChatMessage message) {}
+
+  Uri? _currentRouteUriOrNull() {
+    try {
+      return PathRouteMatch.of(context).uri;
+    } catch (_) {
+      return null;
+    }
   }
 
   Widget _fileInThreadBuilder(BuildContext context, String path) {
@@ -149,23 +251,93 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   void _open(String path) {
-    final state = PathRouteMatch.of(context);
-    final currentUri = state.uri;
+    final currentUri = _currentRouteUriOrNull();
+    if (currentUri == null) {
+      return;
+    }
 
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    final previewOriginQueryParameters = Map<String, String>.from(currentUri.queryParameters);
+    previewOriginQueryParameters.putIfAbsent('pane', () => 'chat');
+    if (_chatController.threadScrollController.hasClients) {
+      previewOriginQueryParameters[filePreviewThreadScrollOffsetQueryParameter] = _chatController.threadScrollController.position.pixels
+          .toString();
+    }
+
     updatedQueryParameters['p'] = path;
-    updatedQueryParameters.remove('pane'); // remove the pane parameter to ensure file is shown
+    updatedQueryParameters[filePreviewOriginQueryParameter] = currentUri.replace(queryParameters: previewOriginQueryParameters).toString();
+    updatedQueryParameters.remove('pane');
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
 
     context.go(newUri.toString());
   }
 
+  void _restoreThreadScrollOffsetFromRoute() {
+    final currentUri = _currentRouteUriOrNull();
+    if (currentUri == null) {
+      return;
+    }
+
+    final rawOffset = currentUri.queryParameters[filePreviewThreadScrollOffsetQueryParameter];
+    if (rawOffset == null || rawOffset.isEmpty || rawOffset == _lastRestoredThreadScrollOffsetValue) {
+      return;
+    }
+
+    final parsedOffset = double.tryParse(rawOffset);
+    if (parsedOffset == null || !parsedOffset.isFinite) {
+      return;
+    }
+
+    _lastRestoredThreadScrollOffsetValue = rawOffset;
+
+    void restore() {
+      if (!mounted) {
+        return;
+      }
+
+      final scrollController = _chatController.threadScrollController;
+      if (!scrollController.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => restore());
+        return;
+      }
+
+      final position = scrollController.position;
+      final clampedOffset = parsedOffset.clamp(position.minScrollExtent, position.maxScrollExtent);
+      scrollController.jumpTo(clampedOffset);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => restore());
+  }
+
   @override
   Widget build(BuildContext context) {
+    final usesMobileLayout = _usesMobileThreadLayout(context);
+    final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
+    final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
+    final mobileUnderHeaderContentPadding = usesMobileLayout
+        ? 40.0 * Curves.easeOutCubic.transform(overlayHeaderScope?.collapseProgress ?? 0)
+        : null;
+    final usesCompactNewThreadPrompt = usesMobileLayout && widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
+    final emptyStateTitle = widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
+        ? "Start a new thread"
+        : "Chat to get started";
+    final resolvedEmptyState =
+        widget.emptyState ??
+        Builder(
+          builder: (context) => usesCompactNewThreadPrompt
+              ? _buildMobileNewThreadEmptyState(context)
+              : _buildThreadEmptyState(
+                  context,
+                  title: emptyStateTitle,
+                  description: _threadEmptyDescription,
+                  compact: usesMobileEmptyState,
+                ),
+        );
+
     return IconTheme(
       data: const IconThemeData(size: 14),
-      child: ma.ChatBotView(
+      child: ChatBotView(
         room: widget.client,
         agentName: widget.agentName,
         threadDisplayMode: widget.threadDisplayMode,
@@ -185,24 +357,27 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                 text: widget.initialMessageText!,
                 attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
               ),
+        onMessageSent: _onMessageSent,
         fileInThreadBuilder: _fileInThreadBuilder,
         openFile: _open,
+        chatInputBoxBuilder: (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox),
         toolsBuilder: (context, controller, snapshot) =>
             buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
         inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
         emptyStateTitle: "Chat to get started",
-        emptyStateDescription: _threadEmptyDescription,
-        emptyState:
-            widget.emptyState ??
-            Builder(
-              builder: (context) => _buildThreadEmptyState(
-                context,
-                title: widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer ? "Start a new thread" : "Chat to get started",
-                description: _threadEmptyDescription,
-              ),
-            ),
+        emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
+        emptyState: resolvedEmptyState,
+        inputContextMenuBuilder: powerboardsUsesSystemAdaptiveTextSelectionToolbar()
+            ? powerboardsThreadMobileAttachmentContextMenuBuilder(
+                onPasteFile: (name, dataStream, size) => _chatController.uploadFile(name, dataStream, size),
+              )
+            : powerboardsAdaptiveInputContextMenuBuilder,
+        inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
+        mobileStorageSaveSurfacePresenter: showPowerboardsThreadStorageSaveSurface,
+        mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
         centerComposer: false,
         hideChatInput: widget.hideChatInput,
+        showThreadList: false,
       ),
     );
   }
@@ -224,6 +399,7 @@ class MeshagentThreadListPane extends StatefulWidget {
     this.mobileRowVerticalPadding = 14,
     this.mobileUseDialogListStyle = false,
     this.showCreateItem = true,
+    this.mobileHideEmptyStateWhenNoEntries = false,
   });
 
   final RoomClient client;
@@ -237,6 +413,7 @@ class MeshagentThreadListPane extends StatefulWidget {
   final double mobileRowVerticalPadding;
   final bool mobileUseDialogListStyle;
   final bool showCreateItem;
+  final bool mobileHideEmptyStateWhenNoEntries;
   final ValueChanged<String?> onSelectedThreadPathChanged;
   final void Function(String? path, String? displayName)? onSelectedThreadResolved;
 
@@ -354,12 +531,12 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
 class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   static TextStyle threadNameStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w400, Color? color}) {
     final theme = ShadTheme.of(context);
-    return GoogleFonts.inter(fontSize: 13, fontWeight: fontWeight, color: color ?? theme.colorScheme.mutedForeground);
+    return powerboardsMetaTextStyle(color: color ?? theme.colorScheme.mutedForeground, fontWeight: fontWeight);
   }
 
   static TextStyle createActionStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w700}) {
     final theme = ShadTheme.of(context);
-    return GoogleFonts.inter(
+    return powerboardsInterTextStyle(
       fontSize: chatBubbleMarkdownBaseFontSize(context),
       fontWeight: fontWeight,
       color: theme.colorScheme.foreground,
@@ -656,12 +833,18 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   @override
   Widget build(BuildContext context) {
     final entries = _threadListEntries();
+    final isMobileDialogList = ResponsiveBreakpoints.of(context).isMobile && widget.mobileUseDialogListStyle;
+    final surface = _buildThreadListSurface(entries);
+
+    if (isMobileDialogList) {
+      return ColoredBox(color: Colors.transparent, child: surface);
+    }
 
     return ColoredBox(
       color: Colors.transparent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [Expanded(child: _buildThreadListSurface(entries))],
+        children: [Expanded(child: surface)],
       ),
     );
   }
@@ -688,6 +871,10 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     }
 
     if (entries.isEmpty && isMobile && !showCreateItem) {
+      if (widget.mobileHideEmptyStateWhenNoEntries) {
+        return const SizedBox.expand();
+      }
+
       return _buildCenteredState(title: "No threads yet");
     }
 
@@ -758,14 +945,14 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
             if (icon != null) ...[Icon(icon, size: 44, color: shadMutedForeground), const SizedBox(height: 16)],
             Text(
               title,
-              style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
+              style: powerboardsInterTextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
             ),
             if (description != null) ...[
               const SizedBox(height: 8),
               Text(
                 description,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: shadMutedForeground),
+                style: powerboardsSecondaryTextStyle(color: shadMutedForeground),
               ),
             ],
           ],
@@ -912,10 +1099,7 @@ class _ThreadListEmptyHint extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(leadingInset, isMobile ? 4 : 8, 0, 0),
-      child: Text(
-        "Add and manage multiple threads.",
-        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: shadMutedForeground, height: 1.4),
-      ),
+      child: Text("Add and manage multiple threads.", style: powerboardsMetaTextStyle(color: shadMutedForeground, height: 1.4)),
     );
   }
 }
@@ -950,7 +1134,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
 
   double _leadingWidth(bool isMobile) {
     if (isMobile && widget.mobileUseDialogListStyle) {
-      return 24;
+      return 0;
     }
 
     return _threadListLeadingWidth(isMobile);
@@ -985,8 +1169,9 @@ class _ThreadListItemState extends State<_ThreadListItem> {
         final isMobile = ResponsiveBreakpoints.of(context).isMobile;
         final showMenuIcon = widget.selected || hovered || focused || isMobile || _menuController.isOpen;
         final selected = widget.selected;
+        final leadingWidth = _leadingWidth(isMobile);
         final textStyle = isMobile && widget.mobileUseDialogListStyle
-            ? TextStyle(inherit: true, fontWeight: selected ? FontWeight.w700 : FontWeight.w400, color: shadForeground)
+            ? powerboardsFileListTitleStyle().copyWith(fontWeight: selected ? FontWeight.w700 : FontWeight.w400)
             : _MeshagentThreadListPaneState.threadNameStyle(
                 context,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
@@ -1017,40 +1202,52 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                           padding: _contentPadding(isMobile),
                           child: Row(
                             children: [
-                              SizedBox(
-                                width: _leadingWidth(isMobile),
-                                child: Center(
-                                  child: selected && !widget.threadStatus.hasStatus
-                                      ? const Icon(LucideIcons.check, size: 16, color: shadForeground)
-                                      : ma.ChatThreadStatusIndicator(
-                                          statusText: widget.threadStatus.text,
-                                          startedAt: widget.threadStatus.startedAt,
-                                          reserveSpace: true,
-                                          size: 14,
-                                          strokeWidth: 2,
-                                        ),
+                              if (leadingWidth > 0) ...[
+                                SizedBox(
+                                  width: leadingWidth,
+                                  child: Center(
+                                    child: selected && !widget.threadStatus.hasStatus
+                                        ? const Icon(LucideIcons.check, size: 16, color: shadForeground)
+                                        : ma.ChatThreadStatusIndicator(
+                                            statusText: widget.threadStatus.text,
+                                            startedAt: widget.threadStatus.startedAt,
+                                            reserveSpace: true,
+                                            size: 14,
+                                            strokeWidth: 2,
+                                          ),
+                                  ),
                                 ),
-                              ),
-                              SizedBox(width: _threadListGap(isMobile)),
+                                SizedBox(width: _threadListGap(isMobile)),
+                              ],
                               Expanded(
-                                child: isMobile && widget.mobileUseDialogListStyle
-                                    ? Text(
-                                        widget.entry.name,
-                                        style: textStyle,
-                                        textAlign: TextAlign.start,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        softWrap: false,
-                                      )
-                                    : ma.ChatThreadProcessingSweepText(
-                                        text: widget.entry.name,
-                                        style: textStyle,
-                                        animate: widget.threadStatus.hasStatus,
-                                        textAlign: TextAlign.start,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        softWrap: false,
-                                      ),
+                                child: Row(
+                                  children: [
+                                    Flexible(
+                                      child: isMobile && widget.mobileUseDialogListStyle
+                                          ? Text(
+                                              widget.entry.name,
+                                              style: textStyle,
+                                              textAlign: TextAlign.start,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              softWrap: false,
+                                            )
+                                          : ma.ChatThreadProcessingSweepText(
+                                              text: widget.entry.name,
+                                              style: textStyle,
+                                              animate: widget.threadStatus.hasStatus,
+                                              textAlign: TextAlign.start,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              softWrap: false,
+                                            ),
+                                    ),
+                                    if (selected && isMobile && widget.mobileUseDialogListStyle) ...[
+                                      const SizedBox(width: 12),
+                                      buildPowerboardsCurrentPill(),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -1139,7 +1336,7 @@ class _DraftThreadListItem extends StatelessWidget {
 
   double _leadingWidth(bool isMobile) {
     if (isMobile && mobileUseDialogListStyle) {
-      return 24;
+      return 0;
     }
 
     return _threadListLeadingWidth(isMobile);
@@ -1148,6 +1345,7 @@ class _DraftThreadListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final leadingWidth = _leadingWidth(isMobile);
     final textStyle = mobileUseDialogListStyle
         ? TextStyle(inherit: true, fontWeight: FontWeight.w700, color: shadForeground)
         : _MeshagentThreadListPaneState.threadNameStyle(context, fontWeight: FontWeight.w700, color: shadForeground);
@@ -1172,11 +1370,13 @@ class _DraftThreadListItem extends StatelessWidget {
               child: Row(
                 children: [
                   if (!isMobile) const SizedBox(width: _desktopThreadContentAlignmentOffset),
-                  SizedBox(
-                    width: _leadingWidth(isMobile),
-                    child: const Center(child: Icon(LucideIcons.check, size: 16, color: shadForeground)),
-                  ),
-                  SizedBox(width: _threadListGap(isMobile)),
+                  if (leadingWidth > 0) ...[
+                    SizedBox(
+                      width: leadingWidth,
+                      child: const Center(child: Icon(LucideIcons.check, size: 16, color: shadForeground)),
+                    ),
+                    SizedBox(width: _threadListGap(isMobile)),
+                  ],
                   Expanded(
                     child: Text("My new thread", maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: textStyle),
                   ),
@@ -1213,6 +1413,8 @@ Widget buildTools(
   ChatThreadController controller,
   ChatThreadSnapshot state,
 ) {
+  final usesNativeMobileAttachMenu = powerboardsUsesNativeMobileDialogLayout(context);
+
   Future<RoomClient> connectRoomClient(String roomName) async {
     final client = getMeshagentClient();
     final conn = await client.connectRoom(projectId: projectId, roomName: roomName);
@@ -1265,15 +1467,22 @@ Widget buildTools(
         };
 
   return ChatThreadToolArea(
-    leading: ChatThreadAttachButton(
-      alwaysShowAttachFiles: true,
-      controller: controller,
-      availableRooms: () => listMeshagentRooms(projectId),
-      connectRoomClient: connectRoomClient,
-      agentName: normalizedAgentName,
-      showMcpConnectors: showMcpConnectors,
-    ),
-    footer: showMcpConnectors && controller.isToolkitEnabled("mcp")
+    leading: usesNativeMobileAttachMenu
+        ? PowerboardsMobileChatAttachButton(
+            alwaysShowAttachFiles: true,
+            controller: controller,
+            availableRooms: () => listMeshagentRooms(projectId),
+            connectRoomClient: connectRoomClient,
+          )
+        : PowerboardsDesktopChatAttachButton(
+            alwaysShowAttachFiles: true,
+            controller: controller,
+            availableRooms: () => listMeshagentRooms(projectId),
+            connectRoomClient: connectRoomClient,
+            agentName: normalizedAgentName,
+            showMcpConnectors: showMcpConnectors,
+          ),
+    footer: !usesNativeMobileAttachMenu && showMcpConnectors && controller.isToolkitEnabled("mcp")
         ? ChatThreadMcpFooter(
             controller: controller,
             agentName: normalizedAgentName,
