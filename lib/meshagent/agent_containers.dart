@@ -469,17 +469,26 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
           final payload = scheduleSpec['payload'];
           final queue = scheduleSpec['queue'];
           final name = scheduleSpec['name'];
-          if (queue is! String || queue.trim().isEmpty) {
+          if (schedule is! String || schedule.trim().isEmpty || queue is! String || queue.trim().isEmpty) {
             continue;
+          }
+          if (payload != null && payload is! Map) {
+            continue;
+          }
+
+          final annotations = <String, String>{'meshagent.agent.name': agent.name};
+          if (name is String && name.trim().isNotEmpty) {
+            annotations['meshagent.agent.task.name'] = name;
           }
 
           await client.createScheduledTask(
             projectId: projectId,
             roomName: roomName,
-            queueName: queue,
-            payload: payload,
-            schedule: schedule,
-            annotations: {'meshagent.agent.name': agent.name, 'meshagent.agent.task.name': name},
+            spec: ScheduledTaskSpec(
+              schedule: schedule,
+              metadata: ScheduledTaskMetadata(annotations: annotations),
+              queue: ScheduledTaskQueueSpec(name: queue.trim(), payload: (payload as Map?)?.cast<String, dynamic>()),
+            ),
           );
         }
       } catch (_) {
@@ -509,7 +518,8 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
     }
 
     final client = getMeshagentClient();
-    final tasks = await client.listScheduledTasks(projectId: widget.projectId, roomName: roomName);
+    final room = await client.getRoom(projectId: widget.projectId, name: roomName);
+    final tasks = await client.listScheduledTasks(projectId: widget.projectId, roomId: room.id);
 
     for (final task in tasks) {
       for (final agent in widget.manifest.agents) {
