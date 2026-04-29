@@ -10,5 +10,8 @@ PRODUCT_NAME = Powerboards;
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.timu.powerboards-prototype;
 
+// URL scheme used for native OAuth callbacks.
+URL_SCHEME = powerboards
+
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2023 com.example. All rights reserved.

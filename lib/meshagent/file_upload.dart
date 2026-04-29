@@ -8,6 +8,17 @@ import 'package:path/path.dart' as p;
 import 'package:powerboards/meshagent/path.dart';
 
 class FileUploadHelper {
+  static bool get supportsPhotoUploadPicker {
+    if (kIsWeb) {
+      return false;
+    }
+
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android || TargetPlatform.iOS => true,
+      TargetPlatform.fuchsia || TargetPlatform.linux || TargetPlatform.macOS || TargetPlatform.windows => false,
+    };
+  }
+
   static Future<Uint8List> _convertImage(Uint8List bytes) async {
     if (kIsWeb) {
       throw UnsupportedError("Web doesn't support image compression well");
