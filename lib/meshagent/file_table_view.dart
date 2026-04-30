@@ -2162,7 +2162,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           ),
         ),
         _buildUploadMenu(),
-        if (!kIsWeb)
+        if (FileUploadHelper.supportsPhotoUploadPicker)
           Tooltip(
             message: "Upload photo",
             child: ShadIconButton.outline(

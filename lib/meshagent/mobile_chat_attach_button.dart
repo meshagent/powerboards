@@ -1,10 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
+import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
@@ -330,13 +332,13 @@ class _PowerboardsMobileChatAttachButtonState extends State<PowerboardsMobileCha
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (!kIsWeb)
+                      if (FileUploadHelper.supportsPhotoUploadPicker)
                         _AttachFlowDialogActionRow(
                           title: 'Upload a photo...',
                           icon: LucideIcons.imageUp,
                           onPressed: () => _runDialogAction(dialogContext, _onSelectPhoto),
                         ),
-                      if (!kIsWeb) const ShadSeparator.horizontal(margin: EdgeInsets.zero),
+                      if (FileUploadHelper.supportsPhotoUploadPicker) const ShadSeparator.horizontal(margin: EdgeInsets.zero),
                       _AttachFlowDialogActionRow(
                         title: 'Upload a file...',
                         icon: LucideIcons.paperclip,
