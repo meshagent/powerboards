@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'package:powerboards/firebase.dart';
 import 'package:powerboards/ui/powerboards_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 
@@ -177,10 +177,8 @@ class FirebaseListenerState extends State<FirebaseListener> {
   void initState() {
     super.initState();
 
-    if (!kIsWeb) {
-      if (kReleaseMode || const bool.fromEnvironment("FIREBASE_INITIALIZE")) {
-        _init();
-      }
+    if (powerboardsSupportsNativeFirebase && powerboardsFirebaseEnabled) {
+      _init();
     }
   }
 

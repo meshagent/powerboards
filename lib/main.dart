@@ -218,10 +218,8 @@ Future<void> initializeApp() async {
   await initializeFlutterDocumenRuntime();
   await Highlighter.initialize(['dart', 'sql', 'yaml']);
 
-  if (!kIsWeb) {
-    if (kReleaseMode || const bool.fromEnvironment("FIREBASE_INITIALIZE")) {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    }
+  if (powerboardsSupportsNativeFirebase && powerboardsFirebaseEnabled) {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   }
   LogicalKeyboardMonitor.start();
 }
