@@ -1,0 +1,4 @@
+#include "AppInfo.xcconfig"
+
+PRODUCT_NAME = Powerboards;
+PRODUCT_BUNDLE_IDENTIFIER = com.timu.powerboards-production;
