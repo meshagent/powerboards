@@ -1,10 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
+import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
@@ -289,7 +291,8 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
   }
 
   Widget _buildAttachButton(BuildContext context) {
-    final attachMenuItemCount = (kIsWeb ? 1 : 2) + 1;
+    final showPhotoUpload = FileUploadHelper.supportsPhotoUploadPicker;
+    final attachMenuItemCount = (showPhotoUpload ? 2 : 1) + 1;
     final showMcpMenuItem = _canShowMcpConnectors;
     final attachMenuHeight = (attachMenuItemCount + (showMcpMenuItem ? 1 : 0)) * 40.0;
 
@@ -302,7 +305,7 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
           estimatedMenuWidth: 175,
           estimatedMenuHeight: attachMenuHeight,
           items: [
-            if (!kIsWeb)
+            if (showPhotoUpload)
               ShadContextMenuItem(
                 leading: const Icon(LucideIcons.imageUp),
                 onPressed: _onSelectPhoto,
