@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:collection/collection.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
+import 'package:powerboards/ui/desktop_sidetray_toggle.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -43,9 +45,11 @@ final EdgeInsets _mobileSidetrayHorizontalPadding = EdgeInsets.symmetric(horizon
 
 class NavController extends Controller {
   bool _hideNav = false;
+  bool _desktopSidetrayCollapsed = false;
   bool _mobileRoomListOpen = false;
 
   bool get isNavHidden => _hideNav;
+  bool get isDesktopSidetrayCollapsed => _desktopSidetrayCollapsed;
   bool get isMobileRoomListOpen => _mobileRoomListOpen;
 
   void hideNav() {
@@ -56,6 +60,33 @@ class NavController extends Controller {
   void showNav() {
     _hideNav = false;
     notifyListeners();
+  }
+
+  void collapseDesktopSidetray() {
+    if (_desktopSidetrayCollapsed) {
+      return;
+    }
+
+    _desktopSidetrayCollapsed = true;
+    notifyListeners();
+  }
+
+  void expandDesktopSidetray() {
+    if (!_desktopSidetrayCollapsed) {
+      return;
+    }
+
+    _desktopSidetrayCollapsed = false;
+    notifyListeners();
+  }
+
+  void toggleDesktopSidetray() {
+    if (_desktopSidetrayCollapsed) {
+      expandDesktopSidetray();
+      return;
+    }
+
+    collapseDesktopSidetray();
   }
 
   void openMobileRoomList() {
@@ -618,12 +649,12 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   }
 
   Widget desktopView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
-    final theme = ShadTheme.of(context);
-    final cs = theme.colorScheme;
+    final cs = ShadTheme.of(context).colorScheme;
     final navController = Controller.ofType<NavController>(context);
     final chromeVisible = ChromeVisibilityModel.of(context).visible;
-
+    final desktopSidetrayCollapsed = navController.isDesktopSidetrayCollapsed;
     final hidden = navController.isNavHidden || !chromeVisible;
+    final sidetrayHidden = hidden || desktopSidetrayCollapsed;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -634,65 +665,80 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
         if (_lastDesktopWidth != width) {
           _lastDesktopWidth = width;
-          _schedulePanelLayoutSyncForBuild(constraints, hidden: hidden);
+          _schedulePanelLayoutSyncForBuild(constraints, hidden: sidetrayHidden);
         }
 
-        if (_lastDesktopHidden != hidden) {
-          _lastDesktopHidden = hidden;
-          _schedulePanelLayoutSyncForBuild(constraints, hidden: hidden);
+        if (_lastDesktopHidden != sidetrayHidden) {
+          _lastDesktopHidden = sidetrayHidden;
+          _schedulePanelLayoutSyncForBuild(constraints, hidden: sidetrayHidden);
         }
 
-        final panelLayout = _resolvePanelLayout(width, hidden: hidden);
+        final panelLayout = _resolvePanelLayout(width, hidden: sidetrayHidden);
 
-        return ShadResizablePanelGroup(
-          axis: .horizontal,
-          showHandle: true,
-          dividerColor: Colors.transparent,
-          controller: resizeController,
-          children: [
-            ShadResizablePanel(
-              id: "nav",
-              defaultSize: panelLayout.nav.defaultSize,
-              minSize: panelLayout.nav.minSize,
-              maxSize: panelLayout.nav.maxSize,
-              child: IgnorePointer(
-                ignoring: hidden,
-                child: ColoredBox(
-                  color: cs.background,
-                  child: Column(
-                    mainAxisSize: .min,
-                    children: [
-                      _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
-
-                      SignalBuilder(
-                        builder: (context, _) => Expanded(
-                          child: _NavBar(
-                            projectId: widget.projectId,
-                            rooms: rooms.state.isReady ? filteredRooms : [],
-                            currentFilter: filter,
-                            canCreateRooms: canCreateRooms,
-                            setFilter: setFilter,
-                            selectedRoom: widget.selectedRoom,
-                            onSave: () => rooms.refresh(),
-                            onRefresh: () => rooms.refresh(),
-                            balanceLow: balanceLow,
+        return DesktopSidetrayToggleScope(
+          collapsed: desktopSidetrayCollapsed,
+          enabled: !hidden,
+          onToggle: navController.toggleDesktopSidetray,
+          onCollapse: navController.collapseDesktopSidetray,
+          onExpand: navController.expandDesktopSidetray,
+          child: ShadResizablePanelGroup(
+            axis: .horizontal,
+            showHandle: !sidetrayHidden,
+            dividerColor: Colors.transparent,
+            controller: resizeController,
+            children: [
+              ShadResizablePanel(
+                id: "nav",
+                defaultSize: panelLayout.nav.defaultSize,
+                minSize: panelLayout.nav.minSize,
+                maxSize: panelLayout.nav.maxSize,
+                child: IgnorePointer(
+                  ignoring: sidetrayHidden,
+                  child: ColoredBox(
+                    color: cs.background,
+                    child: Column(
+                      mainAxisSize: .min,
+                      children: [
+                        _NavBarTop(
+                          projectId: widget.projectId,
+                          projects: projects,
+                          onCreateProject: onCreateProject,
+                          desktopLeading: DesktopSidetrayToggleButton(
+                            collapsed: false,
+                            onPressed: hidden ? null : navController.collapseDesktopSidetray,
                           ),
                         ),
-                      ),
-                    ],
+
+                        SignalBuilder(
+                          builder: (context, _) => Expanded(
+                            child: _NavBar(
+                              projectId: widget.projectId,
+                              rooms: rooms.state.isReady ? filteredRooms : [],
+                              currentFilter: filter,
+                              canCreateRooms: canCreateRooms,
+                              setFilter: setFilter,
+                              selectedRoom: widget.selectedRoom,
+                              onSave: () => rooms.refresh(),
+                              onRefresh: () => rooms.refresh(),
+                              balanceLow: balanceLow,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            ShadResizablePanel(
-              id: "main",
-              defaultSize: panelLayout.main.defaultSize,
-              minSize: panelLayout.main.minSize,
-              maxSize: panelLayout.main.maxSize,
-              child: desktopBody(context, userRole, balanceLow, canCreateRooms),
-            ),
-          ],
+              ShadResizablePanel(
+                id: "main",
+                defaultSize: panelLayout.main.defaultSize,
+                minSize: panelLayout.main.minSize,
+                maxSize: panelLayout.main.maxSize,
+                child: desktopBody(context, userRole, balanceLow, canCreateRooms),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -1855,6 +1901,7 @@ class _NavBarTop extends StatefulWidget {
     this.onSwitchProject,
     this.mobileHorizontalPadding = powerboardsMobileHorizontalPadding,
     this.mobileHeaderContentHorizontalInset = powerboardsMobileShellHorizontalInset,
+    this.desktopLeading,
   });
 
   final String? projectId;
@@ -1867,6 +1914,7 @@ class _NavBarTop extends StatefulWidget {
   final ValueChanged<Project>? onSwitchProject;
   final EdgeInsetsGeometry mobileHorizontalPadding;
   final double mobileHeaderContentHorizontalInset;
+  final Widget? desktopLeading;
 
   @override
   State createState() => _NavBarTopState();
@@ -1913,6 +1961,11 @@ class _NavBarTopState extends State<_NavBarTop> {
     final mobileHeaderControlSize = desktopPaneHeaderCompactButtonWidth;
     final displayName = selectedProject?.name ?? "Select project";
     final mobileCollapseProgress = isSmallDisplay ? widget.mobileCollapseProgress.clamp(0.0, 1.0) : 0.0;
+    final hasDesktopLeading = widget.desktopLeading != null;
+    final desktopLeadingSlotSize = hasDesktopLeading ? desktopPaneHeaderContentHeight : desktopPaneSideHeaderSlotSize;
+    final desktopHeaderVisualInset = hasDesktopLeading
+        ? math.max(desktopPaneSideHeaderVisualInset, desktopLeadingSlotSize)
+        : desktopPaneSideHeaderVisualInset;
     final projectTitleStyle = isSmallDisplay
         ? powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground)
         : powerboardsSectionTitleStyle(color: theme.colorScheme.foreground, height: 1.2);
@@ -2016,51 +2069,55 @@ class _NavBarTopState extends State<_NavBarTop> {
                 child: SizedBox(
                   height: desktopPaneHeaderContentHeight,
                   width: double.infinity,
-                  child: Tooltip(
-                    message: "Switch project",
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _switchProject,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              const Positioned(
-                                left: 0,
-                                child: SizedBox(
-                                  width: desktopPaneSideHeaderSlotSize,
-                                  height: desktopPaneSideHeaderSlotSize,
-                                  child: Center(child: NavMainLogo(size: desktopPaneSideHeaderSlotSize)),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHeaderVisualInset),
-                                child: Text(
-                                  displayName,
-                                  style: projectTitleStyle,
-                                  strutStyle: StrutStyle.fromTextStyle(projectTitleStyle, forceStrutHeight: true),
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                ),
-                              ),
-                              Positioned(
-                                right: 0,
-                                child: SizedBox(
-                                  width: desktopPaneSideHeaderVisualInset,
-                                  child: Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Positioned(
+                          left: 0,
+                          child: SizedBox(
+                            width: desktopLeadingSlotSize,
+                            height: desktopLeadingSlotSize,
+                            child: Center(child: widget.desktopLeading ?? const NavMainLogo(size: desktopPaneSideHeaderSlotSize)),
+                          ),
+                        ),
+                        Positioned.fill(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: desktopHeaderVisualInset),
+                            child: Tooltip(
+                              message: "Switch project",
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _switchProject,
+                                  child: Center(
+                                    child: Text(
+                                      displayName,
+                                      style: projectTitleStyle,
+                                      strutStyle: StrutStyle.fromTextStyle(projectTitleStyle, forceStrutHeight: true),
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
+                        Positioned(
+                          right: 0,
+                          child: SizedBox(
+                            width: desktopHeaderVisualInset,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

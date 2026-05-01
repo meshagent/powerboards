@@ -54,6 +54,7 @@ import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
+import 'package:powerboards/ui/desktop_sidetray_toggle.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/meeting_view.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
@@ -900,11 +901,18 @@ class ActionsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (actions.isEmpty) {
-      return SizedBox.shrink();
+    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
+    final showDesktopSidetrayOpenAction = !isMobile && sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true;
+    final act = [...actions];
+
+    if (showDesktopSidetrayOpenAction) {
+      act.insert(0, DesktopSidetrayToggleButton(collapsed: true, onPressed: sidetrayScope!.onExpand));
     }
 
-    final act = [...actions];
+    if (act.isEmpty) {
+      return SizedBox.shrink();
+    }
 
     bool found = false;
 
@@ -936,7 +944,11 @@ class ActionsRow extends StatelessWidget {
     }
 
     if (!found) {
-      act.insert(0, Spacer());
+      if (showDesktopSidetrayOpenAction) {
+        act.insert(1, Spacer());
+      } else {
+        act.insert(0, Spacer());
+      }
     }
 
     final spacerIndex = act.indexWhere((widget) => widget is Spacer);
@@ -945,8 +957,15 @@ class ActionsRow extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isMobile = ResponsiveBreakpoints.of(context).isMobile;
-        final state = resolvePaneHeaderActionState(constraints, leadingWidth: 320, minimumLeadingWidth: 220, actions: trailingActions);
+        final sidetrayLeadingWidth = showDesktopSidetrayOpenAction
+            ? (desktopPaneHeaderCompactButtonWidth + desktopPaneHeaderButtonGap)
+            : 0.0;
+        final state = resolvePaneHeaderActionState(
+          constraints,
+          leadingWidth: 320 + sidetrayLeadingWidth,
+          minimumLeadingWidth: 220 + sidetrayLeadingWidth,
+          actions: trailingActions,
+        );
         final visibleTrailingActions = visiblePaneHeaderActions(trailingActions, overflowCollapsed: state.overflowCollapsed);
 
         return CompactHeaderActions(
@@ -2722,13 +2741,22 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           else
             LayoutBuilder(
               builder: (context, constraints) {
-                final leadingWidth = meetingIsActive
-                    ? _measureActiveMeetingHeaderWidth(constraints.maxWidth)
-                    : _measureMeetingHeaderTitleWidth(context, constraints.maxWidth);
+                final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
+                final sidetrayOpenButton = sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
+                    ? DesktopSidetrayToggleButton(collapsed: true, onPressed: sidetrayScope!.onExpand)
+                    : null;
+                final sidetrayLeadingWidth = sidetrayOpenButton == null
+                    ? 0.0
+                    : (desktopPaneHeaderCompactButtonWidth + desktopPaneHeaderButtonGap);
+                final leadingWidth =
+                    (meetingIsActive
+                        ? _measureActiveMeetingHeaderWidth(constraints.maxWidth)
+                        : _measureMeetingHeaderTitleWidth(context, constraints.maxWidth)) +
+                    sidetrayLeadingWidth;
                 final localActionState = resolvePaneHeaderActionState(
                   constraints,
                   leadingWidth: leadingWidth,
-                  minimumLeadingWidth: meetingIsActive ? _meetingToolbarPreferredCompactWidth : 120,
+                  minimumLeadingWidth: (meetingIsActive ? _meetingToolbarPreferredCompactWidth : 120) + sidetrayLeadingWidth,
                   reserve: meetingIsActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
                   actions: actions,
                   preferCompactBeforeOverflow: meetingIsActive,
@@ -2748,6 +2776,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                 child: Row(
                                   spacing: desktopPaneHeaderButtonGap,
                                   children: [
+                                    if (sidetrayOpenButton != null) sidetrayOpenButton,
                                     Expanded(
                                       child: LayoutBuilder(
                                         builder: (context, toolbarConstraints) {
@@ -2785,6 +2814,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                 child: Row(
                                   spacing: desktopPaneHeaderButtonGap,
                                   children: [
+                                    if (sidetrayOpenButton != null) sidetrayOpenButton,
                                     Expanded(
                                       child: Align(
                                         alignment: Alignment.centerLeft,

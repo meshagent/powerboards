@@ -35,6 +35,7 @@ import 'package:powerboards/settings/format_date.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
+import 'package:powerboards/ui/desktop_sidetray_toggle.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
@@ -1752,10 +1753,15 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildDesktopHeaderLeadingRow({required List<Widget> trailing}) {
+    final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
+    final sidetrayOpenButton = sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
+        ? DesktopSidetrayToggleButton(collapsed: true, onPressed: sidetrayScope!.onExpand)
+        : null;
     final leadingActions = widget.desktopHeaderLeadingActions;
     return Row(
       spacing: desktopPaneHeaderButtonGap,
       children: [
+        if (sidetrayOpenButton != null) sidetrayOpenButton,
         if (leadingActions.isNotEmpty) Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: leadingActions),
         ...trailing,
       ],
@@ -1763,8 +1769,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget _buildDesktopHeaderLeading() {
+    final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
+    final showsSidetrayOpenButton = sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true;
     if (_openedFile == null) {
-      if (widget.desktopHeaderLeadingActions.isEmpty) {
+      if (widget.desktopHeaderLeadingActions.isEmpty && !showsSidetrayOpenButton) {
         return _buildBreadcrumb();
       }
 
@@ -2241,12 +2249,16 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   double _estimateDesktopHeaderLeadingWidth(BuildContext context, double maxWidth) {
+    final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
+    final sidetrayLeadingWidth = sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
+        ? desktopPaneHeaderCompactButtonWidth + desktopPaneHeaderButtonGap
+        : 0.0;
     final openedFile = _openedFile;
     if (openedFile != null) {
       final fileName = _displayNameForPath(openedFile);
       final closeActionWidth = 40.0 + desktopPaneHeaderButtonGap;
       final fileNameWidth = _measureBreadcrumbLabelWidth(context, fileName) + 24.0;
-      return math.min(closeActionWidth + fileNameWidth, math.min(180.0, maxWidth * 0.24));
+      return math.min(sidetrayLeadingWidth + closeActionWidth + fileNameWidth, math.min(240.0, maxWidth * 0.3));
     }
 
     final segments = _folderBreadcrumbSegments();
@@ -2258,7 +2270,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
     }
 
-    return math.min(width, math.min(180.0, maxWidth * 0.24));
+    return math.min(sidetrayLeadingWidth + width, math.min(240.0, maxWidth * 0.3));
   }
 
   List<FileBreadcrumbSegment> _folderBreadcrumbSegments() {
