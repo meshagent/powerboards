@@ -1065,7 +1065,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
         if (isMeAdmin) {
           // Add project membership first so the room-grant step sees the latest state.
           for (final user in usersToAddToProject) {
-            await client.addUserToProjectByEmail(widget.projectId, user.email);
+            await client.addUserToProjectByEmail(widget.projectId, user.email, inviteRedirectUrl: MeshagentConfig.current!.appUrl);
           }
 
           projectUsersMap.refresh();
@@ -1145,6 +1145,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
             roomId: widget.room.id,
             email: u.email,
             permissions: u.role.apiScope,
+            inviteRedirectUrl: MeshagentConfig.current!.appUrl,
           );
         }),
       );
