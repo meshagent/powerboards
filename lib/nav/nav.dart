@@ -152,7 +152,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   int _mobileRoomListInstance = 0;
   late final AnimationController _mobileRoomListCloseAnimationController;
 
-  final childKey = GlobalKey();
   Resource<List<Project>> get projects {
     return widget.projects;
   }
@@ -615,7 +614,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildRoomContent() {
-    return KeyedSubtree(key: childKey, child: widget.child);
+    return KeyedSubtree(key: GlobalObjectKey('nav-room-content-${widget.projectId}-${widget.selectedRoom}'), child: widget.child);
   }
 
   Widget desktopView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
@@ -750,7 +749,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
             child: _buildMobileRoomListSurface(context, canCreateRooms: canCreateRooms, balanceLow: balanceLow),
           )
         : KeyedSubtree(
-            key: ValueKey('mobile-active-room-${widget.selectedRoom}'),
+            key: ValueKey('mobile-active-room-${widget.projectId}-${widget.selectedRoom}'),
             child: _buildMobileRoomSurfaceWithSidetray(
               context,
               canCreateRooms: canCreateRooms,
