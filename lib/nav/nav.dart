@@ -2111,9 +2111,19 @@ class _NavBarTopState extends State<_NavBarTop> {
                           right: 0,
                           child: SizedBox(
                             width: desktopHeaderVisualInset,
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                            child: Tooltip(
+                              message: "Switch project",
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _switchProject,
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
