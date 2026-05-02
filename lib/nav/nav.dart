@@ -1575,8 +1575,9 @@ class _NavBarState extends State<_NavBar> {
           child: ShadButton.outline(
             height: powerboardsFooterActionButtonHeight,
             decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
-            backgroundColor: ShadTheme.of(context).colorScheme.background,
-            hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
+            backgroundColor: Colors.white,
+            hoverBackgroundColor: Colors.white,
+            foregroundColor: ShadTheme.of(context).colorScheme.foreground,
             hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
             key: const Key('nav-create-room-button'),
             onPressed: isCreatePending ? null : () => addNewRoomDialog(context),
