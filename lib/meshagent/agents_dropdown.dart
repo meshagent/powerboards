@@ -38,6 +38,8 @@ class AgentsDropdown extends StatelessWidget {
   final bool showRoomBreadcrumb;
   final String? roomDisplayNameOverride;
   final VoidCallback? onRoomPressed;
+  final double? roomBreadcrumbMaxWidth;
+  final bool roomBreadcrumbEllipsisOnly;
 
   const AgentsDropdown({
     super.key,
@@ -53,6 +55,8 @@ class AgentsDropdown extends StatelessWidget {
     this.showRoomBreadcrumb = false,
     this.roomDisplayNameOverride,
     this.onRoomPressed,
+    this.roomBreadcrumbMaxWidth,
+    this.roomBreadcrumbEllipsisOnly = false,
   });
 
   String _serviceId(ServiceSpec service) => service.metadata.annotations["meshagent.service.id"] ?? "";
@@ -150,8 +154,8 @@ class AgentsDropdown extends StatelessWidget {
     final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
 
     void onRoomPressed() {
-      if (sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true) {
-        sidetrayScope!.onExpand();
+      if (sidetrayScope?.enabled == true) {
+        sidetrayScope!.onToggle();
       }
       this.onRoomPressed?.call();
       if (this.onRoomPressed == null) {
@@ -159,13 +163,35 @@ class AgentsDropdown extends StatelessWidget {
       }
     }
 
+    final roomButton = roomBreadcrumbEllipsisOnly
+        ? ShadButton.ghost(
+            padding: EdgeInsets.zero,
+            gap: 0,
+            width: 40,
+            height: 40,
+            onPressed: onRoomPressed,
+            child: const Icon(LucideIcons.ellipsis, size: 18),
+          )
+        : ShadButton.ghost(
+            expands: roomBreadcrumbMaxWidth != null,
+            mainAxisAlignment: MainAxisAlignment.start,
+            onPressed: onRoomPressed,
+            child: Text(roomName, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.left, style: textStyle),
+          );
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ShadButton.ghost(
-          onPressed: onRoomPressed,
-          child: Text(roomName, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.left, style: textStyle),
-        ),
+        if (roomBreadcrumbMaxWidth != null)
+          Flexible(
+            fit: FlexFit.loose,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: roomBreadcrumbMaxWidth!),
+              child: roomButton,
+            ),
+          )
+        else
+          roomButton,
         const SizedBox(width: 4),
         const Icon(LucideIcons.chevronRight, size: 18, color: Color(0xffa5a5a5)),
         const SizedBox(width: 4),
@@ -174,9 +200,7 @@ class AgentsDropdown extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
-                child: Text(agentLabel, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.left, style: textStyle),
-              ),
+              Text(agentLabel, maxLines: 1, textAlign: TextAlign.left, style: textStyle),
               const SizedBox(width: 6),
               const Icon(LucideIcons.chevronDown, size: 18),
             ],

@@ -900,6 +900,27 @@ class ActionsRow extends StatelessWidget {
 
   final List<Widget> actions;
 
+  List<Widget> _desktopLeadingChildren(List<Widget> leadingActions) {
+    final children = <Widget>[];
+    for (var i = 0; i < leadingActions.length; i++) {
+      final action = leadingActions[i];
+      if (action is AgentsDropdown) {
+        children.add(
+          Flexible(
+            fit: FlexFit.loose,
+            child: Align(alignment: Alignment.centerLeft, child: action),
+          ),
+        );
+      } else {
+        children.add(action);
+      }
+      if (i < leadingActions.length - 1) {
+        children.add(const SizedBox(width: 8));
+      }
+    }
+    return children;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
@@ -986,10 +1007,12 @@ class ActionsRow extends StatelessWidget {
                         Expanded(
                           child: Align(
                             alignment: Alignment.centerLeft,
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: leadingActions),
-                            ),
+                            child: isMobile
+                                ? SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(mainAxisSize: MainAxisSize.min, spacing: 8, children: leadingActions),
+                                  )
+                                : Row(mainAxisSize: MainAxisSize.max, children: _desktopLeadingChildren(leadingActions)),
                           ),
                         ),
                       if (leadingActions.isEmpty && visibleTrailingActions.isNotEmpty) const Spacer(),
@@ -3952,6 +3975,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                       projectId: widget.projectId,
                                                       room: widget.room,
                                                       roomDisplayNameOverride: _roomDisplayName,
+                                                      roomBreadcrumbMaxWidth: split ? 96 : null,
+                                                      roomBreadcrumbEllipsisOnly: split,
                                                       onRoomPressed: () => _showChatPane(context),
                                                       selectedService: selected.service,
                                                       selectedAgentRouteId: selected.routeId,
