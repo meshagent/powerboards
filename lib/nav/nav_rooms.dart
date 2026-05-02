@@ -230,7 +230,7 @@ class _PendingRoomTile extends StatelessWidget {
 
     return Container(
       constraints: isMobile ? const BoxConstraints(minHeight: powerboardsFooterActionButtonHeight) : null,
-      decoration: BoxDecoration(borderRadius: isMobile ? theme.radius : BorderRadius.circular(4), color: theme.colorScheme.muted),
+      decoration: BoxDecoration(borderRadius: theme.radius, color: theme.colorScheme.muted),
       child: Padding(
         padding: isMobile ? _mobileRoomTilePadding : const EdgeInsets.only(left: desktopPaneSideListItemLeadingInset),
         child: Row(
@@ -390,7 +390,6 @@ class _RoomTileState extends State<_RoomTile> {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
-    final tt = theme.textTheme;
     final name = roomDisplayName(widget.room);
 
     return AnimatedBuilder(
@@ -404,9 +403,12 @@ class _RoomTileState extends State<_RoomTile> {
           final bg = widget.balanceLow
               ? cs.background
               : (_isDeleting ? cs.muted : (widget.selected ? selectedBackground : Colors.transparent));
+          final desktopReferenceTextStyle = powerboardsInterTextStyle(fontSize: 14, fontWeight: FontWeight.w600);
           final desktopTextStyle = widget.balanceLow
-              ? tt.p.copyWith(color: cs.mutedForeground)
-              : (widget.selected ? tt.p.copyWith(color: cs.secondary) : tt.p);
+              ? desktopReferenceTextStyle.copyWith(color: cs.mutedForeground)
+              : (widget.selected
+                    ? desktopReferenceTextStyle.copyWith(color: cs.secondary)
+                    : desktopReferenceTextStyle.copyWith(color: cs.secondaryForeground));
           final mobileReferenceTextStyle = powerboardsFileListTitleStyle().copyWith(
             fontWeight: widget.selected || hovered ? FontWeight.w700 : FontWeight.w400,
           );
@@ -426,7 +428,7 @@ class _RoomTileState extends State<_RoomTile> {
 
           return Container(
             constraints: isMobile ? const BoxConstraints(minHeight: powerboardsFooterActionButtonHeight) : null,
-            decoration: BoxDecoration(borderRadius: isMobile ? theme.radius : BorderRadius.circular(4), color: bg),
+            decoration: BoxDecoration(borderRadius: theme.radius, color: bg),
 
             child: ShadGestureDetector(
               behavior: HitTestBehavior.opaque,
