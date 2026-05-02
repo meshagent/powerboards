@@ -557,7 +557,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildRoomContent() {
-    return KeyedSubtree(key: GlobalObjectKey('nav-room-content-${widget.projectId}-${widget.selectedRoom}'), child: widget.child);
+    return KeyedSubtree(key: ValueKey('nav-room-content-${widget.projectId}-${widget.selectedRoom}'), child: widget.child);
   }
 
   Widget desktopView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
