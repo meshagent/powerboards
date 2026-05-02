@@ -1886,15 +1886,26 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     };
   }
 
-  void _replaceRoomRouteState(BuildContext context, {required _MobileRoomPane pane, String? rawPath}) {
+  void _replaceRoomRouteState(
+    BuildContext context, {
+    required _MobileRoomPane pane,
+    String? rawPath,
+    bool clearRawPath = false,
+    bool clearPreviewOrigin = false,
+  }) {
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
     final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters);
 
     updatedQueryParameters[_roomPaneQueryParameter] = _roomPaneQueryValue(pane);
 
-    if (rawPath != null) {
+    if (clearRawPath) {
+      updatedQueryParameters.remove('p');
+    } else if (rawPath != null) {
       updatedQueryParameters['p'] = rawPath;
+    }
+    if (clearPreviewOrigin) {
+      updatedQueryParameters.remove(filePreviewOriginQueryParameter);
     }
 
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
@@ -1907,7 +1918,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   void _showChatPane(BuildContext context) {
     controller.showChat();
-    _replaceRoomRouteState(context, pane: _MobileRoomPane.chat);
+    _replaceRoomRouteState(context, pane: _MobileRoomPane.chat, clearRawPath: true, clearPreviewOrigin: true);
   }
 
   void _showFilesPane(BuildContext context) {
@@ -3941,6 +3952,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                       projectId: widget.projectId,
                                                       room: widget.room,
                                                       roomDisplayNameOverride: _roomDisplayName,
+                                                      onRoomPressed: () => _showChatPane(context),
                                                       selectedService: selected.service,
                                                       selectedAgentRouteId: selected.routeId,
                                                       services: supported,

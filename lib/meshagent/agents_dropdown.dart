@@ -37,6 +37,7 @@ class AgentsDropdown extends StatelessWidget {
   final bool expandToAvailableWidth;
   final bool showRoomBreadcrumb;
   final String? roomDisplayNameOverride;
+  final VoidCallback? onRoomPressed;
 
   const AgentsDropdown({
     super.key,
@@ -51,6 +52,7 @@ class AgentsDropdown extends StatelessWidget {
     this.expandToAvailableWidth = false,
     this.showRoomBreadcrumb = false,
     this.roomDisplayNameOverride,
+    this.onRoomPressed,
   });
 
   String _serviceId(ServiceSpec service) => service.metadata.annotations["meshagent.service.id"] ?? "";
@@ -151,7 +153,10 @@ class AgentsDropdown extends StatelessWidget {
       if (sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true) {
         sidetrayScope!.onExpand();
       }
-      _navigateToRoute(context, '');
+      this.onRoomPressed?.call();
+      if (this.onRoomPressed == null) {
+        _navigateToRoute(context, '');
+      }
     }
 
     return Row(
