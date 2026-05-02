@@ -45,7 +45,7 @@ final EdgeInsets _mobileSidetrayHorizontalPadding = EdgeInsets.symmetric(horizon
 
 class NavController extends Controller {
   bool _hideNav = false;
-  bool _desktopSidetrayCollapsed = false;
+  bool _desktopSidetrayCollapsed = true;
   bool _mobileRoomListOpen = false;
 
   bool get isNavHidden => _hideNav;
