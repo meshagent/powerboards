@@ -167,16 +167,14 @@ class AgentsDropdown extends StatelessWidget {
     void onRoomPressed() {
       if (showAdaptiveWebappNavOpener && onOpenNavigation != null) {
         onOpenNavigation!();
-        this.onRoomPressed?.call();
-        if (this.onRoomPressed == null) {
-          _navigateToRoute(parentContext, '');
-        }
         return;
       }
 
       if (sidetrayScope?.enabled == true) {
         sidetrayScope!.onToggle();
+        return;
       }
+
       this.onRoomPressed?.call();
       if (this.onRoomPressed == null) {
         _navigateToRoute(parentContext, '');

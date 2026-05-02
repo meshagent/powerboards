@@ -1135,10 +1135,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (!usesMobileRoomLayout && !_didNormalizeInitialDesktopPane) {
       _didNormalizeInitialDesktopPane = true;
 
-      final shouldResetToChat = pane != null && pane != _MobileRoomPane.chat;
+      final hasExplicitPane = pane != null;
       final hasResidualPath = path != null && path.isNotEmpty;
+      final hasPreviewOrigin = currentUri.queryParameters.containsKey(filePreviewOriginQueryParameter);
+      final shouldResetToChat = !hasExplicitPane && (hasResidualPath || hasPreviewOrigin);
 
-      if (shouldResetToChat || hasResidualPath) {
+      if (shouldResetToChat) {
         controller.showChat();
 
         final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters)
