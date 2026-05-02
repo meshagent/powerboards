@@ -115,6 +115,14 @@ Future<void> _sendRoomReady(Protocol protocol) async {
     'room_ready',
     packMessage({'room_name': 'test-room', 'room_url': 'ws://example/rooms/test-room', 'session_id': 'session-1'}),
   );
+  await protocol.send(
+    'connected',
+    packMessage({
+      'type': 'init',
+      'participantId': 'self',
+      'attributes': {'name': 'self'},
+    }),
+  );
 }
 
 Future<void> _sendToolCallResponseChunk({required Protocol protocol, required String toolCallId, required Content chunk}) async {
@@ -150,6 +158,7 @@ void main() {
 
   testWidgets('renders the thread viewer for an empty thread document', (tester) async {
     final pair = _ProtocolPair();
+    final stateSent = Completer<void>();
     final closeReceived = Completer<void>();
     String? toolCallId;
 
@@ -188,6 +197,9 @@ void main() {
             toolCallId: activeToolCallId,
             chunk: BinaryContent(data: Uint8List(0), headers: {'kind': 'state', 'path': 'thread.thread', 'schema': _threadSchema.toJson()}),
           );
+          if (!stateSent.isCompleted) {
+            stateSent.complete();
+          }
           return;
         }
 
@@ -209,27 +221,31 @@ void main() {
     await _sendRoomReady(pair.serverProtocol);
     await startFuture;
 
-    try {
-      await tester.pumpWidget(
-        ShadApp(
-          home: Scaffold(
-            body: SizedBox.expand(
-              child: DocumentPane(path: 'thread.thread', room: room),
-            ),
-          ),
-        ),
-      );
-
-      await _pumpUntil(tester, () => find.byType(ChatThread).evaluate().isNotEmpty);
-
-      expect(find.byType(ChatThread), findsOneWidget);
-      expect(find.byType(ChatThreadInput), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox());
-      await closeReceived.future.timeout(const Duration(seconds: 1));
-    } finally {
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await tester.pump();
       room.dispose();
       await pair.dispose();
-    }
+    });
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Scaffold(
+          body: SizedBox.expand(
+            child: DocumentPane(path: 'thread.thread', room: room),
+          ),
+        ),
+      ),
+    );
+
+    await _pumpUntil(tester, () => stateSent.isCompleted);
+
+    expect(find.byType(ChatThread), findsOneWidget);
+    expect(find.byType(ChatThreadInput), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await closeReceived.future.timeout(const Duration(seconds: 1));
   });
 }
