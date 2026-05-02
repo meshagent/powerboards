@@ -1517,26 +1517,36 @@ class _NavBarState extends State<_NavBar> {
     Widget buildFilterInput() {
       return Builder(
         builder: (context) {
+          final colorScheme = ShadTheme.of(context).colorScheme;
+          final desktopFilterRadius = BorderRadius.circular(999);
           final filterInput = PowerboardsAdaptiveInput(
             controller: _filterController,
             focusNode: _filterFocusNode,
             padding: isMobile ? const EdgeInsets.fromLTRB(14, 8, 12, 8) : null,
+            alignment: isMobile ? null : Alignment.centerLeft,
             decoration: !isMobile
-                ? ShadDecoration(color: ShadTheme.of(context).colorScheme.input)
+                ? ShadDecoration(
+                    color: colorScheme.input,
+                    border: ShadBorder.all(radius: desktopFilterRadius, color: colorScheme.border, width: 1),
+                    focusedBorder: ShadBorder.all(radius: desktopFilterRadius, color: colorScheme.ring, width: 1),
+                    errorBorder: ShadBorder.all(radius: desktopFilterRadius, width: 1),
+                    disableSecondaryBorder: true,
+                  )
                 : ShadDecoration(
-                    color: ShadTheme.of(context).colorScheme.input,
-                    border: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    focusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    errorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    secondaryBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    secondaryFocusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    secondaryErrorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                    color: colorScheme.input,
+                    border: ShadBorder.all(radius: desktopFilterRadius),
+                    focusedBorder: ShadBorder.all(radius: desktopFilterRadius),
+                    errorBorder: ShadBorder.all(radius: desktopFilterRadius),
+                    secondaryBorder: ShadBorder.all(radius: desktopFilterRadius),
+                    secondaryFocusedBorder: ShadBorder.all(radius: desktopFilterRadius),
+                    secondaryErrorBorder: ShadBorder.all(radius: desktopFilterRadius),
                   ),
             key: const Key('room-list-search-field'),
             onChanged: widget.setFilter,
-            leading: !isMobile ? null : Icon(LucideIcons.search, size: 16, color: ShadTheme.of(context).colorScheme.mutedForeground),
-            gap: !isMobile ? null : 10,
+            leading: Icon(LucideIcons.search, size: 16, color: colorScheme.mutedForeground),
+            gap: 10,
             inputPadding: isMobile ? EdgeInsets.zero : null,
+            placeholderAlignment: isMobile ? null : Alignment.centerLeft,
             placeholder: const Text("Filter rooms..."),
           );
 
