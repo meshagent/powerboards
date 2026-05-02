@@ -27,6 +27,7 @@ import 'package:powerboards/ui/empty_states.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
@@ -618,6 +619,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                                   projectId: widget.projectId,
                                   projects: projects,
                                   onCreateProject: onCreateProject,
+                                  forceDesktopLayout: true,
                                   desktopLeading: DesktopSidetrayToggleButton(
                                     collapsed: false,
                                     onPressed: hidden ? null : navController.collapseDesktopSidetray,
@@ -631,6 +633,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                                       rooms: rooms.state.isReady ? filteredRooms : [],
                                       currentFilter: filter,
                                       canCreateRooms: canCreateRooms,
+                                      forceDesktopLayout: true,
                                       setFilter: setFilter,
                                       selectedRoom: widget.selectedRoom,
                                       onSave: () => rooms.refresh(),
@@ -1267,13 +1270,13 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
-    final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+    final useMobileNav = ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
     final navController = Controller.ofType<NavController>(context);
 
     return SignalBuilder(
       builder: (context, _) {
         if (!projects.state.isReady || !role.state.isReady || !isBalanceLowRes.state.isReady || !balanceRes.state.isReady) {
-          return isSmallDisplay ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
+          return useMobileNav ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
         }
 
         if (projects.state.value!.isEmpty) {
@@ -1298,7 +1301,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
               Expanded(
                 child: Container(
                   color: cs.background,
-                  child: isSmallDisplay
+                  child: useMobileNav
                       ? mobileView(context, userRole, balanceLow, canCreateRooms)
                       : desktopView(context, userRole, balanceLow, canCreateRooms),
                 ),
@@ -1332,6 +1335,7 @@ class _NavBar extends StatefulWidget {
     required this.balanceLow,
     required this.canCreateRooms,
     this.onRoomSelected,
+    this.forceDesktopLayout = false,
   });
 
   final String? selectedRoom;
@@ -1352,6 +1356,7 @@ class _NavBar extends StatefulWidget {
   final bool balanceLow;
   final bool canCreateRooms;
   final ValueChanged<Room>? onRoomSelected;
+  final bool forceDesktopLayout;
 
   @override
   State<_NavBar> createState() => _NavBarState();
@@ -1361,7 +1366,7 @@ class _NavBarState extends State<_NavBar> {
   late final TextEditingController _filterController;
   late final FocusNode _filterFocusNode;
 
-  bool get _isMobile => ResponsiveBreakpoints.of(context).isMobile;
+  bool get _isMobile => !widget.forceDesktopLayout && ResponsiveBreakpoints.of(context).isMobile;
   bool get _isMobileFilterMode => _isMobile && widget.mobileFilterMode;
 
   Future<void> addNewRoomDialog(BuildContext context) async {
@@ -1820,6 +1825,7 @@ class _NavBarTop extends StatefulWidget {
     this.mobileHorizontalPadding = powerboardsMobileHorizontalPadding,
     this.mobileHeaderContentHorizontalInset = powerboardsMobileShellHorizontalInset,
     this.desktopLeading,
+    this.forceDesktopLayout = false,
   });
 
   final String? projectId;
@@ -1833,6 +1839,7 @@ class _NavBarTop extends StatefulWidget {
   final EdgeInsetsGeometry mobileHorizontalPadding;
   final double mobileHeaderContentHorizontalInset;
   final Widget? desktopLeading;
+  final bool forceDesktopLayout;
 
   @override
   State createState() => _NavBarTopState();
@@ -1875,7 +1882,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     final theme = ShadTheme.of(context);
     final projectList = widget.projects.state.value ?? const <Project>[];
     final selectedProject = projectList.firstWhereOrNull((p) => p.id == widget.projectId);
-    final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+    final isSmallDisplay = !widget.forceDesktopLayout && ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final mobileHeaderControlSize = desktopPaneHeaderCompactButtonWidth;
     final displayName = selectedProject?.name ?? "Select project";
     final mobileCollapseProgress = isSmallDisplay ? widget.mobileCollapseProgress.clamp(0.0, 1.0) : 0.0;

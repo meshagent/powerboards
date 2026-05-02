@@ -38,8 +38,10 @@ class AgentsDropdown extends StatelessWidget {
   final bool showRoomBreadcrumb;
   final String? roomDisplayNameOverride;
   final VoidCallback? onRoomPressed;
+  final VoidCallback? onOpenNavigation;
   final double? roomBreadcrumbMaxWidth;
   final bool roomBreadcrumbEllipsisOnly;
+  final bool showAdaptiveWebappNavOpener;
 
   const AgentsDropdown({
     super.key,
@@ -55,8 +57,10 @@ class AgentsDropdown extends StatelessWidget {
     this.showRoomBreadcrumb = false,
     this.roomDisplayNameOverride,
     this.onRoomPressed,
+    this.onOpenNavigation,
     this.roomBreadcrumbMaxWidth,
     this.roomBreadcrumbEllipsisOnly = false,
+    this.showAdaptiveWebappNavOpener = false,
   });
 
   String _serviceId(ServiceSpec service) => service.metadata.annotations["meshagent.service.id"] ?? "";
@@ -144,22 +148,38 @@ class AgentsDropdown extends StatelessWidget {
     return '${trimmed[0].toUpperCase()}${trimmed.substring(1)}';
   }
 
-  Widget _desktopBreadcrumb({
-    required BuildContext context,
-    required String roomName,
-    required String agentLabel,
-    required VoidCallback onAgentPressed,
-  }) {
+  Widget _desktopBreadcrumb({required BuildContext parentContext, required String roomName}) {
     final textStyle = powerboardsSectionTitleStyle();
-    final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
+    final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(parentContext);
+    final showSidetrayOpenButton =
+        roomBreadcrumbEllipsisOnly && sidetrayScope != null && (sidetrayScope.collapsed || !sidetrayScope.enabled);
+
+    void onOpenNavPressed() {
+      if (onOpenNavigation != null) {
+        onOpenNavigation!();
+        return;
+      }
+      if (sidetrayScope != null && sidetrayScope.enabled) {
+        sidetrayScope.onExpand();
+      }
+    }
 
     void onRoomPressed() {
+      if (showAdaptiveWebappNavOpener && onOpenNavigation != null) {
+        onOpenNavigation!();
+        this.onRoomPressed?.call();
+        if (this.onRoomPressed == null) {
+          _navigateToRoute(parentContext, '');
+        }
+        return;
+      }
+
       if (sidetrayScope?.enabled == true) {
         sidetrayScope!.onToggle();
       }
       this.onRoomPressed?.call();
       if (this.onRoomPressed == null) {
-        _navigateToRoute(context, '');
+        _navigateToRoute(parentContext, '');
       }
     }
 
@@ -182,6 +202,10 @@ class AgentsDropdown extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (showSidetrayOpenButton) ...[
+          DesktopSidetrayToggleButton(collapsed: true, onPressed: onOpenNavPressed),
+          const SizedBox(width: 8),
+        ],
         if (roomBreadcrumbMaxWidth != null)
           Flexible(
             fit: FlexFit.loose,
@@ -195,23 +219,13 @@ class AgentsDropdown extends StatelessWidget {
         const SizedBox(width: 4),
         const Icon(LucideIcons.chevronRight, size: 18, color: Color(0xffa5a5a5)),
         const SizedBox(width: 4),
-        ShadButton.ghost(
-          onPressed: onAgentPressed,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(agentLabel, maxLines: 1, textAlign: TextAlign.left, style: textStyle),
-              const SizedBox(width: 6),
-              const Icon(LucideIcons.chevronDown, size: 18),
-            ],
-          ),
-        ),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final parentSidetrayContext = context;
     return ChangeNotifierBuilder(
       source: room.messaging,
       builder: (context) {
@@ -227,11 +241,6 @@ class AgentsDropdown extends StatelessWidget {
 
         final hasAgents = services.isNotEmpty || developmentAgents.isNotEmpty;
         final label = selectedService?.metadata.name ?? selectedDevelopmentAgent?.name ?? (hasAgents ? "Select agent" : "No agents");
-        final selectedAgentLabel =
-            (selectedService == null ? null : _serviceAgentName(selectedService!)) ??
-            selectedDevelopmentAgent?.name ??
-            selectedService?.metadata.name ??
-            (hasAgents ? "Select agent" : "No agents");
         final readme = selectedService?.metadata.annotations["meshagent.service.readme"];
 
         final entries = <AppMenuEntry>[
@@ -268,70 +277,6 @@ class AgentsDropdown extends StatelessWidget {
         final mobileMenuHeight = max(220.0, size.height - 96.0);
         final usesExpandedTrigger = expandToAvailableWidth;
 
-        final menuButton = AppContextMenuButton(
-          anchor: isMobileAdaptive ? null : const ShadAnchor(childAlignment: Alignment.topLeft),
-          boundaryContext: boundaryContext,
-          constraints: isMobileAdaptive
-              ? BoxConstraints(minWidth: mobileMenuWidth, maxWidth: mobileMenuWidth)
-              : const BoxConstraints(minWidth: 320, maxWidth: 420),
-          maxMenuHeight: isMobileAdaptive ? mobileMenuHeight : null,
-          centerHorizontallyInBoundary: centerMenuInViewport,
-          entries: entries,
-          childBuilder: (context, controller) {
-            void onTriggerPressed() {
-              onOpen?.call();
-              controller.toggle();
-            }
-
-            if (!isMobileAdaptive && showRoomBreadcrumb) {
-              return _desktopBreadcrumb(
-                context: context,
-                roomName: roomDisplayNameOverride ?? room.roomName ?? "Room",
-                agentLabel: _capitalizeDisplayLabel(selectedAgentLabel),
-                onAgentPressed: onTriggerPressed,
-              );
-            }
-
-            return ShadButton.ghost(
-              expands: usesExpandedTrigger,
-              mainAxisAlignment: usesExpandedTrigger ? MainAxisAlignment.start : MainAxisAlignment.center,
-              trailing: usesExpandedTrigger ? null : const Icon(LucideIcons.chevronDown, size: 18),
-              onPressed: onTriggerPressed,
-              leading: usesExpandedTrigger
-                  ? null
-                  : isMobileAdaptive
-                  ? null
-                  : selectedDevelopmentAgent == null
-                  ? const Icon(LucideIcons.bot, size: 18)
-                  : Opacity(opacity: 0.25, child: Icon(_developmentAgentIcon(selectedDevelopmentAgent.participant), size: 18)),
-              child: usesExpandedTrigger
-                  ? Row(
-                      mainAxisSize: MainAxisSize.max,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            _capitalizeDisplayLabel(label),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.left,
-                            style: powerboardsSectionTitleStyle(),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Icon(LucideIcons.chevronDown, size: 18),
-                      ],
-                    )
-                  : Text(
-                      _capitalizeDisplayLabel(label),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.left,
-                      style: powerboardsSectionTitleStyle(),
-                    ),
-            );
-          },
-        );
-
         final readmeButton = readme == null
             ? null
             : ShadButton.ghost(
@@ -349,6 +294,95 @@ class AgentsDropdown extends StatelessWidget {
                 },
                 child: const Icon(LucideIcons.info),
               );
+
+        Widget buildAgentTriggerButton(BuildContext _, VoidCallback onTriggerPressed) {
+          return ShadButton.ghost(
+            expands: usesExpandedTrigger,
+            mainAxisAlignment: usesExpandedTrigger ? MainAxisAlignment.start : MainAxisAlignment.center,
+            trailing: usesExpandedTrigger ? null : const Icon(LucideIcons.chevronDown, size: 18),
+            onPressed: onTriggerPressed,
+            leading: usesExpandedTrigger
+                ? null
+                : isMobileAdaptive
+                ? null
+                : selectedDevelopmentAgent == null
+                ? const Icon(LucideIcons.bot, size: 18)
+                : Opacity(opacity: 0.25, child: Icon(_developmentAgentIcon(selectedDevelopmentAgent.participant), size: 18)),
+            child: usesExpandedTrigger
+                ? Row(
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _capitalizeDisplayLabel(label),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.left,
+                          style: powerboardsSectionTitleStyle(),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(LucideIcons.chevronDown, size: 18),
+                    ],
+                  )
+                : Text(
+                    _capitalizeDisplayLabel(label),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.left,
+                    style: powerboardsSectionTitleStyle(),
+                  ),
+          );
+        }
+
+        if (!isMobileAdaptive && showRoomBreadcrumb) {
+          final breadcrumbLeading = _desktopBreadcrumb(
+            parentContext: parentSidetrayContext,
+            roomName: roomDisplayNameOverride ?? room.roomName ?? "Room",
+          );
+          final agentMenuButton = AppContextMenuButton(
+            anchor: const ShadAnchor(childAlignment: Alignment.topLeft),
+            boundaryContext: boundaryContext,
+            constraints: const BoxConstraints(minWidth: 320, maxWidth: 420),
+            entries: entries,
+            childBuilder: (context, controller) {
+              void onTriggerPressed() {
+                onOpen?.call();
+                controller.toggle();
+              }
+
+              return buildAgentTriggerButton(context, onTriggerPressed);
+            },
+          );
+
+          return Row(
+            mainAxisSize: expandToAvailableWidth ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              breadcrumbLeading,
+              Flexible(fit: FlexFit.loose, child: agentMenuButton),
+              if (readmeButton != null) ...[const SizedBox(width: 4), readmeButton],
+            ],
+          );
+        }
+
+        final menuButton = AppContextMenuButton(
+          anchor: isMobileAdaptive ? null : const ShadAnchor(childAlignment: Alignment.topLeft),
+          boundaryContext: boundaryContext,
+          constraints: isMobileAdaptive
+              ? BoxConstraints(minWidth: mobileMenuWidth, maxWidth: mobileMenuWidth)
+              : const BoxConstraints(minWidth: 320, maxWidth: 420),
+          maxMenuHeight: isMobileAdaptive ? mobileMenuHeight : null,
+          centerHorizontallyInBoundary: centerMenuInViewport,
+          entries: entries,
+          childBuilder: (context, controller) {
+            void onTriggerPressed() {
+              onOpen?.call();
+              controller.toggle();
+            }
+
+            return buildAgentTriggerButton(context, onTriggerPressed);
+          },
+        );
 
         return Row(
           mainAxisSize: expandToAvailableWidth ? MainAxisSize.max : MainAxisSize.min,

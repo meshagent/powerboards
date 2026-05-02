@@ -927,8 +927,11 @@ class ActionsRow extends StatelessWidget {
     final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
     final showDesktopSidetrayOpenAction = !isMobile && sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true;
     final act = [...actions];
+    final breadcrumbOwnsSidetrayOpenAction = act.any(
+      (action) => action is AgentsDropdown && action.showRoomBreadcrumb && action.roomBreadcrumbEllipsisOnly,
+    );
 
-    if (showDesktopSidetrayOpenAction) {
+    if (showDesktopSidetrayOpenAction && !breadcrumbOwnsSidetrayOpenAction) {
       act.insert(0, DesktopSidetrayToggleButton(collapsed: true, onPressed: sidetrayScope!.onExpand));
     }
 
@@ -966,7 +969,7 @@ class ActionsRow extends StatelessWidget {
     }
 
     if (!found) {
-      if (showDesktopSidetrayOpenAction) {
+      if (showDesktopSidetrayOpenAction && !breadcrumbOwnsSidetrayOpenAction) {
         act.insert(1, Spacer());
       } else {
         act.insert(0, Spacer());
@@ -979,7 +982,7 @@ class ActionsRow extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final sidetrayLeadingWidth = showDesktopSidetrayOpenAction
+        final sidetrayLeadingWidth = showDesktopSidetrayOpenAction && !breadcrumbOwnsSidetrayOpenAction
             ? (desktopPaneHeaderCompactButtonWidth + desktopPaneHeaderButtonGap)
             : 0.0;
         final state = resolvePaneHeaderActionState(
@@ -2482,9 +2485,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  List<Widget> _emptyRoomHeaderActions({required bool isSmallDisplay, required bool isMobile}) {
+  List<Widget> _emptyRoomHeaderActions({required bool isMobile}) {
     return [
-      if (isSmallDisplay) BackButton(projectId: widget.projectId),
+      if (isMobile) BackButton(projectId: widget.projectId),
       if (!isMobile) _buildEmptyRoomNameDisplay(context),
       Spacer(),
       InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
@@ -3697,6 +3700,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final rb = ResponsiveBreakpoints.of(context);
     final isMobile = _usesMobileRoomLayout(context);
     final isSmallDisplay = rb.smallerOrEqualTo("chromebook");
+    final isAdaptiveWebapp = isSmallDisplay && !isMobile;
 
     return RoomParticipantsBuilder(
       room: widget.room,
@@ -3710,7 +3714,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   return _buildRoomInitializationError(context, title: "Unable to load room services", error: services.state.error);
                 }
 
-                final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
+                final actions = _emptyRoomHeaderActions(isMobile: isMobile);
                 final cs = ShadTheme.of(context).colorScheme;
                 if (isMobile) {
                   return PowerboardsMobileOverlayScaffold(
@@ -3760,7 +3764,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
 
                             if (!_hasVisibleAgents(supported)) {
-                              final actions = _emptyRoomHeaderActions(isSmallDisplay: isSmallDisplay, isMobile: isMobile);
+                              final actions = _emptyRoomHeaderActions(isMobile: isMobile);
                               final cs = ShadTheme.of(context).colorScheme;
                               final emptyStateBody = SignalBuilder(
                                 builder: (context, _) {
@@ -3994,14 +3998,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                               : ColoredBox(
                                                   color: cs.card,
                                                   child: _buildAgentArea(context, [
-                                                    if (isSmallDisplay) BackButton(projectId: widget.projectId),
+                                                    if (isMobile) BackButton(projectId: widget.projectId),
 
                                                     AgentsDropdown(
                                                       projectId: widget.projectId,
                                                       room: widget.room,
                                                       roomDisplayNameOverride: _roomDisplayName,
-                                                      roomBreadcrumbMaxWidth: split ? 96 : null,
-                                                      roomBreadcrumbEllipsisOnly: split,
+                                                      roomBreadcrumbMaxWidth: split || isAdaptiveWebapp ? 96 : null,
+                                                      roomBreadcrumbEllipsisOnly: split || isAdaptiveWebapp,
+                                                      showAdaptiveWebappNavOpener: isAdaptiveWebapp,
                                                       onRoomPressed: () => _showChatPane(context),
                                                       selectedService: selected.service,
                                                       selectedAgentRouteId: selected.routeId,
