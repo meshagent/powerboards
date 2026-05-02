@@ -2184,7 +2184,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     return PowerboardsMobileHeaderTrigger(
       primaryText: chatContext.currentThreadLabel,
-      secondaryText: chatContext.agentName,
+      secondaryText: _roomDisplayName,
       collapseProgress: collapseProgress,
       showChevron: canOpenContextSwitcher,
       textAlign: TextAlign.left,
@@ -2455,6 +2455,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.left,
         style: powerboardsSectionTitleStyle(),
+      ),
+    );
+  }
+
+  Widget _buildMobileRoomNameHeaderTitle(BuildContext context) {
+    final theme = ShadTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      child: Text(
+        _roomDisplayName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.left,
+        style: powerboardsMobileHeaderSecondaryTextStyle(color: theme.colorScheme.mutedForeground.withValues(alpha: 0.82)),
       ),
     );
   }
@@ -3692,8 +3706,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 if (isMobile) {
                   return PowerboardsMobileOverlayScaffold(
                     leading: _buildMobileRoomLeadingAction(context, filesVisible: false),
-                    titleBuilder: (_, _) => const SizedBox.shrink(),
+                    titleBuilder: (context, _) => _buildMobileRoomNameHeaderTitle(context),
                     trailingActions: const [],
+                    titleAlignment: Alignment.centerLeft,
                     backgroundColor: cs.card,
                     scrollIdentity: "room-loading",
                     body: _buildRoomLoading(context, title: "Loading room services"),
@@ -3818,11 +3833,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                               if (isMobile) {
                                 return PowerboardsMobileOverlayScaffold(
                                   leading: _buildMobileRoomLeadingAction(context, filesVisible: false),
-                                  titleBuilder: (_, _) => const SizedBox.shrink(),
+                                  titleBuilder: (context, _) => _buildMobileRoomNameHeaderTitle(context),
                                   trailingActions: _buildMobileEmptyRoomHeaderActions(
                                     context,
                                     canViewStorageAllowed: canViewStorageAllowed,
                                   ),
+                                  titleAlignment: Alignment.centerLeft,
                                   backgroundColor: cs.card,
                                   scrollIdentity: "room-empty",
                                   body: emptyStateBody,
