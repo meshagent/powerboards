@@ -2184,7 +2184,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     return PowerboardsMobileHeaderTrigger(
       primaryText: chatContext.currentThreadLabel,
-      secondaryText: _roomDisplayName,
+      secondaryText: _mobileRoomHeaderName,
       collapseProgress: collapseProgress,
       showChevron: canOpenContextSwitcher,
       textAlign: TextAlign.left,
@@ -2440,6 +2440,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return roomName;
   }
 
+  String get _mobileRoomHeaderName {
+    final roomName = widget.room.roomName?.trim();
+    if (roomName == null || roomName.isEmpty) {
+      return "Room";
+    }
+
+    return roomName;
+  }
+
   Widget _buildEmptyRoomNameDisplay(BuildContext context) {
     final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
 
@@ -2464,7 +2473,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       child: Text(
-        _roomDisplayName,
+        _mobileRoomHeaderName,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         textAlign: TextAlign.left,
