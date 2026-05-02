@@ -176,6 +176,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   bool _mobileRoomListScrollCollapsed = false;
   int _mobileRoomListInstance = 0;
   late final AnimationController _mobileRoomListCloseAnimationController;
+  final childKey = GlobalKey();
 
   Resource<List<Project>> get projects {
     return widget.projects;
@@ -553,11 +554,12 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       );
     }
 
-    return _buildRoomContent();
+    return _buildRoomContent(useStableGlobalKey: true);
   }
 
-  Widget _buildRoomContent() {
-    return KeyedSubtree(key: ValueKey('nav-room-content-${widget.projectId}-${widget.selectedRoom}'), child: widget.child);
+  Widget _buildRoomContent({bool useStableGlobalKey = false}) {
+    final key = useStableGlobalKey ? childKey : ValueKey('nav-room-content-${widget.projectId}-${widget.selectedRoom}');
+    return KeyedSubtree(key: key, child: widget.child);
   }
 
   Widget desktopView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
