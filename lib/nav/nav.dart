@@ -166,12 +166,6 @@ class _MobileSidetrayCloseButton extends StatelessWidget {
 }
 
 class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
-  final resizeController = ShadResizableController();
-  double? _navRatio;
-  bool _panelLayoutSyncScheduled = false;
-  bool? _lastDesktopHidden;
-  double? _lastDesktopWidth;
-  bool? _lastSmallDisplay;
   int _mobileNavigationDirection = 1;
   double _mobileRoomListDragOffset = 0;
   String? _mobilePendingCreateProjectId;
@@ -401,87 +395,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     launchUrl(redirectUrl);
   }
 
-  ({({double minSize, double maxSize, double defaultSize}) nav, ({double minSize, double maxSize, double defaultSize}) main})
-  _resolvePanelLayout(double width, {required bool hidden}) {
-    if (hidden) {
-      return (nav: (minSize: 0, maxSize: 0, defaultSize: 0), main: (minSize: 1, maxSize: 1, defaultSize: 1));
-    }
-
-    final rawMinRatio = _navBarMinWidth / width;
-    final rawMaxRatio = _navBarMaxWidth / width;
-    final minRatio = rawMinRatio.clamp(0.0, 1.0);
-    final maxRatio = rawMaxRatio.clamp(minRatio, 1.0);
-    final preferredRatio = (_navRatio ?? (navBarWidth / width)).clamp(minRatio, maxRatio).toDouble();
-    final mainDefaultSize = (1.0 - preferredRatio).clamp(0.0, 1.0).toDouble();
-    final mainMinSize = (1.0 - maxRatio).clamp(0.0, 1.0).toDouble();
-    final mainMaxSize = (1.0 - minRatio).clamp(mainMinSize, 1.0).toDouble();
-
-    return (
-      nav: (minSize: minRatio, maxSize: maxRatio, defaultSize: preferredRatio),
-      main: (minSize: mainMinSize, maxSize: mainMaxSize, defaultSize: mainDefaultSize),
-    );
-  }
-
-  void _resetDesktopPanelState() {
-    resizeController.clear();
-    _lastDesktopHidden = null;
-    _lastDesktopWidth = null;
-    _panelLayoutSyncScheduled = false;
-  }
-
-  void _updatePanelLayout(BoxConstraints constraints, {required bool hidden}) {
-    final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
-    final mainPanel = resizeController.panelsInfo.where((panel) => panel.id == "main").firstOrNull;
-    if (navPanel == null || mainPanel == null) {
-      return;
-    }
-
-    final width = constraints.maxWidth;
-    if (!width.isFinite || width <= 0) {
-      return;
-    }
-
-    if (navPanel.size > 0) {
-      _navRatio = navPanel.size;
-    }
-
-    final panelLayout = _resolvePanelLayout(width, hidden: hidden);
-    final nextNav = ShadPanelInfo(
-      id: "nav",
-      minSize: panelLayout.nav.minSize,
-      maxSize: panelLayout.nav.maxSize,
-      defaultSize: panelLayout.nav.defaultSize,
-    );
-    final nextMain = ShadPanelInfo(
-      id: "main",
-      minSize: panelLayout.main.minSize,
-      maxSize: panelLayout.main.maxSize,
-      defaultSize: panelLayout.main.defaultSize,
-    );
-
-    if (!hidden && navPanel.size > 0) {
-      nextNav.size = navPanel.size.clamp(nextNav.minSize, nextNav.maxSize).toDouble();
-    }
-
-    resizeController.update([nextNav, nextMain]);
-  }
-
-  void _schedulePanelLayoutSyncForBuild(BoxConstraints constraints, {required bool hidden}) {
-    if (_panelLayoutSyncScheduled) {
-      return;
-    }
-
-    _panelLayoutSyncScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _panelLayoutSyncScheduled = false;
-      if (!mounted) {
-        return;
-      }
-
-      _updatePanelLayout(constraints, hidden: hidden);
-    });
-  }
-
   @override
   void didUpdateWidget(Nav oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -610,7 +523,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     _mobileRoomListCloseAnimationController.dispose();
-    resizeController.dispose();
     _mobileRoomListProjectId.dispose();
     _mobileRoomListSelectedRoom.dispose();
     projects.dispose();
@@ -655,6 +567,8 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     final desktopSidetrayCollapsed = navController.isDesktopSidetrayCollapsed;
     final hidden = navController.isNavHidden || !chromeVisible;
     final sidetrayHidden = hidden || desktopSidetrayCollapsed;
+    const animationDuration = Duration(milliseconds: 360);
+    const animationCurve = Curves.easeInOutCubicEmphasized;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -663,17 +577,10 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
           return const SizedBox.shrink();
         }
 
-        if (_lastDesktopWidth != width) {
-          _lastDesktopWidth = width;
-          _schedulePanelLayoutSyncForBuild(constraints, hidden: sidetrayHidden);
-        }
-
-        if (_lastDesktopHidden != sidetrayHidden) {
-          _lastDesktopHidden = sidetrayHidden;
-          _schedulePanelLayoutSyncForBuild(constraints, hidden: sidetrayHidden);
-        }
-
-        final panelLayout = _resolvePanelLayout(width, hidden: sidetrayHidden);
+        final effectiveNavWidth = math.min(_navBarMaxWidth, math.max(_navBarMinWidth, math.min(navBarWidth, width - 320)));
+        final targetNavWidth = sidetrayHidden ? 0.0 : effectiveNavWidth;
+        final contentOffsetX = sidetrayHidden ? -10.0 : 0.0;
+        final contentOpacity = sidetrayHidden ? 0.0 : 1.0;
 
         return DesktopSidetrayToggleScope(
           collapsed: desktopSidetrayCollapsed,
@@ -681,62 +588,65 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
           onToggle: navController.toggleDesktopSidetray,
           onCollapse: navController.collapseDesktopSidetray,
           onExpand: navController.expandDesktopSidetray,
-          child: ShadResizablePanelGroup(
-            axis: .horizontal,
-            showHandle: !sidetrayHidden,
-            dividerColor: Colors.transparent,
-            controller: resizeController,
+          child: Row(
             children: [
-              ShadResizablePanel(
-                id: "nav",
-                defaultSize: panelLayout.nav.defaultSize,
-                minSize: panelLayout.nav.minSize,
-                maxSize: panelLayout.nav.maxSize,
+              AnimatedContainer(
+                duration: animationDuration,
+                curve: animationCurve,
+                width: targetNavWidth,
                 child: IgnorePointer(
                   ignoring: sidetrayHidden,
-                  child: ColoredBox(
-                    color: cs.background,
-                    child: Column(
-                      mainAxisSize: .min,
-                      children: [
-                        _NavBarTop(
-                          projectId: widget.projectId,
-                          projects: projects,
-                          onCreateProject: onCreateProject,
-                          desktopLeading: DesktopSidetrayToggleButton(
-                            collapsed: false,
-                            onPressed: hidden ? null : navController.collapseDesktopSidetray,
-                          ),
-                        ),
+                  child: ClipRect(
+                    child: AnimatedOpacity(
+                      duration: animationDuration,
+                      curve: animationCurve,
+                      opacity: contentOpacity,
+                      child: AnimatedSlide(
+                        duration: animationDuration,
+                        curve: animationCurve,
+                        offset: Offset(contentOffsetX / math.max(effectiveNavWidth, 1), 0),
+                        child: ColoredBox(
+                          color: cs.background,
+                          child: SizedBox(
+                            width: effectiveNavWidth,
+                            child: Column(
+                              mainAxisSize: .min,
+                              children: [
+                                _NavBarTop(
+                                  projectId: widget.projectId,
+                                  projects: projects,
+                                  onCreateProject: onCreateProject,
+                                  desktopLeading: DesktopSidetrayToggleButton(
+                                    collapsed: false,
+                                    onPressed: hidden ? null : navController.collapseDesktopSidetray,
+                                  ),
+                                ),
 
-                        SignalBuilder(
-                          builder: (context, _) => Expanded(
-                            child: _NavBar(
-                              projectId: widget.projectId,
-                              rooms: rooms.state.isReady ? filteredRooms : [],
-                              currentFilter: filter,
-                              canCreateRooms: canCreateRooms,
-                              setFilter: setFilter,
-                              selectedRoom: widget.selectedRoom,
-                              onSave: () => rooms.refresh(),
-                              onRefresh: () => rooms.refresh(),
-                              balanceLow: balanceLow,
+                                SignalBuilder(
+                                  builder: (context, _) => Expanded(
+                                    child: _NavBar(
+                                      projectId: widget.projectId,
+                                      rooms: rooms.state.isReady ? filteredRooms : [],
+                                      currentFilter: filter,
+                                      canCreateRooms: canCreateRooms,
+                                      setFilter: setFilter,
+                                      selectedRoom: widget.selectedRoom,
+                                      onSave: () => rooms.refresh(),
+                                      onRefresh: () => rooms.refresh(),
+                                      balanceLow: balanceLow,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
               ),
-
-              ShadResizablePanel(
-                id: "main",
-                defaultSize: panelLayout.main.defaultSize,
-                minSize: panelLayout.main.minSize,
-                maxSize: panelLayout.main.maxSize,
-                child: desktopBody(context, userRole, balanceLow, canCreateRooms),
-              ),
+              Expanded(child: desktopBody(context, userRole, balanceLow, canCreateRooms)),
             ],
           ),
         );
@@ -1357,11 +1267,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     final cs = theme.colorScheme;
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final navController = Controller.ofType<NavController>(context);
-
-    if (_lastSmallDisplay == true && !isSmallDisplay) {
-      _resetDesktopPanelState();
-    }
-    _lastSmallDisplay = isSmallDisplay;
 
     return SignalBuilder(
       builder: (context, _) {
