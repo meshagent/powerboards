@@ -266,7 +266,8 @@ void main() {
     newThread.onThreadPathChanged?.call('.threads/created.thread');
     await tester.pumpAndSettle();
 
-    expect(newThreadFinder, findsNothing);
+    final selectedNewThread = tester.widget<NewChatThread>(newThreadFinder);
+    expect(selectedNewThread.selectedThreadPath, '.threads/created.thread');
     expect(find.byType(ChatThread), findsOneWidget);
   });
 

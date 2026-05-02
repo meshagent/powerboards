@@ -25,7 +25,7 @@ const double desktopPaneSideHorizontalInset = 20;
 const double desktopPaneSideHeaderSlotSize = 30;
 const double desktopPaneSideHeaderGap = 16;
 const double desktopPaneSideHeaderVisualInset = desktopPaneSideHeaderSlotSize + desktopPaneSideHeaderGap;
-const double desktopPaneSideListItemLeadingInset = 12;
+const double desktopPaneSideListItemLeadingInset = 20;
 
 bool shouldCompactPaneHeaderActions(
   BoxConstraints constraints, {
