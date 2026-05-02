@@ -1043,6 +1043,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   String? _lastPersistedMobileAgentRouteId;
   String? _lastSyncedRoutePath;
   _MobileRoomPane? _lastSyncedRoutePane;
+  bool _didNormalizeInitialDesktopPane = false;
   _MobileMeetingOrigin? _mobileMeetingOrigin;
   StreamSubscription<RoomStatusEvent>? _roomStatusSubscription;
 
@@ -1090,6 +1091,38 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final currentUri = state.uri;
     final path = currentUri.queryParameters['p'];
     final pane = _roomPaneFromUri(currentUri);
+    final usesMobileRoomLayout = _usesMobileRoomLayout(context);
+
+    if (!usesMobileRoomLayout && !_didNormalizeInitialDesktopPane) {
+      _didNormalizeInitialDesktopPane = true;
+
+      final shouldResetToChat = pane != null && pane != _MobileRoomPane.chat;
+      final hasResidualPath = path != null && path.isNotEmpty;
+
+      if (shouldResetToChat || hasResidualPath) {
+        controller.showChat();
+
+        final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters)
+          ..[_roomPaneQueryParameter] = _roomPaneQueryValue(_MobileRoomPane.chat)
+          ..remove('p')
+          ..remove(filePreviewOriginQueryParameter);
+        final normalizedUri = currentUri.replace(queryParameters: updatedQueryParameters);
+
+        _lastSyncedRoutePath = null;
+        _lastSyncedRoutePane = _MobileRoomPane.chat;
+
+        if (normalizedUri.toString() != currentUri.toString()) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !context.mounted) {
+              return;
+            }
+
+            context.go(normalizedUri.toString());
+          });
+        }
+        return;
+      }
+    }
 
     if (path == _lastSyncedRoutePath && pane == _lastSyncedRoutePane) {
       return;
@@ -1108,9 +1141,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         controller.enterMeeting();
         return;
       case null:
-        if (path != null && path.isNotEmpty) {
+        if (path != null && path.isNotEmpty && usesMobileRoomLayout) {
           controller.showFiles();
+          return;
         }
+
+        controller.showChat();
     }
   }
 
