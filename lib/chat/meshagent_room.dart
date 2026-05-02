@@ -45,6 +45,7 @@ import 'package:powerboards/meshagent/tools/ui_toolkit.dart';
 import 'package:powerboards/meshagent/wait_for_agent_participant_builder.dart';
 import 'package:powerboards/nav/leave_meeting.dart';
 import 'package:powerboards/nav/nav.dart';
+import 'package:powerboards/nav/nav_rooms.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
@@ -1040,6 +1041,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final MeshagentRoomController controller = MeshagentRoomController();
   int _newThreadResetVersion = 0;
   String _lastRoomStatusText = "Connecting to room";
+  String? _resolvedRoomDisplayName;
   String? _lastPersistedMobileAgentRouteId;
   String? _lastSyncedRoutePath;
   _MobileRoomPane? _lastSyncedRoutePane;
@@ -1068,6 +1070,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   @override
   void initState() {
     super.initState();
+    unawaited(_loadRoomDisplayName());
 
     _roomStatusSubscription = widget.room.events.where((event) => event is RoomStatusEvent).cast<RoomStatusEvent>().listen((event) {
       final status = event.description.trim();
@@ -1078,6 +1081,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         _lastRoomStatusText = status;
       });
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant MeshagentRoom oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.projectId != widget.projectId || oldWidget.room.roomName != widget.room.roomName) {
+      _resolvedRoomDisplayName = null;
+      unawaited(_loadRoomDisplayName());
+    }
   }
 
   @override
@@ -2356,9 +2369,66 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  Future<void> _loadRoomDisplayName() async {
+    final roomName = widget.room.roomName?.trim();
+    if (roomName == null || roomName.isEmpty) {
+      return;
+    }
+
+    try {
+      final room = await getMeshagentClient().getRoom(name: roomName, projectId: widget.projectId);
+      if (!mounted) {
+        return;
+      }
+
+      final displayName = roomDisplayName(room);
+      if (displayName.isEmpty || displayName == _resolvedRoomDisplayName) {
+        return;
+      }
+
+      setState(() {
+        _resolvedRoomDisplayName = displayName;
+      });
+    } catch (_) {}
+  }
+
+  String get _roomDisplayName {
+    final displayName = _resolvedRoomDisplayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) {
+      return displayName;
+    }
+
+    final roomName = widget.room.roomName?.trim();
+    if (roomName == null || roomName.isEmpty) {
+      return "Room";
+    }
+
+    return roomName;
+  }
+
+  Widget _buildEmptyRoomNameDisplay(BuildContext context) {
+    final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
+
+    return ShadButton.ghost(
+      onPressed: () {
+        if (sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true) {
+          sidetrayScope!.onExpand();
+        }
+      },
+      child: Text(
+        _roomDisplayName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.left,
+        style: powerboardsSectionTitleStyle(),
+      ),
+    );
+  }
+
   List<Widget> _emptyRoomHeaderActions({required bool isSmallDisplay, required bool isMobile}) {
     return [
       if (isSmallDisplay) BackButton(projectId: widget.projectId),
+      if (!isMobile) _buildEmptyRoomNameDisplay(context),
       Spacer(),
       InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
       if (!isMobile) ...[
@@ -3870,11 +3940,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                     AgentsDropdown(
                                                       projectId: widget.projectId,
                                                       room: widget.room,
+                                                      roomDisplayNameOverride: _roomDisplayName,
                                                       selectedService: selected.service,
                                                       selectedAgentRouteId: selected.routeId,
                                                       services: supported,
                                                       onOpen: services.refresh,
                                                       onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+                                                      showRoomBreadcrumb: true,
                                                     ),
 
                                                     ParticipantsButton(
