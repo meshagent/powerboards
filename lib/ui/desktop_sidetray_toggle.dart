@@ -6,6 +6,7 @@ import 'package:powerboards/ui/pane_header_action_scope.dart';
 
 const double _desktopSidetrayHamburgerIconSize = 22;
 const double _desktopSidetrayCloseIconSize = 20;
+const double desktopSidetrayToggleButtonSize = desktopPaneSecondaryControlHeight;
 
 class DesktopSidetrayToggleScope extends InheritedWidget {
   const DesktopSidetrayToggleScope({
@@ -55,16 +56,16 @@ class DesktopSidetrayToggleButton extends StatelessWidget {
       message: collapsed ? "Open navigation" : "Close navigation",
       child: collapsed
           ? ShadIconButton.outline(
-              width: desktopPaneHeaderContentHeight,
-              height: desktopPaneHeaderContentHeight,
+              width: desktopSidetrayToggleButtonSize,
+              height: desktopSidetrayToggleButtonSize,
               padding: EdgeInsets.zero,
               icon: iconWidget,
               decoration: powerboardsAdaptiveIconButtonDecoration(context),
               onPressed: onPressed,
             )
           : ShadIconButton.ghost(
-              width: desktopPaneHeaderContentHeight,
-              height: desktopPaneHeaderContentHeight,
+              width: desktopSidetrayToggleButtonSize,
+              height: desktopSidetrayToggleButtonSize,
               padding: EdgeInsets.zero,
               icon: iconWidget,
               decoration: powerboardsAdaptiveIconButtonDecoration(context),

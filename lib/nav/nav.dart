@@ -1962,7 +1962,7 @@ class _NavBarTopState extends State<_NavBarTop> {
     final displayName = selectedProject?.name ?? "Select project";
     final mobileCollapseProgress = isSmallDisplay ? widget.mobileCollapseProgress.clamp(0.0, 1.0) : 0.0;
     final hasDesktopLeading = widget.desktopLeading != null;
-    final desktopLeadingSlotSize = hasDesktopLeading ? desktopPaneHeaderContentHeight : desktopPaneSideHeaderSlotSize;
+    final desktopLeadingSlotSize = hasDesktopLeading ? desktopSidetrayToggleButtonSize : desktopPaneSideHeaderSlotSize;
     final desktopHeaderVisualInset = hasDesktopLeading
         ? math.max(desktopPaneSideHeaderVisualInset, desktopLeadingSlotSize)
         : desktopPaneSideHeaderVisualInset;
