@@ -2688,7 +2688,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildFilesArea(BuildContext context, List<Widget> actions, {bool embedMobileChrome = true}) {
+  Widget _buildFilesArea(
+    BuildContext context,
+    List<Widget> actions, {
+    bool embedMobileChrome = true,
+    bool showDesktopSidetrayToggle = true,
+  }) {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = _usesMobileRoomLayout(context);
     final mobileFilesLocation = isMobile ? _mobileFilesLocation(context) : null;
@@ -2711,6 +2716,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 services: services,
                 hideSystem: true,
                 mobileShellOwnsHeader: isMobile && !embedMobileChrome,
+                showDesktopSidetrayToggle: showDesktopSidetrayToggle,
                 controller: _filesHeaderController,
                 desktopHeaderLeadingActions: isMobile || !meetingSessionActive ? const [] : _meetingHeaderPrimaryControls(context),
                 desktopHeaderActions: isMobile ? const [] : actions,
@@ -2725,7 +2731,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  Widget _buildMeeting(BuildContext context, String? agentName, List<Widget> actions, {bool embedMobileChrome = true}) {
+  Widget _buildMeeting(
+    BuildContext context,
+    String? agentName,
+    List<Widget> actions, {
+    bool embedMobileChrome = true,
+    bool showDesktopSidetrayToggle = true,
+  }) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
 
@@ -2742,7 +2754,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             LayoutBuilder(
               builder: (context, constraints) {
                 final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
-                final sidetrayOpenButton = sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
+                final sidetrayOpenButton = showDesktopSidetrayToggle && sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
                     ? DesktopSidetrayToggleButton(collapsed: true, onPressed: sidetrayScope!.onExpand)
                     : null;
                 final sidetrayLeadingWidth = sidetrayOpenButton == null
@@ -3840,9 +3852,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                           area2: !split
                                               ? Container()
                                               : filesVisible
-                                              ? _buildFilesArea(context, actions)
+                                              ? _buildFilesArea(context, actions, showDesktopSidetrayToggle: false)
                                               : controller.inMeeting
-                                              ? _buildMeeting(context, null, actions)
+                                              ? _buildMeeting(context, null, actions, showDesktopSidetrayToggle: false)
                                               : _buildAgentArea(context, actions, showEmbeddedThreadList: false),
                                         ),
                                       ),

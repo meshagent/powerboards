@@ -209,6 +209,7 @@ class FileManagerView extends StatefulWidget {
   final double desktopHeaderActionLeadingWidthFloor;
   final double desktopHeaderActionMinimumLeadingWidth;
   final double desktopHeaderActionReserve;
+  final bool showDesktopSidetrayToggle;
 
   const FileManagerView({
     super.key,
@@ -222,6 +223,7 @@ class FileManagerView extends StatefulWidget {
     this.desktopHeaderActionLeadingWidthFloor = 0,
     this.desktopHeaderActionMinimumLeadingWidth = 0,
     this.desktopHeaderActionReserve = desktopPaneHeaderActionReserve,
+    this.showDesktopSidetrayToggle = true,
   });
 
   @override
@@ -1754,7 +1756,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget _buildDesktopHeaderLeadingRow({required List<Widget> trailing}) {
     final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
-    final sidetrayOpenButton = sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
+    final sidetrayOpenButton = widget.showDesktopSidetrayToggle && sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
         ? DesktopSidetrayToggleButton(collapsed: true, onPressed: sidetrayScope!.onExpand)
         : null;
     final leadingActions = widget.desktopHeaderLeadingActions;
@@ -1770,7 +1772,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget _buildDesktopHeaderLeading() {
     final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
-    final showsSidetrayOpenButton = sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true;
+    final showsSidetrayOpenButton = widget.showDesktopSidetrayToggle && sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true;
     if (_openedFile == null) {
       if (widget.desktopHeaderLeadingActions.isEmpty && !showsSidetrayOpenButton) {
         return _buildBreadcrumb();
@@ -2250,7 +2252,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   double _estimateDesktopHeaderLeadingWidth(BuildContext context, double maxWidth) {
     final sidetrayScope = DesktopSidetrayToggleScope.maybeOf(context);
-    final sidetrayLeadingWidth = sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
+    final sidetrayLeadingWidth = widget.showDesktopSidetrayToggle && sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
         ? desktopPaneHeaderCompactButtonWidth + desktopPaneHeaderButtonGap
         : 0.0;
     final openedFile = _openedFile;
