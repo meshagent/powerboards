@@ -131,7 +131,7 @@ class AgentsDropdown extends StatelessWidget {
     return powerboardsIsLandscapePhoneViewport(context);
   }
 
-  String _capitalizeBreadcrumbLabel(String label) {
+  String _capitalizeDisplayLabel(String label) {
     final trimmed = label.trim();
     if (trimmed.isEmpty) {
       return label;
@@ -213,7 +213,7 @@ class AgentsDropdown extends StatelessWidget {
         final entries = <AppMenuEntry>[
           for (final service in services)
             AppMenuEntry(
-              title: service.metadata.name,
+              title: _capitalizeDisplayLabel(service.metadata.name),
               description: service.metadata.description ?? "",
               selected: selectedRouteId != null && selectedRouteId == _serviceId(service),
               icon: LucideIcons.bot,
@@ -221,7 +221,7 @@ class AgentsDropdown extends StatelessWidget {
             ),
           for (final participant in developmentAgents)
             AppMenuEntry(
-              title: participant.name,
+              title: _capitalizeDisplayLabel(participant.name),
               description: "Development mode agent",
               selected: selectedRouteId != null && selectedRouteId == participant.routeId,
               leading: _developmentAgentLeading(participant.participant),
@@ -263,7 +263,7 @@ class AgentsDropdown extends StatelessWidget {
               return _desktopBreadcrumb(
                 context: context,
                 roomName: roomDisplayNameOverride ?? room.roomName ?? "Room",
-                agentLabel: _capitalizeBreadcrumbLabel(selectedAgentLabel),
+                agentLabel: _capitalizeDisplayLabel(selectedAgentLabel),
                 onAgentPressed: onTriggerPressed,
               );
             }
@@ -286,7 +286,7 @@ class AgentsDropdown extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            label,
+                            _capitalizeDisplayLabel(label),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.left,
@@ -298,7 +298,7 @@ class AgentsDropdown extends StatelessWidget {
                       ],
                     )
                   : Text(
-                      label,
+                      _capitalizeDisplayLabel(label),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.left,
