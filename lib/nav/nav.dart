@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:collection/collection.dart';
@@ -8,12 +9,14 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
+import 'package:powerboards/ui/desktop_sidetray_toggle.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
+import 'package:powerboards/meshagent/room_not_found.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
@@ -25,6 +28,7 @@ import 'package:powerboards/ui/empty_states.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
@@ -43,9 +47,11 @@ final EdgeInsets _mobileSidetrayHorizontalPadding = EdgeInsets.symmetric(horizon
 
 class NavController extends Controller {
   bool _hideNav = false;
+  bool _desktopSidetrayCollapsed = true;
   bool _mobileRoomListOpen = false;
 
   bool get isNavHidden => _hideNav;
+  bool get isDesktopSidetrayCollapsed => _desktopSidetrayCollapsed;
   bool get isMobileRoomListOpen => _mobileRoomListOpen;
 
   void hideNav() {
@@ -56,6 +62,33 @@ class NavController extends Controller {
   void showNav() {
     _hideNav = false;
     notifyListeners();
+  }
+
+  void collapseDesktopSidetray() {
+    if (_desktopSidetrayCollapsed) {
+      return;
+    }
+
+    _desktopSidetrayCollapsed = true;
+    notifyListeners();
+  }
+
+  void expandDesktopSidetray() {
+    if (!_desktopSidetrayCollapsed) {
+      return;
+    }
+
+    _desktopSidetrayCollapsed = false;
+    notifyListeners();
+  }
+
+  void toggleDesktopSidetray() {
+    if (_desktopSidetrayCollapsed) {
+      expandDesktopSidetray();
+      return;
+    }
+
+    collapseDesktopSidetray();
   }
 
   void openMobileRoomList() {
@@ -135,12 +168,6 @@ class _MobileSidetrayCloseButton extends StatelessWidget {
 }
 
 class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
-  final resizeController = ShadResizableController();
-  double? _navRatio;
-  bool _panelLayoutSyncScheduled = false;
-  bool? _lastDesktopHidden;
-  double? _lastDesktopWidth;
-  bool? _lastSmallDisplay;
   int _mobileNavigationDirection = 1;
   double _mobileRoomListDragOffset = 0;
   String? _mobilePendingCreateProjectId;
@@ -151,8 +178,8 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   bool _mobileRoomListScrollCollapsed = false;
   int _mobileRoomListInstance = 0;
   late final AnimationController _mobileRoomListCloseAnimationController;
-
   final childKey = GlobalKey();
+
   Resource<List<Project>> get projects {
     return widget.projects;
   }
@@ -371,87 +398,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     launchUrl(redirectUrl);
   }
 
-  ({({double minSize, double maxSize, double defaultSize}) nav, ({double minSize, double maxSize, double defaultSize}) main})
-  _resolvePanelLayout(double width, {required bool hidden}) {
-    if (hidden) {
-      return (nav: (minSize: 0, maxSize: 0, defaultSize: 0), main: (minSize: 1, maxSize: 1, defaultSize: 1));
-    }
-
-    final rawMinRatio = _navBarMinWidth / width;
-    final rawMaxRatio = _navBarMaxWidth / width;
-    final minRatio = rawMinRatio.clamp(0.0, 1.0);
-    final maxRatio = rawMaxRatio.clamp(minRatio, 1.0);
-    final preferredRatio = (_navRatio ?? (navBarWidth / width)).clamp(minRatio, maxRatio).toDouble();
-    final mainDefaultSize = (1.0 - preferredRatio).clamp(0.0, 1.0).toDouble();
-    final mainMinSize = (1.0 - maxRatio).clamp(0.0, 1.0).toDouble();
-    final mainMaxSize = (1.0 - minRatio).clamp(mainMinSize, 1.0).toDouble();
-
-    return (
-      nav: (minSize: minRatio, maxSize: maxRatio, defaultSize: preferredRatio),
-      main: (minSize: mainMinSize, maxSize: mainMaxSize, defaultSize: mainDefaultSize),
-    );
-  }
-
-  void _resetDesktopPanelState() {
-    resizeController.clear();
-    _lastDesktopHidden = null;
-    _lastDesktopWidth = null;
-    _panelLayoutSyncScheduled = false;
-  }
-
-  void _updatePanelLayout(BoxConstraints constraints, {required bool hidden}) {
-    final navPanel = resizeController.panelsInfo.where((panel) => panel.id == "nav").firstOrNull;
-    final mainPanel = resizeController.panelsInfo.where((panel) => panel.id == "main").firstOrNull;
-    if (navPanel == null || mainPanel == null) {
-      return;
-    }
-
-    final width = constraints.maxWidth;
-    if (!width.isFinite || width <= 0) {
-      return;
-    }
-
-    if (navPanel.size > 0) {
-      _navRatio = navPanel.size;
-    }
-
-    final panelLayout = _resolvePanelLayout(width, hidden: hidden);
-    final nextNav = ShadPanelInfo(
-      id: "nav",
-      minSize: panelLayout.nav.minSize,
-      maxSize: panelLayout.nav.maxSize,
-      defaultSize: panelLayout.nav.defaultSize,
-    );
-    final nextMain = ShadPanelInfo(
-      id: "main",
-      minSize: panelLayout.main.minSize,
-      maxSize: panelLayout.main.maxSize,
-      defaultSize: panelLayout.main.defaultSize,
-    );
-
-    if (!hidden && navPanel.size > 0) {
-      nextNav.size = navPanel.size.clamp(nextNav.minSize, nextNav.maxSize).toDouble();
-    }
-
-    resizeController.update([nextNav, nextMain]);
-  }
-
-  void _schedulePanelLayoutSyncForBuild(BoxConstraints constraints, {required bool hidden}) {
-    if (_panelLayoutSyncScheduled) {
-      return;
-    }
-
-    _panelLayoutSyncScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _panelLayoutSyncScheduled = false;
-      if (!mounted) {
-        return;
-      }
-
-      _updatePanelLayout(constraints, hidden: hidden);
-    });
-  }
-
   @override
   void didUpdateWidget(Nav oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -580,7 +526,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     _mobileRoomListCloseAnimationController.dispose();
-    resizeController.dispose();
     _mobileRoomListProjectId.dispose();
     _mobileRoomListSelectedRoom.dispose();
     projects.dispose();
@@ -596,10 +541,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   Widget desktopBody(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
     final cs = ShadTheme.of(context).colorScheme;
 
-    if (userRole == ProjectRole.none) {
-      return forbiddenView(context);
-    }
-
     if (balanceLow) {
       if (userRole == null) {
         return const Center(child: CircularProgressIndicator());
@@ -611,20 +552,23 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       );
     }
 
-    return _buildRoomContent();
+    return _buildRoomContent(useStableGlobalKey: true);
   }
 
-  Widget _buildRoomContent() {
-    return KeyedSubtree(key: childKey, child: widget.child);
+  Widget _buildRoomContent({bool useStableGlobalKey = false}) {
+    final key = useStableGlobalKey ? childKey : ValueKey('nav-room-content-${widget.projectId}-${widget.selectedRoom}');
+    return KeyedSubtree(key: key, child: widget.child);
   }
 
   Widget desktopView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
-    final theme = ShadTheme.of(context);
-    final cs = theme.colorScheme;
+    final cs = ShadTheme.of(context).colorScheme;
     final navController = Controller.ofType<NavController>(context);
     final chromeVisible = ChromeVisibilityModel.of(context).visible;
-
+    final desktopSidetrayCollapsed = navController.isDesktopSidetrayCollapsed;
     final hidden = navController.isNavHidden || !chromeVisible;
+    final sidetrayHidden = hidden || desktopSidetrayCollapsed;
+    const animationDuration = Duration(milliseconds: 360);
+    const animationCurve = Curves.easeInOutCubicEmphasized;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -633,67 +577,80 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
           return const SizedBox.shrink();
         }
 
-        if (_lastDesktopWidth != width) {
-          _lastDesktopWidth = width;
-          _schedulePanelLayoutSyncForBuild(constraints, hidden: hidden);
-        }
+        final effectiveNavWidth = math.min(_navBarMaxWidth, math.max(_navBarMinWidth, math.min(navBarWidth, width - 320)));
+        final targetNavWidth = sidetrayHidden ? 0.0 : effectiveNavWidth;
+        final contentOffsetX = sidetrayHidden ? -10.0 : 0.0;
+        final contentOpacity = sidetrayHidden ? 0.0 : 1.0;
 
-        if (_lastDesktopHidden != hidden) {
-          _lastDesktopHidden = hidden;
-          _schedulePanelLayoutSyncForBuild(constraints, hidden: hidden);
-        }
+        return DesktopSidetrayToggleScope(
+          collapsed: desktopSidetrayCollapsed,
+          enabled: !hidden,
+          onToggle: navController.toggleDesktopSidetray,
+          onCollapse: navController.collapseDesktopSidetray,
+          onExpand: navController.expandDesktopSidetray,
+          child: Row(
+            children: [
+              AnimatedContainer(
+                duration: animationDuration,
+                curve: animationCurve,
+                width: targetNavWidth,
+                child: IgnorePointer(
+                  ignoring: sidetrayHidden,
+                  child: ClipRect(
+                    child: AnimatedOpacity(
+                      duration: animationDuration,
+                      curve: animationCurve,
+                      opacity: contentOpacity,
+                      child: AnimatedSlide(
+                        duration: animationDuration,
+                        curve: animationCurve,
+                        offset: Offset(contentOffsetX / math.max(effectiveNavWidth, 1), 0),
+                        child: ColoredBox(
+                          color: cs.background,
+                          child: SizedBox(
+                            width: effectiveNavWidth,
+                            child: Column(
+                              mainAxisSize: .min,
+                              children: [
+                                _NavBarTop(
+                                  projectId: widget.projectId,
+                                  projects: projects,
+                                  onCreateProject: onCreateProject,
+                                  forceDesktopLayout: true,
+                                  desktopLeading: DesktopSidetrayToggleButton(
+                                    collapsed: false,
+                                    onPressed: hidden ? null : navController.collapseDesktopSidetray,
+                                  ),
+                                ),
 
-        final panelLayout = _resolvePanelLayout(width, hidden: hidden);
-
-        return ShadResizablePanelGroup(
-          axis: .horizontal,
-          showHandle: true,
-          dividerColor: Colors.transparent,
-          controller: resizeController,
-          children: [
-            ShadResizablePanel(
-              id: "nav",
-              defaultSize: panelLayout.nav.defaultSize,
-              minSize: panelLayout.nav.minSize,
-              maxSize: panelLayout.nav.maxSize,
-              child: IgnorePointer(
-                ignoring: hidden,
-                child: ColoredBox(
-                  color: cs.background,
-                  child: Column(
-                    mainAxisSize: .min,
-                    children: [
-                      _NavBarTop(projectId: widget.projectId, projects: projects, onCreateProject: onCreateProject),
-
-                      SignalBuilder(
-                        builder: (context, _) => Expanded(
-                          child: _NavBar(
-                            projectId: widget.projectId,
-                            rooms: rooms.state.isReady ? filteredRooms : [],
-                            currentFilter: filter,
-                            canCreateRooms: canCreateRooms,
-                            setFilter: setFilter,
-                            selectedRoom: widget.selectedRoom,
-                            onSave: () => rooms.refresh(),
-                            onRefresh: () => rooms.refresh(),
-                            balanceLow: balanceLow,
+                                SignalBuilder(
+                                  builder: (context, _) => Expanded(
+                                    child: _NavBar(
+                                      projectId: widget.projectId,
+                                      rooms: rooms.state.isReady ? filteredRooms : [],
+                                      currentFilter: filter,
+                                      canCreateRooms: canCreateRooms,
+                                      forceDesktopLayout: true,
+                                      setFilter: setFilter,
+                                      selectedRoom: widget.selectedRoom,
+                                      onSave: () => rooms.refresh(),
+                                      onRefresh: () => rooms.refresh(),
+                                      balanceLow: balanceLow,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-
-            ShadResizablePanel(
-              id: "main",
-              defaultSize: panelLayout.main.defaultSize,
-              minSize: panelLayout.main.minSize,
-              maxSize: panelLayout.main.maxSize,
-              child: desktopBody(context, userRole, balanceLow, canCreateRooms),
-            ),
-          ],
+              Expanded(child: desktopBody(context, userRole, balanceLow, canCreateRooms)),
+            ],
+          ),
         );
       },
     );
@@ -710,17 +667,9 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
         roomItems.isNotEmpty &&
         navController.isMobileRoomListOpen;
 
-    if (userRole == ProjectRole.none) {
-      return forbiddenView(context);
-    }
-
     if (balanceLow) {
       if (userRole == null) {
         return const Center(child: CircularProgressIndicator());
-      }
-
-      if (userRole == ProjectRole.none) {
-        return forbiddenView(context);
       }
 
       return Column(
@@ -750,7 +699,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
             child: _buildMobileRoomListSurface(context, canCreateRooms: canCreateRooms, balanceLow: balanceLow),
           )
         : KeyedSubtree(
-            key: ValueKey('mobile-active-room-${widget.selectedRoom}'),
+            key: ValueKey('mobile-active-room-${widget.projectId}-${widget.selectedRoom}'),
             child: _buildMobileRoomSurfaceWithSidetray(
               context,
               canCreateRooms: canCreateRooms,
@@ -1306,30 +1255,41 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     );
   }
 
+  Widget inaccessibleView(BuildContext context) {
+    if (widget.selectedRoom != null) {
+      return const RoomNotFound();
+    }
+
+    return forbiddenView(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
-    final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+    final useMobileNav = ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
     final navController = Controller.ofType<NavController>(context);
-
-    if (_lastSmallDisplay == true && !isSmallDisplay) {
-      _resetDesktopPanelState();
-    }
-    _lastSmallDisplay = isSmallDisplay;
 
     return SignalBuilder(
       builder: (context, _) {
-        if (!projects.state.isReady || !role.state.isReady || !isBalanceLowRes.state.isReady || !balanceRes.state.isReady) {
-          return isSmallDisplay ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
+        if (!projects.state.isReady || !role.state.isReady) {
+          return useMobileNav ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
         }
 
         if (projects.state.value!.isEmpty) {
           return EmptyProjectsState(onCreateProject: onCreateProject);
         }
 
-        final balanceLow = isBalanceLowRes.state.value ?? false;
         final userRole = role.state.value;
+        if (userRole == ProjectRole.none) {
+          return ColoredBox(color: cs.background, child: inaccessibleView(context));
+        }
+
+        if (!isBalanceLowRes.state.isReady || !balanceRes.state.isReady) {
+          return useMobileNav ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
+        }
+
+        final balanceLow = isBalanceLowRes.state.value ?? false;
         final canCreateRooms = this.canCreateRooms.state.value ?? false;
         final balance = balanceRes.state.value;
         final balanceBelowThreshold = balance != null && balance.balance < balanceLowThreshold;
@@ -1346,7 +1306,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
               Expanded(
                 child: Container(
                   color: cs.background,
-                  child: isSmallDisplay
+                  child: useMobileNav
                       ? mobileView(context, userRole, balanceLow, canCreateRooms)
                       : desktopView(context, userRole, balanceLow, canCreateRooms),
                 ),
@@ -1380,6 +1340,7 @@ class _NavBar extends StatefulWidget {
     required this.balanceLow,
     required this.canCreateRooms,
     this.onRoomSelected,
+    this.forceDesktopLayout = false,
   });
 
   final String? selectedRoom;
@@ -1400,6 +1361,7 @@ class _NavBar extends StatefulWidget {
   final bool balanceLow;
   final bool canCreateRooms;
   final ValueChanged<Room>? onRoomSelected;
+  final bool forceDesktopLayout;
 
   @override
   State<_NavBar> createState() => _NavBarState();
@@ -1409,7 +1371,7 @@ class _NavBarState extends State<_NavBar> {
   late final TextEditingController _filterController;
   late final FocusNode _filterFocusNode;
 
-  bool get _isMobile => ResponsiveBreakpoints.of(context).isMobile;
+  bool get _isMobile => !widget.forceDesktopLayout && ResponsiveBreakpoints.of(context).isMobile;
   bool get _isMobileFilterMode => _isMobile && widget.mobileFilterMode;
 
   Future<void> addNewRoomDialog(BuildContext context) async {
@@ -1567,26 +1529,36 @@ class _NavBarState extends State<_NavBar> {
     Widget buildFilterInput() {
       return Builder(
         builder: (context) {
+          final colorScheme = ShadTheme.of(context).colorScheme;
+          final desktopFilterRadius = BorderRadius.circular(999);
           final filterInput = PowerboardsAdaptiveInput(
             controller: _filterController,
             focusNode: _filterFocusNode,
             padding: isMobile ? const EdgeInsets.fromLTRB(14, 8, 12, 8) : null,
+            alignment: isMobile ? null : Alignment.centerLeft,
             decoration: !isMobile
-                ? ShadDecoration(color: ShadTheme.of(context).colorScheme.input)
+                ? ShadDecoration(
+                    color: colorScheme.input,
+                    border: ShadBorder.all(radius: desktopFilterRadius, color: colorScheme.border, width: 1),
+                    focusedBorder: ShadBorder.all(radius: desktopFilterRadius, color: colorScheme.ring, width: 1),
+                    errorBorder: ShadBorder.all(radius: desktopFilterRadius, width: 1),
+                    disableSecondaryBorder: true,
+                  )
                 : ShadDecoration(
-                    color: ShadTheme.of(context).colorScheme.input,
-                    border: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    focusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    errorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    secondaryBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    secondaryFocusedBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
-                    secondaryErrorBorder: ShadBorder.all(radius: BorderRadius.circular(999)),
+                    color: colorScheme.input,
+                    border: ShadBorder.all(radius: desktopFilterRadius),
+                    focusedBorder: ShadBorder.all(radius: desktopFilterRadius),
+                    errorBorder: ShadBorder.all(radius: desktopFilterRadius),
+                    secondaryBorder: ShadBorder.all(radius: desktopFilterRadius),
+                    secondaryFocusedBorder: ShadBorder.all(radius: desktopFilterRadius),
+                    secondaryErrorBorder: ShadBorder.all(radius: desktopFilterRadius),
                   ),
             key: const Key('room-list-search-field'),
             onChanged: widget.setFilter,
-            leading: !isMobile ? null : Icon(LucideIcons.search, size: 16, color: ShadTheme.of(context).colorScheme.mutedForeground),
-            gap: !isMobile ? null : 10,
+            leading: Icon(LucideIcons.search, size: 16, color: colorScheme.mutedForeground),
+            gap: 10,
             inputPadding: isMobile ? EdgeInsets.zero : null,
+            placeholderAlignment: isMobile ? null : Alignment.centerLeft,
             placeholder: const Text("Filter rooms..."),
           );
 
@@ -1615,8 +1587,9 @@ class _NavBarState extends State<_NavBar> {
           child: ShadButton.outline(
             height: powerboardsFooterActionButtonHeight,
             decoration: ShadDecoration(border: ShadBorder.all(color: ShadTheme.of(context).colorScheme.border)),
-            backgroundColor: ShadTheme.of(context).colorScheme.background,
-            hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
+            backgroundColor: Colors.white,
+            hoverBackgroundColor: Colors.white,
+            foregroundColor: ShadTheme.of(context).colorScheme.foreground,
             hoverForegroundColor: ShadTheme.of(context).colorScheme.foreground,
             key: const Key('nav-create-room-button'),
             onPressed: isCreatePending ? null : () => addNewRoomDialog(context),
@@ -1856,6 +1829,8 @@ class _NavBarTop extends StatefulWidget {
     this.onSwitchProject,
     this.mobileHorizontalPadding = powerboardsMobileHorizontalPadding,
     this.mobileHeaderContentHorizontalInset = powerboardsMobileShellHorizontalInset,
+    this.desktopLeading,
+    this.forceDesktopLayout = false,
   });
 
   final String? projectId;
@@ -1868,6 +1843,8 @@ class _NavBarTop extends StatefulWidget {
   final ValueChanged<Project>? onSwitchProject;
   final EdgeInsetsGeometry mobileHorizontalPadding;
   final double mobileHeaderContentHorizontalInset;
+  final Widget? desktopLeading;
+  final bool forceDesktopLayout;
 
   @override
   State createState() => _NavBarTopState();
@@ -1910,10 +1887,15 @@ class _NavBarTopState extends State<_NavBarTop> {
     final theme = ShadTheme.of(context);
     final projectList = widget.projects.state.value ?? const <Project>[];
     final selectedProject = projectList.firstWhereOrNull((p) => p.id == widget.projectId);
-    final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
+    final isSmallDisplay = !widget.forceDesktopLayout && ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final mobileHeaderControlSize = desktopPaneHeaderCompactButtonWidth;
     final displayName = selectedProject?.name ?? "Select project";
     final mobileCollapseProgress = isSmallDisplay ? widget.mobileCollapseProgress.clamp(0.0, 1.0) : 0.0;
+    final hasDesktopLeading = widget.desktopLeading != null;
+    final desktopLeadingSlotSize = hasDesktopLeading ? desktopSidetrayToggleButtonSize : desktopPaneSideHeaderSlotSize;
+    final desktopHeaderVisualInset = hasDesktopLeading
+        ? math.max(desktopPaneSideHeaderVisualInset, desktopLeadingSlotSize)
+        : desktopPaneSideHeaderVisualInset;
     final projectTitleStyle = isSmallDisplay
         ? powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground)
         : powerboardsSectionTitleStyle(color: theme.colorScheme.foreground, height: 1.2);
@@ -2017,51 +1999,65 @@ class _NavBarTopState extends State<_NavBarTop> {
                 child: SizedBox(
                   height: desktopPaneHeaderContentHeight,
                   width: double.infinity,
-                  child: Tooltip(
-                    message: "Switch project",
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _switchProject,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              const Positioned(
-                                left: 0,
-                                child: SizedBox(
-                                  width: desktopPaneSideHeaderSlotSize,
-                                  height: desktopPaneSideHeaderSlotSize,
-                                  child: Center(child: NavMainLogo(size: desktopPaneSideHeaderSlotSize)),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Positioned(
+                          left: 0,
+                          child: SizedBox(
+                            width: desktopLeadingSlotSize,
+                            height: desktopLeadingSlotSize,
+                            child: Center(child: widget.desktopLeading ?? const NavMainLogo(size: desktopPaneSideHeaderSlotSize)),
+                          ),
+                        ),
+                        Positioned.fill(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: desktopHeaderVisualInset),
+                            child: Tooltip(
+                              message: "Switch project",
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _switchProject,
+                                  child: Center(
+                                    child: Text(
+                                      displayName,
+                                      style: projectTitleStyle,
+                                      strutStyle: StrutStyle.fromTextStyle(projectTitleStyle, forceStrutHeight: true),
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: desktopPaneSideHeaderVisualInset),
-                                child: Text(
-                                  displayName,
-                                  style: projectTitleStyle,
-                                  strutStyle: StrutStyle.fromTextStyle(projectTitleStyle, forceStrutHeight: true),
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                ),
-                              ),
-                              Positioned(
-                                right: 0,
-                                child: SizedBox(
-                                  width: desktopPaneSideHeaderVisualInset,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          right: 0,
+                          child: SizedBox(
+                            width: desktopHeaderVisualInset,
+                            child: Tooltip(
+                              message: "Switch project",
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _switchProject,
                                   child: Align(
                                     alignment: Alignment.centerRight,
                                     child: Icon(LucideIcons.chevronsUpDown, size: 20, color: theme.colorScheme.foreground),
                                   ),
                                 ),
                               ),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ),

@@ -1,0 +1,4 @@
+#include "AppInfo.xcconfig"
+
+PRODUCT_NAME = Powerboards Life;
+PRODUCT_BUNDLE_IDENTIFIER = com.timu.powerboards-prototype;
