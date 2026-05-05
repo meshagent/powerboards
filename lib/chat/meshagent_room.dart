@@ -1545,6 +1545,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   String getDocumentPath(String? agent, {String? threadDir}) {
     final normalizedThreadDir = _normalizedThreadDocumentDir(threadDir);
     if (normalizedThreadDir != null) {
+      if (normalizedThreadDir.startsWith('dataset://') || normalizedThreadDir.startsWith('tmp://')) {
+        return "$normalizedThreadDir/main";
+      }
       return "$normalizedThreadDir/main.thread";
     }
 
@@ -2563,6 +2566,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     ChatThreadDisplayMode threadDisplayMode = ChatThreadDisplayMode.singleThread,
     String? threadListPath,
     String? threadDir,
+    String? threadPath,
     String? selectedThreadPath,
     ValueChanged<String?>? onSelectedThreadPathChanged,
     Widget? emptyState,
@@ -2572,7 +2576,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final user = MeshagentAuth.current.getUser();
     final userEmail = user?["email"];
     final cs = ShadTheme.of(context).colorScheme;
-    final documentPath = getDocumentPath(agentName, threadDir: threadDir);
+    final normalizedThreadPath = threadPath?.trim();
+    final documentPath = normalizedThreadPath == null || normalizedThreadPath.isEmpty
+        ? getDocumentPath(agentName, threadDir: threadDir)
+        : normalizedThreadPath;
     final isMultiThread = threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
     final isMobile = _usesMobileRoomLayout(context);
     final chatActions = actions;
@@ -3620,6 +3627,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   threadDisplayMode: descriptor!.chatThreadDisplayMode,
                   threadDir: descriptor.threadDir,
                   threadListPath: descriptor.threadListPath,
+                  threadPath: descriptor.threadPath,
                   selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
                   onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                   embedMobileChrome: embedMobileChrome,
@@ -3647,6 +3655,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 threadDisplayMode: descriptor!.chatThreadDisplayMode,
                 threadDir: descriptor.threadDir,
                 threadListPath: descriptor.threadListPath,
+                threadPath: descriptor.threadPath,
                 selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
                 onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                 embedMobileChrome: embedMobileChrome,
