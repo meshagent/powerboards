@@ -257,7 +257,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
                     final code = oauth2AuthorizationCode(
                       await oauth2Authenticate(
                         request,
-                        Uri.parse("${MeshagentConfig.current?.appUrl}/oauth2/callback"),
+                        MeshagentConfig.current!.oauth2CallbackUrl,
                         jsonEncode({"project_id": widget.projectId, "room_name": widget.roomName, "request_id": request.requestId}),
                       ),
                     );

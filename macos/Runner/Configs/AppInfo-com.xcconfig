@@ -2,3 +2,4 @@
 
 PRODUCT_NAME = Powerboards;
 PRODUCT_BUNDLE_IDENTIFIER = com.timu.powerboards-production;
+URL_SCHEME = powerboards-com

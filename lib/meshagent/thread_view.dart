@@ -1462,8 +1462,8 @@ Widget buildTools(
     }
   }
 
-  final callbackBaseUrl = MeshagentConfig.current?.appUrl;
-  final showMcpConnectors = state.agentOnline && state.supportsMcp && agent != null && callbackBaseUrl != null;
+  final oauth2CallbackUrl = MeshagentConfig.current?.oauth2CallbackUrl;
+  final showMcpConnectors = state.agentOnline && state.supportsMcp && agent != null && oauth2CallbackUrl != null;
   final canAddMcpServices = showMcpConnectors && room.apiGrant?.admin != null;
   final availableConnectors = !showMcpConnectors
       ? null
@@ -1473,7 +1473,7 @@ Widget buildTools(
   final onConnectorSetup = !showMcpConnectors
       ? null
       : (Connector connector) async {
-          await connector.authenticate(room, agent!, Uri.parse("$callbackBaseUrl/oauth2/callback"));
+          await connector.authenticate(room, agent!, oauth2CallbackUrl);
         };
   final onAddMcpConnector = !canAddMcpServices
       ? null
