@@ -548,6 +548,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   String? _threadListPath;
   Object? _threadListError;
   bool _threadListLoading = true;
+  StreamSubscription<RoomEvent>? _roomSubscription;
 
   String? _normalizedThreadListPath(String? path) {
     if (path == null) {
@@ -666,6 +667,26 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     }
 
     setState(() {});
+  }
+
+  void _onRoomEvent(RoomEvent event) {
+    if (!mounted || event is! RoomMessageEvent || event.message.type != "agent-message") {
+      return;
+    }
+
+    final payload = event.message.message["payload"];
+    final normalizedPayload = payload is Map<String, dynamic>
+        ? payload
+        : payload is Map
+        ? Map<String, dynamic>.from(payload)
+        : null;
+    if (normalizedPayload == null) {
+      return;
+    }
+
+    if (trackAgentThreadStatusPayload(room: widget.client, payload: normalizedPayload) && mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _closeThreadListDocument() async {
@@ -798,6 +819,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   @override
   void initState() {
     super.initState();
+    _roomSubscription = widget.client.listen(_onRoomEvent);
     widget.client.messaging.addListener(_onThreadStatusChanged);
     unawaited(_rebindThreadListDocument());
   }
@@ -807,7 +829,9 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.client != widget.client) {
+      _roomSubscription?.cancel();
       oldWidget.client.messaging.removeListener(_onThreadStatusChanged);
+      _roomSubscription = widget.client.listen(_onRoomEvent);
       widget.client.messaging.addListener(_onThreadStatusChanged);
     }
 
@@ -825,6 +849,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
 
   @override
   void dispose() {
+    _roomSubscription?.cancel();
     widget.client.messaging.removeListener(_onThreadStatusChanged);
     unawaited(_closeThreadListDocument());
     super.dispose();

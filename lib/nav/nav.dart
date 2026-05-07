@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
+import 'package:powerboards/meshagent/room_not_found.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
@@ -540,10 +541,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   Widget desktopBody(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
     final cs = ShadTheme.of(context).colorScheme;
 
-    if (userRole == ProjectRole.none) {
-      return forbiddenView(context);
-    }
-
     if (balanceLow) {
       if (userRole == null) {
         return const Center(child: CircularProgressIndicator());
@@ -670,17 +667,9 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
         roomItems.isNotEmpty &&
         navController.isMobileRoomListOpen;
 
-    if (userRole == ProjectRole.none) {
-      return forbiddenView(context);
-    }
-
     if (balanceLow) {
       if (userRole == null) {
         return const Center(child: CircularProgressIndicator());
-      }
-
-      if (userRole == ProjectRole.none) {
-        return forbiddenView(context);
       }
 
       return Column(
@@ -1266,6 +1255,14 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     );
   }
 
+  Widget inaccessibleView(BuildContext context) {
+    if (widget.selectedRoom != null) {
+      return const RoomNotFound();
+    }
+
+    return forbiddenView(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
@@ -1275,7 +1272,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
     return SignalBuilder(
       builder: (context, _) {
-        if (!projects.state.isReady || !role.state.isReady || !isBalanceLowRes.state.isReady || !balanceRes.state.isReady) {
+        if (!projects.state.isReady || !role.state.isReady) {
           return useMobileNav ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
         }
 
@@ -1283,8 +1280,16 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
           return EmptyProjectsState(onCreateProject: onCreateProject);
         }
 
-        final balanceLow = isBalanceLowRes.state.value ?? false;
         final userRole = role.state.value;
+        if (userRole == ProjectRole.none) {
+          return ColoredBox(color: cs.background, child: inaccessibleView(context));
+        }
+
+        if (!isBalanceLowRes.state.isReady || !balanceRes.state.isReady) {
+          return useMobileNav ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
+        }
+
+        final balanceLow = isBalanceLowRes.state.value ?? false;
         final canCreateRooms = this.canCreateRooms.state.value ?? false;
         final balance = balanceRes.state.value;
         final balanceBelowThreshold = balance != null && balance.balance < balanceLowThreshold;
