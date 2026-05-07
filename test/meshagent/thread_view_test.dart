@@ -163,6 +163,7 @@ ChatThreadSnapshot _emptySnapshot({bool supportsMcp = false, bool agentOnline = 
     threadTurnId: null,
     pendingMessages: const [],
     pendingItemId: null,
+    usage: null,
   );
 }
 
