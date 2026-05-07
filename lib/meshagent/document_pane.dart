@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter/document_connection_scope.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/forms/form.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
@@ -110,6 +111,10 @@ class _DocumentPane extends State<DocumentPane> {
   }
 
   Widget _meshagentPreview() {
+    if (widget.path.startsWith("dataset://")) {
+      return DatasetChatThread(key: ValueKey('${widget.path}:$_reload'), path: widget.path, room: widget.room, openFile: _open);
+    }
+
     final ext = _ext(widget.path);
     if (ext == "thread") {
       return ChatThread(
