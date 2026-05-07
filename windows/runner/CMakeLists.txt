@@ -21,7 +21,11 @@ add_executable(${BINARY_NAME} WIN32
 apply_standard_settings(${BINARY_NAME})
 
 file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resource.h" RESOURCE_HEADER_PATH)
-file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.ico" APP_ICON_PATH)
+if(APP_FLAVOR STREQUAL "life")
+  file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon_life.ico" APP_ICON_PATH)
+else()
+  file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.ico" APP_ICON_PATH)
+endif()
 
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/Runner.rc.in"
