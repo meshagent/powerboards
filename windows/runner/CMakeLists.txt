@@ -12,13 +12,22 @@ add_executable(${BINARY_NAME} WIN32
   "utils.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
-  "Runner.rc"
+  "${CMAKE_CURRENT_BINARY_DIR}/Runner.rc"
   "runner.exe.manifest"
 )
 
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
+
+file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resource.h" RESOURCE_HEADER_PATH)
+file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.ico" APP_ICON_PATH)
+
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/Runner.rc.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/Runner.rc"
+  @ONLY
+)
 
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
