@@ -1,7 +1,7 @@
 // Microsoft Visual C++ generated resource script.
 //
 #pragma code_page(65001)
-#include "resource.h"
+#include "@RESOURCE_HEADER_PATH@"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -27,7 +27,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 1 TEXTINCLUDE
 BEGIN
-    "resource.h\0"
+    "@RESOURCE_HEADER_PATH@\0"
 END
 
 2 TEXTINCLUDE
@@ -52,7 +52,7 @@ END
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
-IDI_APP_ICON            ICON                    "resources\\app_icon.ico"
+IDI_APP_ICON            ICON                    "@APP_ICON_PATH@"
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Powerboards" "\0"
-            VALUE "FileDescription", "Powerboards" "\0"
+            VALUE "CompanyName", "@APP_COMPANY_NAME@" "\0"
+            VALUE "FileDescription", "@APP_FILE_DESCRIPTION@" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "Powerboards" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2023 Powerboards. All rights reserved." "\0"
-            VALUE "OriginalFilename", "powerboards.exe" "\0"
-            VALUE "ProductName", "Powerboards" "\0"
+            VALUE "InternalName", "@APP_INTERNAL_NAME@" "\0"
+            VALUE "LegalCopyright", "@APP_COPYRIGHT@" "\0"
+            VALUE "OriginalFilename", "@APP_ORIGINAL_FILENAME@" "\0"
+            VALUE "ProductName", "@APP_PRODUCT_NAME@" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

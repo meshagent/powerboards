@@ -124,6 +124,7 @@ dependency_overrides:
 dev_dependencies:
   flutter_lints: ^6.0.0
   dmg: ^0.1.9
+  msix: ^3.16.13
   sentry_dart_plugin: ^3.1.1
   vector_graphics_compiler: ^1.1.9+2
   recase: ^4.0.0
@@ -141,6 +142,13 @@ dev_dependencies:
   # rules and activating additional ones.
   integration_test:
     sdk: flutter
+
+msix_config:
+  display_name: Powerboards
+  publisher_display_name: Powerboards
+  identity_name: Powerboards.Powerboards
+  logo_path: macos/Runner/Assets.xcassets/AppIconCom.appiconset/app_icon_512.png
+  capabilities: internetClient,microphone,webcam
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
