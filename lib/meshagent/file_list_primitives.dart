@@ -48,6 +48,7 @@ Widget buildPowerboardsCurrentPill() {
 }
 
 IconData? powerboardsFileIconDataForEntry(StorageEntry entry) {
+  if (entry.name == '.catalog.lance') return LucideIcons.tableProperties;
   if (entry.isFolder) return LucideIcons.folder;
   if (isThreadFileName(entry.name)) return LucideIcons.messageSquare;
   if (entry.name.endsWith('presentation')) return LucideIcons.presentation;
