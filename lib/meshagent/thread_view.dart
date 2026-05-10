@@ -319,21 +319,20 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         ? 40.0 * Curves.easeOutCubic.transform(overlayHeaderScope?.collapseProgress ?? 0)
         : null;
     final usesCompactNewThreadPrompt = usesMobileLayout && widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
-    final emptyStateTitle = widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
-        ? "Start a new thread"
-        : "Chat to get started";
     final resolvedEmptyState =
         widget.emptyState ??
-        Builder(
-          builder: (context) => usesCompactNewThreadPrompt
-              ? _buildMobileNewThreadEmptyState(context)
-              : _buildThreadEmptyState(
-                  context,
-                  title: emptyStateTitle,
-                  description: _threadEmptyDescription,
-                  compact: usesMobileEmptyState,
-                ),
-        );
+        (widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
+            ? Builder(
+                builder: (context) => usesCompactNewThreadPrompt
+                    ? _buildMobileNewThreadEmptyState(context)
+                    : _buildThreadEmptyState(
+                        context,
+                        title: "Start a new thread",
+                        description: _threadEmptyDescription,
+                        compact: usesMobileEmptyState,
+                      ),
+              )
+            : null);
 
     return IconTheme(
       data: const IconThemeData(size: 14),
@@ -364,7 +363,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         toolsBuilder: (context, controller, snapshot) =>
             buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
         inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
-        emptyStateTitle: "Chat to get started",
+        emptyStateTitle: null,
         emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
         emptyState: resolvedEmptyState,
         inputContextMenuBuilder: powerboardsUsesSystemAdaptiveTextSelectionToolbar()
@@ -674,7 +673,8 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       return;
     }
 
-    final payload = event.message.message["payload"];
+    final message = event.message.message;
+    final payload = message["type"] is String ? message : message["payload"];
     final normalizedPayload = payload is Map<String, dynamic>
         ? payload
         : payload is Map
