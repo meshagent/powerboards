@@ -40,8 +40,8 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
   final folderNameService = MeshagentUploadFoldernameService();
 
   @override
-  Future<FileAttachment> uploadFile(String path, Stream<Uint8List> dataStream, int size) async {
-    final uploader = (await super.uploadFileDeferred(path, dataStream, size)) as MeshagentFileUpload;
+  Future<FileAttachment> uploadFile(String path, Stream<Uint8List> dataStream, int size, {String? mimeType}) async {
+    final uploader = (await super.uploadFileDeferred(path, dataStream, size, mimeType: mimeType)) as MeshagentFileUpload;
 
     // Josef: Removing folder name suggestion for now
     // final folder = await folderNameService.generateFoldername(room, path);
