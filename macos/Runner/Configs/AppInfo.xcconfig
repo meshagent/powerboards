@@ -11,7 +11,7 @@ PRODUCT_NAME = Powerboards Life;
 PRODUCT_BUNDLE_IDENTIFIER = com.timu.powerboards-prototype;
 
 // URL scheme used for native OAuth callbacks.
-URL_SCHEME = powerboards
+URL_SCHEME = powerboards-life
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2023 com.example. All rights reserved.

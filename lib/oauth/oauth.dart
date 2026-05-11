@@ -2,7 +2,7 @@ import 'package:meshagent/meshagent.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
 Future<Uri> oauth2Authenticate(OAuthTokenRequest request, Uri redirectUri, String state) async {
-  final callbackUrlScheme = "powerboards";
+  final callbackUrlScheme = redirectUri.scheme;
 
   String url = await FlutterWebAuth2.authenticate(
     url: Uri.parse(request.authorizationEndpoint)

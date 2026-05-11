@@ -45,6 +45,8 @@ class MeshagentConfig {
   final String imageTagPrefix;
   final List<String> domains;
 
+  Uri get oauth2CallbackUrl => oauthCallbackUrl.replace(path: "/oauth2/callback");
+
   Uri getWsUrl(String roomName) {
     final scheme = serverUrl.scheme == "http" ? "ws" : "wss";
 

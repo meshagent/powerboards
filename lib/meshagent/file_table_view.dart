@@ -233,6 +233,7 @@ class FileManagerView extends StatefulWidget {
 class _FileManagerViewState extends State<FileManagerView> {
   static TextStyle breadcrumbLinkStyle = powerboardsSectionTitleStyle();
   static const String _threadIndexFileName = 'index.threadl';
+  static const String _catalogEntryName = '.catalog.lance';
 
   _FileLocation _location = const _FileLocation(folder: "", openedFile: null);
   String? get _openedFile => _location.openedFile;
@@ -265,7 +266,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     var visible = entries;
     if (widget.hideSystem) {
-      visible = visible.where((e) => !e.name.startsWith('.')).toList();
+      visible = visible.where((e) => !e.name.startsWith('.') || _isCatalogEntry(e)).toList();
     }
 
     final sorted = List<StorageEntry>.from(visible)..sort(sort.compare);
@@ -556,6 +557,28 @@ class _FileManagerViewState extends State<FileManagerView> {
     return joinPaths(trimmed, _threadIndexFileName);
   }
 
+  bool _isCatalogEntry(StorageEntry entry) {
+    return entry.name == _catalogEntryName;
+  }
+
+  List<String>? _datasetNamespaceForStoragePath(String path) {
+    final normalized = p.posix.normalize(path.trim()).replaceAll(RegExp(r'^/+|/+$'), '');
+    if (normalized.isEmpty || normalized == '.') {
+      return null;
+    }
+    return normalized.split('/').where((segment) => segment.isNotEmpty).toList(growable: false);
+  }
+
+  List<StorageEntry> _withDatasetCatalogEntry(List<StorageEntry> entries, {required bool hasDatasetTables}) {
+    if (!hasDatasetTables || entries.any(_isCatalogEntry)) {
+      return entries;
+    }
+
+    final next = List<StorageEntry>.of(entries)
+      ..add(StorageEntry(name: _catalogEntryName, isFolder: false, size: null, createdAt: null, updatedAt: null));
+    return next;
+  }
+
   String _displayNameForPath(String path) {
     final fileName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
     if (isThreadPath(path)) {
@@ -566,6 +589,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   String _displayNameForEntry(StorageEntry entry) {
+    if (_isCatalogEntry(entry)) {
+      return 'datasets';
+    }
     final path = joinPaths(_folderSig.value, entry.name);
     return entry.isFolder ? entry.name : _displayNameForPath(path);
   }
@@ -818,7 +844,13 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _nextFile() => _cycleFile(1);
 
   Future<List<StorageEntry>> _getChildren(String folderPath) async {
-    return await widget.client.storage.list(folderPath);
+    final entries = await widget.client.storage.list(folderPath);
+    var hasDatasetTables = false;
+    try {
+      final tables = await widget.client.datasets.listTables(namespace: _datasetNamespaceForStoragePath(folderPath));
+      hasDatasetTables = tables.isNotEmpty;
+    } catch (_) {}
+    return _withDatasetCatalogEntry(entries, hasDatasetTables: hasDatasetTables);
   }
 
   Future<void> _uploadFile(Stream<Uint8List> stream, String path, int totalBytes) async {

@@ -157,12 +157,16 @@ ChatThreadSnapshot _emptySnapshot({bool supportsMcp = false, bool agentOnline = 
     threadStatus: null,
     threadStatusStartedAt: null,
     threadStatusMode: null,
+    threadStatusTotalBytes: null,
+    threadStatusLinesAdded: null,
+    threadStatusLinesRemoved: null,
     supportsAgentMessages: false,
     supportsMcp: supportsMcp,
     toolkits: const <String, AgentToolkitCapabilities>{},
     threadTurnId: null,
     pendingMessages: const [],
     pendingItemId: null,
+    usage: null,
   );
 }
 

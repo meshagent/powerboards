@@ -40,8 +40,8 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
   final folderNameService = MeshagentUploadFoldernameService();
 
   @override
-  Future<FileAttachment> uploadFile(String path, Stream<Uint8List> dataStream, int size) async {
-    final uploader = (await super.uploadFileDeferred(path, dataStream, size)) as MeshagentFileUpload;
+  Future<FileAttachment> uploadFile(String path, Stream<Uint8List> dataStream, int size, {String? mimeType}) async {
+    final uploader = (await super.uploadFileDeferred(path, dataStream, size, mimeType: mimeType)) as MeshagentFileUpload;
 
     // Josef: Removing folder name suggestion for now
     // final folder = await folderNameService.generateFoldername(room, path);
@@ -319,21 +319,20 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         ? 40.0 * Curves.easeOutCubic.transform(overlayHeaderScope?.collapseProgress ?? 0)
         : null;
     final usesCompactNewThreadPrompt = usesMobileLayout && widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
-    final emptyStateTitle = widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
-        ? "Start a new thread"
-        : "Chat to get started";
     final resolvedEmptyState =
         widget.emptyState ??
-        Builder(
-          builder: (context) => usesCompactNewThreadPrompt
-              ? _buildMobileNewThreadEmptyState(context)
-              : _buildThreadEmptyState(
-                  context,
-                  title: emptyStateTitle,
-                  description: _threadEmptyDescription,
-                  compact: usesMobileEmptyState,
-                ),
-        );
+        (widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer
+            ? Builder(
+                builder: (context) => usesCompactNewThreadPrompt
+                    ? _buildMobileNewThreadEmptyState(context)
+                    : _buildThreadEmptyState(
+                        context,
+                        title: "Start a new thread",
+                        description: _threadEmptyDescription,
+                        compact: usesMobileEmptyState,
+                      ),
+              )
+            : null);
 
     return IconTheme(
       data: const IconThemeData(size: 14),
@@ -364,7 +363,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         toolsBuilder: (context, controller, snapshot) =>
             buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
         inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
-        emptyStateTitle: "Chat to get started",
+        emptyStateTitle: null,
         emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
         emptyState: resolvedEmptyState,
         inputContextMenuBuilder: powerboardsUsesSystemAdaptiveTextSelectionToolbar()
@@ -548,6 +547,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   String? _threadListPath;
   Object? _threadListError;
   bool _threadListLoading = true;
+  StreamSubscription<RoomEvent>? _roomSubscription;
 
   String? _normalizedThreadListPath(String? path) {
     if (path == null) {
@@ -666,6 +666,27 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     }
 
     setState(() {});
+  }
+
+  void _onRoomEvent(RoomEvent event) {
+    if (!mounted || event is! RoomMessageEvent || event.message.type != "agent-message") {
+      return;
+    }
+
+    final message = event.message.message;
+    final payload = message["type"] is String ? message : message["payload"];
+    final normalizedPayload = payload is Map<String, dynamic>
+        ? payload
+        : payload is Map
+        ? Map<String, dynamic>.from(payload)
+        : null;
+    if (normalizedPayload == null) {
+      return;
+    }
+
+    if (trackAgentThreadStatusPayload(room: widget.client, payload: normalizedPayload) && mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _closeThreadListDocument() async {
@@ -798,6 +819,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   @override
   void initState() {
     super.initState();
+    _roomSubscription = widget.client.listen(_onRoomEvent);
     widget.client.messaging.addListener(_onThreadStatusChanged);
     unawaited(_rebindThreadListDocument());
   }
@@ -807,7 +829,9 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.client != widget.client) {
+      _roomSubscription?.cancel();
       oldWidget.client.messaging.removeListener(_onThreadStatusChanged);
+      _roomSubscription = widget.client.listen(_onRoomEvent);
       widget.client.messaging.addListener(_onThreadStatusChanged);
     }
 
@@ -825,6 +849,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
 
   @override
   void dispose() {
+    _roomSubscription?.cancel();
     widget.client.messaging.removeListener(_onThreadStatusChanged);
     unawaited(_closeThreadListDocument());
     super.dispose();
@@ -1437,8 +1462,8 @@ Widget buildTools(
     }
   }
 
-  final callbackBaseUrl = MeshagentConfig.current?.appUrl;
-  final showMcpConnectors = state.agentOnline && state.supportsMcp && agent != null && callbackBaseUrl != null;
+  final oauth2CallbackUrl = MeshagentConfig.current?.oauth2CallbackUrl;
+  final showMcpConnectors = state.agentOnline && state.supportsMcp && agent != null && oauth2CallbackUrl != null;
   final canAddMcpServices = showMcpConnectors && room.apiGrant?.admin != null;
   final availableConnectors = !showMcpConnectors
       ? null
@@ -1448,7 +1473,7 @@ Widget buildTools(
   final onConnectorSetup = !showMcpConnectors
       ? null
       : (Connector connector) async {
-          await connector.authenticate(room, agent!, Uri.parse("$callbackBaseUrl/oauth2/callback"));
+          await connector.authenticate(room, agent!, oauth2CallbackUrl);
         };
   final onAddMcpConnector = !canAddMcpServices
       ? null
