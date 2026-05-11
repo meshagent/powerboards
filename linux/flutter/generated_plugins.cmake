@@ -12,6 +12,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   gtk
   irondash_engine_context
   livekit_client
+  record_linux
   sentry_flutter
   super_native_extensions
   url_launcher_linux
@@ -19,6 +20,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
+  flutter_soloud
   jni
   pdfium_flutter
 )
