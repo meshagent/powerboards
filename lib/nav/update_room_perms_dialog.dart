@@ -41,13 +41,23 @@ double _desktopTaskDialogHeight(BoxConstraints constraints) {
   return (maxHeight - 100.0).clamp(0.0, 600.0).toDouble();
 }
 
+double _desktopTaskDialogWidth(BoxConstraints constraints) {
+  final maxWidth = constraints.maxWidth;
+  if (!maxWidth.isFinite) {
+    return 1024.0;
+  }
+
+  return (maxWidth - 100.0).clamp(512.0, 1024.0).toDouble();
+}
+
 BoxConstraints? _desktopTaskDialogConstraints(BuildContext context, BoxConstraints constraints) {
   if (_usesMobileDialogLayout(context)) {
     return null;
   }
 
+  final width = _desktopTaskDialogWidth(constraints);
   final height = _desktopTaskDialogHeight(constraints);
-  return BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height);
+  return BoxConstraints(minWidth: width, maxWidth: width, minHeight: height, maxHeight: height);
 }
 
 class _UserSettingsMenuButton extends StatefulWidget {
