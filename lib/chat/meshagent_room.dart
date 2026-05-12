@@ -2888,6 +2888,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               padding: EdgeInsets.fromLTRB(horizontalInset, topInset, horizontalInset, bottomInset),
               child: FileManagerView(
                 client: widget.room,
+                projectId: widget.projectId,
                 services: services,
                 hideSystem: true,
                 mobileShellOwnsHeader: isMobile && !embedMobileChrome,
