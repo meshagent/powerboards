@@ -17,6 +17,7 @@ import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:meshagent_flutter_dev/developer_console.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/conversation_descriptor.dart' as ma;
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
@@ -1523,23 +1524,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   String? _resolvedThreadListPath(String? threadListPath, {String? threadDir, String? agentName}) {
-    if (threadListPath != null) {
-      final trimmed = threadListPath.trim();
-      if (trimmed.isNotEmpty) {
-        return trimmed;
-      }
-    }
-
-    final normalizedThreadDir = _normalizedThreadDocumentDir(threadDir);
-    if (normalizedThreadDir == null) {
-      final defaultThreadDir = _defaultThreadDocumentDir(agentName);
-      if (defaultThreadDir == null) {
-        return null;
-      }
-      return "$defaultThreadDir/index.threadl";
-    }
-
-    return "$normalizedThreadDir/index.threadl";
+    return ma.resolvedThreadListPath(threadListPath, threadDir: threadDir, agentName: agentName);
   }
 
   String getDocumentPath(String? agent, {String? threadDir}) {
