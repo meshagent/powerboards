@@ -50,6 +50,8 @@ PODS:
     - FlutterMacOS
   - flutter_js (0.0.1):
     - FlutterMacOS
+  - flutter_soloud (0.0.1):
+    - FlutterMacOS
   - flutter_timezone (0.1.0):
     - FlutterMacOS
   - flutter_web_auth_2 (5.0.0):
@@ -94,6 +96,9 @@ PODS:
     - flutter_webrtc
     - FlutterMacOS
     - WebRTC-SDK (= 137.7151.04)
+  - meshagent_flutter_desktop_updater (0.40.2):
+    - FlutterMacOS
+    - Sparkle (~> 2.9)
   - nanopb (3.30910.0):
     - nanopb/decode (= 3.30910.0)
     - nanopb/encode (= 3.30910.0)
@@ -105,6 +110,8 @@ PODS:
     - Flutter
     - FlutterMacOS
   - PromisesObjC (2.4.0)
+  - record_macos (1.2.0):
+    - FlutterMacOS
   - Sentry/HybridSDK (8.58.2)
   - sentry_flutter (9.20.0):
     - Flutter
@@ -115,6 +122,7 @@ PODS:
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - Sparkle (2.9.1)
   - super_native_extensions (0.0.1):
     - FlutterMacOS
   - url_launcher_macos (0.0.1):
@@ -140,6 +148,7 @@ DEPENDENCIES:
   - firebase_messaging (from `Flutter/ephemeral/.symlinks/plugins/firebase_messaging/macos`)
   - flutter_image_compress_macos (from `Flutter/ephemeral/.symlinks/plugins/flutter_image_compress_macos/macos`)
   - flutter_js (from `Flutter/ephemeral/.symlinks/plugins/flutter_js/macos`)
+  - flutter_soloud (from `Flutter/ephemeral/.symlinks/plugins/flutter_soloud/macos`)
   - flutter_timezone (from `Flutter/ephemeral/.symlinks/plugins/flutter_timezone/macos`)
   - flutter_web_auth_2 (from `Flutter/ephemeral/.symlinks/plugins/flutter_web_auth_2/macos`)
   - flutter_webrtc (from `Flutter/ephemeral/.symlinks/plugins/flutter_webrtc/macos`)
@@ -147,8 +156,10 @@ DEPENDENCIES:
   - irondash_engine_context (from `Flutter/ephemeral/.symlinks/plugins/irondash_engine_context/macos`)
   - just_audio (from `Flutter/ephemeral/.symlinks/plugins/just_audio/darwin`)
   - livekit_client (from `Flutter/ephemeral/.symlinks/plugins/livekit_client/macos`)
+  - meshagent_flutter_desktop_updater (from `Flutter/ephemeral/.symlinks/plugins/meshagent_flutter_desktop_updater/macos`)
   - package_info_plus (from `Flutter/ephemeral/.symlinks/plugins/package_info_plus/macos`)
   - pdfium_flutter (from `Flutter/ephemeral/.symlinks/plugins/pdfium_flutter/darwin`)
+  - record_macos (from `Flutter/ephemeral/.symlinks/plugins/record_macos/macos`)
   - sentry_flutter (from `Flutter/ephemeral/.symlinks/plugins/sentry_flutter/macos`)
   - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
@@ -170,6 +181,7 @@ SPEC REPOS:
     - nanopb
     - PromisesObjC
     - Sentry
+    - Sparkle
     - WebRTC-SDK
 
 EXTERNAL SOURCES:
@@ -195,6 +207,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_image_compress_macos/macos
   flutter_js:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_js/macos
+  flutter_soloud:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_soloud/macos
   flutter_timezone:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_timezone/macos
   flutter_web_auth_2:
@@ -209,10 +223,14 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/just_audio/darwin
   livekit_client:
     :path: Flutter/ephemeral/.symlinks/plugins/livekit_client/macos
+  meshagent_flutter_desktop_updater:
+    :path: Flutter/ephemeral/.symlinks/plugins/meshagent_flutter_desktop_updater/macos
   package_info_plus:
     :path: Flutter/ephemeral/.symlinks/plugins/package_info_plus/macos
   pdfium_flutter:
     :path: Flutter/ephemeral/.symlinks/plugins/pdfium_flutter/darwin
+  record_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/record_macos/macos
   sentry_flutter:
     :path: Flutter/ephemeral/.symlinks/plugins/sentry_flutter/macos
   share_plus:
@@ -247,6 +265,7 @@ SPEC CHECKSUMS:
   FirebaseMessaging: 341004946fa7ffc741344b20f1b667514fc93e31
   flutter_image_compress_macos: c26c3c13ea0f28ae6dea4e139b3292e7729f99f1
   flutter_js: c664361655af1d8fc24e278c7d086e9cbe0d68bc
+  flutter_soloud: 21ef2703cfe4b698f87fa1020b4244d183f6e81d
   flutter_timezone: b3bc0c587d8780d395651284a1ff46eb1e5753ac
   flutter_web_auth_2: 3fe7e46bdb854095fec46ef73e376ddf4f2ccb73
   flutter_webrtc: f3000fcd54abc3fa966c77ecf7e43ab701793c64
@@ -256,14 +275,17 @@ SPEC CHECKSUMS:
   irondash_engine_context: da62996ee25616d2f01bbeb85dc115d813359478
   just_audio: a42c63806f16995daf5b219ae1d679deb76e6a79
   livekit_client: d4774aba3ed3d6a8ebc92d4e8f441cf03554a2f2
+  meshagent_flutter_desktop_updater: c73d73cb3025555f002a847b8f36c6feefc12ba8
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   package_info_plus: 12f1c5c2cfe8727ca46cbd0b26677728972d9a5b
   pdfium_flutter: 1cfb4ed2070a5f7df49eb9481210c92fe8b9c5b1
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
+  record_macos: 4680f37daeebf52162e715efb7ff682f0a5ce4fd
   Sentry: de29b881e83bd91cf99a927f82f1fd86bfb39db2
   sentry_flutter: aafdf112550e9550972852e71f44994bd4239254
   share_plus: 1fa619de8392a4398bfaf176d441853922614e89
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6
+  Sparkle: a4115cd9a339b297a61163256e6954d9e35297ce
   super_native_extensions: 85efee3a7495b46b04befcfc86ed12069264ebf3
   url_launcher_macos: 175a54c831f4375a6cf895875f716ee5af3888ce
   video_player_avfoundation: 7993f492ae0bd77edaea24d9dc051d8bb2cd7c86

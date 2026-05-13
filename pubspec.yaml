@@ -52,6 +52,8 @@ dependencies:
   livekit_client: ^2.5.3
   localstorage: ^5.0.0
   mime: ^2.0.0
+  meshagent_flutter_desktop_updater: ^0.40.2
+  package_info_plus: ^9.0.1
   path: ^1.9.1
   path_provider: ^2.1.5
   responsive_framework: ^1.1.1
