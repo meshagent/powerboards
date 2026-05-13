@@ -1227,10 +1227,25 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
 
     if (confirmDelete == true) {
-      if (isFolder) {
-        await _deleteFolder(fullPath);
-      } else {
-        await _deleteFile(fullPath);
+      try {
+        if (isFolder) {
+          await _deleteFolder(fullPath);
+        } else {
+          await _deleteFile(fullPath);
+        }
+      } catch (error) {
+        if (!mounted) {
+          return false;
+        }
+
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            title: Text("Unable to delete ${isFolder ? 'folder' : 'file'}"),
+            description: Text("$error"),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+        return false;
       }
       return true;
     }

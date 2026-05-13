@@ -88,6 +88,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
 
     try {
       toaster.show(const ShadToast(title: Text("Room shutdown requested")));
+      widget.room.dispose();
       await getMeshagentClient().terminate(projectId: widget.projectId, sessionId: sessionId);
     } catch (error) {
       if (!mounted) {

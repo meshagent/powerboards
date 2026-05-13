@@ -202,13 +202,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
 
   Widget _roomDisconnectedCard() {
     return _roomSafeAreaShell(
-      _loadingBody(
-        RoomEndedCard(
-          title: "Disconnected from room",
-          description: "You were disconnected from the room due to inactivity.",
-          onReconnect: _reconnect,
-        ),
-      ),
+      _loadingBody(RoomEndedCard(title: "Disconnected from room", description: "The room connection has ended.", onReconnect: _reconnect)),
     );
   }
 
