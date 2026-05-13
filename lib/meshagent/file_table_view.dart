@@ -19,6 +19,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
+import 'package:meshagent_flutter_shadcn/storage/pending_storage_deletes.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
@@ -200,6 +201,7 @@ class FileManagerViewController {
 
 class FileManagerView extends StatefulWidget {
   final RoomClient client;
+  final String? projectId;
   final Resource<List<ServiceSpec>>? services;
   final bool hideSystem;
   final bool mobileShellOwnsHeader;
@@ -214,6 +216,7 @@ class FileManagerView extends StatefulWidget {
   const FileManagerView({
     super.key,
     required this.client,
+    this.projectId,
     this.services,
     this.hideSystem = false,
     this.mobileShellOwnsHeader = false,
@@ -233,7 +236,6 @@ class FileManagerView extends StatefulWidget {
 class _FileManagerViewState extends State<FileManagerView> {
   static TextStyle breadcrumbLinkStyle = powerboardsSectionTitleStyle();
   static const String _threadIndexFileName = 'index.threadl';
-  static const String _catalogEntryName = '.catalog.lance';
 
   _FileLocation _location = const _FileLocation(folder: "", openedFile: null);
   String? get _openedFile => _location.openedFile;
@@ -258,6 +260,12 @@ class _FileManagerViewState extends State<FileManagerView> {
   final _sortSig = Signal<FileSort>(const FileSort(FileSortField.name, true));
   final _selectedSig = Signal<Set<String>>(<String>{});
 
+  PendingStorageDeleteScope get _deleteScope => PendingStorageDeleteScope(projectId: widget.projectId, roomName: widget.client.roomName);
+
+  bool _isDeletePending(String path, bool isFolder) {
+    return PendingStorageDeletes.contains(scope: _deleteScope, path: path, isFolder: isFolder);
+  }
+
   late final storageEntries = Resource<List<StorageEntry>>(() => _getChildren(_folderSig.value), source: _folderSig);
 
   late final _visibleSortedEntries = Computed<List<StorageEntry>>(() {
@@ -266,7 +274,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     var visible = entries;
     if (widget.hideSystem) {
-      visible = visible.where((e) => !e.name.startsWith('.') || _isCatalogEntry(e)).toList();
+      visible = visible.where((e) => !e.name.startsWith('.')).toList();
     }
 
     final sorted = List<StorageEntry>.from(visible)..sort(sort.compare);
@@ -557,28 +565,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     return joinPaths(trimmed, _threadIndexFileName);
   }
 
-  bool _isCatalogEntry(StorageEntry entry) {
-    return entry.name == _catalogEntryName;
-  }
-
-  List<String>? _datasetNamespaceForStoragePath(String path) {
-    final normalized = p.posix.normalize(path.trim()).replaceAll(RegExp(r'^/+|/+$'), '');
-    if (normalized.isEmpty || normalized == '.') {
-      return null;
-    }
-    return normalized.split('/').where((segment) => segment.isNotEmpty).toList(growable: false);
-  }
-
-  List<StorageEntry> _withDatasetCatalogEntry(List<StorageEntry> entries, {required bool hasDatasetTables}) {
-    if (!hasDatasetTables || entries.any(_isCatalogEntry)) {
-      return entries;
-    }
-
-    final next = List<StorageEntry>.of(entries)
-      ..add(StorageEntry(name: _catalogEntryName, isFolder: false, size: null, createdAt: null, updatedAt: null));
-    return next;
-  }
-
   String _displayNameForPath(String path) {
     final fileName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
     if (isThreadPath(path)) {
@@ -589,9 +575,6 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   String _displayNameForEntry(StorageEntry entry) {
-    if (_isCatalogEntry(entry)) {
-      return 'datasets';
-    }
     final path = joinPaths(_folderSig.value, entry.name);
     return entry.isFolder ? entry.name : _displayNameForPath(path);
   }
@@ -781,7 +764,15 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
   }
 
-  void _selectAllVisible() => _setSelected(_visibleKeys.value);
+  void _selectAllVisible() {
+    final folder = _folderSig.value;
+    final keys = _visibleSortedEntries.value
+        .where((entry) => !_isDeletePending(joinPaths(folder, entry.name), entry.isFolder))
+        .map((entry) => _FilePathKey.keyForEntry(folder, entry))
+        .toSet();
+    _setSelected(keys);
+  }
+
   void _clearSelected() => _setSelected(<String>{});
 
   void _activateMobileSelectionMode() {
@@ -844,13 +835,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _nextFile() => _cycleFile(1);
 
   Future<List<StorageEntry>> _getChildren(String folderPath) async {
-    final entries = await widget.client.storage.list(folderPath);
-    var hasDatasetTables = false;
-    try {
-      final tables = await widget.client.datasets.listTables(namespace: _datasetNamespaceForStoragePath(folderPath));
-      hasDatasetTables = tables.isNotEmpty;
-    } catch (_) {}
-    return _withDatasetCatalogEntry(entries, hasDatasetTables: hasDatasetTables);
+    return widget.client.storage.list(folderPath);
   }
 
   Future<void> _uploadFile(Stream<Uint8List> stream, String path, int totalBytes) async {
@@ -892,23 +877,25 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _deleteFile(String path) async {
-    await widget.client.storage.delete(path);
+    _toggleSelected(_FilePathKey.keyForPath(path, false), false);
+    final pendingDelete = PendingStorageDeletes.begin(scope: _deleteScope, path: path, isFolder: false);
+    try {
+      await widget.client.storage.delete(path);
+      _onFileDeleted(path);
+    } finally {
+      pendingDelete.complete();
+    }
   }
 
   Future<void> _deleteFolder(String folderPath) async {
-    final children = await _getChildren(folderPath);
-
-    for (final child in children) {
-      final childPath = joinPaths(folderPath, child.name);
-
-      if (child.isFolder) {
-        await _deleteFolder(childPath);
-      } else {
-        await _deleteFile(childPath);
-      }
+    _toggleSelected(_FilePathKey.keyForPath(folderPath, true), false);
+    final pendingDelete = PendingStorageDeletes.begin(scope: _deleteScope, path: folderPath, isFolder: true);
+    try {
+      await widget.client.storage.delete(folderPath, recursive: true);
+      _removePath(folderPath, isFolder: true);
+    } finally {
+      pendingDelete.complete();
     }
-
-    _removePath(folderPath, isFolder: true);
   }
 
   String? _validateRenameInput(String? value) {
@@ -1240,10 +1227,25 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
 
     if (confirmDelete == true) {
-      if (isFolder) {
-        await _deleteFolder(fullPath);
-      } else {
-        await _deleteFile(fullPath);
+      try {
+        if (isFolder) {
+          await _deleteFolder(fullPath);
+        } else {
+          await _deleteFile(fullPath);
+        }
+      } catch (error) {
+        if (!mounted) {
+          return false;
+        }
+
+        ShadToaster.of(context).show(
+          ShadToast.destructive(
+            title: Text("Unable to delete ${isFolder ? 'folder' : 'file'}"),
+            description: Text("$error"),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+        return false;
       }
       return true;
     }
@@ -1304,6 +1306,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     for (final key in toDelete) {
       final isFolder = _FilePathKey.isFolderKey(key);
       final path = _FilePathKey.pathFromKey(key);
+      if (_isDeletePending(path, isFolder)) {
+        continue;
+      }
 
       try {
         if (isFolder) {
@@ -2024,17 +2029,19 @@ class _FileManagerViewState extends State<FileManagerView> {
       label: "Delete",
       selected: true,
       destructive: true,
-      onPressed: () async {
-        final openedFile = _openedFile;
-        if (openedFile == null) {
-          return;
-        }
+      onPressed: _openedFile == null || _isDeletePending(_openedFile!, false)
+          ? null
+          : () async {
+              final openedFile = _openedFile;
+              if (openedFile == null) {
+                return;
+              }
 
-        final confirmDelete = await _confirmAndDelete(openedFile, false);
-        if (confirmDelete == true) {
-          _openEntry(_folderSig.value, true);
-        }
-      },
+              final confirmDelete = await _confirmAndDelete(openedFile, false);
+              if (confirmDelete == true) {
+                _openEntry(_folderSig.value, true);
+              }
+            },
     );
 
     return Padding(
@@ -2182,12 +2189,14 @@ class _FileManagerViewState extends State<FileManagerView> {
           child: ShadIconButton.outline(
             icon: const Icon(LucideIcons.trash),
             decoration: powerboardsAdaptiveIconButtonDecoration(context),
-            onPressed: () async {
-              final confirmDelete = await _confirmAndDelete(_openedFile!, false);
-              if (confirmDelete == true) {
-                _openEntry(_folderSig.value, true);
-              }
-            },
+            onPressed: _isDeletePending(_openedFile!, false)
+                ? null
+                : () async {
+                    final confirmDelete = await _confirmAndDelete(_openedFile!, false);
+                    if (confirmDelete == true) {
+                      _openEntry(_folderSig.value, true);
+                    }
+                  },
           ),
         ),
       ];
@@ -2663,6 +2672,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                                       isRefreshing: storageEntries.state.isRefreshing,
                                       forceShowSelect: _forceShowSelect,
                                       displayNameBuilder: _displayNameForEntry,
+                                      deleteRevision: PendingStorageDeletes.listenableFor(_deleteScope),
+                                      isDeletePending: _isDeletePending,
                                       onOpen: _openEntry,
                                       onToggleSelected: _toggleSelected,
                                       onToggleAllSelected: _toggleAllSelected,
@@ -2704,6 +2715,8 @@ class FileTableView extends StatefulWidget {
   final bool isRefreshing;
   final bool forceShowSelect;
   final String Function(StorageEntry entry)? displayNameBuilder;
+  final ValueListenable<int> deleteRevision;
+  final bool Function(String fullPath, bool isFolder) isDeletePending;
   final void Function(String fullPath, bool isFolder) onOpen;
   final void Function(String key, bool selected) onToggleSelected;
   final void Function(bool selected) onToggleAllSelected;
@@ -2726,6 +2739,8 @@ class FileTableView extends StatefulWidget {
     required this.isRefreshing,
     required this.forceShowSelect,
     this.displayNameBuilder,
+    required this.deleteRevision,
+    required this.isDeletePending,
     required this.onOpen,
     required this.onToggleSelected,
     required this.onToggleAllSelected,
@@ -3050,54 +3065,61 @@ class _FileTableViewState extends State<FileTableView> {
                 final metadataLabel = <String>[?sizeLabel, if (modifiedLabel.isNotEmpty) modifiedLabel].join(' • ');
                 final showMetadataLabel = metadataLabel.isNotEmpty;
                 final displayName = _displayNameForEntry(entry);
+                final deletePending = widget.isDeletePending(fullPath, entry.isFolder);
 
-                return Material(
-                  color: isSelected ? const Color(0xFFF2F1FF) : shadCard,
-                  child: InkWell(
-                    onTap: () => widget.onOpen(fullPath, entry.isFolder),
-                    child: Padding(
-                      padding: powerboardsFileListRowPadding,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          if (showSelectColumn) ...[
-                            SizedBox(
-                              width: 36,
-                              child: Center(
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => widget.onToggleSelected(key, !isSelected),
-                                  child: _fileSelectionCheckbox(decoration: checkboxDecoration, value: isSelected),
+                return Opacity(
+                  opacity: deletePending ? 0.45 : 1,
+                  child: Material(
+                    color: isSelected ? const Color(0xFFF2F1FF) : shadCard,
+                    child: InkWell(
+                      onTap: deletePending ? null : () => widget.onOpen(fullPath, entry.isFolder),
+                      child: Padding(
+                        padding: powerboardsFileListRowPadding,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (showSelectColumn) ...[
+                              SizedBox(
+                                width: 36,
+                                child: Center(
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: deletePending ? null : () => widget.onToggleSelected(key, !isSelected),
+                                    child: _fileSelectionCheckbox(decoration: checkboxDecoration, value: isSelected),
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                          ],
-                          _getIcon(entry),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(displayName, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                if (showMetadataLabel) ...[
-                                  const SizedBox(height: 4),
-                                  Text(metadataLabel, style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              const SizedBox(width: 4),
+                            ],
+                            _getIcon(entry),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(displayName, style: dataStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  if (showMetadataLabel) ...[
+                                    const SizedBox(height: 4),
+                                    Text(metadataLabel, style: headerStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          ValueListenableBuilder<String?>(
-                            valueListenable: _hoveredRowKey,
-                            builder: (_, hoveredKey, _) => widget.buildActionsMenu(
-                              _tableCardKey.currentContext,
-                              fullPath,
-                              entry.isFolder,
-                              showRowMenu && (alwaysShowMenu || isSelected || hoveredKey == key),
-                            ),
-                          ),
-                        ],
+                            const SizedBox(width: 8),
+                            if (deletePending)
+                              const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            else
+                              ValueListenableBuilder<String?>(
+                                valueListenable: _hoveredRowKey,
+                                builder: (_, hoveredKey, _) => widget.buildActionsMenu(
+                                  _tableCardKey.currentContext,
+                                  fullPath,
+                                  entry.isFolder,
+                                  showRowMenu && (alwaysShowMenu || isSelected || hoveredKey == key),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -3112,6 +3134,10 @@ class _FileTableViewState extends State<FileTableView> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(valueListenable: widget.deleteRevision, builder: (context, _, _) => _build(context));
+  }
+
+  Widget _build(BuildContext context) {
     if (widget.entries.isEmpty) {
       return _buildEmptyState(context);
     }
@@ -3124,7 +3150,14 @@ class _FileTableViewState extends State<FileTableView> {
         final colorScheme = ShadTheme.of(context).colorScheme;
         final showSelectColumn = !isMobile || widget.forceShowSelect;
         final alwaysShowMenu = isMobile;
-        final bool? selectAllValue = widget.selected.isEmpty ? false : (widget.selected.length == widget.entries.length ? true : null);
+        final selectableKeys = widget.entries
+            .where((entry) => !widget.isDeletePending(_FilePathKey.pathForEntry(widget.currentPath, entry), entry.isFolder))
+            .map((entry) => _FilePathKey.keyForEntry(widget.currentPath, entry))
+            .toSet();
+        final selectedSelectableCount = widget.selected.where(selectableKeys.contains).length;
+        final bool? selectAllValue = selectedSelectableCount == 0
+            ? false
+            : (selectedSelectableCount == selectableKeys.length ? true : null);
 
         if (isMobile) {
           return _buildMobileList(context, showSelectColumn, alwaysShowMenu, selectAllValue, showSize);
@@ -3141,11 +3174,14 @@ class _FileTableViewState extends State<FileTableView> {
           );
           final sizeLabel = showSize ? (_formatEntrySize(entry) ?? "") : "";
           final displayName = _displayNameForEntry(entry);
+          final deletePending = widget.isDeletePending(fullPath, entry.isFolder);
 
           return DataRow(
-            onSelectChanged: (_) {
-              widget.onOpen(fullPath, entry.isFolder);
-            },
+            onSelectChanged: deletePending
+                ? null
+                : (_) {
+                    widget.onOpen(fullPath, entry.isFolder);
+                  },
             color: WidgetStateProperty.resolveWith((states) {
               if (isSelected) {
                 return const Color(0xFFF2F1FF);
@@ -3161,7 +3197,7 @@ class _FileTableViewState extends State<FileTableView> {
                   Center(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => widget.onToggleSelected(key, !isSelected),
+                      onTap: deletePending ? null : () => widget.onToggleSelected(key, !isSelected),
                       child: _fileSelectionCheckbox(decoration: checkboxDecoration, value: isSelected),
                     ),
                   ),
@@ -3169,14 +3205,17 @@ class _FileTableViewState extends State<FileTableView> {
               DataCell(
                 _hoverRegion(
                   key,
-                  Row(
-                    children: [
-                      _getIcon(entry),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Text(displayName, style: dataStyle, overflow: TextOverflow.ellipsis),
-                      ),
-                    ],
+                  Opacity(
+                    opacity: deletePending ? 0.45 : 1,
+                    child: Row(
+                      children: [
+                        _getIcon(entry),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(displayName, style: dataStyle, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -3206,17 +3245,19 @@ class _FileTableViewState extends State<FileTableView> {
               DataCell(
                 _hoverRegion(
                   key,
-                  ValueListenableBuilder<String?>(
-                    valueListenable: _hoveredRowKey,
-                    builder: (_, hoveredKey, _) => Center(
-                      child: widget.buildActionsMenu(
-                        _tableCardKey.currentContext,
-                        fullPath,
-                        entry.isFolder,
-                        alwaysShowMenu || isSelected || hoveredKey == key,
-                      ),
-                    ),
-                  ),
+                  deletePending
+                      ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+                      : ValueListenableBuilder<String?>(
+                          valueListenable: _hoveredRowKey,
+                          builder: (_, hoveredKey, _) => Center(
+                            child: widget.buildActionsMenu(
+                              _tableCardKey.currentContext,
+                              fullPath,
+                              entry.isFolder,
+                              alwaysShowMenu || isSelected || hoveredKey == key,
+                            ),
+                          ),
+                        ),
                 ),
               ),
             ],
