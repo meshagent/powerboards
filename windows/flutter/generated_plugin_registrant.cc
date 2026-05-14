@@ -17,6 +17,7 @@
 #include <fullscreen_window/fullscreen_window_plugin_c_api.h>
 #include <irondash_engine_context/irondash_engine_context_plugin_c_api.h>
 #include <livekit_client/live_kit_plugin.h>
+#include <meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater_plugin_c_api.h>
 #include <record_windows/record_windows_plugin_c_api.h>
 #include <sentry_flutter/sentry_flutter_plugin.h>
 #include <share_plus/share_plus_windows_plugin_c_api.h>
@@ -47,6 +48,8 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("IrondashEngineContextPluginCApi"));
   LiveKitPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("LiveKitPlugin"));
+  MeshagentFlutterDesktopUpdaterPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("MeshagentFlutterDesktopUpdaterPluginCApi"));
   RecordWindowsPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("RecordWindowsPluginCApi"));
   SentryFlutterPluginRegisterWithRegistrar(
