@@ -12,6 +12,7 @@ import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/nav/switch_project_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
@@ -164,6 +165,11 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
     );
   }
 
+  void _toggleUiMode() {
+    final nextMode = powerboardsUiModeSignal.value == PowerboardsUiMode.legacy ? PowerboardsUiMode.v1 : PowerboardsUiMode.legacy;
+    setPowerboardsUiMode(nextMode);
+  }
+
   Future<void> _onNewProject() async {
     final p = await createMeshagentProject(context);
 
@@ -233,6 +239,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context, _) {
+        final currentUiMode = powerboardsUiModeSignal.value;
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
         final user = MeshagentAuth.current.getUser();
         final initials = userAvatarInitialsFromEmail((user?["email"] as String?) ?? "");
@@ -258,6 +265,13 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
             icon: LucideIcons.package,
             onPressed: _switchProject,
           ),
+          if (!isMobile)
+            AppMenuEntry(
+              title: currentUiMode == PowerboardsUiMode.v1 ? "End new UI Preview" : "Preview new UI",
+              description: currentUiMode == PowerboardsUiMode.v1 ? "Switch back" : "In-development",
+              icon: currentUiMode == PowerboardsUiMode.v1 ? LucideIcons.rotateCcw : LucideIcons.eye,
+              onPressed: _toggleUiMode,
+            ),
 
           if (kIsWeb && _isAdmin)
             AppMenuEntry(
