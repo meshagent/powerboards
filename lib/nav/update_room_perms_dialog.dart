@@ -44,10 +44,10 @@ double _desktopTaskDialogHeight(BoxConstraints constraints) {
 double _desktopTaskDialogWidth(BoxConstraints constraints) {
   final maxWidth = constraints.maxWidth;
   if (!maxWidth.isFinite) {
-    return 1024.0;
+    return 512.0;
   }
 
-  return (maxWidth - 100.0).clamp(512.0, 1024.0).toDouble();
+  return (maxWidth - 100.0).clamp(360.0, 512.0).toDouble();
 }
 
 BoxConstraints? _desktopTaskDialogConstraints(BuildContext context, BoxConstraints constraints) {
