@@ -52,6 +52,7 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/settings/selected_room.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
@@ -1815,6 +1816,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   List<Widget> _meetingPaneActions(BuildContext context, {required bool canViewStorageAllowed}) {
     final meetingSessionActive = _isMeetingSessionActive(context);
     final activeMeetingPane = meetingSessionActive && controller.inMeeting;
+    final useDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
     return [
       if (canViewStorageAllowed)
         PaneHeaderActionItem(
@@ -1829,12 +1831,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         overflowOnCompact: activeMeetingPane,
         child: MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _toggleMeetingPane(context)),
       ),
-      PaneHeaderActionItem(
-        expandedWidth: desktopPaneHeaderInviteButtonWidth,
-        compactWidth: desktopPaneHeaderCompactButtonWidth,
-        overflowOnCompact: !activeMeetingPane,
-        child: InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-      ),
+      if (activeMeetingPane)
+        PaneHeaderActionItem(
+          expandedWidth: desktopPaneHeaderInviteButtonWidth,
+          compactWidth: desktopPaneHeaderCompactButtonWidth,
+          overflowOnCompact: false,
+          child: InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+        ),
       PaneHeaderActionItem(
         expandedWidth: desktopPaneHeaderOptionsButtonWidth,
         compactWidth: desktopPaneHeaderOptionsButtonWidth,
@@ -1853,11 +1856,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           onShowMeet: () => _toggleMeetingPane(context),
         ),
       ),
-      PaneHeaderActionItem(
-        expandedWidth: desktopPaneHeaderAvatarButtonWidth,
-        compactWidth: desktopPaneHeaderAvatarButtonWidth,
-        child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
-      ),
+      if (!useDesktopUiPreview)
+        PaneHeaderActionItem(
+          expandedWidth: desktopPaneHeaderAvatarButtonWidth,
+          compactWidth: desktopPaneHeaderAvatarButtonWidth,
+          child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+        ),
     ];
   }
 
@@ -2476,11 +2480,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   List<Widget> _emptyRoomHeaderActions({required bool isMobile}) {
+    final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
+
     return [
       if (isMobile) BackButton(projectId: widget.projectId),
       if (!isMobile) _buildEmptyRoomNameDisplay(context),
       Spacer(),
-      InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+      if (!useDesktopUiPreview) InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
       if (!isMobile) ...[
         RoomOptionsMenu(
           projectId: widget.projectId,
@@ -2490,7 +2496,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           canViewDeveloperLogs: canViewDeveloperLogs,
           boundaryContext: context,
         ),
-        UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+        if (!useDesktopUiPreview) UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
       ],
     ];
   }

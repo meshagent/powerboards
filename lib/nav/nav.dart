@@ -1401,15 +1401,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     return SafeArea(
       minimum: const EdgeInsets.all(12),
       child: Column(
-        children: [
-          Row(
-            children: [
-              const Spacer(),
-              UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
-            ],
-          ),
-          Expanded(child: EmptyProjectsState(onCreateProject: onCreateProject)),
-        ],
+        children: [Expanded(child: EmptyProjectsState(onCreateProject: onCreateProject))],
       ),
     );
   }
