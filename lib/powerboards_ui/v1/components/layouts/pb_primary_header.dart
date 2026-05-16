@@ -28,6 +28,7 @@ class PbPrimaryHeader extends StatelessWidget {
     this.onProjectDismissRequested,
     this.onRoomDismissRequested,
     this.onAvatarDismissRequested,
+    this.onSharePressed,
   });
 
   final bool shellMobile;
@@ -49,6 +50,7 @@ class PbPrimaryHeader extends StatelessWidget {
   final VoidCallback? onProjectDismissRequested;
   final VoidCallback? onRoomDismissRequested;
   final VoidCallback? onAvatarDismissRequested;
+  final VoidCallback? onSharePressed;
 
   @override
   Widget build(BuildContext context) {
@@ -105,8 +107,16 @@ class PbPrimaryHeader extends StatelessWidget {
                     trailingActions ??
                         Row(
                           children: [
-                            PbButton(iconAssetName: 'user-plus', label: 'Share', variant: PbButtonVariant.primary, iconOnly: shellIconOnly),
-                            SizedBox(width: actionGap),
+                            if (onSharePressed != null) ...[
+                              PbButton(
+                                iconAssetName: 'user-plus',
+                                label: 'Share',
+                                variant: PbButtonVariant.primary,
+                                iconOnly: shellIconOnly,
+                                onPressed: onSharePressed,
+                              ),
+                              SizedBox(width: actionGap),
+                            ],
                             PbMenuAnchor(
                               placement: PbMenuAnchorPlacement.bottomRight,
                               gap: shellIconOnly ? 10 : 21,

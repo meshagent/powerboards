@@ -26,6 +26,7 @@ import 'package:powerboards/settings/selected_room.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/nav/switch_project_dialog.dart';
+import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/ui/empty_states.dart';
 import 'package:powerboards/ui/keyboard_safe.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
@@ -215,6 +216,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   String filter = "";
   final _mobileRoomListProjectId = Signal<String?>(null);
   final _mobileRoomListSelectedRoom = Signal<String?>(null);
+  String? _roomsResourceProjectId;
   late Resource<List<Room>> rooms;
   late final mobileRoomListRooms = Resource<List<Room>>(() async {
     final projectId = _effectiveMobileRoomListProjectId;
@@ -252,10 +254,11 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     return _mobileRoomListSelectedRoom.value ?? widget.selectedRoom;
   }
 
-  Resource<List<Room>> _createRoomsResource() {
-    return Resource<List<Room>>(() async {
-      final projectId = widget.projectId ?? localStorage.getItem("lastProjectId");
+  Resource<List<Room>> _createRoomsResource([String? projectIdOverride]) {
+    final projectId = projectIdOverride ?? widget.projectId ?? localStorage.getItem("lastProjectId");
+    _roomsResourceProjectId = projectId;
 
+    return Resource<List<Room>>(() async {
       return projectId == null ? [] : await listMeshagentRooms(projectId);
     });
   }
@@ -419,12 +422,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
     if (oldWidget.projectId != widget.projectId) {
       rooms.dispose();
-      rooms = _createRoomsResource();
-      rooms.refresh();
-      if (_mobileRoomListProjectId.value == null) {
-        mobileRoomListRooms.refresh();
-      }
-    } else if (oldWidget.selectedRoom != widget.selectedRoom) {
+      rooms = _createRoomsResource(widget.projectId);
       rooms.refresh();
       if (_mobileRoomListProjectId.value == null) {
         mobileRoomListRooms.refresh();
@@ -545,14 +543,30 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   }
 
   void _toggleUiModeFromPreviewHeader() {
-    final nextMode = powerboardsUiModeSignal.value == PowerboardsUiMode.legacy ? PowerboardsUiMode.v1 : PowerboardsUiMode.legacy;
-    setPowerboardsUiMode(nextMode);
+    togglePowerboardsUiMode();
+  }
+
+  Future<void> _openInviteFromPreviewHeader() async {
+    final projectId = widget.projectId;
+    final roomName = widget.selectedRoom?.trim();
+    if (projectId == null || roomName == null || roomName.isEmpty) {
+      return;
+    }
+
+    final room = await getMeshagentClient().getRoom(name: roomName, projectId: projectId);
+
+    if (!mounted) {
+      return;
+    }
+
+    await showUpdateRoomPermsDialog(context, projectId: projectId, room: room);
   }
 
   @override
   void initState() {
     super.initState();
-    rooms = _createRoomsResource();
+    syncPowerboardsUiModeFromStorage();
+    rooms = _createRoomsResource(widget.projectId);
 
     _mobileRoomListCloseAnimationController = AnimationController(vsync: this, duration: powerboardsMobileTransitionDuration)
       ..addListener(() {
@@ -638,12 +652,13 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       final user = MeshagentAuth.current.getUser();
       final avatarInitials = userAvatarInitialsFromEmail((user?['email'] as String?) ?? '');
       final avatarEmail = ((user?['email'] as String?) ?? '').trim();
-      final roomItems = rooms.state.value ?? const <Room>[];
+      final roomItems = _roomsResourceProjectId == widget.projectId ? (rooms.state.value ?? const <Room>[]) : const <Room>[];
 
       return Column(
         key: const ValueKey('desktop-ui-preview-v1'),
         children: [
           DesktopPreviewNavHeader(
+            key: ValueKey('desktop-preview-header-${widget.projectId}-${widget.selectedRoom}'),
             projects: projects.state.value ?? const <Project>[],
             rooms: roomItems,
             projectId: widget.projectId,
@@ -666,6 +681,11 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
             },
             onCreateRoom: widget.projectId == null || !canCreateRooms ? null : () => _createRoomFromPreviewHeader(widget.projectId!),
             onManageAccountPressed: kIsWeb && userRole == ProjectRole.admin ? _goToAccountsFromPreviewHeader : null,
+            onSharePressed: widget.projectId == null || widget.selectedRoom == null
+                ? null
+                : () {
+                    _openInviteFromPreviewHeader();
+                  },
             onPreviewTogglePressed: _toggleUiModeFromPreviewHeader,
             onLogoutPressed: _signOutFromPreviewHeader,
           ),
@@ -1403,8 +1423,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
     return SignalBuilder(
       builder: (context, _) {
-        syncPowerboardsUiModeFromStorage();
-
         if (!projects.state.isReady || !role.state.isReady) {
           return useMobileNav ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
         }

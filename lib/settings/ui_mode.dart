@@ -40,7 +40,20 @@ PowerboardsUiMode getStoredPowerboardsUiMode() {
 
 final Signal<PowerboardsUiMode> powerboardsUiModeSignal = Signal<PowerboardsUiMode>(getStoredPowerboardsUiMode());
 
-void syncPowerboardsUiModeFromStorage() {
+bool hasStoredPowerboardsUiMode() {
+  final scopedRawValue = localStorage.getItem(_currentPowerboardsUiModeStorageKey());
+  final legacyRawValue = localStorage.getItem(_powerboardsUiModeStorageKey);
+  return scopedRawValue is String || legacyRawValue is String;
+}
+
+void syncPowerboardsUiModeFromStorage({bool resetToLegacyWhenMissing = false}) {
+  if (!hasStoredPowerboardsUiMode()) {
+    if (resetToLegacyWhenMissing && powerboardsUiModeSignal.value != PowerboardsUiMode.legacy) {
+      powerboardsUiModeSignal.value = PowerboardsUiMode.legacy;
+    }
+    return;
+  }
+
   final storedMode = getStoredPowerboardsUiMode();
   if (powerboardsUiModeSignal.value != storedMode) {
     powerboardsUiModeSignal.value = storedMode;
@@ -56,6 +69,11 @@ void setPowerboardsUiMode(PowerboardsUiMode mode) {
   powerboardsUiModeSignal.value = mode;
 }
 
+void togglePowerboardsUiMode() {
+  final nextMode = powerboardsUiModeSignal.value == PowerboardsUiMode.legacy ? PowerboardsUiMode.v1 : PowerboardsUiMode.legacy;
+  setPowerboardsUiMode(nextMode);
+}
+
 void resetPowerboardsUiMode() {
   final scopedKey = _currentPowerboardsUiModeStorageKey();
   localStorage.removeItem(scopedKey);
@@ -66,6 +84,5 @@ void resetPowerboardsUiMode() {
 }
 
 bool powerboardsUsesDesktopUiPreview(BuildContext context) {
-  syncPowerboardsUiModeFromStorage();
   return powerboardsUiModeSignal.value == PowerboardsUiMode.v1 && !powerboardsUsesNativeMobileDialogLayout(context);
 }

@@ -5,13 +5,7 @@ import '../../theme/pb_typography.dart';
 import 'pb_svg_icon.dart';
 
 class PbSwitcherField extends StatefulWidget {
-  const PbSwitcherField({
-    super.key,
-    required this.eyebrow,
-    required this.value,
-    this.selected = false,
-    this.onPressed,
-  });
+  const PbSwitcherField({super.key, required this.eyebrow, required this.value, this.selected = false, this.onPressed});
 
   final String eyebrow;
   final String value;
@@ -33,40 +27,14 @@ class _PbSwitcherFieldState extends State<PbSwitcherField> {
   Widget build(BuildContext context) {
     final isSelected = widget.selected && !_pressed;
     final selectedSurface = _pressed || isSelected;
-    final borderColor = _pressed || isSelected
-        ? PbColors.borderStateSelected
-        : PbColors.borderSoft;
+    final borderColor = _pressed || isSelected ? PbColors.borderStateSelected : PbColors.borderSoft;
     final shadows = _pressed
-        ? const [
-            BoxShadow(
-              color: Color.fromRGBO(15, 23, 42, 0.08),
-              blurRadius: 2,
-              offset: Offset(0, 1),
-            ),
-          ]
+        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 2, offset: Offset(0, 1))]
         : isSelected
-        ? const [
-            BoxShadow(
-              color: Color.fromRGBO(102, 116, 142, 0.12),
-              blurRadius: 18,
-              offset: Offset(0, 4),
-            ),
-          ]
+        ? const [BoxShadow(color: Color.fromRGBO(102, 116, 142, 0.12), blurRadius: 18, offset: Offset(0, 4))]
         : _lifted
-        ? const [
-            BoxShadow(
-              color: Color.fromRGBO(15, 23, 42, 0.12),
-              blurRadius: 30,
-              offset: Offset(0, 14),
-            ),
-          ]
-        : const [
-            BoxShadow(
-              color: Color.fromRGBO(102, 116, 142, 0.12),
-              blurRadius: 18,
-              offset: Offset(0, 4),
-            ),
-          ];
+        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 30, offset: Offset(0, 14))]
+        : const [BoxShadow(color: Color.fromRGBO(102, 116, 142, 0.12), blurRadius: 18, offset: Offset(0, 4))];
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -78,10 +46,8 @@ class _PbSwitcherFieldState extends State<PbSwitcherField> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) {
-          setState(() => _pressed = false);
-          widget.onPressed?.call();
-        },
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: widget.onPressed,
         onTapCancel: () => setState(() => _pressed = false),
         child: Transform.translate(
           offset: Offset(0, _lifted ? -1 : 0),
@@ -95,10 +61,7 @@ class _PbSwitcherFieldState extends State<PbSwitcherField> {
               gradient: selectedSurface
                   ? null
                   : const LinearGradient(
-                      colors: [
-                        PbColors.surfacePanel,
-                        PbColors.surfacePanelSoft,
-                      ],
+                      colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
@@ -112,17 +75,9 @@ class _PbSwitcherFieldState extends State<PbSwitcherField> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        widget.eyebrow,
-                        style: PowerboardsTypography.fieldEyebrow,
-                      ),
+                      Text(widget.eyebrow, style: PowerboardsTypography.fieldEyebrow),
                       const SizedBox(height: 2),
-                      Text(
-                        widget.value,
-                        style: PowerboardsTypography.fieldValue,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      Text(widget.value, style: PowerboardsTypography.fieldValue, maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
@@ -131,11 +86,7 @@ class _PbSwitcherFieldState extends State<PbSwitcherField> {
                   turns: widget.selected ? -0.5 : 0,
                   duration: _chevronDuration,
                   curve: Curves.easeOutCubic,
-                  child: const PbSvgIcon(
-                    assetName: 'chevron-down',
-                    size: 20,
-                    color: PbColors.textPrimary,
-                  ),
+                  child: const PbSvgIcon(assetName: 'chevron-down', size: 20, color: PbColors.textPrimary),
                 ),
               ],
             ),

@@ -104,6 +104,12 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    syncPowerboardsUiModeFromStorage();
+  }
+
+  @override
   void didUpdateWidget(covariant UserAvatarMenuButton oldWidget) {
     super.didUpdateWidget(oldWidget);
 
@@ -167,8 +173,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
   }
 
   void _toggleUiMode() {
-    final nextMode = powerboardsUiModeSignal.value == PowerboardsUiMode.legacy ? PowerboardsUiMode.v1 : PowerboardsUiMode.legacy;
-    setPowerboardsUiMode(nextMode);
+    togglePowerboardsUiMode();
   }
 
   Future<void> _onNewProject() async {
@@ -240,7 +245,6 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context, _) {
-        syncPowerboardsUiModeFromStorage();
         final currentUiMode = powerboardsUiModeSignal.value;
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
         final user = MeshagentAuth.current.getUser();

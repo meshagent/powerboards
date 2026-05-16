@@ -3,6 +3,7 @@ import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/nav/nav_rooms.dart';
 import 'package:powerboards/powerboards_ui/active.dart';
+import 'dart:async';
 
 class DesktopPreviewNavHeader extends StatefulWidget {
   const DesktopPreviewNavHeader({
@@ -19,6 +20,7 @@ class DesktopPreviewNavHeader extends StatefulWidget {
     this.avatarInitials = 'JP',
     this.avatarEmail = '',
     this.onManageAccountPressed,
+    this.onSharePressed,
     this.onPreviewTogglePressed,
     this.onLogoutPressed,
   });
@@ -35,6 +37,7 @@ class DesktopPreviewNavHeader extends StatefulWidget {
   final String avatarInitials;
   final String avatarEmail;
   final VoidCallback? onManageAccountPressed;
+  final VoidCallback? onSharePressed;
   final VoidCallback? onPreviewTogglePressed;
   final VoidCallback? onLogoutPressed;
 
@@ -63,6 +66,31 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant DesktopPreviewNavHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.projectId == widget.projectId) {
+      return;
+    }
+
+    if (_roomFilterController.text.isNotEmpty) {
+      _roomFilterController.clear();
+    }
+
+    if (_openMenu == _DesktopPreviewNavMenu.room) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _openMenu != _DesktopPreviewNavMenu.room) {
+          return;
+        }
+
+        setState(() {
+          _openMenu = _DesktopPreviewNavMenu.none;
+        });
+      });
+    }
+  }
+
   void _toggleMenu(_DesktopPreviewNavMenu menu) {
     setState(() {
       _openMenu = _openMenu == menu ? _DesktopPreviewNavMenu.none : menu;
@@ -84,9 +112,15 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
       return;
     }
 
+    final hadOpenMenu = _openMenu != _DesktopPreviewNavMenu.none;
     _closeMenu();
 
-    WidgetsBinding.instance.endOfFrame.then((_) => action());
+    if (!hadOpenMenu) {
+      scheduleMicrotask(action);
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => action());
   }
 
   String get _projectQuery => _projectFilterController.text.trim().toLowerCase();
@@ -233,6 +267,7 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
       onProjectDismissRequested: _closeMenu,
       onRoomDismissRequested: _closeMenu,
       onAvatarDismissRequested: _closeMenu,
+      onSharePressed: widget.onSharePressed,
     );
   }
 }

@@ -37,33 +37,13 @@ class _PbAvatarButtonState extends State<PbAvatarButton> {
   Widget build(BuildContext context) {
     final avatarShadow = widget.selected
         ? const [
-            BoxShadow(
-              color: Color.fromARGB(214, 199, 216, 255),
-              blurRadius: 0,
-              spreadRadius: 2,
-            ),
-            BoxShadow(
-              color: Color.fromRGBO(15, 23, 42, 0.12),
-              blurRadius: 24,
-              offset: Offset(0, 10),
-            ),
+            BoxShadow(color: Color.fromARGB(214, 199, 216, 255), blurRadius: 0, spreadRadius: 2),
+            BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 24, offset: Offset(0, 10)),
           ]
         : _pressed
-        ? const [
-            BoxShadow(
-              color: Color.fromARGB(214, 199, 216, 255),
-              blurRadius: 0,
-              spreadRadius: 2,
-            ),
-          ]
+        ? const [BoxShadow(color: Color.fromARGB(214, 199, 216, 255), blurRadius: 0, spreadRadius: 2)]
         : _hovered
-        ? const [
-            BoxShadow(
-              color: Color.fromRGBO(15, 23, 42, 0.12),
-              blurRadius: 30,
-              offset: Offset(0, 14),
-            ),
-          ]
+        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 30, offset: Offset(0, 14))]
         : null;
 
     return MouseRegion(
@@ -76,32 +56,21 @@ class _PbAvatarButtonState extends State<PbAvatarButton> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) {
-          setState(() => _pressed = false);
-          widget.onPressed?.call();
-        },
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: widget.onPressed,
         onTapCancel: () => setState(() => _pressed = false),
         child: Transform.translate(
           offset: Offset(0, _lifted ? -1 : 0),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              PbAvatar(
-                initials: widget.initials,
-                size: widget.avatarSize,
-                borderColor: widget.idleBorderColor,
-                boxShadow: avatarShadow,
-              ),
+              PbAvatar(initials: widget.initials, size: widget.avatarSize, borderColor: widget.idleBorderColor, boxShadow: avatarShadow),
               const SizedBox(width: 3),
               AnimatedRotation(
                 turns: widget.selected ? -0.5 : 0,
                 duration: _chevronDuration,
                 curve: Curves.easeOutCubic,
-                child: PbSvgIcon(
-                  assetName: 'chevron-down',
-                  size: 16,
-                  color: widget.chevronColor,
-                ),
+                child: PbSvgIcon(assetName: 'chevron-down', size: 16, color: widget.chevronColor),
               ),
             ],
           ),
