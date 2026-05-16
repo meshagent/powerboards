@@ -549,7 +549,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   }
 
   void _toggleUiModeFromPreviewHeader() {
-    togglePowerboardsUiMode();
+    togglePowerboardsUiModeAndReload();
   }
 
   Future<void> _openInviteFromPreviewHeader() async {

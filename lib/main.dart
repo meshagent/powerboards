@@ -37,6 +37,7 @@ import 'ui/powerboards_shad_dialog.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
 import 'updates/powerboards_desktop_update_banner.dart';
+import 'settings/ui_mode.dart';
 
 final uiRoot = GlobalKey();
 
@@ -186,6 +187,7 @@ Future<void> startApp() async {
 
   await initializeApp();
   await initLocalStorage();
+  initializePowerboardsUiMode();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

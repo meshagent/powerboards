@@ -173,7 +173,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
   }
 
   void _toggleUiMode() {
-    togglePowerboardsUiMode();
+    togglePowerboardsUiModeAndReload();
   }
 
   Future<void> _onNewProject() async {
