@@ -25,6 +25,9 @@ class PbPrimaryHeader extends StatelessWidget {
     this.onProjectPressed,
     this.onRoomPressed,
     this.onAvatarPressed,
+    this.onProjectDismissRequested,
+    this.onRoomDismissRequested,
+    this.onAvatarDismissRequested,
   });
 
   final bool shellMobile;
@@ -43,6 +46,9 @@ class PbPrimaryHeader extends StatelessWidget {
   final VoidCallback? onProjectPressed;
   final VoidCallback? onRoomPressed;
   final VoidCallback? onAvatarPressed;
+  final VoidCallback? onProjectDismissRequested;
+  final VoidCallback? onRoomDismissRequested;
+  final VoidCallback? onAvatarDismissRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +69,7 @@ class PbPrimaryHeader extends StatelessWidget {
                   children: [
                     PbMenuAnchor(
                       panel: projectMenu,
+                      onDismissRequested: onProjectDismissRequested,
                       child: PbSwitcherField(
                         eyebrow: 'Project',
                         value: projectValue,
@@ -73,6 +80,7 @@ class PbPrimaryHeader extends StatelessWidget {
                     const SizedBox(height: 12),
                     PbMenuAnchor(
                       panel: roomMenu,
+                      onDismissRequested: onRoomDismissRequested,
                       child: PbSwitcherField(eyebrow: 'Room', value: roomValue, selected: roomSelected, onPressed: onRoomPressed),
                     ),
                   ],
@@ -90,6 +98,8 @@ class PbPrimaryHeader extends StatelessWidget {
                       roomMenu: roomMenu,
                       onProjectPressed: onProjectPressed,
                       onRoomPressed: onRoomPressed,
+                      onProjectDismissRequested: onProjectDismissRequested,
+                      onRoomDismissRequested: onRoomDismissRequested,
                     ),
                     const Spacer(),
                     trailingActions ??
@@ -102,6 +112,7 @@ class PbPrimaryHeader extends StatelessWidget {
                               gap: shellIconOnly ? 10 : 21,
                               triggerHeight: shellIconOnly ? 48 : 34,
                               panel: avatarMenu,
+                              onDismissRequested: onAvatarDismissRequested,
                               child: shellIconOnly
                                   ? PbAvatarButton(
                                       initials: avatarInitials,
@@ -138,6 +149,8 @@ class _SwitcherRow extends StatelessWidget {
     this.roomMenu,
     this.onProjectPressed,
     this.onRoomPressed,
+    this.onProjectDismissRequested,
+    this.onRoomDismissRequested,
   });
 
   final double gap;
@@ -150,6 +163,8 @@ class _SwitcherRow extends StatelessWidget {
   final Widget? roomMenu;
   final VoidCallback? onProjectPressed;
   final VoidCallback? onRoomPressed;
+  final VoidCallback? onProjectDismissRequested;
+  final VoidCallback? onRoomDismissRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +174,7 @@ class _SwitcherRow extends StatelessWidget {
           width: 196,
           child: PbMenuAnchor(
             panel: projectMenu,
+            onDismissRequested: onProjectDismissRequested,
             child: PbSwitcherField(eyebrow: 'Project', value: projectValue, selected: projectSelected, onPressed: onProjectPressed),
           ),
         ),
@@ -168,6 +184,7 @@ class _SwitcherRow extends StatelessWidget {
             width: 196,
             child: PbMenuAnchor(
               panel: roomMenu,
+              onDismissRequested: onRoomDismissRequested,
               child: PbSwitcherField(eyebrow: 'Room', value: roomValue, selected: roomSelected, onPressed: onRoomPressed),
             ),
           ),

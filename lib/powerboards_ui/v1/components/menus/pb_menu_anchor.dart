@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 enum PbMenuAnchorPlacement { bottomLeft, bottomRight, rightTop }
 
@@ -12,6 +11,7 @@ class PbMenuAnchor extends StatefulWidget {
     this.gap = 10,
     this.triggerWidth,
     this.triggerHeight = 48,
+    this.onDismissRequested,
   });
 
   final Widget child;
@@ -20,6 +20,7 @@ class PbMenuAnchor extends StatefulWidget {
   final double gap;
   final double? triggerWidth;
   final double triggerHeight;
+  final VoidCallback? onDismissRequested;
 
   @override
   State<PbMenuAnchor> createState() => _PbMenuAnchorState();
@@ -29,6 +30,7 @@ class _PbMenuAnchorState extends State<PbMenuAnchor> {
   static const double _viewportPadding = 16;
   static const double _mobileBreakpoint = 680;
   final OverlayPortalController _controller = OverlayPortalController();
+  final Object _tapRegionGroupId = Object();
 
   @override
   void initState() {
@@ -58,51 +60,56 @@ class _PbMenuAnchorState extends State<PbMenuAnchor> {
     });
   }
 
+  void _handleTapOutside(PointerDownEvent event) {
+    if (widget.panel == null) {
+      return;
+    }
+
+    widget.onDismissRequested?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return OverlayPortal.overlayChildLayoutBuilder(
-      controller: _controller,
-      overlayChildBuilder: (context, info) {
-        final panel = widget.panel;
+    return TapRegion(
+      groupId: _tapRegionGroupId,
+      onTapOutside: widget.onDismissRequested == null ? null : _handleTapOutside,
+      child: OverlayPortal.overlayChildLayoutBuilder(
+        controller: _controller,
+        overlayChildBuilder: (context, info) {
+          final panel = widget.panel;
 
-        if (panel == null) {
-          return const SizedBox.shrink();
-        }
+          if (panel == null) {
+            return const SizedBox.shrink();
+          }
 
-        final childRect = MatrixUtils.transformRect(
-          info.childPaintTransform,
-          Offset.zero & info.childSize,
-        );
-        final maxPanelWidth = info.overlaySize.width - (_viewportPadding * 2);
-        final maxPanelHeight = info.overlaySize.height - (_viewportPadding * 2);
-        final mobileRailStretch =
-            info.overlaySize.width <= _mobileBreakpoint &&
-            widget.placement == PbMenuAnchorPlacement.bottomRight;
+          final childRect = MatrixUtils.transformRect(info.childPaintTransform, Offset.zero & info.childSize);
+          final maxPanelWidth = info.overlaySize.width - (_viewportPadding * 2);
+          final maxPanelHeight = info.overlaySize.height - (_viewportPadding * 2);
+          final mobileRailStretch = info.overlaySize.width <= _mobileBreakpoint && widget.placement == PbMenuAnchorPlacement.bottomRight;
 
-        return CustomSingleChildLayout(
-          delegate: _PbMenuAnchorLayoutDelegate(
-            childRect: childRect,
-            overlaySize: info.overlaySize,
-            placement: widget.placement,
-            gap: widget.gap,
-            viewportPadding: _viewportPadding,
-            mobileRailStretch: mobileRailStretch,
-          ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: maxPanelWidth,
-              maxHeight: maxPanelHeight,
+          return TapRegion(
+            groupId: _tapRegionGroupId,
+            child: CustomSingleChildLayout(
+              delegate: _PbMenuAnchorLayoutDelegate(
+                childRect: childRect,
+                overlaySize: info.overlaySize,
+                placement: widget.placement,
+                gap: widget.gap,
+                viewportPadding: _viewportPadding,
+                mobileRailStretch: mobileRailStretch,
+              ),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxPanelWidth, maxHeight: maxPanelHeight),
+                child: SingleChildScrollView(
+                  primary: false,
+                  child: mobileRailStretch ? SizedBox(width: maxPanelWidth, child: panel) : panel,
+                ),
+              ),
             ),
-            child: SingleChildScrollView(
-              primary: false,
-              child: mobileRailStretch
-                  ? SizedBox(width: maxPanelWidth, child: panel)
-                  : panel,
-            ),
-          ),
-        );
-      },
-      child: widget.child,
+          );
+        },
+        child: widget.child,
+      ),
     );
   }
 }
@@ -126,12 +133,7 @@ class _PbMenuAnchorLayoutDelegate extends SingleChildLayoutDelegate {
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
-    return BoxConstraints.loose(
-      Size(
-        overlaySize.width - (viewportPadding * 2),
-        overlaySize.height - (viewportPadding * 2),
-      ),
-    );
+    return BoxConstraints.loose(Size(overlaySize.width - (viewportPadding * 2), overlaySize.height - (viewportPadding * 2)));
   }
 
   @override
@@ -144,9 +146,7 @@ class _PbMenuAnchorLayoutDelegate extends SingleChildLayoutDelegate {
         left = childRect.left;
         top = childRect.bottom + gap;
       case PbMenuAnchorPlacement.bottomRight:
-        left = mobileRailStretch
-            ? viewportPadding
-            : childRect.right - childSize.width;
+        left = mobileRailStretch ? viewportPadding : childRect.right - childSize.width;
         top = childRect.bottom + gap;
       case PbMenuAnchorPlacement.rightTop:
         left = childRect.right + gap;
@@ -157,14 +157,8 @@ class _PbMenuAnchorLayoutDelegate extends SingleChildLayoutDelegate {
     final maxTop = size.height - viewportPadding - childSize.height;
 
     return Offset(
-      left.clamp(
-        viewportPadding,
-        maxLeft < viewportPadding ? viewportPadding : maxLeft,
-      ),
-      top.clamp(
-        viewportPadding,
-        maxTop < viewportPadding ? viewportPadding : maxTop,
-      ),
+      left.clamp(viewportPadding, maxLeft < viewportPadding ? viewportPadding : maxLeft),
+      top.clamp(viewportPadding, maxTop < viewportPadding ? viewportPadding : maxTop),
     );
   }
 

@@ -69,16 +69,22 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
     });
   }
 
+  void _closeMenu() {
+    if (_openMenu == _DesktopPreviewNavMenu.none) {
+      return;
+    }
+
+    setState(() {
+      _openMenu = _DesktopPreviewNavMenu.none;
+    });
+  }
+
   void _closeMenuAndRun(VoidCallback? action) {
     if (action == null) {
       return;
     }
 
-    if (_openMenu != _DesktopPreviewNavMenu.none) {
-      setState(() {
-        _openMenu = _DesktopPreviewNavMenu.none;
-      });
-    }
+    _closeMenu();
 
     WidgetsBinding.instance.endOfFrame.then((_) => action());
   }
@@ -224,6 +230,9 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
       onProjectPressed: () => _toggleMenu(_DesktopPreviewNavMenu.project),
       onRoomPressed: showRoomSwitcher ? () => _toggleMenu(_DesktopPreviewNavMenu.room) : null,
       onAvatarPressed: () => _toggleMenu(_DesktopPreviewNavMenu.account),
+      onProjectDismissRequested: _closeMenu,
+      onRoomDismissRequested: _closeMenu,
+      onAvatarDismissRequested: _closeMenu,
     );
   }
 }

@@ -13,17 +13,21 @@ class PbSideRail extends StatelessWidget {
     this.moreSelected = false,
     this.moreMenu,
     this.onMorePressed,
+    this.onMoreDismissRequested,
     this.accountSelected = false,
     this.accountMenu,
     this.onAccountPressed,
+    this.onAccountDismissRequested,
   });
 
   final bool moreSelected;
   final Widget? moreMenu;
   final VoidCallback? onMorePressed;
+  final VoidCallback? onMoreDismissRequested;
   final bool accountSelected;
   final Widget? accountMenu;
   final VoidCallback? onAccountPressed;
+  final VoidCallback? onAccountDismissRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -31,37 +35,32 @@ class PbSideRail extends StatelessWidget {
       builder: (context, constraints) {
         final mobile = constraints.maxWidth > constraints.maxHeight;
         return Container(
-          padding: mobile
-              ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
-              : const EdgeInsets.fromLTRB(0, 20, 0, 18),
+          padding: mobile ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12) : const EdgeInsets.fromLTRB(0, 20, 0, 18),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [
-                PbColors.surfaceActionPrimary,
-                PbColors.surfaceRail,
-                PbColors.brandInk,
-              ],
+              colors: [PbColors.surfaceActionPrimary, PbColors.surfaceRail, PbColors.brandInk],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               stops: [0.0, 0.54, 1.0],
             ),
-            border: Border(
-              right: BorderSide(color: Color.fromARGB(15, 255, 255, 255)),
-            ),
+            border: Border(right: BorderSide(color: Color.fromARGB(15, 255, 255, 255))),
           ),
           child: mobile
               ? _MobileRail(
                   moreSelected: moreSelected,
                   moreMenu: moreMenu,
                   onMorePressed: onMorePressed,
+                  onMoreDismissRequested: onMoreDismissRequested,
                   accountSelected: accountSelected,
                   accountMenu: accountMenu,
                   onAccountPressed: onAccountPressed,
+                  onAccountDismissRequested: onAccountDismissRequested,
                 )
               : _DesktopRail(
                   moreSelected: moreSelected,
                   moreMenu: moreMenu,
                   onMorePressed: onMorePressed,
+                  onMoreDismissRequested: onMoreDismissRequested,
                 ),
         );
       },
@@ -74,11 +73,13 @@ class _DesktopRail extends StatelessWidget {
     required this.moreSelected,
     required this.moreMenu,
     required this.onMorePressed,
+    required this.onMoreDismissRequested,
   });
 
   final bool moreSelected;
   final Widget? moreMenu;
   final VoidCallback? onMorePressed;
+  final VoidCallback? onMoreDismissRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +93,7 @@ class _DesktopRail extends StatelessWidget {
           moreSelected: moreSelected,
           moreMenu: moreMenu,
           onMorePressed: onMorePressed,
+          onMoreDismissRequested: onMoreDismissRequested,
         ),
       ],
     );
@@ -105,17 +107,21 @@ class _MobileRail extends StatelessWidget {
     required this.moreSelected,
     required this.moreMenu,
     required this.onMorePressed,
+    required this.onMoreDismissRequested,
     required this.accountSelected,
     required this.accountMenu,
     required this.onAccountPressed,
+    required this.onAccountDismissRequested,
   });
 
   final bool moreSelected;
   final Widget? moreMenu;
   final VoidCallback? onMorePressed;
+  final VoidCallback? onMoreDismissRequested;
   final bool accountSelected;
   final Widget? accountMenu;
   final VoidCallback? onAccountPressed;
+  final VoidCallback? onAccountDismissRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -123,10 +129,7 @@ class _MobileRail extends StatelessWidget {
       children: [
         const SizedBox(
           width: _sideSlotWidth,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _BrandMark(size: 48),
-          ),
+          child: Align(alignment: Alignment.centerLeft, child: _BrandMark(size: 48)),
         ),
         Expanded(
           child: _RailNav(
@@ -135,6 +138,7 @@ class _MobileRail extends StatelessWidget {
             moreSelected: moreSelected,
             moreMenu: moreMenu,
             onMorePressed: onMorePressed,
+            onMoreDismissRequested: onMoreDismissRequested,
           ),
         ),
         SizedBox(
@@ -146,6 +150,7 @@ class _MobileRail extends StatelessWidget {
               gap: 10,
               triggerHeight: 48,
               panel: accountMenu,
+              onDismissRequested: onAccountDismissRequested,
               child: PbAvatarButton(
                 initials: 'JP',
                 avatarSize: 48,
@@ -176,12 +181,7 @@ class _BrandMark extends StatelessWidget {
       width: size,
       height: size,
       child: Center(
-        child: PbSvgIcon(
-          assetName: 'powerboards-symbol-logo',
-          width: _logoWidth,
-          height: _logoHeight,
-          color: PbColors.textInverse,
-        ),
+        child: PbSvgIcon(assetName: 'powerboards-symbol-logo', width: _logoWidth, height: _logoHeight, color: PbColors.textInverse),
       ),
     );
   }
@@ -194,6 +194,7 @@ class _RailNav extends StatelessWidget {
     this.moreSelected = false,
     this.moreMenu,
     this.onMorePressed,
+    this.onMoreDismissRequested,
   });
 
   final bool vertical;
@@ -201,6 +202,7 @@ class _RailNav extends StatelessWidget {
   final bool moreSelected;
   final Widget? moreMenu;
   final VoidCallback? onMorePressed;
+  final VoidCallback? onMoreDismissRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -222,10 +224,9 @@ class _RailNav extends StatelessWidget {
             menuOpen: item.menuOpen,
             menuPanel: item.label == 'More' ? moreMenu : null,
             onPressed: item.label == 'More' ? onMorePressed : null,
+            onDismissRequested: item.label == 'More' ? onMoreDismissRequested : null,
             menuGap: item.label == 'More' && !vertical ? 12 : 4,
-            menuPlacement: vertical
-                ? PbMenuAnchorPlacement.rightTop
-                : PbMenuAnchorPlacement.bottomRight,
+            menuPlacement: vertical ? PbMenuAnchorPlacement.rightTop : PbMenuAnchorPlacement.bottomRight,
           ),
         )
         .toList();
@@ -234,10 +235,7 @@ class _RailNav extends StatelessWidget {
         ? Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (var i = 0; i < children.length; i++) ...[
-                children[i],
-                if (i != children.length - 1) const SizedBox(height: 18),
-              ],
+              for (var i = 0; i < children.length; i++) ...[children[i], if (i != children.length - 1) const SizedBox(height: 18)],
             ],
           )
         : Row(
@@ -250,11 +248,7 @@ class _RailNav extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        for (var i = 0; i < children.length; i++) ...[
-                          children[i],
-                          if (i != children.length - 1)
-                            const SizedBox(width: 8),
-                        ],
+                        for (var i = 0; i < children.length; i++) ...[children[i], if (i != children.length - 1) const SizedBox(width: 8)],
                       ],
                     ),
                   ),
@@ -274,6 +268,7 @@ class _RailItem extends StatelessWidget {
     this.menuOpen = false,
     this.menuPanel,
     this.onPressed,
+    this.onDismissRequested,
     this.menuGap = 4,
     this.menuPlacement = PbMenuAnchorPlacement.rightTop,
   });
@@ -285,6 +280,7 @@ class _RailItem extends StatelessWidget {
   final bool menuOpen;
   final Widget? menuPanel;
   final VoidCallback? onPressed;
+  final VoidCallback? onDismissRequested;
   final double menuGap;
   final PbMenuAnchorPlacement menuPlacement;
 
@@ -298,23 +294,17 @@ class _RailItem extends StatelessWidget {
           gap: menuGap,
           triggerWidth: 44,
           panel: menuPanel,
+          onDismissRequested: onDismissRequested,
           child: PbIconButton(
             iconAssetName: iconAssetName,
-            variant: active
-                ? PbRailIconButtonVariant.selected
-                : PbRailIconButtonVariant.outlineInverse,
+            variant: active ? PbRailIconButtonVariant.selected : PbRailIconButtonVariant.outlineInverse,
             menuOpen: menuOpen,
             onPressed: onPressed,
           ),
         ),
         if (showLabel) ...[
           const SizedBox(height: 6),
-          Text(
-            label,
-            style: PowerboardsTypography.railLabel.copyWith(
-              color: active ? PbColors.textInverse : const Color(0xBDF8FAFC),
-            ),
-          ),
+          Text(label, style: PowerboardsTypography.railLabel.copyWith(color: active ? PbColors.textInverse : const Color(0xBDF8FAFC))),
         ],
       ],
     );
@@ -322,12 +312,7 @@ class _RailItem extends StatelessWidget {
 }
 
 class _RailItemData {
-  const _RailItemData(
-    this.label,
-    this.iconAssetName,
-    this.active, {
-    this.menuOpen = false,
-  });
+  const _RailItemData(this.label, this.iconAssetName, this.active, {this.menuOpen = false});
 
   final String label;
   final String iconAssetName;
