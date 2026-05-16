@@ -1,0 +1,88 @@
+import 'package:flutter/foundation.dart';
+
+class PreviewRoomRailMenuBridge extends ChangeNotifier {
+  bool showRename = true;
+  bool showPermissions = true;
+  bool showManageAgents = false;
+  bool showDeleteRoom = true;
+  bool showKeychain = true;
+  bool showConsoleToggle = false;
+  bool showShutdown = false;
+  String consoleLabel = 'Show console';
+
+  VoidCallback? onRenamePressed;
+  VoidCallback? onPermissionsPressed;
+  VoidCallback? onManageAgentsPressed;
+  VoidCallback? onDeleteRoomPressed;
+  VoidCallback? onKeychainPressed;
+  VoidCallback? onToggleConsolePressed;
+  VoidCallback? onShutdownPressed;
+
+  void configure({
+    required bool showRename,
+    required bool showPermissions,
+    required bool showManageAgents,
+    required bool showDeleteRoom,
+    required bool showKeychain,
+    required bool showConsoleToggle,
+    required bool showShutdown,
+    required String consoleLabel,
+    VoidCallback? onRenamePressed,
+    VoidCallback? onPermissionsPressed,
+    VoidCallback? onManageAgentsPressed,
+    VoidCallback? onDeleteRoomPressed,
+    VoidCallback? onKeychainPressed,
+    VoidCallback? onToggleConsolePressed,
+    VoidCallback? onShutdownPressed,
+  }) {
+    this.onRenamePressed = onRenamePressed;
+    this.onPermissionsPressed = onPermissionsPressed;
+    this.onManageAgentsPressed = onManageAgentsPressed;
+    this.onDeleteRoomPressed = onDeleteRoomPressed;
+    this.onKeychainPressed = onKeychainPressed;
+    this.onToggleConsolePressed = onToggleConsolePressed;
+    this.onShutdownPressed = onShutdownPressed;
+
+    final changed =
+        this.showRename != showRename ||
+        this.showPermissions != showPermissions ||
+        this.showManageAgents != showManageAgents ||
+        this.showDeleteRoom != showDeleteRoom ||
+        this.showKeychain != showKeychain ||
+        this.showConsoleToggle != showConsoleToggle ||
+        this.showShutdown != showShutdown ||
+        this.consoleLabel != consoleLabel;
+
+    this.showRename = showRename;
+    this.showPermissions = showPermissions;
+    this.showManageAgents = showManageAgents;
+    this.showDeleteRoom = showDeleteRoom;
+    this.showKeychain = showKeychain;
+    this.showConsoleToggle = showConsoleToggle;
+    this.showShutdown = showShutdown;
+    this.consoleLabel = consoleLabel;
+
+    if (changed) {
+      notifyListeners();
+    }
+  }
+}
+
+final ValueNotifier<PreviewRoomRailMenuBridge?> previewRoomRailMenuBridgeListenable = ValueNotifier<PreviewRoomRailMenuBridge?>(null);
+VoidCallback? _previewRoomListRefreshCallback;
+
+void exposePreviewRoomRailMenuBridge(PreviewRoomRailMenuBridge? bridge) {
+  if (identical(previewRoomRailMenuBridgeListenable.value, bridge)) {
+    return;
+  }
+
+  previewRoomRailMenuBridgeListenable.value = bridge;
+}
+
+void registerPreviewRoomListRefreshCallback(VoidCallback? callback) {
+  _previewRoomListRefreshCallback = callback;
+}
+
+void refreshPreviewRoomList() {
+  _previewRoomListRefreshCallback?.call();
+}
