@@ -11,14 +11,17 @@ class PbPrimaryHeader extends StatelessWidget {
     super.key,
     required this.shellMobile,
     required this.shellIconOnly,
+    this.showRoomSwitcher = true,
     this.projectValue = 'Project Name',
     this.roomValue = 'Room Name',
     this.projectSelected = false,
     this.roomSelected = false,
     this.avatarSelected = false,
+    this.avatarInitials = 'JP',
     this.projectMenu,
     this.roomMenu,
     this.avatarMenu,
+    this.trailingActions,
     this.onProjectPressed,
     this.onRoomPressed,
     this.onAvatarPressed,
@@ -26,14 +29,17 @@ class PbPrimaryHeader extends StatelessWidget {
 
   final bool shellMobile;
   final bool shellIconOnly;
+  final bool showRoomSwitcher;
   final String projectValue;
   final String roomValue;
   final bool projectSelected;
   final bool roomSelected;
   final bool avatarSelected;
+  final String avatarInitials;
   final Widget? projectMenu;
   final Widget? roomMenu;
   final Widget? avatarMenu;
+  final Widget? trailingActions;
   final VoidCallback? onProjectPressed;
   final VoidCallback? onRoomPressed;
   final VoidCallback? onAvatarPressed;
@@ -49,9 +55,7 @@ class PbPrimaryHeader extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
           decoration: BoxDecoration(
             color: PbColors.surfacePanel.withValues(alpha: 0.86),
-            border: const Border(
-              bottom: BorderSide(color: PbColors.borderSoft),
-            ),
+            border: const Border(bottom: BorderSide(color: PbColors.borderSoft)),
           ),
           child: shellMobile
               ? Column(
@@ -69,12 +73,7 @@ class PbPrimaryHeader extends StatelessWidget {
                     const SizedBox(height: 12),
                     PbMenuAnchor(
                       panel: roomMenu,
-                      child: PbSwitcherField(
-                        eyebrow: 'Room',
-                        value: roomValue,
-                        selected: roomSelected,
-                        onPressed: onRoomPressed,
-                      ),
+                      child: PbSwitcherField(eyebrow: 'Room', value: roomValue, selected: roomSelected, onPressed: onRoomPressed),
                     ),
                   ],
                 )
@@ -82,6 +81,7 @@ class PbPrimaryHeader extends StatelessWidget {
                   children: [
                     _SwitcherRow(
                       gap: switcherGap,
+                      showRoomSwitcher: showRoomSwitcher,
                       projectValue: projectValue,
                       roomValue: roomValue,
                       projectSelected: projectSelected,
@@ -92,36 +92,32 @@ class PbPrimaryHeader extends StatelessWidget {
                       onRoomPressed: onRoomPressed,
                     ),
                     const Spacer(),
-                    Row(
-                      children: [
-                        PbButton(
-                          iconAssetName: 'user-plus',
-                          label: 'Share',
-                          variant: PbButtonVariant.primary,
-                          iconOnly: shellIconOnly,
+                    trailingActions ??
+                        Row(
+                          children: [
+                            PbButton(iconAssetName: 'user-plus', label: 'Share', variant: PbButtonVariant.primary, iconOnly: shellIconOnly),
+                            SizedBox(width: actionGap),
+                            PbMenuAnchor(
+                              placement: PbMenuAnchorPlacement.bottomRight,
+                              gap: shellIconOnly ? 10 : 21,
+                              triggerHeight: shellIconOnly ? 48 : 34,
+                              panel: avatarMenu,
+                              child: shellIconOnly
+                                  ? PbAvatarButton(
+                                      initials: avatarInitials,
+                                      avatarSize: 48,
+                                      selected: avatarSelected,
+                                      onPressed: onAvatarPressed,
+                                    )
+                                  : PbAvatarButton(
+                                      initials: avatarInitials,
+                                      avatarSize: 40,
+                                      selected: avatarSelected,
+                                      onPressed: onAvatarPressed,
+                                    ),
+                            ),
+                          ],
                         ),
-                        SizedBox(width: actionGap),
-                        PbMenuAnchor(
-                          placement: PbMenuAnchorPlacement.bottomRight,
-                          gap: shellIconOnly ? 10 : 21,
-                          triggerHeight: shellIconOnly ? 48 : 34,
-                          panel: avatarMenu,
-                          child: shellIconOnly
-                              ? PbAvatarButton(
-                                  initials: 'JP',
-                                  avatarSize: 48,
-                                  selected: avatarSelected,
-                                  onPressed: onAvatarPressed,
-                                )
-                              : PbAvatarButton(
-                                  initials: 'JP',
-                                  avatarSize: 40,
-                                  selected: avatarSelected,
-                                  onPressed: onAvatarPressed,
-                                ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
         );
@@ -133,6 +129,7 @@ class PbPrimaryHeader extends StatelessWidget {
 class _SwitcherRow extends StatelessWidget {
   const _SwitcherRow({
     required this.gap,
+    required this.showRoomSwitcher,
     required this.projectValue,
     required this.roomValue,
     required this.projectSelected,
@@ -144,6 +141,7 @@ class _SwitcherRow extends StatelessWidget {
   });
 
   final double gap;
+  final bool showRoomSwitcher;
   final String projectValue;
   final String roomValue;
   final bool projectSelected;
@@ -161,27 +159,19 @@ class _SwitcherRow extends StatelessWidget {
           width: 196,
           child: PbMenuAnchor(
             panel: projectMenu,
-            child: PbSwitcherField(
-              eyebrow: 'Project',
-              value: projectValue,
-              selected: projectSelected,
-              onPressed: onProjectPressed,
-            ),
+            child: PbSwitcherField(eyebrow: 'Project', value: projectValue, selected: projectSelected, onPressed: onProjectPressed),
           ),
         ),
-        SizedBox(width: gap),
-        SizedBox(
-          width: 196,
-          child: PbMenuAnchor(
-            panel: roomMenu,
-            child: PbSwitcherField(
-              eyebrow: 'Room',
-              value: roomValue,
-              selected: roomSelected,
-              onPressed: onRoomPressed,
+        if (showRoomSwitcher) ...[
+          SizedBox(width: gap),
+          SizedBox(
+            width: 196,
+            child: PbMenuAnchor(
+              panel: roomMenu,
+              child: PbSwitcherField(eyebrow: 'Room', value: roomValue, selected: roomSelected, onPressed: onRoomPressed),
             ),
           ),
-        ),
+        ],
       ],
     );
   }

@@ -7,17 +7,18 @@ import 'pb_menu_list.dart';
 import 'pb_menu_option.dart';
 
 class PbSwitcherMenuItem {
-  const PbSwitcherMenuItem({required this.title, this.selected = false});
+  const PbSwitcherMenuItem({required this.title, this.selected = false, this.onPressed});
 
   final String title;
   final bool selected;
+  final VoidCallback? onPressed;
 }
 
 class PbSwitcherMenu extends StatelessWidget {
   const PbSwitcherMenu({
     super.key,
     required this.items,
-    required this.actionLabel,
+    this.actionLabel,
     this.filterPlaceholder = 'Filter...',
     this.filterController,
     this.onFilterChanged,
@@ -29,7 +30,7 @@ class PbSwitcherMenu extends StatelessWidget {
   });
 
   final List<PbSwitcherMenuItem> items;
-  final String actionLabel;
+  final String? actionLabel;
   final String filterPlaceholder;
   final TextEditingController? filterController;
   final ValueChanged<String>? onFilterChanged;
@@ -41,35 +42,34 @@ class PbSwitcherMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resolvedActionLabel = actionLabel?.trim();
+    final showAction = resolvedActionLabel != null && resolvedActionLabel.isNotEmpty;
+
     return SizedBox(
       width: width,
       child: PbMenuCard(
         child: Column(
           children: [
-            PbMenuFilterField(
-              placeholder: filterPlaceholder,
-              controller: filterController,
-              onChanged: onFilterChanged,
-            ),
+            PbMenuFilterField(placeholder: filterPlaceholder, controller: filterController, onChanged: onFilterChanged),
             PbMenuList(
               children: [
                 for (final item in items)
                   PbMenuOption(
                     title: item.title,
                     singleLine: true,
-                    trailingIconAssetName: item.selected
-                        ? 'circle-check-big'
-                        : null,
-                    onPressed: () => onItemPressed?.call(item.title),
+                    trailingIconAssetName: item.selected ? 'circle-check-big' : null,
+                    onPressed: item.onPressed ?? () => onItemPressed?.call(item.title),
                   ),
-                const PbMenuDivider(),
-                PbMenuOption(
-                  title: actionLabel,
-                  singleLine: true,
-                  leadingIconAssetName: actionLeadingIconAssetName,
-                  leadingIconTurns: actionLeadingIconTurns,
-                  onPressed: onActionPressed,
-                ),
+                if (showAction) ...[
+                  const PbMenuDivider(),
+                  PbMenuOption(
+                    title: resolvedActionLabel,
+                    singleLine: true,
+                    leadingIconAssetName: actionLeadingIconAssetName,
+                    leadingIconTurns: actionLeadingIconTurns,
+                    onPressed: onActionPressed,
+                  ),
+                ],
               ],
             ),
           ],

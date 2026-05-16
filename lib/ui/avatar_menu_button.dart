@@ -122,6 +122,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
   }
 
   void _signOut() {
+    resetPowerboardsUiMode();
     MeshagentAuth.current.signOut();
     localStorage.clear();
 
@@ -239,6 +240,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
   Widget build(BuildContext context) {
     return SignalBuilder(
       builder: (context, _) {
+        syncPowerboardsUiModeFromStorage();
         final currentUiMode = powerboardsUiModeSignal.value;
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
         final user = MeshagentAuth.current.getUser();

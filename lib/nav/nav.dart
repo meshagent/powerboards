@@ -8,6 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart' as fs;
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:localstorage/localstorage.dart';
+import 'package:meshagent_flutter_auth/meshagent_auth.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/desktop_sidetray_toggle.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -22,6 +23,7 @@ import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/settings/mobile_room_list_intent.dart';
 import 'package:powerboards/settings/selected_room.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/nav/switch_project_dialog.dart';
 import 'package:powerboards/ui/empty_states.dart';
@@ -35,6 +37,7 @@ import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:meshagent/meshagent.dart';
 
 import 'chrome_visibility.dart';
+import 'desktop_preview_nav_header.dart';
 import 'nav_rooms.dart';
 
 const double _navBarMinWidth = 280.0;
@@ -212,11 +215,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   String filter = "";
   final _mobileRoomListProjectId = Signal<String?>(null);
   final _mobileRoomListSelectedRoom = Signal<String?>(null);
-  late final rooms = Resource<List<Room>>(() async {
-    final projectId = widget.projectId ?? localStorage.getItem("lastProjectId");
-
-    return projectId == null ? [] : await listMeshagentRooms(projectId);
-  });
+  late Resource<List<Room>> rooms;
   late final mobileRoomListRooms = Resource<List<Room>>(() async {
     final projectId = _effectiveMobileRoomListProjectId;
 
@@ -251,6 +250,14 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
   String? get _effectiveMobileRoomListSelectedRoom {
     return _mobileRoomListSelectedRoom.value ?? widget.selectedRoom;
+  }
+
+  Resource<List<Room>> _createRoomsResource() {
+    return Resource<List<Room>>(() async {
+      final projectId = widget.projectId ?? localStorage.getItem("lastProjectId");
+
+      return projectId == null ? [] : await listMeshagentRooms(projectId);
+    });
   }
 
   void _resetMobileRoomListBrowsingState() {
@@ -410,7 +417,14 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       _mobileNavigationDirection = 1;
     }
 
-    if (oldWidget.projectId != widget.projectId || oldWidget.selectedRoom != widget.selectedRoom) {
+    if (oldWidget.projectId != widget.projectId) {
+      rooms.dispose();
+      rooms = _createRoomsResource();
+      rooms.refresh();
+      if (_mobileRoomListProjectId.value == null) {
+        mobileRoomListRooms.refresh();
+      }
+    } else if (oldWidget.selectedRoom != widget.selectedRoom) {
       rooms.refresh();
       if (_mobileRoomListProjectId.value == null) {
         mobileRoomListRooms.refresh();
@@ -483,9 +497,62 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     }
   }
 
+  Future<void> _createRoomFromPreviewHeader(String projectId) async {
+    final room = await createMeshagentRoom(context, projectId);
+    if (!mounted || room == null) {
+      return;
+    }
+
+    await rooms.refresh();
+
+    if (!mounted) {
+      return;
+    }
+
+    context.go("/p/${fromUUID(projectId)}/r/${room.name}");
+  }
+
+  void _signOutFromPreviewHeader() {
+    resetPowerboardsUiMode();
+    MeshagentAuth.current.signOut();
+    localStorage.clear();
+
+    final returnUrl = MeshagentConfig.current?.appUrl;
+    final signOutUrl = MeshagentConfig.current!.serverUrl
+        .resolve("/signout")
+        .replace(queryParameters: {if (returnUrl != null) "return_url": returnUrl.toString()});
+
+    if (kIsWeb) {
+      launchUrl(signOutUrl, webOnlyWindowName: "_self");
+    } else {
+      context.go("/");
+    }
+  }
+
+  void _goToAccountsFromPreviewHeader() {
+    final billingUrl = MeshagentConfig.current?.billingUrl;
+    if (billingUrl == null) {
+      return;
+    }
+
+    if (widget.projectId == null) {
+      launchUrl(billingUrl);
+      return;
+    }
+
+    final pid = fromUUID(widget.projectId!);
+    launchUrl(billingUrl.replace(path: "/p/$pid"));
+  }
+
+  void _toggleUiModeFromPreviewHeader() {
+    final nextMode = powerboardsUiModeSignal.value == PowerboardsUiMode.legacy ? PowerboardsUiMode.v1 : PowerboardsUiMode.legacy;
+    setPowerboardsUiMode(nextMode);
+  }
+
   @override
   void initState() {
     super.initState();
+    rooms = _createRoomsResource();
 
     _mobileRoomListCloseAnimationController = AnimationController(vsync: this, duration: powerboardsMobileTransitionDuration)
       ..addListener(() {
@@ -560,7 +627,53 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     return KeyedSubtree(key: key, child: widget.child);
   }
 
-  Widget desktopView(BuildContext context, ProjectRole? userRole, bool balanceLow, bool canCreateRooms) {
+  Widget desktopView(
+    BuildContext context,
+    ProjectRole? userRole,
+    bool balanceLow,
+    bool canCreateRooms, {
+    required bool useDesktopUiPreview,
+  }) {
+    if (useDesktopUiPreview) {
+      final user = MeshagentAuth.current.getUser();
+      final avatarInitials = userAvatarInitialsFromEmail((user?['email'] as String?) ?? '');
+      final avatarEmail = ((user?['email'] as String?) ?? '').trim();
+      final roomItems = rooms.state.value ?? const <Room>[];
+
+      return Column(
+        key: const ValueKey('desktop-ui-preview-v1'),
+        children: [
+          DesktopPreviewNavHeader(
+            projects: projects.state.value ?? const <Project>[],
+            rooms: roomItems,
+            projectId: widget.projectId,
+            selectedRoom: widget.selectedRoom,
+            canCreateRooms: canCreateRooms,
+            avatarInitials: avatarInitials,
+            avatarEmail: avatarEmail,
+            onCreateProject: onCreateProject,
+            onSelectProject: (project) {
+              localStorage.setItem("lastProjectId", project.id);
+              context.go("/p/${fromUUID(project.id)}");
+            },
+            onSelectRoom: (room) {
+              final projectId = widget.projectId;
+              if (projectId == null) {
+                return;
+              }
+
+              context.go("/p/${fromUUID(projectId)}/r/${room.name}");
+            },
+            onCreateRoom: widget.projectId == null || !canCreateRooms ? null : () => _createRoomFromPreviewHeader(widget.projectId!),
+            onManageAccountPressed: kIsWeb && userRole == ProjectRole.admin ? _goToAccountsFromPreviewHeader : null,
+            onPreviewTogglePressed: _toggleUiModeFromPreviewHeader,
+            onLogoutPressed: _signOutFromPreviewHeader,
+          ),
+          Expanded(child: desktopBody(context, userRole, balanceLow, canCreateRooms)),
+        ],
+      );
+    }
+
     final cs = ShadTheme.of(context).colorScheme;
     final navController = Controller.ofType<NavController>(context);
     final chromeVisible = ChromeVisibilityModel.of(context).visible;
@@ -571,6 +684,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     const animationCurve = Curves.easeInOutCubicEmphasized;
 
     return LayoutBuilder(
+      key: const ValueKey('desktop-ui-legacy'),
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         if (!width.isFinite || width <= 0) {
@@ -1263,6 +1377,23 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     return forbiddenView(context);
   }
 
+  Widget _previewModeEmptyProjectsView(BuildContext context) {
+    return SafeArea(
+      minimum: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Spacer(),
+              UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+            ],
+          ),
+          Expanded(child: EmptyProjectsState(onCreateProject: onCreateProject)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
@@ -1272,12 +1403,17 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
     return SignalBuilder(
       builder: (context, _) {
+        syncPowerboardsUiModeFromStorage();
+
         if (!projects.state.isReady || !role.state.isReady) {
           return useMobileNav ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
         }
 
+        final uiMode = powerboardsUiModeSignal.value;
+        final useDesktopUiPreview = uiMode == PowerboardsUiMode.v1 && !useMobileNav;
+
         if (projects.state.value!.isEmpty) {
-          return EmptyProjectsState(onCreateProject: onCreateProject);
+          return useDesktopUiPreview ? _previewModeEmptyProjectsView(context) : EmptyProjectsState(onCreateProject: onCreateProject);
         }
 
         final userRole = role.state.value;
@@ -1308,7 +1444,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                   color: cs.background,
                   child: useMobileNav
                       ? mobileView(context, userRole, balanceLow, canCreateRooms)
-                      : desktopView(context, userRole, balanceLow, canCreateRooms),
+                      : desktopView(context, userRole, balanceLow, canCreateRooms, useDesktopUiPreview: useDesktopUiPreview),
                 ),
               ),
             ],
