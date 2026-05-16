@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 class PreviewRoomRailMenuBridge extends ChangeNotifier {
+  bool showDestinations = true;
+  bool showMore = true;
   bool showRename = true;
   bool showPermissions = true;
   bool showManageAgents = false;
@@ -19,6 +21,8 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
   VoidCallback? onShutdownPressed;
 
   void configure({
+    required bool showDestinations,
+    required bool showMore,
     required bool showRename,
     required bool showPermissions,
     required bool showManageAgents,
@@ -44,6 +48,8 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
     this.onShutdownPressed = onShutdownPressed;
 
     final changed =
+        this.showDestinations != showDestinations ||
+        this.showMore != showMore ||
         this.showRename != showRename ||
         this.showPermissions != showPermissions ||
         this.showManageAgents != showManageAgents ||
@@ -53,6 +59,8 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
         this.showShutdown != showShutdown ||
         this.consoleLabel != consoleLabel;
 
+    this.showDestinations = showDestinations;
+    this.showMore = showMore;
     this.showRename = showRename;
     this.showPermissions = showPermissions;
     this.showManageAgents = showManageAgents;

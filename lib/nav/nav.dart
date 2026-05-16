@@ -452,6 +452,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
     if (oldWidget.projectId != widget.projectId || oldWidget.selectedRoom != widget.selectedRoom) {
       _closePreviewRailMoreMenu();
+      exposePreviewRoomRailMenuBridge(null);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
           return;
@@ -744,7 +745,8 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       final avatarInitials = userAvatarInitialsFromEmail((user?['email'] as String?) ?? '');
       final avatarEmail = ((user?['email'] as String?) ?? '').trim();
       final roomItems = _roomsResourceProjectId == widget.projectId ? (rooms.state.value ?? const <Room>[]) : const <Room>[];
-      final showPreviewRail = widget.selectedRoom != null;
+      final hasSelectedRoom = (widget.selectedRoom?.trim().isNotEmpty) ?? false;
+      final showPreviewRail = widget.projectId != null;
       final previewPane = _currentPreviewRoomPane(context);
       const railWidth = 64.0;
 
@@ -758,8 +760,23 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                 valueListenable: previewRoomRailMenuBridgeListenable,
                 builder: (context, bridge, _) {
                   if (bridge == null) {
+                    final showDestinations = hasSelectedRoom;
+                    final showMore = hasSelectedRoom;
+                    final destinationsEnabled = showDestinations && !balanceLow;
+                    final moreEnabled = showMore && !balanceLow && bridge != null;
+                    if (!moreEnabled && _previewRailMoreMenuOpen) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          _closePreviewRailMoreMenu();
+                        }
+                      });
+                    }
                     return PbSideRail(
                       showRecent: false,
+                      showDestinations: showDestinations,
+                      destinationsEnabled: destinationsEnabled,
+                      showMore: showMore,
+                      moreEnabled: moreEnabled,
                       selectedDestination: switch (previewPane) {
                         'files' => PbSideRailDestination.files,
                         'meeting' => PbSideRailDestination.meet,
@@ -775,21 +792,39 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
                   return ListenableBuilder(
                     listenable: bridge,
-                    builder: (context, _) => PbSideRail(
-                      showRecent: false,
-                      selectedDestination: switch (previewPane) {
-                        'files' => PbSideRailDestination.files,
-                        'meeting' => PbSideRailDestination.meet,
-                        _ => PbSideRailDestination.chat,
-                      },
-                      onChatPressed: () => _goToPreviewRoomPane(context, 'chat'),
-                      onFilesPressed: () => _goToPreviewRoomPane(context, 'files'),
-                      onMeetPressed: () => _goToPreviewRoomPane(context, 'meeting'),
-                      moreSelected: _previewRailMoreMenuOpen,
-                      moreMenu: _previewRailMoreMenuOpen ? _buildPreviewRailMenu(bridge) : null,
-                      onMorePressed: _togglePreviewRailMoreMenu,
-                      onMoreDismissRequested: _closePreviewRailMoreMenu,
-                    ),
+                    builder: (context, _) {
+                      final showDestinations = balanceLow ? hasSelectedRoom : bridge.showDestinations;
+                      final showMore = balanceLow ? hasSelectedRoom : bridge.showMore;
+                      final destinationsEnabled = showDestinations && !balanceLow;
+                      final moreEnabled = showMore && !balanceLow;
+                      if (!moreEnabled && _previewRailMoreMenuOpen) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (mounted) {
+                            _closePreviewRailMoreMenu();
+                          }
+                        });
+                      }
+
+                      return PbSideRail(
+                        showRecent: false,
+                        showDestinations: showDestinations,
+                        destinationsEnabled: destinationsEnabled,
+                        showMore: showMore,
+                        moreEnabled: moreEnabled,
+                        selectedDestination: switch (previewPane) {
+                          'files' => PbSideRailDestination.files,
+                          'meeting' => PbSideRailDestination.meet,
+                          _ => PbSideRailDestination.chat,
+                        },
+                        onChatPressed: () => _goToPreviewRoomPane(context, 'chat'),
+                        onFilesPressed: () => _goToPreviewRoomPane(context, 'files'),
+                        onMeetPressed: () => _goToPreviewRoomPane(context, 'meeting'),
+                        moreSelected: moreEnabled && _previewRailMoreMenuOpen,
+                        moreMenu: moreEnabled && _previewRailMoreMenuOpen ? _buildPreviewRailMenu(bridge) : null,
+                        onMorePressed: moreEnabled ? _togglePreviewRailMoreMenu : null,
+                        onMoreDismissRequested: _closePreviewRailMoreMenu,
+                      );
+                    },
                   );
                 },
               ),

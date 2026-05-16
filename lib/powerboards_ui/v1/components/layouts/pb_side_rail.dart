@@ -13,6 +13,10 @@ class PbSideRail extends StatelessWidget {
   const PbSideRail({
     super.key,
     this.showRecent = true,
+    this.showDestinations = true,
+    this.destinationsEnabled = true,
+    this.showMore = true,
+    this.moreEnabled = true,
     this.selectedDestination = PbSideRailDestination.chat,
     this.onRecentPressed,
     this.onChatPressed,
@@ -29,6 +33,10 @@ class PbSideRail extends StatelessWidget {
   });
 
   final bool showRecent;
+  final bool showDestinations;
+  final bool destinationsEnabled;
+  final bool showMore;
+  final bool moreEnabled;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
   final VoidCallback? onChatPressed;
@@ -62,6 +70,10 @@ class PbSideRail extends StatelessWidget {
           child: mobile
               ? _MobileRail(
                   showRecent: showRecent,
+                  showDestinations: showDestinations,
+                  destinationsEnabled: destinationsEnabled,
+                  showMore: showMore,
+                  moreEnabled: moreEnabled,
                   selectedDestination: selectedDestination,
                   onRecentPressed: onRecentPressed,
                   onChatPressed: onChatPressed,
@@ -78,6 +90,10 @@ class PbSideRail extends StatelessWidget {
                 )
               : _DesktopRail(
                   showRecent: showRecent,
+                  showDestinations: showDestinations,
+                  destinationsEnabled: destinationsEnabled,
+                  showMore: showMore,
+                  moreEnabled: moreEnabled,
                   selectedDestination: selectedDestination,
                   onRecentPressed: onRecentPressed,
                   onChatPressed: onChatPressed,
@@ -97,6 +113,10 @@ class PbSideRail extends StatelessWidget {
 class _DesktopRail extends StatelessWidget {
   const _DesktopRail({
     required this.showRecent,
+    required this.showDestinations,
+    required this.destinationsEnabled,
+    required this.showMore,
+    required this.moreEnabled,
     required this.selectedDestination,
     required this.onRecentPressed,
     required this.onChatPressed,
@@ -109,6 +129,10 @@ class _DesktopRail extends StatelessWidget {
   });
 
   final bool showRecent;
+  final bool showDestinations;
+  final bool destinationsEnabled;
+  final bool showMore;
+  final bool moreEnabled;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
   final VoidCallback? onChatPressed;
@@ -129,6 +153,10 @@ class _DesktopRail extends StatelessWidget {
           vertical: true,
           showLabels: true,
           showRecent: showRecent,
+          showDestinations: showDestinations,
+          destinationsEnabled: destinationsEnabled,
+          showMore: showMore,
+          moreEnabled: moreEnabled,
           selectedDestination: selectedDestination,
           onRecentPressed: onRecentPressed,
           onChatPressed: onChatPressed,
@@ -149,6 +177,10 @@ class _MobileRail extends StatelessWidget {
 
   const _MobileRail({
     required this.showRecent,
+    required this.showDestinations,
+    required this.destinationsEnabled,
+    required this.showMore,
+    required this.moreEnabled,
     required this.selectedDestination,
     required this.onRecentPressed,
     required this.onChatPressed,
@@ -165,6 +197,10 @@ class _MobileRail extends StatelessWidget {
   });
 
   final bool showRecent;
+  final bool showDestinations;
+  final bool destinationsEnabled;
+  final bool showMore;
+  final bool moreEnabled;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
   final VoidCallback? onChatPressed;
@@ -192,6 +228,10 @@ class _MobileRail extends StatelessWidget {
             vertical: false,
             showLabels: false,
             showRecent: showRecent,
+            showDestinations: showDestinations,
+            destinationsEnabled: destinationsEnabled,
+            showMore: showMore,
+            moreEnabled: moreEnabled,
             selectedDestination: selectedDestination,
             onRecentPressed: onRecentPressed,
             onChatPressed: onChatPressed,
@@ -254,6 +294,10 @@ class _RailNav extends StatelessWidget {
     required this.vertical,
     required this.showLabels,
     required this.showRecent,
+    required this.showDestinations,
+    required this.destinationsEnabled,
+    required this.showMore,
+    required this.moreEnabled,
     required this.selectedDestination,
     this.onRecentPressed,
     this.onChatPressed,
@@ -268,6 +312,10 @@ class _RailNav extends StatelessWidget {
   final bool vertical;
   final bool showLabels;
   final bool showRecent;
+  final bool showDestinations;
+  final bool destinationsEnabled;
+  final bool showMore;
+  final bool moreEnabled;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
   final VoidCallback? onChatPressed;
@@ -286,31 +334,46 @@ class _RailNav extends StatelessWidget {
           label: 'Recent',
           iconAssetName: 'history',
           destination: PbSideRailDestination.recent,
-          active: selectedDestination == PbSideRailDestination.recent,
-          onPressed: onRecentPressed,
+          active: destinationsEnabled && selectedDestination == PbSideRailDestination.recent,
+          enabled: destinationsEnabled,
+          onPressed: destinationsEnabled ? onRecentPressed : null,
         ),
-      _RailItemData(
-        label: 'Chat',
-        iconAssetName: 'messages-square',
-        destination: PbSideRailDestination.chat,
-        active: selectedDestination == PbSideRailDestination.chat,
-        onPressed: onChatPressed,
-      ),
-      _RailItemData(
-        label: 'Files',
-        iconAssetName: 'folder',
-        destination: PbSideRailDestination.files,
-        active: selectedDestination == PbSideRailDestination.files,
-        onPressed: onFilesPressed,
-      ),
-      _RailItemData(
-        label: 'Meet',
-        iconAssetName: 'video',
-        destination: PbSideRailDestination.meet,
-        active: selectedDestination == PbSideRailDestination.meet,
-        onPressed: onMeetPressed,
-      ),
-      _RailItemData(label: 'More', iconAssetName: 'ellipsis', active: false, menuOpen: moreSelected, onPressed: onMorePressed),
+      if (showDestinations)
+        _RailItemData(
+          label: 'Chat',
+          iconAssetName: 'messages-square',
+          destination: PbSideRailDestination.chat,
+          active: destinationsEnabled && selectedDestination == PbSideRailDestination.chat,
+          enabled: destinationsEnabled,
+          onPressed: destinationsEnabled ? onChatPressed : null,
+        ),
+      if (showDestinations)
+        _RailItemData(
+          label: 'Files',
+          iconAssetName: 'folder',
+          destination: PbSideRailDestination.files,
+          active: destinationsEnabled && selectedDestination == PbSideRailDestination.files,
+          enabled: destinationsEnabled,
+          onPressed: destinationsEnabled ? onFilesPressed : null,
+        ),
+      if (showDestinations)
+        _RailItemData(
+          label: 'Meet',
+          iconAssetName: 'video',
+          destination: PbSideRailDestination.meet,
+          active: destinationsEnabled && selectedDestination == PbSideRailDestination.meet,
+          enabled: destinationsEnabled,
+          onPressed: destinationsEnabled ? onMeetPressed : null,
+        ),
+      if (showMore)
+        _RailItemData(
+          label: 'More',
+          iconAssetName: 'ellipsis',
+          active: false,
+          enabled: moreEnabled,
+          menuOpen: moreSelected,
+          onPressed: moreEnabled ? onMorePressed : null,
+        ),
     ];
 
     final children = items
@@ -319,9 +382,10 @@ class _RailNav extends StatelessWidget {
             label: item.label,
             iconAssetName: item.iconAssetName,
             active: item.active,
+            enabled: item.enabled,
             showLabel: showLabels,
             menuOpen: item.menuOpen,
-            menuPanel: item.label == 'More' ? moreMenu : null,
+            menuPanel: item.label == 'More' && item.enabled ? moreMenu : null,
             onPressed: item.onPressed,
             onDismissRequested: item.label == 'More' ? onMoreDismissRequested : null,
             menuGap: item.label == 'More' && !vertical ? 12 : 4,
@@ -363,6 +427,7 @@ class _RailItem extends StatelessWidget {
     required this.label,
     required this.iconAssetName,
     required this.active,
+    required this.enabled,
     required this.showLabel,
     this.menuOpen = false,
     this.menuPanel,
@@ -375,6 +440,7 @@ class _RailItem extends StatelessWidget {
   final String label;
   final String iconAssetName;
   final bool active;
+  final bool enabled;
   final bool showLabel;
   final bool menuOpen;
   final Widget? menuPanel;
@@ -385,6 +451,7 @@ class _RailItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final labelColor = active ? PbColors.textInverse : const Color(0xBDF8FAFC);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -397,13 +464,17 @@ class _RailItem extends StatelessWidget {
           child: PbIconButton(
             iconAssetName: iconAssetName,
             variant: active ? PbRailIconButtonVariant.selected : PbRailIconButtonVariant.outlineInverse,
+            enabled: enabled,
             menuOpen: menuOpen,
             onPressed: onPressed,
           ),
         ),
         if (showLabel) ...[
           const SizedBox(height: 6),
-          Text(label, style: PowerboardsTypography.railLabel.copyWith(color: active ? PbColors.textInverse : const Color(0xBDF8FAFC))),
+          Opacity(
+            opacity: enabled ? 1 : 0.5,
+            child: Text(label, style: PowerboardsTypography.railLabel.copyWith(color: labelColor)),
+          ),
         ],
       ],
     );
@@ -415,6 +486,7 @@ class _RailItemData {
     required this.label,
     required this.iconAssetName,
     required this.active,
+    required this.enabled,
     this.destination,
     this.menuOpen = false,
     this.onPressed,
@@ -423,6 +495,7 @@ class _RailItemData {
   final String label;
   final String iconAssetName;
   final bool active;
+  final bool enabled;
   final PbSideRailDestination? destination;
   final bool menuOpen;
   final VoidCallback? onPressed;

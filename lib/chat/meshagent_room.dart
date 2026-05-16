@@ -1996,6 +1996,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     _previewRoomRailMenuBridge.configure(
+      showDestinations: true,
+      showMore: true,
       showRename: true,
       showPermissions: true,
       showManageAgents: isOwner.state.value == true,

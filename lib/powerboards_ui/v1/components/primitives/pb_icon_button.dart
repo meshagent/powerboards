@@ -12,6 +12,7 @@ class PbIconButton extends StatefulWidget {
     required this.variant,
     this.compact = true,
     this.menuOpen = false,
+    this.enabled = true,
     this.onPressed,
   });
 
@@ -19,6 +20,7 @@ class PbIconButton extends StatefulWidget {
   final PbRailIconButtonVariant variant;
   final bool compact;
   final bool menuOpen;
+  final bool enabled;
   final VoidCallback? onPressed;
 
   @override
@@ -32,6 +34,7 @@ class _PbIconButtonState extends State<PbIconButton> {
   bool get _isSelected => widget.variant == PbRailIconButtonVariant.selected;
   bool get _isMenuOpen => widget.menuOpen && !_isSelected;
   bool get _lifted => (_hovered || _isMenuOpen) && !_pressed && !_isSelected;
+  bool get _interactive => widget.enabled && widget.onPressed != null;
 
   @override
   Widget build(BuildContext context) {
@@ -52,64 +55,51 @@ class _PbIconButtonState extends State<PbIconButton> {
         ? const Color.fromARGB(15, 248, 250, 252)
         : Colors.transparent;
     final boxShadow = _isSelected
-        ? const [
-            BoxShadow(
-              color: Color.fromRGBO(15, 23, 42, 0.22),
-              blurRadius: 24,
-              offset: Offset(0, 10),
-            ),
-          ]
+        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.22), blurRadius: 24, offset: Offset(0, 10))]
         : _pressed
-        ? const [
-            BoxShadow(
-              color: Color.fromRGBO(15, 23, 42, 0.18),
-              blurRadius: 2,
-              offset: Offset(0, 1),
-            ),
-          ]
+        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.18), blurRadius: 2, offset: Offset(0, 1))]
         : (_lifted || _isMenuOpen)
-        ? const [
-            BoxShadow(
-              color: Color.fromRGBO(15, 23, 42, 0.12),
-              blurRadius: 30,
-              offset: Offset(0, 14),
-            ),
-          ]
+        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 30, offset: Offset(0, 14))]
         : null;
 
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
+      cursor: _interactive ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
       onExit: (_) => setState(() {
         _hovered = false;
         _pressed = false;
       }),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) {
-          setState(() => _pressed = false);
-          widget.onPressed?.call();
-        },
-        onTapCancel: () => setState(() => _pressed = false),
-        child: Transform.translate(
-          offset: Offset(0, _lifted ? -1 : 0),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            curve: Curves.easeOut,
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(radius),
-              color: backgroundColor,
-              border: Border.all(color: borderColor),
-              boxShadow: boxShadow,
-            ),
-            alignment: Alignment.center,
-            child: PbSvgIcon(
-              assetName: widget.iconAssetName,
-              size: widget.compact ? 21 : 22,
-              color: const Color.fromARGB(240, 248, 250, 252),
+        onTapDown: _interactive ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: _interactive
+            ? (_) {
+                setState(() => _pressed = false);
+                widget.onPressed?.call();
+              }
+            : null,
+        onTapCancel: _interactive ? () => setState(() => _pressed = false) : null,
+        child: Opacity(
+          opacity: widget.enabled ? 1 : 0.5,
+          child: Transform.translate(
+            offset: Offset(0, _lifted ? -1 : 0),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(radius),
+                color: backgroundColor,
+                border: Border.all(color: borderColor),
+                boxShadow: boxShadow,
+              ),
+              alignment: Alignment.center,
+              child: PbSvgIcon(
+                assetName: widget.iconAssetName,
+                size: widget.compact ? 21 : 22,
+                color: const Color.fromARGB(240, 248, 250, 252),
+              ),
             ),
           ),
         ),
