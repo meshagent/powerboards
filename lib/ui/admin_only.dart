@@ -24,7 +24,7 @@ class _AdminOnlyState extends State<AdminOnly> {
 
     _role = Resource<ProjectRole?>(() async {
       final client = getMeshagentClient();
-      return await client.getProjectRole(widget.projectId);
+      return (await client.getProjectRole(widget.projectId)).role;
     });
   }
 

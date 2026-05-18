@@ -112,7 +112,7 @@ class _DocumentPane extends State<DocumentPane> {
 
   Widget _meshagentPreview() {
     if (widget.path.startsWith("dataset://")) {
-      return DatasetChatThread(key: ValueKey('${widget.path}:$_reload'), path: widget.path, room: widget.room, openFile: _open);
+      return RoomDatasetChatThread(key: ValueKey('${widget.path}:$_reload'), path: widget.path, room: widget.room, openFile: _open);
     }
 
     final ext = _ext(widget.path);
