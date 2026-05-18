@@ -185,7 +185,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   }
 
   late final isBalanceLowRes = Resource<bool>(() => isBalanceLow(widget.projectId));
-  late final role = Resource(() async {
+  late final role = Resource<ProjectRole?>(() async {
     if (widget.projectId == null) {
       return null;
     }
@@ -193,7 +193,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     final client = getMeshagentClient();
 
     try {
-      return await client.getProjectRole(widget.projectId!);
+      return (await client.getProjectRole(widget.projectId!)).role;
     } on ForbiddenException {
       return ProjectRole.none;
     }

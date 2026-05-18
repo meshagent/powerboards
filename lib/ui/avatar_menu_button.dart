@@ -92,7 +92,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
 
     final client = getMeshagentClient();
 
-    return client.getProjectRole(pid);
+    return (await client.getProjectRole(pid)).role;
   });
 
   @override
