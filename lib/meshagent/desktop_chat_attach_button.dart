@@ -60,14 +60,14 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
     return widget.showMcpConnectors && normalizedAgentName != null && normalizedAgentName.isNotEmpty;
   }
 
-  Future<String> _resolveImportedPath(String requestedPath) async {
+  Future<String> _resolveImportedPath({required RoomClient destinationRoom, required String requestedPath}) async {
     String candidate = requestedPath.split('/').last;
     final dotIndex = candidate.lastIndexOf('.');
     final stem = dotIndex > 0 ? candidate.substring(0, dotIndex) : candidate;
     final extension = dotIndex > 0 ? candidate.substring(dotIndex) : '';
 
     for (var i = 1; ; i++) {
-      final candidateExists = await widget.controller.room.storage.exists(candidate);
+      final candidateExists = await destinationRoom.storage.exists(candidate);
       if (!candidateExists) {
         return candidate;
       }
@@ -77,16 +77,11 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
     }
   }
 
-  Future<String> _importFile({required RoomClient sourceRoom, required String sourcePath}) async {
+  Future<String> _importFile({required RoomClient sourceRoom, required RoomClient destinationRoom, required String sourcePath}) async {
     final content = await sourceRoom.storage.download(sourcePath);
-    final destinationPath = await _resolveImportedPath(sourcePath);
+    final destinationPath = await _resolveImportedPath(destinationRoom: destinationRoom, requestedPath: sourcePath);
 
-    await widget.controller.room.storage.uploadStream(
-      destinationPath,
-      Stream.value(content.data),
-      overwrite: true,
-      size: content.data.length,
-    );
+    await destinationRoom.storage.uploadStream(destinationPath, Stream.value(content.data), overwrite: true, size: content.data.length);
 
     return destinationPath;
   }
@@ -137,9 +132,14 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
   }
 
   Future<void> _onBrowseFiles() async {
-    final currentRoomName = widget.controller.room.roomName?.trim() ?? '';
+    final destinationRoom = widget.controller.room;
+    if (destinationRoom == null) {
+      return;
+    }
+
+    final currentRoomName = destinationRoom.roomName?.trim() ?? '';
     String selectedRoomName = currentRoomName;
-    RoomClient selectedRoomClient = widget.controller.room;
+    RoomClient selectedRoomClient = destinationRoom;
     bool resolvingRoom = false;
     bool resolveError = false;
     List<String> picked = [];
@@ -210,7 +210,7 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
 
                             RoomClient? nextRoomClient;
                             if (value == currentRoomName) {
-                              nextRoomClient = widget.controller.room;
+                              nextRoomClient = destinationRoom;
                             } else {
                               try {
                                 nextRoomClient = await widget.connectRoomClient!(value);
@@ -225,7 +225,7 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
                               return;
                             }
 
-                            if (!identical(widget.controller.room, selectedRoomClient) && !identical(nextRoomClient, selectedRoomClient)) {
+                            if (!identical(destinationRoom, selectedRoomClient) && !identical(nextRoomClient, selectedRoomClient)) {
                               selectedRoomClient.dispose();
                             }
 
@@ -275,16 +275,16 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
       }
 
       for (final filePath in selectedFiles) {
-        if (identical(selectedRoomClient, widget.controller.room)) {
+        if (identical(selectedRoomClient, destinationRoom)) {
           widget.controller.attachFile(filePath);
           continue;
         }
 
-        final importedPath = await _importFile(sourceRoom: selectedRoomClient, sourcePath: filePath);
+        final importedPath = await _importFile(sourceRoom: selectedRoomClient, destinationRoom: destinationRoom, sourcePath: filePath);
         widget.controller.attachFile(importedPath);
       }
     } finally {
-      if (!identical(selectedRoomClient, widget.controller.room)) {
+      if (!identical(selectedRoomClient, destinationRoom)) {
         selectedRoomClient.dispose();
       }
     }
@@ -316,11 +316,12 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
               onPressed: _onSelectAttachment,
               child: const Text('Upload a file...'),
             ),
-            ShadContextMenuItem(
-              leading: const Icon(LucideIcons.download),
-              onPressed: _onBrowseFiles,
-              child: const Text('Add from room...'),
-            ),
+            if (widget.controller.room != null)
+              ShadContextMenuItem(
+                leading: const Icon(LucideIcons.download),
+                onPressed: _onBrowseFiles,
+                child: const Text('Add from room...'),
+              ),
             if (showMcpMenuItem)
               ShadContextMenuItem(
                 leading: const Icon(LucideIcons.plug),
