@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 
@@ -164,11 +164,41 @@ Future<Map<String, dynamic>?> createMeshagentProject(BuildContext context) async
   return null;
 }
 
+const int _roomGrantPageSize = 100;
+
+typedef RoomGrantPageLoader = Future<RoomGrantsPage> Function(int limit, int offset);
+
+@visibleForTesting
+Future<List<Room>> collectMeshagentRoomsFromGrantPages(RoomGrantPageLoader loadPage, {int pageSize = _roomGrantPageSize}) async {
+  if (pageSize <= 0) {
+    throw ArgumentError.value(pageSize, 'pageSize', 'Must be greater than zero.');
+  }
+
+  final roomsByName = <String, Room>{};
+  var offset = 0;
+
+  while (true) {
+    final page = await loadPage(pageSize, offset);
+
+    for (final grant in page.roomGrants) {
+      roomsByName.putIfAbsent(grant.room.name, () => grant.room);
+    }
+
+    // Keep paging until the server returns a short page; the reported total
+    // has not always been enough to trust as the lone termination condition.
+    if (page.roomGrants.length < pageSize) {
+      return roomsByName.values.toList(growable: false);
+    }
+
+    offset += page.roomGrants.length;
+  }
+}
+
 Future<List<Room>> listMeshagentRooms(String projectId) async {
   final client = getMeshagentClient();
-  final grants = await client.listRoomGrantsByUser(projectId: projectId, userId: "me");
-
-  return grants.map((g) => g.room).toList();
+  return collectMeshagentRoomsFromGrantPages((limit, offset) {
+    return client.listRoomGrantsByUserPage(projectId: projectId, userId: "me", limit: limit, offset: offset);
+  });
 }
 
 Future<bool> waitForMeshagentRoomConnectionReady(
