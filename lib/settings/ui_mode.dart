@@ -74,6 +74,17 @@ PowerboardsUiMode getConfiguredPowerboardsUiMode() {
   return getQueryParameterPowerboardsUiMode() ?? getDefaultPowerboardsUiMode() ?? PowerboardsUiMode.legacy;
 }
 
+bool emailCanPreviewPowerboardsUiMode(String? email) {
+  final normalized = email?.trim().toLowerCase();
+  return normalized != null && normalized.endsWith('@timu.com');
+}
+
+bool currentUserCanPreviewPowerboardsUiMode() {
+  final user = MeshagentAuth.current.getUser();
+  final email = user?['email'];
+  return email is String && emailCanPreviewPowerboardsUiMode(email);
+}
+
 PowerboardsUiMode getEffectivePowerboardsUiMode() {
   if (hasStoredPowerboardsUiMode()) {
     return getStoredPowerboardsUiMode();

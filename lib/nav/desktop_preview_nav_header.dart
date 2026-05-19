@@ -1,9 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/nav/nav_rooms.dart';
 import 'package:powerboards/powerboards_ui/active.dart';
-import 'dart:async';
+import 'package:powerboards/settings/ui_mode.dart';
 
 class DesktopPreviewNavHeader extends StatefulWidget {
   const DesktopPreviewNavHeader({
@@ -231,12 +233,14 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
   }
 
   Widget _buildAccountMenu() {
+    final canPreviewNewUi = emailCanPreviewPowerboardsUiMode(widget.avatarEmail);
+
     return PbAccountMenu(
       initials: widget.avatarInitials,
       email: widget.avatarEmail,
       onManageAccountPressed: widget.onManageAccountPressed,
-      previewTitle: 'End new UI Preview',
-      onPreviewPressed: () => _closeMenuAndRun(widget.onPreviewTogglePressed),
+      previewTitle: canPreviewNewUi ? 'End new UI Preview' : null,
+      onPreviewPressed: canPreviewNewUi ? () => _closeMenuAndRun(widget.onPreviewTogglePressed) : null,
       onLogoutPressed: widget.onLogoutPressed == null ? null : () => _closeMenuAndRun(widget.onLogoutPressed),
     );
   }

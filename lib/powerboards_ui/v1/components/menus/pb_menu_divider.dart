@@ -7,10 +7,6 @@ class PbMenuDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 1,
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      color: PbColors.borderSoft,
-    );
+    return Container(height: 1, margin: const EdgeInsets.symmetric(vertical: 4), color: PbColors.borderSoft);
   }
 }

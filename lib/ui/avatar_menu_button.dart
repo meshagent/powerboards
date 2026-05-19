@@ -251,6 +251,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
         final initials = userAvatarInitialsFromEmail((user?["email"] as String?) ?? "");
         final displayName = ((user?["name"] as String?) ?? (user?["full_name"] as String?) ?? "").trim();
         final email = ((user?["email"] as String?) ?? "").trim();
+        final canPreviewNewUi = emailCanPreviewPowerboardsUiMode(email);
         final title = displayName.isNotEmpty ? displayName : (email.isNotEmpty ? email : "Account");
 
         final projectsState = widget.projects.state;
@@ -271,7 +272,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
             icon: LucideIcons.package,
             onPressed: _switchProject,
           ),
-          if (!isMobile)
+          if (!isMobile && canPreviewNewUi)
             AppMenuEntry(
               title: currentUiMode == PowerboardsUiMode.v1 ? "End new UI Preview" : "Preview new UI",
               description: currentUiMode == PowerboardsUiMode.v1 ? "Switch back" : "In-development",

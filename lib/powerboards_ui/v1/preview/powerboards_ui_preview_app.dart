@@ -8,11 +8,6 @@ class PowerboardsUiPreviewApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Powerboards UI Preview',
-      theme: pbTheme(),
-      home: const PreviewPage(),
-    );
+    return MaterialApp(debugShowCheckedModeBanner: false, title: 'Powerboards UI Preview', theme: pbTheme(), home: const PreviewPage());
   }
 }

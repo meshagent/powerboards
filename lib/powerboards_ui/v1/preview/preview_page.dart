@@ -18,8 +18,7 @@ class PreviewPage extends StatefulWidget {
 
 class _PreviewPageState extends State<PreviewPage> {
   _PreviewOpenMenu _openMenu = _PreviewOpenMenu.none;
-  final TextEditingController _projectFilterController =
-      TextEditingController();
+  final TextEditingController _projectFilterController = TextEditingController();
   final TextEditingController _roomFilterController = TextEditingController();
 
   final List<String> _projects = ['ACME', 'Powerboards'];
@@ -53,15 +52,8 @@ class _PreviewPageState extends State<PreviewPage> {
   List<PbSwitcherMenuItem> get _projectItems {
     final query = _projectFilterController.text.trim().toLowerCase();
     return _projects
-        .where(
-          (project) => query.isEmpty || project.toLowerCase().contains(query),
-        )
-        .map(
-          (project) => PbSwitcherMenuItem(
-            title: project,
-            selected: project == _selectedProject,
-          ),
-        )
+        .where((project) => query.isEmpty || project.toLowerCase().contains(query))
+        .map((project) => PbSwitcherMenuItem(title: project, selected: project == _selectedProject))
         .toList();
   }
 
@@ -69,10 +61,7 @@ class _PreviewPageState extends State<PreviewPage> {
     final query = _roomFilterController.text.trim().toLowerCase();
     return _rooms
         .where((room) => query.isEmpty || room.toLowerCase().contains(query))
-        .map(
-          (room) =>
-              PbSwitcherMenuItem(title: room, selected: room == _selectedRoom),
-        )
+        .map((room) => PbSwitcherMenuItem(title: room, selected: room == _selectedRoom))
         .toList();
   }
 
@@ -104,11 +93,7 @@ class _PreviewPageState extends State<PreviewPage> {
   }
 
   Future<void> _createProject() async {
-    final name = await _promptForName(
-      title: 'New Project',
-      initialValue: '',
-      confirmLabel: 'Create',
-    );
+    final name = await _promptForName(title: 'New Project', initialValue: '', confirmLabel: 'Create');
     if (name == null || name.isEmpty) {
       return;
     }
@@ -124,11 +109,7 @@ class _PreviewPageState extends State<PreviewPage> {
   }
 
   Future<void> _createRoom() async {
-    final name = await _promptForName(
-      title: 'New Room',
-      initialValue: '',
-      confirmLabel: 'Create',
-    );
+    final name = await _promptForName(title: 'New Room', initialValue: '', confirmLabel: 'Create');
     if (name == null || name.isEmpty) {
       return;
     }
@@ -144,11 +125,7 @@ class _PreviewPageState extends State<PreviewPage> {
   }
 
   Future<void> _renameRoom() async {
-    final nextName = await _promptForName(
-      title: 'Rename Room',
-      initialValue: _selectedRoom,
-      confirmLabel: 'Rename',
-    );
+    final nextName = await _promptForName(title: 'Rename Room', initialValue: _selectedRoom, confirmLabel: 'Rename');
     if (nextName == null || nextName.isEmpty || nextName == _selectedRoom) {
       return;
     }
@@ -185,11 +162,7 @@ class _PreviewPageState extends State<PreviewPage> {
     });
   }
 
-  Future<String?> _promptForName({
-    required String title,
-    required String initialValue,
-    required String confirmLabel,
-  }) async {
+  Future<String?> _promptForName({required String title, required String initialValue, required String confirmLabel}) async {
     final controller = TextEditingController(text: initialValue);
     final value = await showDialog<String>(
       context: context,
@@ -203,15 +176,8 @@ class _PreviewPageState extends State<PreviewPage> {
             onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.of(context).pop(controller.text.trim()),
-              child: Text(confirmLabel),
-            ),
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.of(context).pop(controller.text.trim()), child: Text(confirmLabel)),
           ],
         );
       },
@@ -282,19 +248,13 @@ class _PreviewPageState extends State<PreviewPage> {
                   height: 84,
                   child: PbSideRail(
                     moreSelected: _openMenu == _PreviewOpenMenu.more,
-                    moreMenu: _openMenu == _PreviewOpenMenu.more
-                        ? _buildRoomOptionsMenu(mobileMenuWidth)
-                        : null,
+                    moreMenu: _openMenu == _PreviewOpenMenu.more ? _buildRoomOptionsMenu(mobileMenuWidth) : null,
                     onMorePressed: () => _toggleMenu(_PreviewOpenMenu.more),
                     accountSelected: _openMenu == _PreviewOpenMenu.account,
                     accountMenu: _openMenu == _PreviewOpenMenu.account
-                        ? PbAccountMenu(
-                            onManageAccountPressed: _closeMenus,
-                            onLogoutPressed: _closeMenus,
-                          )
+                        ? PbAccountMenu(onManageAccountPressed: _closeMenus, onLogoutPressed: _closeMenus)
                         : null,
-                    onAccountPressed: () =>
-                        _toggleMenu(_PreviewOpenMenu.account),
+                    onAccountPressed: () => _toggleMenu(_PreviewOpenMenu.account),
                   ),
                 ),
                 PbPrimaryHeader(
@@ -304,21 +264,13 @@ class _PreviewPageState extends State<PreviewPage> {
                   roomValue: _selectedRoom,
                   projectSelected: _openMenu == _PreviewOpenMenu.project,
                   roomSelected: _openMenu == _PreviewOpenMenu.room,
-                  projectMenu: _openMenu == _PreviewOpenMenu.project
-                      ? _buildProjectMenu(mobileMenuWidth)
-                      : null,
-                  roomMenu: _openMenu == _PreviewOpenMenu.room
-                      ? _buildRoomMenu(mobileMenuWidth)
-                      : null,
+                  projectMenu: _openMenu == _PreviewOpenMenu.project ? _buildProjectMenu(mobileMenuWidth) : null,
+                  roomMenu: _openMenu == _PreviewOpenMenu.room ? _buildRoomMenu(mobileMenuWidth) : null,
                   onProjectPressed: () => _toggleMenu(_PreviewOpenMenu.project),
                   onRoomPressed: () => _toggleMenu(_PreviewOpenMenu.room),
                 ),
                 Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: _closeMenus,
-                    child: const _PreviewWorkspaceBody(),
-                  ),
+                  child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _closeMenus, child: const _PreviewWorkspaceBody()),
                 ),
               ],
             );
@@ -354,29 +306,17 @@ class _PreviewPageState extends State<PreviewPage> {
                             shellIconOnly: iconOnly,
                             projectValue: _selectedProject,
                             roomValue: _selectedRoom,
-                            projectSelected:
-                                _openMenu == _PreviewOpenMenu.project,
+                            projectSelected: _openMenu == _PreviewOpenMenu.project,
                             roomSelected: _openMenu == _PreviewOpenMenu.room,
-                            avatarSelected:
-                                _openMenu == _PreviewOpenMenu.account,
-                            projectMenu: _openMenu == _PreviewOpenMenu.project
-                                ? _buildProjectMenu(240)
-                                : null,
-                            roomMenu: _openMenu == _PreviewOpenMenu.room
-                                ? _buildRoomMenu(240)
-                                : null,
+                            avatarSelected: _openMenu == _PreviewOpenMenu.account,
+                            projectMenu: _openMenu == _PreviewOpenMenu.project ? _buildProjectMenu(240) : null,
+                            roomMenu: _openMenu == _PreviewOpenMenu.room ? _buildRoomMenu(240) : null,
                             avatarMenu: _openMenu == _PreviewOpenMenu.account
-                                ? PbAccountMenu(
-                                    onManageAccountPressed: _closeMenus,
-                                    onLogoutPressed: _closeMenus,
-                                  )
+                                ? PbAccountMenu(onManageAccountPressed: _closeMenus, onLogoutPressed: _closeMenus)
                                 : null,
-                            onProjectPressed: () =>
-                                _toggleMenu(_PreviewOpenMenu.project),
-                            onRoomPressed: () =>
-                                _toggleMenu(_PreviewOpenMenu.room),
-                            onAvatarPressed: () =>
-                                _toggleMenu(_PreviewOpenMenu.account),
+                            onProjectPressed: () => _toggleMenu(_PreviewOpenMenu.project),
+                            onRoomPressed: () => _toggleMenu(_PreviewOpenMenu.room),
+                            onAvatarPressed: () => _toggleMenu(_PreviewOpenMenu.account),
                           ),
                         ),
                       ],
@@ -392,9 +332,7 @@ class _PreviewPageState extends State<PreviewPage> {
                   width: railWidth,
                   child: PbSideRail(
                     moreSelected: _openMenu == _PreviewOpenMenu.more,
-                    moreMenu: _openMenu == _PreviewOpenMenu.more
-                        ? _buildRoomOptionsMenu(240)
-                        : null,
+                    moreMenu: _openMenu == _PreviewOpenMenu.more ? _buildRoomOptionsMenu(240) : null,
                     onMorePressed: () => _toggleMenu(_PreviewOpenMenu.more),
                   ),
                 ),

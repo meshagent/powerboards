@@ -14,8 +14,7 @@ class PbMenuList extends StatelessWidget {
       children: [
         for (var i = 0; i < children.length; i++) ...[
           children[i],
-          if (i != children.length - 1 && children[i] is! PbMenuDivider)
-            SizedBox(height: gap),
+          if (i != children.length - 1 && children[i] is! PbMenuDivider) SizedBox(height: gap),
         ],
       ],
     );

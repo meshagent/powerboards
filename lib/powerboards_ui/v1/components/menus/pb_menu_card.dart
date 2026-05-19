@@ -21,13 +21,7 @@ class PbMenuCard extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color.fromRGBO(15, 23, 42, 0.14),
-            blurRadius: 40,
-            offset: Offset(0, 18),
-          ),
-        ],
+        boxShadow: const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.14), blurRadius: 40, offset: Offset(0, 18))],
       ),
       child: child,
     );
