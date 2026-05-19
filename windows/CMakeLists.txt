@@ -10,7 +10,7 @@ if(NOT APP_FLAVOR)
 endif()
 
 if(APP_FLAVOR STREQUAL "life")
-  set(BINARY_NAME "powerboards_life")
+  set(BINARY_NAME "powerboards-life")
   set(APP_DISPLAY_NAME "Powerboards Life")
 elseif(APP_FLAVOR STREQUAL "com")
   set(BINARY_NAME "powerboards")
