@@ -55,6 +55,15 @@ class _AppContextMenuButtonState extends State<AppContextMenuButton> {
   late final ShadContextMenuController controller = ShadContextMenuController();
   late final ScrollController menuScrollController = ScrollController();
 
+  void _runEntryAction(VoidCallback? action) {
+    if (action == null) {
+      return;
+    }
+
+    controller.hide();
+    WidgetsBinding.instance.endOfFrame.then((_) => action());
+  }
+
   @override
   void dispose() {
     menuScrollController.dispose();
@@ -64,7 +73,20 @@ class _AppContextMenuButtonState extends State<AppContextMenuButton> {
 
   @override
   Widget build(BuildContext context) {
-    final items = widget.compact ? _buildCompactItems(widget.entries) : _buildItems(widget.entries, radius: widget.radius);
+    final entries = widget.entries
+        .map(
+          (entry) => AppMenuEntry(
+            title: entry.title,
+            description: entry.description,
+            onPressed: entry.onPressed == null ? null : () => _runEntryAction(entry.onPressed),
+            icon: entry.icon,
+            leading: entry.leading,
+            selected: entry.selected,
+            separatorBefore: entry.separatorBefore,
+          ),
+        )
+        .toList(growable: false);
+    final items = widget.compact ? _buildCompactItems(entries) : _buildItems(entries, radius: widget.radius);
     final menuContent = _buildMenuContent(items, maxMenuHeight: widget.maxMenuHeight, scrollController: menuScrollController);
 
     return AdaptiveShadContextMenu(
