@@ -13,5 +13,8 @@ PRODUCT_BUNDLE_IDENTIFIER = com.timu.powerboards-prototype;
 // URL scheme used for native OAuth callbacks.
 URL_SCHEME = powerboards-life
 
+// Public EdDSA key used by Sparkle to verify macOS updates.
+SPARKLE_PUBLIC_ED_KEY = LFAHFAQ2Ea6+Qax49SsbQKzK1hOF6pQJgxui00upPZM=
+
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2023 com.example. All rights reserved.

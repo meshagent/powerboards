@@ -20,6 +20,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/conversation_descriptor.dart' as ma;
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
+import 'package:meshagent_flutter_shadcn/secrets/keychain_dialog.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
@@ -47,11 +48,15 @@ import 'package:powerboards/meshagent/wait_for_agent_participant_builder.dart';
 import 'package:powerboards/nav/leave_meeting.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/nav/nav_rooms.dart';
+import 'package:powerboards/nav/delete_room_dialog.dart';
+import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
 import 'package:powerboards/settings/selected_room.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
@@ -1057,6 +1062,7 @@ class _ResolvedAgentSelection {
 class MeshagentRoomState extends State<MeshagentRoom> {
   final ResizableSplitViewController _meetingSplitViewController = ResizableSplitViewController();
   final FileManagerViewController _filesHeaderController = FileManagerViewController();
+  final PreviewRoomRailMenuBridge _previewRoomRailMenuBridge = PreviewRoomRailMenuBridge();
 
   final videoChatKey = GlobalKey<room.VideoChatConnectionState>();
   final meetingViewKey = GlobalKey();
@@ -1203,6 +1209,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   @override
   void dispose() {
+    if (identical(previewRoomRailMenuBridgeListenable.value, _previewRoomRailMenuBridge)) {
+      exposePreviewRoomRailMenuBridge(null);
+    }
     _meetingSplitViewController.dispose();
     _roomStatusSubscription?.cancel();
     _roomStatusSubscription = null;
@@ -1815,6 +1824,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   List<Widget> _meetingPaneActions(BuildContext context, {required bool canViewStorageAllowed}) {
     final meetingSessionActive = _isMeetingSessionActive(context);
     final activeMeetingPane = meetingSessionActive && controller.inMeeting;
+    final useDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
     return [
       if (canViewStorageAllowed)
         PaneHeaderActionItem(
@@ -1829,12 +1839,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         overflowOnCompact: activeMeetingPane,
         child: MeetButton(controller: controller, meetingSessionActive: meetingSessionActive, onPressed: () => _toggleMeetingPane(context)),
       ),
-      PaneHeaderActionItem(
-        expandedWidth: desktopPaneHeaderInviteButtonWidth,
-        compactWidth: desktopPaneHeaderCompactButtonWidth,
-        overflowOnCompact: !activeMeetingPane,
-        child: InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
-      ),
+      if (activeMeetingPane)
+        PaneHeaderActionItem(
+          expandedWidth: desktopPaneHeaderInviteButtonWidth,
+          compactWidth: desktopPaneHeaderCompactButtonWidth,
+          overflowOnCompact: false,
+          child: InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+        ),
       PaneHeaderActionItem(
         expandedWidth: desktopPaneHeaderOptionsButtonWidth,
         compactWidth: desktopPaneHeaderOptionsButtonWidth,
@@ -1853,11 +1864,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           onShowMeet: () => _toggleMeetingPane(context),
         ),
       ),
-      PaneHeaderActionItem(
-        expandedWidth: desktopPaneHeaderAvatarButtonWidth,
-        compactWidth: desktopPaneHeaderAvatarButtonWidth,
-        child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
-      ),
+      if (!useDesktopUiPreview)
+        PaneHeaderActionItem(
+          expandedWidth: desktopPaneHeaderAvatarButtonWidth,
+          compactWidth: desktopPaneHeaderAvatarButtonWidth,
+          child: UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+        ),
     ];
   }
 
@@ -1865,6 +1877,158 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     await showManageAgentsSurface(context: context, projectId: widget.projectId, room: widget.room);
     if (!mounted) return;
     services.refresh();
+  }
+
+  Future<void> _renameCurrentRoomFromPreviewRail() async {
+    final currentName = _roomDisplayName;
+    final newName = await showRenameRoomDialog(context, initialValue: currentName);
+    if (!mounted || newName == null || newName == currentName) {
+      return;
+    }
+
+    final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
+    if (!mounted) {
+      return;
+    }
+
+    await getMeshagentClient().updateRoom(
+      projectId: widget.projectId,
+      roomId: room.id,
+      name: room.name,
+      metadata: {"displayName": newName},
+    );
+    if (!mounted) {
+      return;
+    }
+
+    refreshPreviewRoomList();
+    setState(() {
+      _resolvedRoomDisplayName = newName;
+    });
+  }
+
+  Future<void> _openCurrentRoomPermissionsFromPreviewRail() async {
+    final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
+    if (!mounted) {
+      return;
+    }
+
+    await showUpdateRoomPermsDialog(context, projectId: widget.projectId, room: room);
+  }
+
+  Future<void> _deleteCurrentRoomFromPreviewRail() async {
+    final confirmed =
+        await showDeleteRoomDialog(
+          context,
+          title: 'Delete room',
+          description: 'Are you sure you want to delete the room "$_roomDisplayName"? This action cannot be undone.',
+          confirmText: 'Delete',
+          destructive: true,
+        ) ??
+        false;
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
+    if (!mounted) {
+      return;
+    }
+
+    await getMeshagentClient().deleteRoom(projectId: widget.projectId, roomId: room.id);
+    if (!mounted) {
+      return;
+    }
+
+    refreshPreviewRoomList();
+    clearLastSelectedRoom(widget.projectId);
+    context.go('/p/${fromUUID(widget.projectId)}');
+  }
+
+  void _openRoomKeychainFromPreviewRail() {
+    showShadDialog<void>(
+      context: context,
+      builder: (dialogContext) => KeychainDialog(room: widget.room),
+    );
+  }
+
+  Future<void> _shutdownRoomFromPreviewRail() async {
+    final toaster = ShadToaster.of(context);
+    final sessionId = widget.room.sessionId;
+    if (sessionId == null || sessionId.isEmpty) {
+      toaster.show(ShadToast.destructive(description: const Text("Unable to shut down room: session id is not available yet.")));
+      return;
+    }
+
+    final confirmed = await showDeleteRoomDialog(
+      context,
+      title: "Shutdown room?",
+      description: "This will stop the current room session for everyone connected.",
+      confirmText: "Shutdown",
+      destructive: true,
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    try {
+      toaster.show(const ShadToast(title: Text("Room shutdown requested")));
+      widget.room.dispose();
+      await getMeshagentClient().terminate(projectId: widget.projectId, sessionId: sessionId);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      toaster.show(ShadToast.destructive(description: Text("Unable to shut down room: $error")));
+    }
+  }
+
+  void _syncPreviewRoomRailMenuBridge(BuildContext context) {
+    final shouldExpose = !ResponsiveBreakpoints.of(context).isMobile && powerboardsUsesDesktopUiPreview(context);
+    if (!shouldExpose) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (identical(previewRoomRailMenuBridgeListenable.value, _previewRoomRailMenuBridge)) {
+          exposePreviewRoomRailMenuBridge(null);
+        }
+      });
+      return;
+    }
+
+    _previewRoomRailMenuBridge.configure(
+      showDestinations: true,
+      showMore: true,
+      showRename: true,
+      showPermissions: true,
+      showManageAgents: isOwner.state.value == true,
+      showDeleteRoom: true,
+      showKeychain: true,
+      showConsoleToggle: canViewDeveloperLogs.state.value == true,
+      showShutdown: isOwner.state.value == true,
+      consoleLabel: controller.isDebugShown ? 'Hide console' : 'Show console',
+      onRenamePressed: () => unawaited(_renameCurrentRoomFromPreviewRail()),
+      onPermissionsPressed: () => unawaited(_openCurrentRoomPermissionsFromPreviewRail()),
+      onManageAgentsPressed: () => unawaited(showManageAgents()),
+      onDeleteRoomPressed: () => unawaited(_deleteCurrentRoomFromPreviewRail()),
+      onKeychainPressed: _openRoomKeychainFromPreviewRail,
+      onToggleConsolePressed: () {
+        if (controller.isDebugShown) {
+          controller.hideDebug();
+        } else {
+          controller.showDebug();
+        }
+        _syncPreviewRoomRailMenuBridge(context);
+      },
+      onShutdownPressed: () => unawaited(_shutdownRoomFromPreviewRail()),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      exposePreviewRoomRailMenuBridge(_previewRoomRailMenuBridge);
+    });
   }
 
   Widget _buildAgentsActionRow(BuildContext context) {
@@ -2476,21 +2640,27 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   List<Widget> _emptyRoomHeaderActions({required bool isMobile}) {
+    final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
+    if (useDesktopUiPreview) {
+      return const [];
+    }
+
     return [
       if (isMobile) BackButton(projectId: widget.projectId),
       if (!isMobile) _buildEmptyRoomNameDisplay(context),
       Spacer(),
-      InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
+      if (!useDesktopUiPreview) InviteUserButton(projectId: widget.projectId, roomName: widget.room.roomName!),
       if (!isMobile) ...[
-        RoomOptionsMenu(
-          projectId: widget.projectId,
-          room: widget.room,
-          roomController: controller,
-          isOwner: isOwner,
-          canViewDeveloperLogs: canViewDeveloperLogs,
-          boundaryContext: context,
-        ),
-        UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
+        if (!useDesktopUiPreview)
+          RoomOptionsMenu(
+            projectId: widget.projectId,
+            room: widget.room,
+            roomController: controller,
+            isOwner: isOwner,
+            canViewDeveloperLogs: canViewDeveloperLogs,
+            boundaryContext: context,
+          ),
+        if (!useDesktopUiPreview) UserAvatarMenuButton(projectId: widget.projectId, projects: widget.projects, boundaryContext: context),
       ],
     ];
   }
@@ -3029,6 +3199,44 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         ],
       ),
     );
+  }
+
+  Widget _buildDesktopPreviewRoomSection(
+    BuildContext context, {
+    required List<ServiceSpec> supported,
+    required _ResolvedAgentSelection selected,
+    required List<RemoteParticipant> participants,
+    required bool canViewStorageAllowed,
+    required bool isAdaptiveWebapp,
+  }) {
+    if (controller.inMeeting) {
+      return _buildMeeting(context, null, const [], showDesktopSidetrayToggle: false);
+    }
+
+    if (canViewStorageAllowed && controller.isFilesShown) {
+      return _buildFilesArea(context, const [], showDesktopSidetrayToggle: false);
+    }
+
+    final chatActions = <Widget>[
+      AgentsDropdown(
+        projectId: widget.projectId,
+        room: widget.room,
+        roomDisplayNameOverride: _roomDisplayName,
+        roomBreadcrumbMaxWidth: isAdaptiveWebapp ? 96 : null,
+        roomBreadcrumbEllipsisOnly: isAdaptiveWebapp,
+        showAdaptiveWebappNavOpener: isAdaptiveWebapp,
+        onRoomPressed: () => _showChatPane(context),
+        selectedService: selected.service,
+        selectedAgentRouteId: selected.routeId,
+        services: supported,
+        onOpen: services.refresh,
+        onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+        showRoomBreadcrumb: true,
+      ),
+      ParticipantsButton(participants: participants, localParticipant: widget.room.localParticipant),
+    ];
+
+    return ColoredBox(color: ShadTheme.of(context).colorScheme.card, child: _buildAgentArea(context, chatActions));
   }
 
   void _leaveMeeting() {
@@ -3699,6 +3907,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final isSmallDisplay = rb.smallerOrEqualTo("chromebook");
     final isAdaptiveWebapp = isSmallDisplay && !isMobile;
 
+    _syncPreviewRoomRailMenuBridge(context);
+
     return RoomParticipantsBuilder(
       room: widget.room,
       builder: (context, participants) {
@@ -3759,6 +3969,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             final meetingSessionActive = _isMeetingSessionActive(context);
                             final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;
                             final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
+                            final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
 
                             if (!_hasVisibleAgents(supported)) {
                               final actions = _emptyRoomHeaderActions(isMobile: isMobile);
@@ -3961,7 +4172,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   );
                                 }
 
-                                final actions = _meetingPaneActions(context, canViewStorageAllowed: canViewStorageAllowed);
+                                final actions = useDesktopUiPreview
+                                    ? const <Widget>[]
+                                    : _meetingPaneActions(context, canViewStorageAllowed: canViewStorageAllowed);
 
                                 return RoomDeveloperLogsListener(
                                   events: events,
@@ -3973,62 +4186,71 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                       ShadResizablePanel(
                                         id: "top",
                                         defaultSize: 1 - defaultDebugSize,
-                                        child: ResizableSplitView(
-                                          allowCollapse: meetingSessionActive,
-                                          minArea1Width: meetingSessionActive ? 58 : 360,
-                                          minArea2Width: 440,
-                                          preferredArea2Fraction: meetingSessionActive ? 0.75 : null,
-                                          minArea2Fraction: meetingSessionActive ? 0.5 : null,
-                                          maxArea2Fraction: null,
-                                          collapseArea1Width: meetingSessionActive ? 300 : null,
-                                          controller: _meetingSplitViewController,
-                                          onCollapsedChanged: (_) {
-                                            if (!mounted) {
-                                              return;
-                                            }
+                                        child: useDesktopUiPreview
+                                            ? _buildDesktopPreviewRoomSection(
+                                                context,
+                                                supported: supported,
+                                                selected: selected,
+                                                participants: participants,
+                                                canViewStorageAllowed: canViewStorageAllowed,
+                                                isAdaptiveWebapp: isAdaptiveWebapp,
+                                              )
+                                            : ResizableSplitView(
+                                                allowCollapse: meetingSessionActive,
+                                                minArea1Width: meetingSessionActive ? 58 : 360,
+                                                minArea2Width: 440,
+                                                preferredArea2Fraction: meetingSessionActive ? 0.75 : null,
+                                                minArea2Fraction: meetingSessionActive ? 0.5 : null,
+                                                maxArea2Fraction: null,
+                                                collapseArea1Width: meetingSessionActive ? 300 : null,
+                                                controller: _meetingSplitViewController,
+                                                onCollapsedChanged: (_) {
+                                                  if (!mounted) {
+                                                    return;
+                                                  }
 
-                                            setState(() {});
-                                          },
-                                          split: split,
-                                          area1: useLandscapePhoneMeetingPane
-                                              ? _buildMeeting(context, null, actions)
-                                              : ColoredBox(
-                                                  color: cs.card,
-                                                  child: _buildAgentArea(context, [
-                                                    if (isMobile) BackButton(projectId: widget.projectId),
+                                                  setState(() {});
+                                                },
+                                                split: split,
+                                                area1: useLandscapePhoneMeetingPane
+                                                    ? _buildMeeting(context, null, actions)
+                                                    : ColoredBox(
+                                                        color: cs.card,
+                                                        child: _buildAgentArea(context, [
+                                                          if (isMobile) BackButton(projectId: widget.projectId),
 
-                                                    AgentsDropdown(
-                                                      projectId: widget.projectId,
-                                                      room: widget.room,
-                                                      roomDisplayNameOverride: _roomDisplayName,
-                                                      roomBreadcrumbMaxWidth: split || isAdaptiveWebapp ? 96 : null,
-                                                      roomBreadcrumbEllipsisOnly: split || isAdaptiveWebapp,
-                                                      showAdaptiveWebappNavOpener: isAdaptiveWebapp,
-                                                      onRoomPressed: () => _showChatPane(context),
-                                                      selectedService: selected.service,
-                                                      selectedAgentRouteId: selected.routeId,
-                                                      services: supported,
-                                                      onOpen: services.refresh,
-                                                      onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-                                                      showRoomBreadcrumb: true,
-                                                    ),
+                                                          AgentsDropdown(
+                                                            projectId: widget.projectId,
+                                                            room: widget.room,
+                                                            roomDisplayNameOverride: _roomDisplayName,
+                                                            roomBreadcrumbMaxWidth: split || isAdaptiveWebapp ? 96 : null,
+                                                            roomBreadcrumbEllipsisOnly: split || isAdaptiveWebapp,
+                                                            showAdaptiveWebappNavOpener: isAdaptiveWebapp,
+                                                            onRoomPressed: () => _showChatPane(context),
+                                                            selectedService: selected.service,
+                                                            selectedAgentRouteId: selected.routeId,
+                                                            services: supported,
+                                                            onOpen: services.refresh,
+                                                            onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+                                                            showRoomBreadcrumb: true,
+                                                          ),
 
-                                                    ParticipantsButton(
-                                                      participants: participants,
-                                                      localParticipant: widget.room.localParticipant,
-                                                    ),
+                                                          ParticipantsButton(
+                                                            participants: participants,
+                                                            localParticipant: widget.room.localParticipant,
+                                                          ),
 
-                                                    if (!split) ...actions,
-                                                  ], showEmbeddedThreadList: !split),
-                                                ),
-                                          area2: !split
-                                              ? Container()
-                                              : filesVisible
-                                              ? _buildFilesArea(context, actions, showDesktopSidetrayToggle: false)
-                                              : controller.inMeeting
-                                              ? _buildMeeting(context, null, actions, showDesktopSidetrayToggle: false)
-                                              : _buildAgentArea(context, actions, showEmbeddedThreadList: false),
-                                        ),
+                                                          if (!split) ...actions,
+                                                        ], showEmbeddedThreadList: !split),
+                                                      ),
+                                                area2: !split
+                                                    ? Container()
+                                                    : filesVisible
+                                                    ? _buildFilesArea(context, actions, showDesktopSidetrayToggle: false)
+                                                    : controller.inMeeting
+                                                    ? _buildMeeting(context, null, actions, showDesktopSidetrayToggle: false)
+                                                    : _buildAgentArea(context, actions, showEmbeddedThreadList: false),
+                                              ),
                                       ),
 
                                       if (controller.isDebugShown)
