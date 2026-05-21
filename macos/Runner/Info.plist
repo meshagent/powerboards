@@ -49,8 +49,6 @@
 	<true/>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
-	<key>SUEnableInstallerLauncherService</key>
-	<true/>
 	<key>SUPublicEDKey</key>
 	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
 </dict>
