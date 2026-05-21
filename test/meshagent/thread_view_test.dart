@@ -162,7 +162,7 @@ ChatThreadSnapshot _emptySnapshot({bool supportsMcp = false, bool agentOnline = 
     threadStatusLinesRemoved: null,
     supportsAgentMessages: false,
     supportsMcp: supportsMcp,
-    toolkits: const <String, AgentToolkitCapabilities>{},
+    toolkits: const {},
     threadTurnId: null,
     pendingMessages: const [],
     pendingItemId: null,

@@ -14,6 +14,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   fullscreen_window
   irondash_engine_context
   livekit_client
+  meshagent_flutter_desktop_updater
   record_windows
   sentry_flutter
   share_plus
@@ -25,7 +26,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   flutter_soloud
   jni
-  pdfium_flutter
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

@@ -7,6 +7,7 @@ import 'package:flutter_portal/flutter_portal.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
+import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater.dart';
 import 'package:meshagent_flutter_shadcn/web_context_menu_manager.dart';
 import 'package:powerboards/ui/error_states.dart';
 import 'package:screenshot/screenshot.dart';
@@ -33,6 +34,8 @@ import 'ui/powerboards_adaptive_input.dart';
 import 'ui/powerboards_shad_dialog.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
+import 'updates/powerboards_desktop_update_banner.dart';
+import 'settings/ui_mode.dart';
 
 final uiRoot = GlobalKey();
 
@@ -191,6 +194,7 @@ Future<void> startApp() async {
 
   await initializeApp();
   await initLocalStorage();
+  initializePowerboardsUiMode();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -347,13 +351,20 @@ class _RootProvidersState extends State<_RootProviders> {
   final documentPlayer = GlobalKey();
   final navController = NavController();
   final meetingViewController = MeetingViewController();
+  late final desktopUpdateController = DesktopUpdateController(config: DesktopUpdateConfig.fromEnvironment());
+
+  @override
+  void initState() {
+    super.initState();
+    desktopUpdateController.startUpdateChecks();
+  }
 
   @override
   void dispose() {
-    super.dispose();
-
     documentRecorder.currentState?.dispose();
     documentPlayer.currentState?.dispose();
+    desktopUpdateController.dispose();
+    super.dispose();
   }
 
   @override
@@ -441,7 +452,9 @@ class _RootProvidersState extends State<_RootProviders> {
                   controller: navController,
                   child: ControllerProvider(
                     controller: meetingViewController,
-                    child: Portal(child: widget.child),
+                    child: Portal(
+                      child: PowerboardsDesktopUpdateBanner(controller: desktopUpdateController, child: widget.child),
+                    ),
                   ),
                 ),
               ),

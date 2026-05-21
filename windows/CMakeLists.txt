@@ -4,19 +4,19 @@ project(powerboards LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(APP_FLAVOR "$ENV{POWERBOARDS_WINDOWS_FLAVOR}")
+set(APP_FLAVOR "$ENV{WINDOWS_APP_FLAVOR}")
 if(NOT APP_FLAVOR)
   set(APP_FLAVOR "com")
 endif()
 
 if(APP_FLAVOR STREQUAL "life")
-  set(BINARY_NAME "powerboards_life")
+  set(BINARY_NAME "powerboards-life")
   set(APP_DISPLAY_NAME "Powerboards Life")
 elseif(APP_FLAVOR STREQUAL "com")
   set(BINARY_NAME "powerboards")
   set(APP_DISPLAY_NAME "Powerboards")
 else()
-  message(FATAL_ERROR "Unsupported POWERBOARDS_WINDOWS_FLAVOR: ${APP_FLAVOR}")
+  message(FATAL_ERROR "Unsupported WINDOWS_APP_FLAVOR: ${APP_FLAVOR}")
 endif()
 
 set(APP_COMPANY_NAME "Powerboards")
