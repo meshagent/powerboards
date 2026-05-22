@@ -4262,7 +4262,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                             pricing: null,
                                             events: events,
                                             room: widget.room,
-                                            shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}-esgz",
+                                            shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}",
                                           ),
                                         ),
                                     ],
