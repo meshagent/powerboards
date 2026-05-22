@@ -860,7 +860,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _downloadFile(String path) async {
-    final url = await widget.client.storage.downloadUrl(path);
+    final url = await widget.client.storage.downloadUrl(path, download: true);
     launchUrl(Uri.parse(url));
   }
 
