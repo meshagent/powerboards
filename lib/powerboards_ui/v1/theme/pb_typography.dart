@@ -5,29 +5,20 @@ import 'pb_colors.dart';
 abstract final class PowerboardsTypography {
   static const String fontFamily = 'Inter';
 
-  static const TextStyle label = TextStyle(
+  static const TextStyle h1Large = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 15,
-    height: 1.3,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -0.16,
-    color: PbColors.textPrimary,
-  );
-
-  static const TextStyle labelStrong = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 15,
-    height: 1.3,
+    fontSize: 32,
+    height: 1.1,
     fontWeight: FontWeight.w800,
-    letterSpacing: -0.18,
+    letterSpacing: 0,
     color: PbColors.textPrimary,
   );
 
-  static const TextStyle labelSmall = TextStyle(
+  static const TextStyle h1 = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 14,
-    height: 1.3,
-    fontWeight: FontWeight.w700,
+    fontSize: 22,
+    height: 1.2,
+    fontWeight: FontWeight.w800,
     letterSpacing: 0,
     color: PbColors.textPrimary,
   );
@@ -35,6 +26,15 @@ abstract final class PowerboardsTypography {
   static const TextStyle h2 = TextStyle(
     fontFamily: fontFamily,
     fontSize: 19,
+    height: 1.2,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.28,
+    color: PbColors.textPrimary,
+  );
+
+  static const TextStyle h3 = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 18,
     height: 1.2,
     fontWeight: FontWeight.w800,
     letterSpacing: 0,
@@ -50,6 +50,35 @@ abstract final class PowerboardsTypography {
     color: PbColors.textPrimary,
   );
 
+  static const TextStyle large = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 16,
+    height: 1.25,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0,
+    color: PbColors.textPrimary,
+  );
+
+  static const TextStyle label = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 15,
+    height: 1.3,
+    fontWeight: FontWeight.w800,
+    letterSpacing: 0,
+    color: PbColors.textPrimary,
+  );
+
+  static const TextStyle labelStrong = label;
+
+  static const TextStyle labelSmall = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 14,
+    height: 1.3,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0,
+    color: PbColors.textPrimary,
+  );
+
   static const TextStyle button = TextStyle(
     fontFamily: fontFamily,
     fontSize: 14,
@@ -57,6 +86,15 @@ abstract final class PowerboardsTypography {
     fontWeight: FontWeight.w700,
     letterSpacing: 0,
     color: PbColors.textPrimary,
+  );
+
+  static const TextStyle p = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 15,
+    height: 1.75,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    color: PbColors.textBody,
   );
 
   static const TextStyle meta = TextStyle(
@@ -68,12 +106,21 @@ abstract final class PowerboardsTypography {
     color: PbColors.textBody,
   );
 
+  static const TextStyle small = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 13,
+    height: 1.35,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    color: PbColors.textBody,
+  );
+
   static const TextStyle textXSmall = TextStyle(
     fontFamily: fontFamily,
     fontSize: 12.5,
     height: 1.3,
     fontWeight: FontWeight.w400,
-    letterSpacing: 0,
+    letterSpacing: -0.08,
     color: PbColors.textBody,
   );
 
@@ -86,76 +133,73 @@ abstract final class PowerboardsTypography {
     color: PbColors.textPrimary,
   );
 
-  static const TextStyle buttonPrimary = TextStyle(
+  static const TextStyle overline = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 12,
+    height: 1.3,
+    fontWeight: FontWeight.w800,
+    letterSpacing: 0,
+    color: PbColors.textPrimary,
+  );
+
+  static const TextStyle customButtonSolid = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 13,
+    height: 1.3,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    color: PbColors.textPrimary,
+  );
+
+  static const TextStyle customBrandMark = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 24,
+    height: 1,
+    fontWeight: FontWeight.w800,
+    letterSpacing: 0,
+    color: PbColors.textPrimary,
+  );
+
+  static const TextStyle customAvatarInitials = TextStyle(
     fontFamily: fontFamily,
     fontSize: 14,
     height: 1.4,
     fontWeight: FontWeight.w600,
-    letterSpacing: -0.14,
+    letterSpacing: 0,
     color: PbColors.textInverse,
   );
 
-  static const TextStyle buttonSecondary = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 14,
-    height: 1.4,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -0.20,
-    color: PbColors.textPrimary,
-  );
+  static const TextStyle buttonPrimary = button;
+  static const TextStyle buttonSecondary = button;
 
   static const TextStyle fieldEyebrow = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 12,
+    fontSize: 12.5,
     height: 1.3,
     fontWeight: FontWeight.w500,
     letterSpacing: -0.08,
     color: PbColors.textMuted,
   );
 
-  static const TextStyle fieldValue = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 15,
-    height: 1.3,
-    fontWeight: FontWeight.w800,
-    letterSpacing: -0.18,
-    color: PbColors.textPrimary,
-  );
+  static const TextStyle fieldValue = label;
 
   static const TextStyle railLabel = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 12,
+    fontSize: 12.5,
     height: 1.3,
     fontWeight: FontWeight.w400,
-    letterSpacing: 0,
-    color: Color(0xBDC9D2E1),
+    letterSpacing: -0.08,
+    color: Color(0xBDF8FAFC),
   );
 
-  static const TextStyle avatarInitials = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 14,
-    height: 1.4,
-    fontWeight: FontWeight.w600,
-    letterSpacing: -0.14,
-    color: PbColors.textInverse,
-  );
-
-  static const TextStyle customAvatarInitials = avatarInitials;
-
-  static const TextStyle menuTitle = TextStyle(
-    fontFamily: fontFamily,
-    fontSize: 14,
-    height: 1.3,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -0.12,
-    color: PbColors.textPrimary,
-  );
+  static const TextStyle avatarInitials = customAvatarInitials;
+  static const TextStyle menuTitle = labelSmall;
 
   static const TextStyle menuSubtitle = TextStyle(
     fontFamily: fontFamily,
-    fontSize: 12,
+    fontSize: 12.5,
     height: 1.3,
-    fontWeight: FontWeight.w400,
+    fontWeight: FontWeight.w500,
     letterSpacing: -0.08,
     color: PbColors.textMuted,
   );
@@ -165,7 +209,7 @@ abstract final class PowerboardsTypography {
     fontSize: 15,
     height: 1.3,
     fontWeight: FontWeight.w400,
-    letterSpacing: -0.18,
+    letterSpacing: 0,
     color: PbColors.textPrimary,
   );
 
@@ -174,7 +218,7 @@ abstract final class PowerboardsTypography {
     fontSize: 15,
     height: 1.3,
     fontWeight: FontWeight.w400,
-    letterSpacing: -0.14,
+    letterSpacing: 0,
     color: PbColors.textMuted,
   );
 }

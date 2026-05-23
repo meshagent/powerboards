@@ -103,8 +103,12 @@ class _PbMenuOptionState extends State<PbMenuOption> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: _interactive && !_disabled && widget.state == null ? (_) => setState(() => _isPointerPressed = true) : null,
-        onTapUp: _interactive && !_disabled && widget.state == null ? (_) => setState(() => _isPointerPressed = false) : null,
-        onTap: _interactive && !_disabled && widget.state == null ? widget.onPressed : null,
+        onTapUp: _interactive && !_disabled && widget.state == null
+            ? (_) {
+                setState(() => _isPointerPressed = false);
+                widget.onPressed?.call();
+              }
+            : null,
         onTapCancel: _interactive && !_disabled && widget.state == null ? () => setState(() => _isPointerPressed = false) : null,
         child: Opacity(
           opacity: _disabled ? 0.45 : 1,
@@ -146,8 +150,8 @@ class _PbMenuOptionState extends State<PbMenuOption> {
                               child: Text(
                                 widget.leadingInitials!,
                                 style: widget.singleLine
-                                    ? PowerboardsTypography.avatarInitials.copyWith(fontSize: 12)
-                                    : PowerboardsTypography.avatarInitials,
+                                    ? PowerboardsTypography.customAvatarInitials.copyWith(fontSize: 12)
+                                    : PowerboardsTypography.customAvatarInitials,
                               ),
                             ),
                     ),
@@ -162,7 +166,7 @@ class _PbMenuOptionState extends State<PbMenuOption> {
                     children: [
                       Text(
                         widget.title,
-                        style: PowerboardsTypography.menuTitle.copyWith(color: titleColor),
+                        style: PowerboardsTypography.labelSmall.copyWith(color: titleColor),
                         maxLines: 1,
                         softWrap: false,
                         overflow: _clipCopy ? TextOverflow.clip : TextOverflow.ellipsis,
@@ -171,7 +175,7 @@ class _PbMenuOptionState extends State<PbMenuOption> {
                         const SizedBox(height: 4),
                         Text(
                           widget.subtitle!,
-                          style: PowerboardsTypography.menuSubtitle.copyWith(color: subtitleColor),
+                          style: PowerboardsTypography.textXSmall.copyWith(fontWeight: FontWeight.w500, color: subtitleColor),
                           maxLines: 1,
                           softWrap: false,
                           overflow: _clipCopy ? TextOverflow.clip : TextOverflow.ellipsis,

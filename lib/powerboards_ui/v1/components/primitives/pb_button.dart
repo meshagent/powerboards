@@ -57,7 +57,7 @@ class _PbButtonState extends State<PbButton> {
               ? const [PbColors.surfaceRailActive, PbColors.surfaceActionPrimary]
               : const [PbColors.surfacePanel, PbColors.surfacePanelSoft]);
     final boxShadow = _pressed
-        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 2, offset: Offset(0, 1))]
+        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 2, offset: Offset(0, 1), blurStyle: BlurStyle.inner)]
         : _lifted
         ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 30, offset: Offset(0, 14))]
         : null;
@@ -98,22 +98,28 @@ class _PbButtonState extends State<PbButton> {
                 gradient: LinearGradient(colors: gradientColors, begin: Alignment.topCenter, end: Alignment.bottomCenter),
                 boxShadow: boxShadow,
               ),
-              child: Row(
-                mainAxisSize: widget.iconOnly ? MainAxisSize.min : MainAxisSize.max,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (widget.iconAssetName != null)
-                    PbSvgIcon(assetName: widget.iconAssetName!, size: widget.iconOnly ? 20 : widget.iconSize, color: textColor),
-                  if (!widget.iconOnly) ...[
-                    if (widget.iconAssetName != null) SizedBox(width: widget.iconGap),
-                    Text(
-                      widget.label,
-                      style: (_isPrimary ? PowerboardsTypography.buttonPrimary : PowerboardsTypography.buttonSecondary).copyWith(
-                        color: textColor,
-                      ),
-                    ),
-                  ],
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final label = Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: PowerboardsTypography.button.copyWith(color: textColor),
+                  );
+                  final shouldFlexLabel = constraints.maxWidth.isFinite && constraints.maxWidth < 180;
+
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (widget.iconAssetName != null)
+                        PbSvgIcon(assetName: widget.iconAssetName!, size: widget.iconOnly ? 20 : widget.iconSize, color: textColor),
+                      if (!widget.iconOnly && widget.iconAssetName != null) SizedBox(width: widget.iconGap),
+                      if (!widget.iconOnly) shouldFlexLabel ? Flexible(child: label) : label,
+                    ],
+                  );
+                },
               ),
             ),
           ),
