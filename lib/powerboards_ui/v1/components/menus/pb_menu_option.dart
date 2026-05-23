@@ -17,6 +17,7 @@ class PbMenuOption extends StatefulWidget {
     this.trailingIconAssetName,
     this.singleLine = false,
     this.selected = false,
+    this.selectedSurface = false,
     this.alert = false,
     this.info = false,
     this.infoSelected = false,
@@ -32,6 +33,7 @@ class PbMenuOption extends StatefulWidget {
   final String? trailingIconAssetName;
   final bool singleLine;
   final bool selected;
+  final bool selectedSurface;
   final bool alert;
   final bool info;
   final bool infoSelected;
@@ -73,12 +75,14 @@ class _PbMenuOptionState extends State<PbMenuOption> {
   Widget build(BuildContext context) {
     final backgroundColor = widget.infoSelected
         ? PbColors.surfaceAccentSoft
+        : widget.selected && widget.selectedSurface
+        ? PbColors.surfaceStateSelected
         : widget.alert && _isHoveredState
         ? PbColors.alertSoft
         : (_isHoveredState && _interactive)
         ? PbColors.surfaceAccentSoft
         : Colors.transparent;
-    final borderColor = _isPressedState ? PbColors.borderStateSelected : Colors.transparent;
+    final borderColor = _isPressedState || (widget.selected && widget.selectedSurface) ? PbColors.borderStateSelected : Colors.transparent;
     final iconColor = widget.alert ? PbColors.alert : PbColors.textPrimary;
     final titleColor = widget.alert ? PbColors.alert : PbColors.textPrimary;
     final subtitleColor = widget.alert ? PbColors.alert : PbColors.textMuted;

@@ -21,6 +21,7 @@ class PbSwitcherMenu extends StatefulWidget {
     super.key,
     required this.items,
     this.actionLabel,
+    this.emptyLabel = 'No items',
     this.filterPlaceholder = 'Filter...',
     this.filterController,
     this.onFilterChanged,
@@ -33,6 +34,7 @@ class PbSwitcherMenu extends StatefulWidget {
 
   final List<PbSwitcherMenuItem> items;
   final String? actionLabel;
+  final String emptyLabel;
   final String filterPlaceholder;
   final TextEditingController? filterController;
   final ValueChanged<String>? onFilterChanged;
@@ -106,13 +108,16 @@ class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
                               padding: const EdgeInsets.only(right: 2),
                               child: PbMenuList(
                                 children: [
-                                  for (final item in widget.items)
-                                    PbMenuOption(
-                                      title: item.title,
-                                      singleLine: true,
-                                      trailingIconAssetName: item.selected ? 'circle-check-big' : null,
-                                      onPressed: item.onPressed ?? () => widget.onItemPressed?.call(item.title),
-                                    ),
+                                  if (widget.items.isEmpty)
+                                    PbMenuOption(title: widget.emptyLabel, singleLine: true, state: PbMenuOptionVisualState.disabled)
+                                  else
+                                    for (final item in widget.items)
+                                      PbMenuOption(
+                                        title: item.title,
+                                        singleLine: true,
+                                        trailingIconAssetName: item.selected ? 'circle-check-big' : null,
+                                        onPressed: item.onPressed ?? () => widget.onItemPressed?.call(item.title),
+                                      ),
                                 ],
                               ),
                             ),

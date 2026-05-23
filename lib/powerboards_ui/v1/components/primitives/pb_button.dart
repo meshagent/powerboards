@@ -9,17 +9,27 @@ enum PbButtonVariant { primary, secondary }
 class PbButton extends StatefulWidget {
   const PbButton({
     super.key,
-    required this.iconAssetName,
+    this.iconAssetName,
     required this.label,
     required this.variant,
     this.iconOnly = false,
+    this.iconOnlySize = 48,
+    this.height = 40,
+    this.horizontalPadding = 18,
+    this.iconSize = 18,
+    this.iconGap = 10,
     this.onPressed,
   });
 
-  final String iconAssetName;
+  final String? iconAssetName;
   final String label;
   final PbButtonVariant variant;
   final bool iconOnly;
+  final double iconOnlySize;
+  final double height;
+  final double horizontalPadding;
+  final double iconSize;
+  final double iconGap;
   final VoidCallback? onPressed;
 
   @override
@@ -79,9 +89,9 @@ class _PbButtonState extends State<PbButton> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
               curve: Curves.easeOut,
-              height: widget.iconOnly ? 48 : 40,
-              constraints: BoxConstraints(minWidth: widget.iconOnly ? 48 : 0),
-              padding: EdgeInsets.symmetric(horizontal: widget.iconOnly ? 0 : 18),
+              height: widget.iconOnly ? widget.iconOnlySize : widget.height,
+              constraints: BoxConstraints(minWidth: widget.iconOnly ? widget.iconOnlySize : 0),
+              padding: EdgeInsets.symmetric(horizontal: widget.iconOnly ? 0 : widget.horizontalPadding),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(widget.iconOnly ? 14 : 10),
                 border: Border.all(color: borderColor),
@@ -92,9 +102,10 @@ class _PbButtonState extends State<PbButton> {
                 mainAxisSize: widget.iconOnly ? MainAxisSize.min : MainAxisSize.max,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  PbSvgIcon(assetName: widget.iconAssetName, size: widget.iconOnly ? 20 : 18, color: textColor),
+                  if (widget.iconAssetName != null)
+                    PbSvgIcon(assetName: widget.iconAssetName!, size: widget.iconOnly ? 20 : widget.iconSize, color: textColor),
                   if (!widget.iconOnly) ...[
-                    const SizedBox(width: 10),
+                    if (widget.iconAssetName != null) SizedBox(width: widget.iconGap),
                     Text(
                       widget.label,
                       style: (_isPrimary ? PowerboardsTypography.buttonPrimary : PowerboardsTypography.buttonSecondary).copyWith(
@@ -108,6 +119,31 @@ class _PbButtonState extends State<PbButton> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class PbTertiaryButton extends StatelessWidget {
+  const PbTertiaryButton({super.key, this.iconAssetName, required this.label, this.solid = false, this.onPressed});
+
+  const PbTertiaryButton.solid({super.key, this.iconAssetName, required this.label, this.onPressed}) : solid = true;
+
+  final String? iconAssetName;
+  final String label;
+  final bool solid;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return PbButton(
+      iconAssetName: iconAssetName,
+      label: label,
+      variant: solid ? PbButtonVariant.primary : PbButtonVariant.secondary,
+      height: 36,
+      horizontalPadding: 14,
+      iconSize: 16,
+      iconGap: 8,
+      onPressed: onPressed,
     );
   }
 }
