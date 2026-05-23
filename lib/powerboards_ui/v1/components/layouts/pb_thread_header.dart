@@ -13,6 +13,7 @@ class PbThreadHeader extends StatefulWidget {
     this.agentName = 'Assistant',
     this.threads = const ['Launch planning'],
     this.selectedThreadTitle,
+    this.threadMenuEnabled = true,
     this.onThreadSelected,
     this.onCreateThread,
     this.roomPanelExpanded = true,
@@ -25,6 +26,7 @@ class PbThreadHeader extends StatefulWidget {
   final String agentName;
   final List<String> threads;
   final String? selectedThreadTitle;
+  final bool threadMenuEnabled;
   final ValueChanged<String>? onThreadSelected;
   final VoidCallback? onCreateThread;
   final bool roomPanelExpanded;
@@ -51,6 +53,10 @@ class _PbThreadHeaderState extends State<PbThreadHeader> {
   String get _selectedThreadTitle => widget.selectedThreadTitle ?? widget.title;
 
   void _toggleThreadMenu() {
+    if (!widget.threadMenuEnabled) {
+      return;
+    }
+
     setState(() => _threadMenuOpen = !_threadMenuOpen);
     widget.onTitlePressed?.call();
   }
@@ -104,13 +110,21 @@ class _PbThreadHeaderState extends State<PbThreadHeader> {
 
   @override
   Widget build(BuildContext context) {
-    final threadTitleButton = PbMenuAnchor(
-      panel: _threadMenuOpen ? _buildThreadMenu() : null,
-      gap: 10,
-      triggerHeight: 38,
-      onDismiss: _closeThreadMenu,
-      child: _ThreadTitleButton(title: _selectedThreadTitle, selected: _threadMenuOpen, onPressed: _toggleThreadMenu),
+    final titleButton = _ThreadTitleButton(
+      title: _selectedThreadTitle,
+      selected: _threadMenuOpen,
+      menuEnabled: widget.threadMenuEnabled,
+      onPressed: widget.threadMenuEnabled ? _toggleThreadMenu : null,
     );
+    final threadTitleButton = widget.threadMenuEnabled
+        ? PbMenuAnchor(
+            panel: _threadMenuOpen ? _buildThreadMenu() : null,
+            gap: 10,
+            triggerHeight: 38,
+            onDismiss: _closeThreadMenu,
+            child: titleButton,
+          )
+        : titleButton;
 
     return Container(
       constraints: const BoxConstraints(minHeight: 76),
@@ -118,7 +132,12 @@ class _PbThreadHeaderState extends State<PbThreadHeader> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final stacked = constraints.maxWidth < 560;
-          final titleGroup = _ThreadTitleGroup(titleButton: threadTitleButton, agentName: widget.agentName, stacked: stacked);
+          final titleGroup = _ThreadTitleGroup(
+            titleButton: threadTitleButton,
+            agentName: widget.agentName,
+            showThreadPrefix: widget.threadMenuEnabled,
+            stacked: stacked,
+          );
           final actions = _ThreadHeaderActions(
             roomPanelExpanded: widget.roomPanelExpanded,
             onRoomPanelToggle: widget.onRoomPanelToggle,
@@ -156,15 +175,16 @@ class _PbThreadHeaderState extends State<PbThreadHeader> {
 }
 
 class _ThreadTitleGroup extends StatelessWidget {
-  const _ThreadTitleGroup({required this.titleButton, required this.agentName, required this.stacked});
+  const _ThreadTitleGroup({required this.titleButton, required this.agentName, required this.showThreadPrefix, required this.stacked});
 
   final Widget titleButton;
   final String agentName;
+  final bool showThreadPrefix;
   final bool stacked;
 
   @override
   Widget build(BuildContext context) {
-    final meta = _ThreadMeta(agentName: agentName);
+    final meta = _ThreadMeta(agentName: agentName, showThreadPrefix: showThreadPrefix);
 
     if (stacked) {
       return Column(
@@ -186,10 +206,11 @@ class _ThreadTitleGroup extends StatelessWidget {
 }
 
 class _ThreadTitleButton extends StatefulWidget {
-  const _ThreadTitleButton({required this.title, this.selected = false, this.onPressed});
+  const _ThreadTitleButton({required this.title, this.selected = false, this.menuEnabled = true, this.onPressed});
 
   final String title;
   final bool selected;
+  final bool menuEnabled;
   final VoidCallback? onPressed;
 
   @override
@@ -202,23 +223,28 @@ class _ThreadTitleButtonState extends State<_ThreadTitleButton> {
 
   @override
   Widget build(BuildContext context) {
-    final lifted = _hovered && !_pressed;
+    final interactive = widget.menuEnabled && widget.onPressed != null;
+    final lifted = interactive && _hovered && !_pressed;
 
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
+      cursor: interactive ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: interactive ? (_) => setState(() => _hovered = true) : null,
+      onExit: interactive
+          ? (_) => setState(() {
+              _hovered = false;
+              _pressed = false;
+            })
+          : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) {
-          setState(() => _pressed = false);
-          widget.onPressed?.call();
-        },
-        onTapCancel: () => setState(() => _pressed = false),
+        onTapDown: interactive ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: interactive
+            ? (_) {
+                setState(() => _pressed = false);
+                widget.onPressed?.call();
+              }
+            : null,
+        onTapCancel: interactive ? () => setState(() => _pressed = false) : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           curve: Curves.ease,
@@ -230,13 +256,15 @@ class _ThreadTitleButtonState extends State<_ThreadTitleButton> {
               Flexible(
                 child: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: PowerboardsTypography.h2),
               ),
-              const SizedBox(width: 6),
-              AnimatedRotation(
-                turns: widget.selected ? -0.5 : 0,
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                child: const PbSvgIcon(assetName: 'chevron-down', size: 15, color: PbColors.customBrandInk),
-              ),
+              if (widget.menuEnabled) ...[
+                const SizedBox(width: 6),
+                AnimatedRotation(
+                  turns: widget.selected ? -0.5 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  child: const PbSvgIcon(assetName: 'chevron-down', size: 15, color: PbColors.customBrandInk),
+                ),
+              ],
             ],
           ),
         ),
@@ -246,18 +274,21 @@ class _ThreadTitleButtonState extends State<_ThreadTitleButton> {
 }
 
 class _ThreadMeta extends StatelessWidget {
-  const _ThreadMeta({required this.agentName});
+  const _ThreadMeta({required this.agentName, required this.showThreadPrefix});
 
   final String agentName;
+  final bool showThreadPrefix;
 
   @override
   Widget build(BuildContext context) {
+    final label = showThreadPrefix ? 'Thread with $agentName' : 'with $agentName';
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Flexible(
           child: Text(
-            'Thread with $agentName',
+            label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             softWrap: false,

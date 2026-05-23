@@ -1765,11 +1765,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
 
       final serviceName = service.agents.firstOrNull?.name ?? service.metadata.name;
-      final threadListPath = _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: serviceName);
+      final isVoiceOnly = supportsVoice && !supportsChat;
+      final threadListPath = isVoiceOnly
+          ? null
+          : _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: serviceName);
       final supportsThreads = threadListPath != null;
       final rawServiceDescription = service.metadata.description;
       final serviceDescription = rawServiceDescription == null || rawServiceDescription.trim().isEmpty
-          ? (supportsVoice && !supportsChat ? "Voice agent" : "Chat agent")
+          ? (isVoiceOnly ? "Voice agent" : "Chat agent")
           : rawServiceDescription;
       options.add(
         _MobileRoomContextAgentOption(
@@ -1779,7 +1782,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           threadListPath: threadListPath,
           leadingIcon: supportsVoice ? LucideIcons.audioWaveform : LucideIcons.bot,
           supportsThreads: supportsThreads,
-          isVoiceOnly: supportsVoice && !supportsChat,
+          isVoiceOnly: isVoiceOnly,
         ),
       );
     }
@@ -1796,22 +1799,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       if (participantName == null) {
         continue;
       }
-      final threadListPath = _resolvedThreadListPath(
-        descriptor?.threadListPath,
-        threadDir: descriptor?.threadDir,
-        agentName: participantName,
-      );
+      final isVoiceOnly = supportsVoice && !supportsChat;
+      final threadListPath = isVoiceOnly
+          ? null
+          : _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: participantName);
       final supportsThreads = threadListPath != null;
 
       options.add(
         _MobileRoomContextAgentOption(
           routeId: developmentAgentRouteId(participantName),
           name: participantName,
-          description: supportsVoice && !supportsChat ? "Development mode voice agent" : "Development mode agent",
+          description: isVoiceOnly ? "Development mode voice agent" : "Development mode agent",
           threadListPath: threadListPath,
           leadingIcon: _developmentAgentIcon(participant),
           supportsThreads: supportsThreads,
-          isVoiceOnly: supportsVoice && !supportsChat,
+          isVoiceOnly: isVoiceOnly,
         ),
       );
     }
@@ -1867,9 +1869,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       if (agentName == null) {
         return null;
       }
-      threadListPath = _resolvedThreadListPath(descriptor.threadListPath, threadDir: descriptor.threadDir, agentName: agentName);
-      supportsThreads = threadListPath != null;
       isVoiceOnly = descriptor.isVoiceOnly == true && descriptor.isChat != true;
+      threadListPath = isVoiceOnly
+          ? null
+          : _resolvedThreadListPath(descriptor.threadListPath, threadDir: descriptor.threadDir, agentName: agentName);
+      supportsThreads = threadListPath != null;
       currentThreadLabel = isVoiceOnly ? "Audio session" : "New thread";
     } else if (selection.service != null) {
       final service = selection.service!;
@@ -1879,9 +1883,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
 
       agentName = service.agents.firstOrNull?.name ?? service.metadata.name;
-      threadListPath = _resolvedThreadListPath(descriptor.threadListPath, threadDir: descriptor.threadDir, agentName: agentName);
-      supportsThreads = threadListPath != null;
       isVoiceOnly = descriptor.isVoiceOnly == true && descriptor.isChat != true;
+      threadListPath = isVoiceOnly
+          ? null
+          : _resolvedThreadListPath(descriptor.threadListPath, threadDir: descriptor.threadDir, agentName: agentName);
+      supportsThreads = threadListPath != null;
       currentThreadLabel = isVoiceOnly ? "Audio session" : "New thread";
     }
 
@@ -3597,6 +3603,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   agentName: agentName,
                   threads: [for (final thread in threads) thread.name],
                   selectedThreadTitle: selectedThreadTitle,
+                  threadMenuEnabled: threadListPath != null,
                   roomPanelExpanded: !_desktopPreviewRoomPanelCollapsed,
                   onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
                   onThreadSelected: (threadTitle) {
@@ -3642,6 +3649,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               selectedAgentTitle: agentName,
               onAgentItemSelected: _selectDesktopPreviewAgent,
               onManageAgents: isOwner.state.value == true ? showManageAgents : null,
+              showThreadsSection: threadListPath != null,
               threads: [for (final thread in threads) thread.name],
               threadItems: threadItems,
               selectedThreadId: chatContext?.selectedThreadPath,

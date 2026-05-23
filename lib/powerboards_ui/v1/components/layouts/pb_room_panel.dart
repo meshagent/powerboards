@@ -42,6 +42,7 @@ class PbRoomPanel extends StatefulWidget {
     this.onAgentSelected,
     this.onAgentItemSelected,
     this.onManageAgents,
+    this.showThreadsSection = true,
     this.attachments,
     required this.threads,
     this.threadItems,
@@ -66,6 +67,7 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<String>? onAgentSelected;
   final ValueChanged<PbAgentListItemData>? onAgentItemSelected;
   final VoidCallback? onManageAgents;
+  final bool showThreadsSection;
   final List<PbAttachmentListItemData>? attachments;
   final List<String> threads;
   final List<PbThreadListItemData>? threadItems;
@@ -201,6 +203,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
                             onAgentSelected: widget.onAgentSelected,
                             onAgentItemSelected: widget.onAgentItemSelected,
                             onManageAgents: widget.onManageAgents,
+                            showThreadsSection: widget.showThreadsSection,
                             selectedThreadId: widget.selectedThreadId,
                             selectedThreadTitle: widget.selectedThreadTitle,
                             onThreadSelected: widget.onThreadSelected,
@@ -355,6 +358,7 @@ class _AgentsPanel extends StatefulWidget {
     this.onAgentSelected,
     this.onAgentItemSelected,
     this.onManageAgents,
+    this.showThreadsSection = true,
     this.selectedThreadId,
     required this.selectedThreadTitle,
     required this.onThreadSelected,
@@ -372,6 +376,7 @@ class _AgentsPanel extends StatefulWidget {
   final ValueChanged<String>? onAgentSelected;
   final ValueChanged<PbAgentListItemData>? onAgentItemSelected;
   final VoidCallback? onManageAgents;
+  final bool showThreadsSection;
   final String? selectedThreadId;
   final String? selectedThreadTitle;
   final ValueChanged<String> onThreadSelected;
@@ -465,6 +470,7 @@ class _AgentsPanelState extends State<_AgentsPanel> {
           panelHeight: constraints.maxHeight,
           compactLayout: compactLayout,
           onManageAgents: widget.onManageAgents,
+          showDivider: widget.showThreadsSection,
           onAgentSelected: (agent) {
             setState(() => _selectedAgentKey = agent.identity);
             widget.onAgentSelected?.call(agent.title);
@@ -472,29 +478,36 @@ class _AgentsPanelState extends State<_AgentsPanel> {
           },
           onToggleExpanded: () => setState(() => _agentsExpanded = !_agentsExpanded),
         );
-        final threadsSection = _ThreadsSection(
-          threads: widget.threads,
-          threadItems: widget.threadItems,
-          selectedThreadId: widget.selectedThreadId,
-          selectedThread: widget.selectedThreadTitle,
-          compactLayout: compactLayout,
-          onCreateThread: widget.onCreateThread,
-          onThreadSelected: widget.onThreadSelected,
-          onThreadItemSelected: widget.onThreadItemSelected,
-          onThreadRename: widget.onThreadRename,
-          onThreadDelete: widget.onThreadDelete,
-        );
+        final threadsSection = widget.showThreadsSection
+            ? _ThreadsSection(
+                threads: widget.threads,
+                threadItems: widget.threadItems,
+                selectedThreadId: widget.selectedThreadId,
+                selectedThread: widget.selectedThreadTitle,
+                compactLayout: compactLayout,
+                onCreateThread: widget.onCreateThread,
+                onThreadSelected: widget.onThreadSelected,
+                onThreadItemSelected: widget.onThreadItemSelected,
+                onThreadRename: widget.onThreadRename,
+                onThreadDelete: widget.onThreadDelete,
+              )
+            : null;
 
         if (compactLayout) {
-          return ListView(padding: EdgeInsets.zero, children: [fixedSection, const SizedBox(height: 30), threadsSection]);
+          return ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              fixedSection,
+              if (threadsSection != null) ...[const SizedBox(height: 30), threadsSection],
+            ],
+          );
         }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             fixedSection,
-            const SizedBox(height: 30),
-            Expanded(child: threadsSection),
+            if (threadsSection != null) ...[const SizedBox(height: 30), Expanded(child: threadsSection)],
           ],
         );
       },
@@ -522,6 +535,7 @@ class _AgentsFixedSection extends StatelessWidget {
     required this.panelHeight,
     required this.compactLayout,
     this.onManageAgents,
+    required this.showDivider,
     required this.onAgentSelected,
     required this.onToggleExpanded,
   });
@@ -533,6 +547,7 @@ class _AgentsFixedSection extends StatelessWidget {
   final double panelHeight;
   final bool compactLayout;
   final VoidCallback? onManageAgents;
+  final bool showDivider;
   final ValueChanged<PbAgentListItemData> onAgentSelected;
   final VoidCallback onToggleExpanded;
 
@@ -558,8 +573,10 @@ class _AgentsFixedSection extends StatelessWidget {
           onManageAgents: onManageAgents,
           onToggleExpanded: onToggleExpanded,
         ),
-        const SizedBox(height: _sidepaneActionsToDividerGap),
-        const Divider(height: 1, thickness: 1, color: PbColors.borderSoft),
+        if (showDivider) ...[
+          const SizedBox(height: _sidepaneActionsToDividerGap),
+          const Divider(height: 1, thickness: 1, color: PbColors.borderSoft),
+        ],
       ],
     );
   }

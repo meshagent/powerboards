@@ -8,6 +8,7 @@ void main() {
     required List<PbAgentListItemData> agents,
     String? selectedAgentId,
     ValueChanged<PbAgentListItemData>? onAgentSelected,
+    bool showThreadsSection = true,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -20,6 +21,7 @@ void main() {
               agents: agents,
               selectedAgentId: selectedAgentId,
               onAgentItemSelected: onAgentSelected,
+              showThreadsSection: showThreadsSection,
               threads: const ['Planning', 'Implementation'],
               selectedThreadTitle: null,
               onThreadSelected: (_) {},
@@ -138,5 +140,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(agentCardById('coordinator'), findsOneWidget);
+  });
+
+  testWidgets('agent panel can hide thread section and divider for agents without threads', (tester) async {
+    final agents = [
+      const PbAgentListItemData(id: 'voice', title: 'Voice', status: 'Available', icon: 'video'),
+      const PbAgentListItemData(id: 'assistant-primary', title: 'Assistant', status: 'Available', icon: 'bot'),
+    ];
+
+    await tester.pumpWidget(buildHarness(agents: agents, selectedAgentId: 'voice', showThreadsSection: false));
+    await tester.pump();
+
+    expect(find.text('Threads'), findsNothing);
+    expect(find.text('New Thread...'), findsNothing);
+    expect(find.byType(Divider), findsNothing);
   });
 }
