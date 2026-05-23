@@ -10,6 +10,8 @@ void main() {
     ValueChanged<PbAgentListItemData>? onAgentSelected,
     bool showThreadsSection = true,
     bool showFilesTab = true,
+    bool? agentsExpanded,
+    ValueChanged<bool>? onAgentsExpandedChanged,
     PbRoomPanelTab? selectedTab,
   }) {
     return MaterialApp(
@@ -24,6 +26,8 @@ void main() {
               selectedTab: selectedTab,
               selectedAgentId: selectedAgentId,
               onAgentItemSelected: onAgentSelected,
+              agentsExpanded: agentsExpanded,
+              onAgentsExpandedChanged: onAgentsExpandedChanged,
               showThreadsSection: showThreadsSection,
               showFilesTab: showFilesTab,
               threads: const ['Planning', 'Implementation'],
@@ -160,6 +164,66 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(agentCardById('coordinator'), findsOneWidget);
+  });
+
+  testWidgets('controlled agent expansion persists when panel is remounted', (tester) async {
+    var panelVisible = true;
+    var agentsExpanded = true;
+    final agents = [
+      const PbAgentListItemData(id: 'assistant-primary', title: 'Assistant', status: 'Available', icon: 'bot'),
+      const PbAgentListItemData(id: 'research', title: 'Research', status: 'Available', icon: 'bot'),
+      const PbAgentListItemData(id: 'builder', title: 'Builder', status: 'Available', icon: 'bot'),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setHarnessState) {
+            return Scaffold(
+              body: Column(
+                children: [
+                  TextButton(onPressed: () => setHarnessState(() => panelVisible = !panelVisible), child: const Text('Toggle panel')),
+                  SizedBox(
+                    width: 320,
+                    height: 520,
+                    child: panelVisible
+                        ? PbRoomPanel(
+                            agents: agents,
+                            selectedAgentId: 'assistant-primary',
+                            agentsExpanded: agentsExpanded,
+                            onAgentsExpandedChanged: (expanded) => setHarnessState(() => agentsExpanded = expanded),
+                            threads: const ['Planning', 'Implementation'],
+                            selectedThreadTitle: null,
+                            onThreadSelected: (_) {},
+                            onCreateThread: () {},
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Show less'), findsOneWidget);
+    expect(agentCardById('research'), findsOneWidget);
+
+    await tester.tap(find.text('Show less'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Show more'), findsOneWidget);
+    expect(agentCardById('research'), findsNothing);
+
+    await tester.tap(find.text('Toggle panel'));
+    await tester.pump();
+    await tester.tap(find.text('Toggle panel'));
+    await tester.pump();
+
+    expect(find.text('Show more'), findsOneWidget);
+    expect(agentCardById('research'), findsNothing);
   });
 
   testWidgets('agent panel can hide thread section and divider for agents without threads', (tester) async {

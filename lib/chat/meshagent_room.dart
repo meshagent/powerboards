@@ -1270,6 +1270,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   _MobileRoomPane? _lastSyncedRoutePane;
   PbRoomPanelTab _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
   bool _desktopPreviewRoomPanelCollapsed = false;
+  bool _desktopPreviewAgentsExpanded = true;
   bool _didNormalizeInitialDesktopPane = false;
   _MobileMeetingOrigin? _mobileMeetingOrigin;
   StreamSubscription<RoomStatusEvent>? _roomStatusSubscription;
@@ -3649,6 +3650,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               selectedAgentTitle: agentName,
               onAgentItemSelected: _selectDesktopPreviewAgent,
               onManageAgents: isOwner.state.value == true ? showManageAgents : null,
+              agentsExpanded: _desktopPreviewAgentsExpanded,
+              onAgentsExpandedChanged: (expanded) {
+                setState(() {
+                  _desktopPreviewAgentsExpanded = expanded;
+                });
+              },
               showThreadsSection: threadListPath != null,
               showFilesTab: false,
               threads: [for (final thread in threads) thread.name],

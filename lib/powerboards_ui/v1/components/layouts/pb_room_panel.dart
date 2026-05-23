@@ -43,6 +43,8 @@ class PbRoomPanel extends StatefulWidget {
     this.onAgentSelected,
     this.onAgentItemSelected,
     this.onManageAgents,
+    this.agentsExpanded,
+    this.onAgentsExpandedChanged,
     this.showThreadsSection = true,
     this.showFilesTab = true,
     this.attachments,
@@ -69,6 +71,8 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<String>? onAgentSelected;
   final ValueChanged<PbAgentListItemData>? onAgentItemSelected;
   final VoidCallback? onManageAgents;
+  final bool? agentsExpanded;
+  final ValueChanged<bool>? onAgentsExpandedChanged;
   final bool showThreadsSection;
   final bool showFilesTab;
   final List<PbAttachmentListItemData>? attachments;
@@ -220,6 +224,8 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
                             onAgentSelected: widget.onAgentSelected,
                             onAgentItemSelected: widget.onAgentItemSelected,
                             onManageAgents: widget.onManageAgents,
+                            agentsExpanded: widget.agentsExpanded,
+                            onAgentsExpandedChanged: widget.onAgentsExpandedChanged,
                             showThreadsSection: widget.showThreadsSection,
                             selectedThreadId: widget.selectedThreadId,
                             selectedThreadTitle: widget.selectedThreadTitle,
@@ -378,6 +384,8 @@ class _AgentsPanel extends StatefulWidget {
     this.onAgentSelected,
     this.onAgentItemSelected,
     this.onManageAgents,
+    this.agentsExpanded,
+    this.onAgentsExpandedChanged,
     this.showThreadsSection = true,
     this.selectedThreadId,
     required this.selectedThreadTitle,
@@ -396,6 +404,8 @@ class _AgentsPanel extends StatefulWidget {
   final ValueChanged<String>? onAgentSelected;
   final ValueChanged<PbAgentListItemData>? onAgentItemSelected;
   final VoidCallback? onManageAgents;
+  final bool? agentsExpanded;
+  final ValueChanged<bool>? onAgentsExpandedChanged;
   final bool showThreadsSection;
   final String? selectedThreadId;
   final String? selectedThreadTitle;
@@ -412,6 +422,16 @@ class _AgentsPanel extends StatefulWidget {
 class _AgentsPanelState extends State<_AgentsPanel> {
   bool _agentsExpanded = true;
   late String _selectedAgentKey = _initialSelectedAgentKey();
+
+  bool get _effectiveAgentsExpanded => widget.agentsExpanded ?? _agentsExpanded;
+
+  void _setAgentsExpanded(bool expanded) {
+    if (widget.agentsExpanded == null) {
+      setState(() => _agentsExpanded = expanded);
+    }
+
+    widget.onAgentsExpandedChanged?.call(expanded);
+  }
 
   String _initialSelectedAgentKey() {
     final selectedId = widget.selectedAgentId;
@@ -477,7 +497,8 @@ class _AgentsPanelState extends State<_AgentsPanel> {
     }
 
     final selectedAgent = widget.agents.firstWhere((agent) => agent.identity == _selectedAgentKey, orElse: () => widget.agents.first);
-    final visibleAgents = _agentsExpanded ? widget.agents : [selectedAgent];
+    final agentsExpanded = _effectiveAgentsExpanded;
+    final visibleAgents = agentsExpanded ? widget.agents : [selectedAgent];
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -485,7 +506,7 @@ class _AgentsPanelState extends State<_AgentsPanel> {
         final fixedSection = _AgentsFixedSection(
           agents: visibleAgents,
           selectedAgentKey: _selectedAgentKey,
-          expanded: _agentsExpanded,
+          expanded: agentsExpanded,
           canToggleExpanded: widget.agents.length > 1,
           panelHeight: constraints.maxHeight,
           compactLayout: compactLayout,
@@ -496,7 +517,7 @@ class _AgentsPanelState extends State<_AgentsPanel> {
             widget.onAgentSelected?.call(agent.title);
             widget.onAgentItemSelected?.call(agent);
           },
-          onToggleExpanded: () => setState(() => _agentsExpanded = !_agentsExpanded),
+          onToggleExpanded: () => _setAgentsExpanded(!agentsExpanded),
         );
         final threadsSection = widget.showThreadsSection
             ? _ThreadsSection(
