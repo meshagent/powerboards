@@ -3650,6 +3650,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               onAgentItemSelected: _selectDesktopPreviewAgent,
               onManageAgents: isOwner.state.value == true ? showManageAgents : null,
               showThreadsSection: threadListPath != null,
+              showFilesTab: false,
               threads: [for (final thread in threads) thread.name],
               threadItems: threadItems,
               selectedThreadId: chatContext?.selectedThreadPath,

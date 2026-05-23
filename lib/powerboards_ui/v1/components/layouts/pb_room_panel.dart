@@ -43,6 +43,7 @@ class PbRoomPanel extends StatefulWidget {
     this.onAgentItemSelected,
     this.onManageAgents,
     this.showThreadsSection = true,
+    this.showFilesTab = true,
     this.attachments,
     required this.threads,
     this.threadItems,
@@ -68,6 +69,7 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<PbAgentListItemData>? onAgentItemSelected;
   final VoidCallback? onManageAgents;
   final bool showThreadsSection;
+  final bool showFilesTab;
   final List<PbAttachmentListItemData>? attachments;
   final List<String> threads;
   final List<PbThreadListItemData>? threadItems;
@@ -126,7 +128,13 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
     PbAttachmentListItemData(title: 'Release notes.rtf', subtitle: 'Rich text', fileType: PbAttachmentFileType.document),
   ];
 
-  PbRoomPanelTab get _activeTab => widget.selectedTab ?? _selectedTab;
+  PbRoomPanelTab get _activeTab {
+    final selectedTab = widget.selectedTab ?? _selectedTab;
+    if (!widget.showFilesTab && selectedTab == PbRoomPanelTab.files) {
+      return PbRoomPanelTab.agents;
+    }
+    return selectedTab;
+  }
 
   @override
   void didUpdateWidget(covariant PbRoomPanel oldWidget) {
@@ -135,9 +143,17 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
     if (widget.selectedTab != null && widget.selectedTab != oldWidget.selectedTab) {
       _selectedTab = widget.selectedTab!;
     }
+
+    if (!widget.showFilesTab && _selectedTab == PbRoomPanelTab.files) {
+      _selectedTab = PbRoomPanelTab.agents;
+    }
   }
 
   void _selectTab(PbRoomPanelTab tab) {
+    if (tab == PbRoomPanelTab.files && !widget.showFilesTab) {
+      return;
+    }
+
     if (widget.selectedTab == null) {
       setState(() => _selectedTab = tab);
     }
@@ -190,7 +206,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  PbRoomTabs(selectedTab: _activeTab, onTabSelected: _selectTab),
+                  PbRoomTabs(selectedTab: _activeTab, showFilesTab: widget.showFilesTab, onTabSelected: _selectTab),
                   const SizedBox(height: 20),
                   Expanded(
                     child: _activeTab == PbRoomPanelTab.agents
@@ -235,9 +251,10 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
 }
 
 class PbRoomTabs extends StatefulWidget {
-  const PbRoomTabs({super.key, required this.selectedTab, required this.onTabSelected});
+  const PbRoomTabs({super.key, required this.selectedTab, this.showFilesTab = true, required this.onTabSelected});
 
   final PbRoomPanelTab selectedTab;
+  final bool showFilesTab;
   final ValueChanged<PbRoomPanelTab> onTabSelected;
 
   @override
@@ -274,15 +291,17 @@ class _PbRoomTabsState extends State<PbRoomTabs> {
                 onHoverChanged: (hovered) => setState(() => _hoveredTab = hovered ? PbRoomPanelTab.agents : null),
                 onPressed: () => widget.onTabSelected(PbRoomPanelTab.agents),
               ),
-              const SizedBox(width: 24),
-              _RoomTab(
-                label: 'Files',
-                selected: widget.selectedTab == PbRoomPanelTab.files,
-                hovered: _hoveredTab == PbRoomPanelTab.files,
-                selectedSuppressed: _hoveredTab != null && _hoveredTab != PbRoomPanelTab.files,
-                onHoverChanged: (hovered) => setState(() => _hoveredTab = hovered ? PbRoomPanelTab.files : null),
-                onPressed: () => widget.onTabSelected(PbRoomPanelTab.files),
-              ),
+              if (widget.showFilesTab) ...[
+                const SizedBox(width: 24),
+                _RoomTab(
+                  label: 'Files',
+                  selected: widget.selectedTab == PbRoomPanelTab.files,
+                  hovered: _hoveredTab == PbRoomPanelTab.files,
+                  selectedSuppressed: _hoveredTab != null && _hoveredTab != PbRoomPanelTab.files,
+                  onHoverChanged: (hovered) => setState(() => _hoveredTab = hovered ? PbRoomPanelTab.files : null),
+                  onPressed: () => widget.onTabSelected(PbRoomPanelTab.files),
+                ),
+              ],
             ],
           ),
         ],

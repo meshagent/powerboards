@@ -9,6 +9,8 @@ void main() {
     String? selectedAgentId,
     ValueChanged<PbAgentListItemData>? onAgentSelected,
     bool showThreadsSection = true,
+    bool showFilesTab = true,
+    PbRoomPanelTab? selectedTab,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -19,9 +21,11 @@ void main() {
             height: 640,
             child: PbRoomPanel(
               agents: agents,
+              selectedTab: selectedTab,
               selectedAgentId: selectedAgentId,
               onAgentItemSelected: onAgentSelected,
               showThreadsSection: showThreadsSection,
+              showFilesTab: showFilesTab,
               threads: const ['Planning', 'Implementation'],
               selectedThreadTitle: null,
               onThreadSelected: (_) {},
@@ -154,5 +158,26 @@ void main() {
     expect(find.text('Threads'), findsNothing);
     expect(find.text('New Thread...'), findsNothing);
     expect(find.byType(Divider), findsNothing);
+  });
+
+  testWidgets('files tab can be hidden for scoped chat release', (tester) async {
+    final agents = [const PbAgentListItemData(id: 'assistant-primary', title: 'Assistant', status: 'Available', icon: 'bot')];
+
+    await tester.pumpWidget(buildHarness(agents: agents, showFilesTab: false));
+    await tester.pump();
+
+    expect(find.text('Agents'), findsOneWidget);
+    expect(find.text('Files'), findsNothing);
+  });
+
+  testWidgets('hidden files tab keeps controlled files selection on agents panel', (tester) async {
+    final agents = [const PbAgentListItemData(id: 'assistant-primary', title: 'Assistant', status: 'Available', icon: 'bot')];
+
+    await tester.pumpWidget(buildHarness(agents: agents, showFilesTab: false, selectedTab: PbRoomPanelTab.files));
+    await tester.pump();
+
+    expect(find.text('Files'), findsNothing);
+    expect(find.text('Browse threads by selected agent.'), findsOneWidget);
+    expect(find.text('Browse attachments by selected agent.'), findsNothing);
   });
 }
