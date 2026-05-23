@@ -47,12 +47,14 @@ class DesktopPreviewNavHeader extends StatefulWidget {
   State<DesktopPreviewNavHeader> createState() => _DesktopPreviewNavHeaderState();
 }
 
-enum _DesktopPreviewNavMenu { none, project, room, account }
+enum _DesktopPreviewNavMenu { none, room, account }
 
 class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
   late final TextEditingController _projectFilterController;
   late final TextEditingController _roomFilterController;
+  final OverlayPortalController _projectDialogController = OverlayPortalController();
   _DesktopPreviewNavMenu _openMenu = _DesktopPreviewNavMenu.none;
+  bool _projectDialogOpen = false;
 
   @override
   void initState() {
@@ -63,6 +65,9 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
 
   @override
   void dispose() {
+    if (_projectDialogController.isShowing) {
+      _projectDialogController.hide();
+    }
     _projectFilterController.dispose();
     _roomFilterController.dispose();
     super.dispose();
@@ -128,6 +133,16 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
   String get _projectQuery => _projectFilterController.text.trim().toLowerCase();
   String get _roomQuery => _roomFilterController.text.trim().toLowerCase();
 
+  Project? get _currentProject {
+    for (final project in widget.projects) {
+      if (project.id == widget.projectId) {
+        return project;
+      }
+    }
+
+    return null;
+  }
+
   List<Project> get _filteredProjects {
     if (_projectQuery.isEmpty) {
       return widget.projects;
@@ -152,40 +167,6 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
 
     final hasSelectedRoom = widget.rooms.any((room) => room.name == selectedRoomName);
     return hasSelectedRoom ? null : selectedRoomName;
-  }
-
-  Widget _buildProjectMenu() {
-    final filtering = _projectFilterController.text.trim().isNotEmpty;
-
-    return PbSwitcherMenu(
-      width: 240,
-      filterPlaceholder: 'Filter projects...',
-      filterController: _projectFilterController,
-      onFilterChanged: (_) => setState(() {}),
-      items: _filteredProjects
-          .map(
-            (project) => PbSwitcherMenuItem(
-              title: project.name,
-              selected: project.id == widget.projectId,
-              onPressed: () => _closeMenuAndRun(() => widget.onSelectProject(project)),
-            ),
-          )
-          .toList(),
-      actionLabel: filtering ? 'Clear results' : 'New Project',
-      actionLeadingIconAssetName: 'plus',
-      actionLeadingIconTurns: filtering ? -0.125 : 0,
-      onActionPressed: () async {
-        if (filtering) {
-          _projectFilterController.clear();
-          setState(() {});
-          return;
-        }
-
-        _closeMenuAndRun(() {
-          widget.onCreateProject();
-        });
-      },
-    );
   }
 
   Widget _buildRoomMenu() {
@@ -234,10 +215,13 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
 
   Widget _buildAccountMenu() {
     final canPreviewNewUi = emailCanPreviewPowerboardsUiMode(widget.avatarEmail);
+    final currentProject = _currentProject;
 
     return PbAccountMenu(
       initials: widget.avatarInitials,
       email: widget.avatarEmail,
+      projectLabel: 'Browsing project: ${currentProject?.name ?? 'No project selected'}',
+      onSelectProjectPressed: () => _closeMenuAndRun(_openProjectDialog),
       onManageAccountPressed: widget.onManageAccountPressed,
       previewTitle: canPreviewNewUi ? 'End new UI Preview' : null,
       onPreviewPressed: canPreviewNewUi ? () => _closeMenuAndRun(widget.onPreviewTogglePressed) : null,
@@ -245,33 +229,81 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
     );
   }
 
+  void _openProjectDialog() {
+    _projectFilterController.clear();
+    setState(() {
+      _projectDialogOpen = true;
+    });
+    _projectDialogController.show();
+  }
+
+  void _closeProjectDialog() {
+    if (!_projectDialogOpen) {
+      return;
+    }
+
+    _projectDialogController.hide();
+    setState(() {
+      _projectDialogOpen = false;
+    });
+  }
+
+  void _selectProjectFromDialog(String projectName) {
+    Project? selectedProject;
+    for (final project in widget.projects) {
+      if (project.name == projectName) {
+        selectedProject = project;
+        break;
+      }
+    }
+
+    if (selectedProject == null) {
+      return;
+    }
+
+    _closeProjectDialog();
+    widget.onSelectProject(selectedProject);
+  }
+
+  void _createProjectFromDialog() {
+    _closeProjectDialog();
+    widget.onCreateProject();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final currentProject = widget.projects.where((project) => project.id == widget.projectId).firstOrNull;
+    final currentProject = _currentProject;
     final currentRoom = widget.rooms.where((room) => room.name == widget.selectedRoom).firstOrNull;
     final resolvedRoomValue = currentRoom != null ? roomDisplayName(currentRoom) : (_selectedRoomFallbackLabel ?? 'Select room');
     final showRoomSwitcher = widget.rooms.isNotEmpty || ((widget.selectedRoom?.trim().isNotEmpty) ?? false);
 
-    return PbPrimaryHeader(
-      shellMobile: false,
-      shellIconOnly: false,
-      showRoomSwitcher: showRoomSwitcher,
-      projectValue: currentProject?.name ?? 'Select project',
-      roomValue: resolvedRoomValue,
-      projectSelected: _openMenu == _DesktopPreviewNavMenu.project,
-      roomSelected: _openMenu == _DesktopPreviewNavMenu.room,
-      avatarSelected: _openMenu == _DesktopPreviewNavMenu.account,
-      avatarInitials: widget.avatarInitials,
-      projectMenu: _openMenu == _DesktopPreviewNavMenu.project ? _buildProjectMenu() : null,
-      roomMenu: showRoomSwitcher && _openMenu == _DesktopPreviewNavMenu.room ? _buildRoomMenu() : null,
-      avatarMenu: _openMenu == _DesktopPreviewNavMenu.account ? _buildAccountMenu() : null,
-      onProjectPressed: () => _toggleMenu(_DesktopPreviewNavMenu.project),
-      onRoomPressed: showRoomSwitcher ? () => _toggleMenu(_DesktopPreviewNavMenu.room) : null,
-      onAvatarPressed: () => _toggleMenu(_DesktopPreviewNavMenu.account),
-      onProjectDismissRequested: _closeMenu,
-      onRoomDismissRequested: _closeMenu,
-      onAvatarDismissRequested: _closeMenu,
-      onSharePressed: widget.onSharePressed,
+    return OverlayPortal(
+      controller: _projectDialogController,
+      overlayChildBuilder: (context) => PbProjectSelectDialog(
+        projects: _filteredProjects.map((project) => project.name).toList(),
+        selectedProject: currentProject?.name ?? '',
+        filterController: _projectFilterController,
+        onFilterChanged: (_) => setState(() {}),
+        onProjectSelected: _selectProjectFromDialog,
+        onCreateProjectPressed: _createProjectFromDialog,
+        onClose: _closeProjectDialog,
+      ),
+      child: PbPrimaryHeader(
+        shellMobile: false,
+        shellIconOnly: false,
+        showRoomSwitcher: showRoomSwitcher,
+        roomValue: resolvedRoomValue,
+        roomSelected: _openMenu == _DesktopPreviewNavMenu.room,
+        avatarSelected: _openMenu == _DesktopPreviewNavMenu.account,
+        avatarInitials: widget.avatarInitials,
+        roomMenu: showRoomSwitcher && _openMenu == _DesktopPreviewNavMenu.room ? _buildRoomMenu() : null,
+        avatarMenu: _openMenu == _DesktopPreviewNavMenu.account ? _buildAccountMenu() : null,
+        onRoomPressed: showRoomSwitcher ? () => _toggleMenu(_DesktopPreviewNavMenu.room) : null,
+        onAvatarPressed: () => _toggleMenu(_DesktopPreviewNavMenu.account),
+        onRoomDismissRequested: _closeMenu,
+        onAvatarDismissRequested: _closeMenu,
+        onSharePressed: widget.onSharePressed,
+      ),
     );
   }
 }

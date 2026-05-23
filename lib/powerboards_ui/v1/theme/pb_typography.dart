@@ -23,6 +23,15 @@ abstract final class PowerboardsTypography {
     color: PbColors.textPrimary,
   );
 
+  static const TextStyle labelSmall = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 14,
+    height: 1.3,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0,
+    color: PbColors.textPrimary,
+  );
+
   static const TextStyle h2 = TextStyle(
     fontFamily: fontFamily,
     fontSize: 19,

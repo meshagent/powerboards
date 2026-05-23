@@ -49,13 +49,11 @@ class PbSwitcherMenu extends StatefulWidget {
 }
 
 class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
-  late final ScrollController _scrollController;
+  static const double _selectedRevealInset = 16;
 
-  @override
-  void initState() {
-    super.initState();
-    _scrollController = ScrollController();
-  }
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _scrollRegionKey = GlobalKey();
+  final Map<String, GlobalKey> _itemKeys = {};
 
   @override
   void dispose() {
@@ -67,6 +65,7 @@ class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
   Widget build(BuildContext context) {
     final resolvedActionLabel = widget.actionLabel?.trim();
     final showAction = resolvedActionLabel != null && resolvedActionLabel.isNotEmpty;
+    _scheduleSelectedItemReveal();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -102,6 +101,7 @@ class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
                         child: Scrollbar(
                           controller: _scrollController,
                           child: SingleChildScrollView(
+                            key: _scrollRegionKey,
                             controller: _scrollController,
                             primary: false,
                             child: Padding(
@@ -112,11 +112,16 @@ class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
                                     PbMenuOption(title: widget.emptyLabel, singleLine: true, state: PbMenuOptionVisualState.disabled)
                                   else
                                     for (final item in widget.items)
-                                      PbMenuOption(
-                                        title: item.title,
-                                        singleLine: true,
-                                        trailingIconAssetName: item.selected ? 'circle-check-big' : null,
-                                        onPressed: item.onPressed ?? () => widget.onItemPressed?.call(item.title),
+                                      KeyedSubtree(
+                                        key: _keyForItem(item.title),
+                                        child: PbMenuOption(
+                                          title: item.title,
+                                          singleLine: true,
+                                          selected: item.selected,
+                                          selectedSurface: item.selected,
+                                          trailingIconAssetName: item.selected ? 'circle-check-big' : null,
+                                          onPressed: item.onPressed ?? () => widget.onItemPressed?.call(item.title),
+                                        ),
                                       ),
                                 ],
                               ),
@@ -147,5 +152,56 @@ class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
         );
       },
     );
+  }
+
+  GlobalKey _keyForItem(String title) {
+    return _itemKeys.putIfAbsent(title, GlobalKey.new);
+  }
+
+  void _scheduleSelectedItemReveal() {
+    String? selectedItem;
+    for (final item in widget.items) {
+      if (item.selected) {
+        selectedItem = item.title;
+        break;
+      }
+    }
+
+    if (selectedItem == null) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+
+      final selectedContext = _itemKeys[selectedItem]?.currentContext;
+      final scrollRegionContext = _scrollRegionKey.currentContext;
+      final selectedBox = selectedContext?.findRenderObject();
+      final scrollRegionBox = scrollRegionContext?.findRenderObject();
+
+      if (selectedBox is! RenderBox || scrollRegionBox is! RenderBox) {
+        return;
+      }
+
+      final selectedOffset = selectedBox.localToGlobal(Offset.zero);
+      final scrollRegionOffset = scrollRegionBox.localToGlobal(Offset.zero);
+      final selectedTop = selectedOffset.dy;
+      final selectedBottom = selectedTop + selectedBox.size.height;
+      final topEdge = scrollRegionOffset.dy + _selectedRevealInset;
+      final bottomEdge = scrollRegionOffset.dy + scrollRegionBox.size.height - _selectedRevealInset;
+
+      if (selectedTop < topEdge) {
+        _scrollController.jumpTo((_scrollController.offset + selectedTop - topEdge).clamp(0.0, _scrollController.position.maxScrollExtent));
+        return;
+      }
+
+      if (selectedBottom > bottomEdge) {
+        _scrollController.jumpTo(
+          (_scrollController.offset + selectedBottom - bottomEdge).clamp(0.0, _scrollController.position.maxScrollExtent),
+        );
+      }
+    });
   }
 }
