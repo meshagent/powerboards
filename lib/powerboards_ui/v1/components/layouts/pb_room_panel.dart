@@ -36,12 +36,19 @@ class PbRoomPanel extends StatefulWidget {
     this.onTabSelected,
     this.onFilePreviewOpenChanged,
     this.onFilePreviewFullscreenChanged,
+    this.agents,
+    this.selectedAgentId,
     this.selectedAgentTitle,
     this.onAgentSelected,
+    this.onAgentItemSelected,
+    this.onManageAgents,
     this.attachments,
     required this.threads,
+    this.threadItems,
+    this.selectedThreadId,
     required this.selectedThreadTitle,
     required this.onThreadSelected,
+    this.onThreadItemSelected,
     required this.onCreateThread,
     this.filePreviewResizing = false,
   });
@@ -51,12 +58,19 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<PbRoomPanelTab>? onTabSelected;
   final ValueChanged<bool>? onFilePreviewOpenChanged;
   final ValueChanged<bool>? onFilePreviewFullscreenChanged;
+  final List<PbAgentListItemData>? agents;
+  final String? selectedAgentId;
   final String? selectedAgentTitle;
   final ValueChanged<String>? onAgentSelected;
+  final ValueChanged<PbAgentListItemData>? onAgentItemSelected;
+  final VoidCallback? onManageAgents;
   final List<PbAttachmentListItemData>? attachments;
   final List<String> threads;
+  final List<PbThreadListItemData>? threadItems;
+  final String? selectedThreadId;
   final String? selectedThreadTitle;
   final ValueChanged<String> onThreadSelected;
+  final ValueChanged<PbThreadListItemData>? onThreadItemSelected;
   final VoidCallback onCreateThread;
   final bool filePreviewResizing;
 
@@ -175,12 +189,18 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
                   Expanded(
                     child: _activeTab == PbRoomPanelTab.agents
                         ? _AgentsPanel(
-                            agents: _agents,
+                            agents: widget.agents ?? _agents,
                             threads: widget.threads,
+                            threadItems: widget.threadItems,
+                            selectedAgentId: widget.selectedAgentId,
                             selectedAgentTitle: widget.selectedAgentTitle,
                             onAgentSelected: widget.onAgentSelected,
+                            onAgentItemSelected: widget.onAgentItemSelected,
+                            onManageAgents: widget.onManageAgents,
+                            selectedThreadId: widget.selectedThreadId,
                             selectedThreadTitle: widget.selectedThreadTitle,
                             onThreadSelected: widget.onThreadSelected,
+                            onThreadItemSelected: widget.onThreadItemSelected,
                             onCreateThread: widget.onCreateThread,
                           )
                         : _FilesPanel(attachments: widget.attachments ?? _attachments, onPreviewFile: _openFilePreview),
@@ -323,19 +343,31 @@ class _AgentsPanel extends StatefulWidget {
   const _AgentsPanel({
     required this.agents,
     required this.threads,
+    this.threadItems,
+    this.selectedAgentId,
     this.selectedAgentTitle,
     this.onAgentSelected,
+    this.onAgentItemSelected,
+    this.onManageAgents,
+    this.selectedThreadId,
     required this.selectedThreadTitle,
     required this.onThreadSelected,
+    this.onThreadItemSelected,
     required this.onCreateThread,
   });
 
   final List<PbAgentListItemData> agents;
   final List<String> threads;
+  final List<PbThreadListItemData>? threadItems;
+  final String? selectedAgentId;
   final String? selectedAgentTitle;
   final ValueChanged<String>? onAgentSelected;
+  final ValueChanged<PbAgentListItemData>? onAgentItemSelected;
+  final VoidCallback? onManageAgents;
+  final String? selectedThreadId;
   final String? selectedThreadTitle;
   final ValueChanged<String> onThreadSelected;
+  final ValueChanged<PbThreadListItemData>? onThreadItemSelected;
   final VoidCallback onCreateThread;
 
   @override
@@ -347,9 +379,22 @@ class _AgentsPanelState extends State<_AgentsPanel> {
   late String _selectedAgent = _initialSelectedAgentTitle();
 
   String _initialSelectedAgentTitle() {
+    final selectedId = widget.selectedAgentId;
+    if (selectedId != null) {
+      for (final agent in widget.agents) {
+        if (agent.id == selectedId) {
+          return agent.title;
+        }
+      }
+    }
+
     final selectedTitle = widget.selectedAgentTitle;
     if (selectedTitle != null && widget.agents.any((agent) => agent.title == selectedTitle)) {
       return selectedTitle;
+    }
+
+    if (widget.agents.isEmpty) {
+      return '';
     }
 
     return widget.agents.firstWhere((agent) => agent.selected, orElse: () => widget.agents.first).title;
@@ -359,9 +404,19 @@ class _AgentsPanelState extends State<_AgentsPanel> {
   void didUpdateWidget(covariant _AgentsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final selectedTitle = widget.selectedAgentTitle;
-    if (selectedTitle != null && selectedTitle != _selectedAgent && widget.agents.any((agent) => agent.title == selectedTitle)) {
-      _selectedAgent = selectedTitle;
+    final selectedId = widget.selectedAgentId;
+    if (selectedId != null) {
+      for (final agent in widget.agents) {
+        if (agent.id == selectedId && agent.title != _selectedAgent) {
+          _selectedAgent = agent.title;
+          break;
+        }
+      }
+    } else {
+      final selectedTitle = widget.selectedAgentTitle;
+      if (selectedTitle != null && selectedTitle != _selectedAgent && widget.agents.any((agent) => agent.title == selectedTitle)) {
+        _selectedAgent = selectedTitle;
+      }
     }
 
     if (!widget.agents.any((agent) => agent.title == _selectedAgent) && widget.agents.isNotEmpty) {
@@ -371,6 +426,10 @@ class _AgentsPanelState extends State<_AgentsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.agents.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     final selectedAgent = widget.agents.firstWhere((agent) => agent.title == _selectedAgent, orElse: () => widget.agents.first);
     final visibleAgents = _agentsExpanded ? widget.agents : [selectedAgent];
 
@@ -384,18 +443,23 @@ class _AgentsPanelState extends State<_AgentsPanel> {
           canToggleExpanded: widget.agents.length > 1,
           panelHeight: constraints.maxHeight,
           compactLayout: compactLayout,
+          onManageAgents: widget.onManageAgents,
           onAgentSelected: (agent) {
             setState(() => _selectedAgent = agent.title);
             widget.onAgentSelected?.call(agent.title);
+            widget.onAgentItemSelected?.call(agent);
           },
           onToggleExpanded: () => setState(() => _agentsExpanded = !_agentsExpanded),
         );
         final threadsSection = _ThreadsSection(
           threads: widget.threads,
+          threadItems: widget.threadItems,
+          selectedThreadId: widget.selectedThreadId,
           selectedThread: widget.selectedThreadTitle,
           compactLayout: compactLayout,
           onCreateThread: widget.onCreateThread,
           onThreadSelected: widget.onThreadSelected,
+          onThreadItemSelected: widget.onThreadItemSelected,
         );
 
         if (compactLayout) {
@@ -434,6 +498,7 @@ class _AgentsFixedSection extends StatelessWidget {
     required this.canToggleExpanded,
     required this.panelHeight,
     required this.compactLayout,
+    this.onManageAgents,
     required this.onAgentSelected,
     required this.onToggleExpanded,
   });
@@ -444,6 +509,7 @@ class _AgentsFixedSection extends StatelessWidget {
   final bool canToggleExpanded;
   final double panelHeight;
   final bool compactLayout;
+  final VoidCallback? onManageAgents;
   final ValueChanged<PbAgentListItemData> onAgentSelected;
   final VoidCallback onToggleExpanded;
 
@@ -463,7 +529,12 @@ class _AgentsFixedSection extends StatelessWidget {
           onAgentSelected: onAgentSelected,
         ),
         const SizedBox(height: _sidepaneListToActionsGap),
-        _AgentActions(expanded: expanded, canToggleExpanded: canToggleExpanded, onToggleExpanded: onToggleExpanded),
+        _AgentActions(
+          expanded: expanded,
+          canToggleExpanded: canToggleExpanded,
+          onManageAgents: onManageAgents,
+          onToggleExpanded: onToggleExpanded,
+        ),
         const SizedBox(height: _sidepaneActionsToDividerGap),
         const Divider(height: 1, thickness: 1, color: PbColors.borderSoft),
       ],
@@ -654,10 +725,11 @@ class _AgentList extends StatelessWidget {
 }
 
 class _AgentActions extends StatelessWidget {
-  const _AgentActions({required this.expanded, required this.canToggleExpanded, required this.onToggleExpanded});
+  const _AgentActions({required this.expanded, required this.canToggleExpanded, this.onManageAgents, required this.onToggleExpanded});
 
   final bool expanded;
   final bool canToggleExpanded;
+  final VoidCallback? onManageAgents;
   final VoidCallback onToggleExpanded;
 
   @override
@@ -666,7 +738,7 @@ class _AgentActions extends StatelessWidget {
       spacing: 12,
       runSpacing: 12,
       children: [
-        const PbTertiaryButton.solid(label: 'Manage'),
+        PbTertiaryButton.solid(label: 'Manage', onPressed: onManageAgents),
         if (canToggleExpanded) PbTertiaryButton(label: expanded ? 'Show less' : 'Show more', onPressed: onToggleExpanded),
       ],
     );
@@ -676,17 +748,23 @@ class _AgentActions extends StatelessWidget {
 class _ThreadsSection extends StatefulWidget {
   const _ThreadsSection({
     required this.threads,
+    this.threadItems,
+    this.selectedThreadId,
     required this.selectedThread,
     required this.compactLayout,
     required this.onCreateThread,
     required this.onThreadSelected,
+    this.onThreadItemSelected,
   });
 
   final List<String> threads;
+  final List<PbThreadListItemData>? threadItems;
+  final String? selectedThreadId;
   final String? selectedThread;
   final bool compactLayout;
   final VoidCallback onCreateThread;
   final ValueChanged<String> onThreadSelected;
+  final ValueChanged<PbThreadListItemData>? onThreadItemSelected;
 
   @override
   State<_ThreadsSection> createState() => _ThreadsSectionState();
@@ -708,10 +786,11 @@ class _ThreadsSectionState extends State<_ThreadsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final threadItems = widget.threadItems ?? [for (final thread in widget.threads) PbThreadListItemData(id: thread, title: thread)];
     if (widget.compactLayout || widget.selectedThread == null) {
       _lastRevealSignature = null;
     } else {
-      _scheduleSelectedThreadReveal();
+      _scheduleSelectedThreadReveal(threadItems);
     }
 
     return Column(
@@ -722,20 +801,20 @@ class _ThreadsSectionState extends State<_ThreadsSection> {
         const SizedBox(height: 12),
         Padding(padding: const EdgeInsets.only(bottom: 6), child: _newThreadChip()),
         if (widget.compactLayout)
-          for (var i = 0; i < widget.threads.length; i++) ...[
-            _threadChip(widget.threads[i]),
-            if (i != widget.threads.length - 1) const SizedBox(height: 8),
+          for (var i = 0; i < threadItems.length; i++) ...[
+            _threadChip(threadItems[i]),
+            if (i != threadItems.length - 1) const SizedBox(height: 8),
           ]
         else
           _SidepaneScrollViewport.separated(
             controller: _scrollController,
             viewportKey: _scrollRegionKey,
-            itemCount: widget.threads.length,
+            itemCount: threadItems.length,
             gap: 8,
             itemBuilder: (context, index) {
-              final thread = widget.threads[index];
+              final thread = threadItems[index];
 
-              return KeyedSubtree(key: _keyForThread(thread), child: _threadChip(thread));
+              return KeyedSubtree(key: _keyForThread(thread.id), child: _threadChip(thread));
             },
           ),
       ],
@@ -746,22 +825,42 @@ class _ThreadsSectionState extends State<_ThreadsSection> {
     return PbThreadChip(title: 'New Thread...', create: true, selected: widget.selectedThread == null, onPressed: widget.onCreateThread);
   }
 
-  Widget _threadChip(String thread) {
-    return PbThreadChip(title: thread, selected: thread == widget.selectedThread, onPressed: () => widget.onThreadSelected(thread));
+  Widget _threadChip(PbThreadListItemData thread) {
+    final selectedThreadId = widget.selectedThreadId;
+    final selected = selectedThreadId == null ? thread.title == widget.selectedThread : thread.id == selectedThreadId;
+
+    return PbThreadChip(
+      title: thread.title,
+      selected: selected,
+      onPressed: () {
+        widget.onThreadSelected(thread.title);
+        widget.onThreadItemSelected?.call(thread);
+      },
+    );
   }
 
   GlobalKey _keyForThread(String title) {
     return _threadKeys.putIfAbsent(title, GlobalKey.new);
   }
 
-  void _scheduleSelectedThreadReveal() {
-    final selectedThread = widget.selectedThread;
-    if (selectedThread == null || !widget.threads.contains(selectedThread)) {
+  void _scheduleSelectedThreadReveal(List<PbThreadListItemData> threads) {
+    final selectedThreadId = widget.selectedThreadId;
+    final selectedThread = selectedThreadId ?? widget.selectedThread;
+    String? selectedKey = selectedThreadId;
+    if (selectedKey == null) {
+      for (final thread in threads) {
+        if (thread.title == selectedThread) {
+          selectedKey = thread.id;
+          break;
+        }
+      }
+    }
+    if (selectedThread == null || selectedKey == null || !threads.any((thread) => thread.id == selectedKey)) {
       _lastRevealSignature = null;
       return;
     }
 
-    final revealSignature = '$selectedThread:${widget.threads.length}:${widget.compactLayout}';
+    final revealSignature = '$selectedKey:${threads.length}:${widget.compactLayout}';
     if (_lastRevealSignature == revealSignature) {
       return;
     }
@@ -772,7 +871,7 @@ class _ThreadsSectionState extends State<_ThreadsSection> {
         return;
       }
 
-      final context = _threadKeys[selectedThread]?.currentContext;
+      final context = _threadKeys[selectedKey]?.currentContext;
       final scrollRegionContext = _scrollRegionKey.currentContext;
 
       if (context == null || scrollRegionContext == null) {
@@ -1899,6 +1998,7 @@ class _GhostIconState extends State<_GhostIcon> {
 
 class PbAgentListItemData {
   const PbAgentListItemData({
+    this.id,
     required this.title,
     required this.status,
     required this.icon,
@@ -1906,14 +2006,16 @@ class PbAgentListItemData {
     this.selected = false,
   });
 
+  final String? id;
   final String title;
   final String status;
   final String icon;
   final PbAgentStatusTone statusTone;
   final bool selected;
 
-  PbAgentListItemData copyWith({String? title, String? status, String? icon, PbAgentStatusTone? statusTone, bool? selected}) {
+  PbAgentListItemData copyWith({String? id, String? title, String? status, String? icon, PbAgentStatusTone? statusTone, bool? selected}) {
     return PbAgentListItemData(
+      id: id ?? this.id,
       title: title ?? this.title,
       status: status ?? this.status,
       icon: icon ?? this.icon,
@@ -1921,4 +2023,11 @@ class PbAgentListItemData {
       selected: selected ?? this.selected,
     );
   }
+}
+
+class PbThreadListItemData {
+  const PbThreadListItemData({required this.id, required this.title});
+
+  final String id;
+  final String title;
 }
