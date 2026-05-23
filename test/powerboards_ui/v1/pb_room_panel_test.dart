@@ -58,6 +58,22 @@ void main() {
     expect(secondary.data.selected, isTrue);
   });
 
+  testWidgets('agent cards capitalize display names while preserving raw selection data', (tester) async {
+    PbAgentListItemData? selected;
+    final agents = [const PbAgentListItemData(id: 'multi-word', title: 'multi word agent', status: 'Available', icon: 'bot')];
+
+    await tester.pumpWidget(buildHarness(agents: agents, selectedAgentId: 'multi-word', onAgentSelected: (agent) => selected = agent));
+    await tester.pump();
+
+    expect(find.text('Multi Word Agent'), findsOneWidget);
+    expect(find.text('multi word agent'), findsNothing);
+
+    await tester.tap(agentCardById('multi-word'));
+    await tester.pump();
+
+    expect(selected?.title, 'multi word agent');
+  });
+
   testWidgets('expanded agent list scrolls through all switchable agents', (tester) async {
     PbAgentListItemData? selected;
     final agents = [

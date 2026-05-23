@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/pb_agent_display.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_typography.dart';
 import '../menus/pb_menu_anchor.dart';
@@ -281,7 +282,8 @@ class _ThreadMeta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = showThreadPrefix ? 'Thread with $agentName' : 'with $agentName';
+    final displayAgentName = pbDisplayAgentName(agentName);
+    final label = showThreadPrefix ? 'Thread with $displayAgentName' : 'with $displayAgentName';
 
     return Row(
       mainAxisSize: MainAxisSize.min,

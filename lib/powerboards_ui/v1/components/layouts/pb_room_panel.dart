@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/pb_attachment_file_metadata.dart';
+import '../../models/pb_agent_display.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_typography.dart';
 import '../menus/pb_menu_anchor.dart';
@@ -1093,7 +1094,12 @@ class _PbAgentCardState extends State<PbAgentCard> {
                     Row(
                       children: [
                         Flexible(
-                          child: Text(widget.data.title, style: PowerboardsTypography.button, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            pbDisplayAgentName(widget.data.title),
+                            style: PowerboardsTypography.button,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ],
                     ),

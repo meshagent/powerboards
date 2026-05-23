@@ -4,14 +4,14 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_heade
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 
 void main() {
-  Widget buildHarness({required bool threadMenuEnabled}) {
+  Widget buildHarness({required bool threadMenuEnabled, String agentName = 'voice'}) {
     return MaterialApp(
       home: Scaffold(
         body: SizedBox(
           width: 720,
           child: PbThreadHeader(
             title: 'Audio session',
-            agentName: 'voice',
+            agentName: agentName,
             threads: const ['Planning'],
             selectedThreadTitle: 'Audio session',
             threadMenuEnabled: threadMenuEnabled,
@@ -30,8 +30,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('Audio session'), findsOneWidget);
-    expect(find.text('with voice'), findsOneWidget);
-    expect(find.text('Thread with voice'), findsNothing);
+    expect(find.text('with Voice'), findsOneWidget);
+    expect(find.text('Thread with Voice'), findsNothing);
     expect(chevronIcon(), findsNothing);
 
     await tester.tap(find.text('Audio session'));
@@ -45,8 +45,8 @@ void main() {
     await tester.pumpWidget(buildHarness(threadMenuEnabled: true));
     await tester.pump();
 
-    expect(find.text('Thread with voice'), findsOneWidget);
-    expect(find.text('with voice'), findsNothing);
+    expect(find.text('Thread with Voice'), findsOneWidget);
+    expect(find.text('with Voice'), findsNothing);
     expect(chevronIcon(), findsOneWidget);
 
     await tester.tap(find.text('Audio session'));
@@ -54,5 +54,13 @@ void main() {
 
     expect(find.text('Filter...'), findsOneWidget);
     expect(find.text('New Thread'), findsOneWidget);
+  });
+
+  testWidgets('thread meta capitalizes multi-word agent display names', (tester) async {
+    await tester.pumpWidget(buildHarness(threadMenuEnabled: true, agentName: 'research assistant'));
+    await tester.pump();
+
+    expect(find.text('Thread with Research Assistant'), findsOneWidget);
+    expect(find.text('Thread with research assistant'), findsNothing);
   });
 }
