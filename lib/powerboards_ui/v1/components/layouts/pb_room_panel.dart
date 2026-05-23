@@ -17,7 +17,7 @@ enum PbAgentStatusTone { online, amber, gray }
 const double _sidepaneInlinePadding = 22;
 const double _sidepaneScrollTopPadding = 8;
 const double _sidepaneListTopHoverClearance = 2;
-const double _sidepaneScrollBottomPadding = 0;
+const double _sidepaneScrollBottomPadding = 24;
 const double _sidepaneDescriptionToListGap = 20;
 const double _sidepaneListToActionsGap = 20;
 const double _sidepaneActionsHeight = 36;
@@ -49,6 +49,8 @@ class PbRoomPanel extends StatefulWidget {
     required this.selectedThreadTitle,
     required this.onThreadSelected,
     this.onThreadItemSelected,
+    this.onThreadRename,
+    this.onThreadDelete,
     required this.onCreateThread,
     this.filePreviewResizing = false,
   });
@@ -71,6 +73,8 @@ class PbRoomPanel extends StatefulWidget {
   final String? selectedThreadTitle;
   final ValueChanged<String> onThreadSelected;
   final ValueChanged<PbThreadListItemData>? onThreadItemSelected;
+  final ValueChanged<PbThreadListItemData>? onThreadRename;
+  final ValueChanged<PbThreadListItemData>? onThreadDelete;
   final VoidCallback onCreateThread;
   final bool filePreviewResizing;
 
@@ -201,6 +205,8 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
                             selectedThreadTitle: widget.selectedThreadTitle,
                             onThreadSelected: widget.onThreadSelected,
                             onThreadItemSelected: widget.onThreadItemSelected,
+                            onThreadRename: widget.onThreadRename,
+                            onThreadDelete: widget.onThreadDelete,
                             onCreateThread: widget.onCreateThread,
                           )
                         : _FilesPanel(attachments: widget.attachments ?? _attachments, onPreviewFile: _openFilePreview),
@@ -353,6 +359,8 @@ class _AgentsPanel extends StatefulWidget {
     required this.selectedThreadTitle,
     required this.onThreadSelected,
     this.onThreadItemSelected,
+    this.onThreadRename,
+    this.onThreadDelete,
     required this.onCreateThread,
   });
 
@@ -368,6 +376,8 @@ class _AgentsPanel extends StatefulWidget {
   final String? selectedThreadTitle;
   final ValueChanged<String> onThreadSelected;
   final ValueChanged<PbThreadListItemData>? onThreadItemSelected;
+  final ValueChanged<PbThreadListItemData>? onThreadRename;
+  final ValueChanged<PbThreadListItemData>? onThreadDelete;
   final VoidCallback onCreateThread;
 
   @override
@@ -460,6 +470,8 @@ class _AgentsPanelState extends State<_AgentsPanel> {
           onCreateThread: widget.onCreateThread,
           onThreadSelected: widget.onThreadSelected,
           onThreadItemSelected: widget.onThreadItemSelected,
+          onThreadRename: widget.onThreadRename,
+          onThreadDelete: widget.onThreadDelete,
         );
 
         if (compactLayout) {
@@ -755,6 +767,8 @@ class _ThreadsSection extends StatefulWidget {
     required this.onCreateThread,
     required this.onThreadSelected,
     this.onThreadItemSelected,
+    this.onThreadRename,
+    this.onThreadDelete,
   });
 
   final List<String> threads;
@@ -765,6 +779,8 @@ class _ThreadsSection extends StatefulWidget {
   final VoidCallback onCreateThread;
   final ValueChanged<String> onThreadSelected;
   final ValueChanged<PbThreadListItemData>? onThreadItemSelected;
+  final ValueChanged<PbThreadListItemData>? onThreadRename;
+  final ValueChanged<PbThreadListItemData>? onThreadDelete;
 
   @override
   State<_ThreadsSection> createState() => _ThreadsSectionState();
@@ -836,6 +852,8 @@ class _ThreadsSectionState extends State<_ThreadsSection> {
         widget.onThreadSelected(thread.title);
         widget.onThreadItemSelected?.call(thread);
       },
+      onRename: widget.onThreadRename == null ? null : () => widget.onThreadRename!(thread),
+      onDelete: widget.onThreadDelete == null ? null : () => widget.onThreadDelete!(thread),
     );
   }
 
@@ -1039,12 +1057,22 @@ class _PbAgentCardState extends State<PbAgentCard> {
 }
 
 class PbThreadChip extends StatefulWidget {
-  const PbThreadChip({super.key, required this.title, this.selected = false, this.create = false, this.onPressed});
+  const PbThreadChip({
+    super.key,
+    required this.title,
+    this.selected = false,
+    this.create = false,
+    this.onPressed,
+    this.onRename,
+    this.onDelete,
+  });
 
   final String title;
   final bool selected;
   final bool create;
   final VoidCallback? onPressed;
+  final VoidCallback? onRename;
+  final VoidCallback? onDelete;
 
   @override
   State<PbThreadChip> createState() => _PbThreadChipState();
@@ -1096,79 +1124,87 @@ class _PbThreadChipState extends State<PbThreadChip> {
           curve: Curves.ease,
           transform: Matrix4.translationValues(0, lifted ? -1 : 0, 0),
           constraints: const BoxConstraints(minHeight: 40),
-          padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
           decoration: BoxDecoration(
-            color: menuOpenBackground
-                ? PbColors.customMenuOpenSurface
-                : selectedBackground
-                ? PbColors.customStateSelectedSurface
-                : hoverBackground
-                ? PbColors.surfacePanel
-                : Colors.transparent,
-            gradient: hoverBackground
-                ? const LinearGradient(
-                    colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  )
-                : null,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: _menuOpen
-                  ? Colors.transparent
-                  : selectedBorder
-                  ? PbColors.customStateSelectedBorder
-                  : hoverSurface
-                  ? PbColors.borderSoft
-                  : Colors.transparent,
-            ),
-            boxShadow: _pressed
-                ? const [
-                    BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 2, offset: Offset(0, 1), blurStyle: BlurStyle.inner),
-                  ]
-                : showHoverShadow
+            boxShadow: showHoverShadow
                 ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 30, offset: Offset(0, 14))]
                 : null,
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  widget.title,
-                  style: PowerboardsTypography.button.copyWith(color: active ? PbColors.textPrimary : PbColors.textBody),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 40),
+            padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
+            decoration: BoxDecoration(
+              color: menuOpenBackground
+                  ? PbColors.customMenuOpenSurface
+                  : selectedBackground
+                  ? PbColors.customStateSelectedSurface
+                  : hoverBackground
+                  ? PbColors.surfacePanel
+                  : Colors.transparent,
+              gradient: hoverBackground
+                  ? const LinearGradient(
+                      colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    )
+                  : null,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _menuOpen
+                    ? Colors.transparent
+                    : selectedBorder
+                    ? PbColors.customStateSelectedBorder
+                    : hoverSurface
+                    ? PbColors.borderSoft
+                    : Colors.transparent,
               ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 38,
-                height: 38,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    AnimatedOpacity(
-                      duration: const Duration(milliseconds: 160),
-                      opacity: showSelectedMark ? 1 : 0,
-                      child: const PbSvgIcon(assetName: 'circle-check-big', size: 20, color: PbColors.customBrandInk),
-                    ),
-                    AnimatedOpacity(
-                      duration: const Duration(milliseconds: 160),
-                      opacity: showAction ? 1 : 0,
-                      child: IgnorePointer(
-                        ignoring: !showAction,
-                        child: widget.create
-                            ? const _GhostIcon(assetName: 'plus', color: PbColors.textPrimary, opacity: 1)
-                            : PbSidepaneItemMenu(
-                                onOpenChanged: (open) => setState(() => _menuOpen = open),
-                                panelBuilder: (closeMenu) => PbThreadItemMenu(onDismiss: closeMenu),
-                              ),
+              boxShadow: _pressed
+                  ? const [
+                      BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 2, offset: Offset(0, 1), blurStyle: BlurStyle.inner),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: PowerboardsTypography.button.copyWith(color: active ? PbColors.textPrimary : PbColors.textBody),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 38,
+                  height: 38,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      AnimatedOpacity(
+                        duration: const Duration(milliseconds: 160),
+                        opacity: showSelectedMark ? 1 : 0,
+                        child: const PbSvgIcon(assetName: 'circle-check-big', size: 20, color: PbColors.customBrandInk),
                       ),
-                    ),
-                  ],
+                      AnimatedOpacity(
+                        duration: const Duration(milliseconds: 160),
+                        opacity: showAction ? 1 : 0,
+                        child: IgnorePointer(
+                          ignoring: !showAction,
+                          child: widget.create
+                              ? const _GhostIcon(assetName: 'plus', color: PbColors.textPrimary, opacity: 1)
+                              : PbSidepaneItemMenu(
+                                  onOpenChanged: (open) => setState(() => _menuOpen = open),
+                                  panelBuilder: (closeMenu) =>
+                                      PbThreadItemMenu(onRename: widget.onRename, onDelete: widget.onDelete, onDismiss: closeMenu),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

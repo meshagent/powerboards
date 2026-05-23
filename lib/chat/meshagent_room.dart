@@ -359,8 +359,15 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
 }
 
 class _DesktopPreviewThreadEntry {
-  const _DesktopPreviewThreadEntry({required this.path, required this.name, required this.createdAt, required this.modifiedAt});
+  const _DesktopPreviewThreadEntry({
+    required this.element,
+    required this.path,
+    required this.name,
+    required this.createdAt,
+    required this.modifiedAt,
+  });
 
+  final MeshElement element;
   final String path;
   final String name;
   final String createdAt;
@@ -431,6 +438,7 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
       final modifiedAt = node.getAttribute("modified_at");
       entries.add(
         _DesktopPreviewThreadEntry(
+          element: node,
           path: path,
           name: rawName is String && rawName.trim().isNotEmpty ? rawName.trim() : defaultThreadDisplayNameFromPath(path),
           createdAt: createdAt is String ? createdAt : "",
@@ -3455,6 +3463,60 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _setSelectedThreadPath(agentKey, path, displayName: displayName);
   }
 
+  Future<void> _renameDesktopPreviewThread(_DesktopPreviewThreadEntry entry) async {
+    final newName = await showRenameRoomDialog(
+      context,
+      title: "Rename thread",
+      description: "Choose a clear name for this conversation.",
+      initialValue: entry.name,
+      label: "Name",
+      placeholder: "e.g. Sprint planning",
+    );
+    if (!mounted || newName == null) {
+      return;
+    }
+
+    final trimmed = newName.trim();
+    if (trimmed.isEmpty || trimmed == entry.name) {
+      return;
+    }
+
+    entry.element.setAttribute("name", trimmed);
+  }
+
+  Future<void> _deleteDesktopPreviewThread(_MobileChatHeaderContext? chatContext, _DesktopPreviewThreadEntry entry) async {
+    final confirmed =
+        await showDeleteRoomDialog(
+          context,
+          title: "Delete thread",
+          description: "Are you sure you want to delete \"${entry.name}\"? This cannot be undone.",
+          confirmText: "Delete",
+          destructive: true,
+        ) ??
+        false;
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    if (chatContext?.selectedThreadPath == entry.path) {
+      _selectDesktopPreviewThread(chatContext, null);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) {
+        return;
+      }
+    }
+
+    try {
+      await widget.room.storage.delete(entry.path);
+      entry.element.delete();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to delete thread: $error")));
+    }
+  }
+
   void _selectDesktopPreviewAgent(PbAgentListItemData agent) {
     final routeId = agent.id;
     if (routeId == null || routeId.isEmpty) {
@@ -3555,6 +3617,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
               onThreadSelected: (_) {},
               onThreadItemSelected: (thread) => _selectDesktopPreviewThread(chatContext, thread.id, displayName: thread.title),
+              onThreadRename: (thread) {
+                final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                if (entry != null) {
+                  unawaited(_renameDesktopPreviewThread(entry));
+                }
+              },
+              onThreadDelete: (thread) {
+                final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                if (entry != null) {
+                  unawaited(_deleteDesktopPreviewThread(chatContext, entry));
+                }
+              },
               onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
               attachments: const [],
               filePreviewResizing: resizing,
