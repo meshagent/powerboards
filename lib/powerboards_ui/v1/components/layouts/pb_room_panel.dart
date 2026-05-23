@@ -12,7 +12,7 @@ import '../primitives/pb_svg_icon.dart';
 
 enum PbRoomPanelTab { agents, files }
 
-enum PbAgentStatusTone { online, amber, gray }
+enum PbAgentStatusTone { online, amber, gray, error }
 
 const double _sidepaneInlinePadding = 22;
 const double _sidepaneScrollTopPadding = 8;
@@ -386,28 +386,32 @@ class _AgentsPanel extends StatefulWidget {
 
 class _AgentsPanelState extends State<_AgentsPanel> {
   bool _agentsExpanded = true;
-  late String _selectedAgent = _initialSelectedAgentTitle();
+  late String _selectedAgentKey = _initialSelectedAgentKey();
 
-  String _initialSelectedAgentTitle() {
+  String _initialSelectedAgentKey() {
     final selectedId = widget.selectedAgentId;
     if (selectedId != null) {
       for (final agent in widget.agents) {
         if (agent.id == selectedId) {
-          return agent.title;
+          return agent.identity;
         }
       }
     }
 
     final selectedTitle = widget.selectedAgentTitle;
-    if (selectedTitle != null && widget.agents.any((agent) => agent.title == selectedTitle)) {
-      return selectedTitle;
+    if (selectedTitle != null) {
+      for (final agent in widget.agents) {
+        if (agent.title == selectedTitle) {
+          return agent.identity;
+        }
+      }
     }
 
     if (widget.agents.isEmpty) {
       return '';
     }
 
-    return widget.agents.firstWhere((agent) => agent.selected, orElse: () => widget.agents.first).title;
+    return widget.agents.firstWhere((agent) => agent.selected, orElse: () => widget.agents.first).identity;
   }
 
   @override
@@ -417,20 +421,27 @@ class _AgentsPanelState extends State<_AgentsPanel> {
     final selectedId = widget.selectedAgentId;
     if (selectedId != null) {
       for (final agent in widget.agents) {
-        if (agent.id == selectedId && agent.title != _selectedAgent) {
-          _selectedAgent = agent.title;
+        if (agent.id == selectedId && agent.identity != _selectedAgentKey) {
+          _selectedAgentKey = agent.identity;
           break;
         }
       }
     } else {
       final selectedTitle = widget.selectedAgentTitle;
-      if (selectedTitle != null && selectedTitle != _selectedAgent && widget.agents.any((agent) => agent.title == selectedTitle)) {
-        _selectedAgent = selectedTitle;
+      if (selectedTitle != null) {
+        for (final agent in widget.agents) {
+          if (agent.title == selectedTitle) {
+            if (agent.identity != _selectedAgentKey) {
+              _selectedAgentKey = agent.identity;
+            }
+            break;
+          }
+        }
       }
     }
 
-    if (!widget.agents.any((agent) => agent.title == _selectedAgent) && widget.agents.isNotEmpty) {
-      _selectedAgent = widget.agents.first.title;
+    if (!widget.agents.any((agent) => agent.identity == _selectedAgentKey) && widget.agents.isNotEmpty) {
+      _selectedAgentKey = widget.agents.first.identity;
     }
   }
 
@@ -440,7 +451,7 @@ class _AgentsPanelState extends State<_AgentsPanel> {
       return const SizedBox.shrink();
     }
 
-    final selectedAgent = widget.agents.firstWhere((agent) => agent.title == _selectedAgent, orElse: () => widget.agents.first);
+    final selectedAgent = widget.agents.firstWhere((agent) => agent.identity == _selectedAgentKey, orElse: () => widget.agents.first);
     final visibleAgents = _agentsExpanded ? widget.agents : [selectedAgent];
 
     return LayoutBuilder(
@@ -448,14 +459,14 @@ class _AgentsPanelState extends State<_AgentsPanel> {
         final compactLayout = constraints.maxHeight < 520;
         final fixedSection = _AgentsFixedSection(
           agents: visibleAgents,
-          selectedAgentTitle: _selectedAgent,
+          selectedAgentKey: _selectedAgentKey,
           expanded: _agentsExpanded,
           canToggleExpanded: widget.agents.length > 1,
           panelHeight: constraints.maxHeight,
           compactLayout: compactLayout,
           onManageAgents: widget.onManageAgents,
           onAgentSelected: (agent) {
-            setState(() => _selectedAgent = agent.title);
+            setState(() => _selectedAgentKey = agent.identity);
             widget.onAgentSelected?.call(agent.title);
             widget.onAgentItemSelected?.call(agent);
           },
@@ -505,7 +516,7 @@ class _RoomPanelDescription extends StatelessWidget {
 class _AgentsFixedSection extends StatelessWidget {
   const _AgentsFixedSection({
     required this.agents,
-    required this.selectedAgentTitle,
+    required this.selectedAgentKey,
     required this.expanded,
     required this.canToggleExpanded,
     required this.panelHeight,
@@ -516,7 +527,7 @@ class _AgentsFixedSection extends StatelessWidget {
   });
 
   final List<PbAgentListItemData> agents;
-  final String selectedAgentTitle;
+  final String selectedAgentKey;
   final bool expanded;
   final bool canToggleExpanded;
   final double panelHeight;
@@ -535,7 +546,7 @@ class _AgentsFixedSection extends StatelessWidget {
         SizedBox(height: _sidepaneDescriptionToListGap + (compactLayout ? _sidepaneListTopHoverClearance : 0)),
         _AgentGroup(
           agents: agents,
-          selectedAgentTitle: selectedAgentTitle,
+          selectedAgentKey: selectedAgentKey,
           expanded: expanded,
           panelHeight: panelHeight,
           onAgentSelected: onAgentSelected,
@@ -557,14 +568,14 @@ class _AgentsFixedSection extends StatelessWidget {
 class _AgentGroup extends StatefulWidget {
   const _AgentGroup({
     required this.agents,
-    required this.selectedAgentTitle,
+    required this.selectedAgentKey,
     required this.expanded,
     required this.panelHeight,
     required this.onAgentSelected,
   });
 
   final List<PbAgentListItemData> agents;
-  final String selectedAgentTitle;
+  final String selectedAgentKey;
   final bool expanded;
   final double panelHeight;
   final ValueChanged<PbAgentListItemData> onAgentSelected;
@@ -591,7 +602,7 @@ class _AgentGroupState extends State<_AgentGroup> {
   Widget build(BuildContext context) {
     if (!widget.expanded) {
       _lastRevealSignature = null;
-      return _AgentList(agents: widget.agents, selectedAgentTitle: widget.selectedAgentTitle, onAgentSelected: widget.onAgentSelected);
+      return _AgentList(agents: widget.agents, selectedAgentKey: widget.selectedAgentKey, onAgentSelected: widget.onAgentSelected);
     }
 
     final contentHeight = _agentListHeight(widget.agents.length);
@@ -599,7 +610,7 @@ class _AgentGroupState extends State<_AgentGroup> {
 
     if (widget.agents.length <= _agentListScrollThreshold || contentHeight <= maxHeight) {
       _lastRevealSignature = null;
-      return _AgentList(agents: widget.agents, selectedAgentTitle: widget.selectedAgentTitle, onAgentSelected: widget.onAgentSelected);
+      return _AgentList(agents: widget.agents, selectedAgentKey: widget.selectedAgentKey, onAgentSelected: widget.onAgentSelected);
     }
 
     _scheduleSelectedAgentReveal();
@@ -617,9 +628,9 @@ class _AgentGroupState extends State<_AgentGroup> {
           final agent = widget.agents[index];
 
           return KeyedSubtree(
-            key: _keyForAgent(agent.title),
+            key: _keyForAgent(agent.identity),
             child: PbAgentCard(
-              data: agent.copyWith(selected: agent.title == widget.selectedAgentTitle),
+              data: agent.copyWith(selected: agent.identity == widget.selectedAgentKey),
               onPressed: () => widget.onAgentSelected(agent),
             ),
           );
@@ -633,13 +644,13 @@ class _AgentGroupState extends State<_AgentGroup> {
   }
 
   void _scheduleSelectedAgentReveal() {
-    final selectedAgentVisible = widget.agents.any((agent) => agent.title == widget.selectedAgentTitle);
-    if (!selectedAgentVisible) {
+    final selectedIndex = widget.agents.indexWhere((agent) => agent.identity == widget.selectedAgentKey);
+    if (selectedIndex == -1) {
       _lastRevealSignature = null;
       return;
     }
 
-    final revealSignature = '${widget.selectedAgentTitle}:${widget.agents.length}:${widget.expanded}';
+    final revealSignature = '${widget.selectedAgentKey}:${widget.agents.length}:${widget.expanded}';
     if (_lastRevealSignature == revealSignature) {
       return;
     }
@@ -650,37 +661,73 @@ class _AgentGroupState extends State<_AgentGroup> {
         return;
       }
 
-      final context = _agentKeys[widget.selectedAgentTitle]?.currentContext;
-      final scrollRegionContext = _scrollRegionKey.currentContext;
-
-      if (context == null || scrollRegionContext == null) {
-        return;
-      }
-
-      final selectedBox = context.findRenderObject();
-      final scrollRegionBox = scrollRegionContext.findRenderObject();
-
-      if (selectedBox is! RenderBox || scrollRegionBox is! RenderBox) {
-        return;
-      }
-
-      final selectedOffset = selectedBox.localToGlobal(Offset.zero);
-      final scrollRegionOffset = scrollRegionBox.localToGlobal(Offset.zero);
-      final selectedTop = selectedOffset.dy;
-      final selectedBottom = selectedTop + selectedBox.size.height;
-      final topEdge = scrollRegionOffset.dy + _selectedRevealInset;
-      final bottomEdge = scrollRegionOffset.dy + scrollRegionBox.size.height - _selectedRevealInset;
-      final maxScrollExtent = _scrollController.position.maxScrollExtent;
-
-      if (selectedTop < topEdge) {
-        _scrollController.jumpTo((_scrollController.offset + selectedTop - topEdge).clamp(0, maxScrollExtent));
-        return;
-      }
-
-      if (selectedBottom > bottomEdge) {
-        _scrollController.jumpTo((_scrollController.offset + selectedBottom - bottomEdge).clamp(0, maxScrollExtent));
+      if (!_revealBuiltSelectedAgent(widget.selectedAgentKey)) {
+        _jumpToEstimatedSelectedAgent(selectedIndex);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _scrollController.hasClients) {
+            _revealBuiltSelectedAgent(widget.selectedAgentKey);
+          }
+        });
       }
     });
+  }
+
+  bool _revealBuiltSelectedAgent(String selectedKey) {
+    final context = _agentKeys[selectedKey]?.currentContext;
+    final scrollRegionContext = _scrollRegionKey.currentContext;
+
+    if (context == null || scrollRegionContext == null) {
+      return false;
+    }
+
+    final selectedBox = context.findRenderObject();
+    final scrollRegionBox = scrollRegionContext.findRenderObject();
+
+    if (selectedBox is! RenderBox || scrollRegionBox is! RenderBox) {
+      return false;
+    }
+
+    final selectedOffset = selectedBox.localToGlobal(Offset.zero);
+    final scrollRegionOffset = scrollRegionBox.localToGlobal(Offset.zero);
+    final selectedTop = selectedOffset.dy;
+    final selectedBottom = selectedTop + selectedBox.size.height;
+    final topEdge = scrollRegionOffset.dy + _selectedRevealInset;
+    final bottomEdge = scrollRegionOffset.dy + scrollRegionBox.size.height - _selectedRevealInset;
+    final maxScrollExtent = _scrollController.position.maxScrollExtent;
+
+    if (selectedTop < topEdge) {
+      _scrollController.jumpTo((_scrollController.offset + selectedTop - topEdge).clamp(0, maxScrollExtent));
+      return true;
+    }
+
+    if (selectedBottom > bottomEdge) {
+      _scrollController.jumpTo((_scrollController.offset + selectedBottom - bottomEdge).clamp(0, maxScrollExtent));
+    }
+
+    return true;
+  }
+
+  void _jumpToEstimatedSelectedAgent(int selectedIndex) {
+    final scrollRegionContext = _scrollRegionKey.currentContext;
+    final scrollRegionBox = scrollRegionContext?.findRenderObject();
+    if (scrollRegionBox is! RenderBox) {
+      return;
+    }
+
+    final selectedTop = _sidepaneListTopHoverClearance + (selectedIndex * (_agentCardMinHeight + _agentListGap));
+    final selectedBottom = selectedTop + _agentCardMinHeight;
+    final visibleTop = _scrollController.offset + _selectedRevealInset;
+    final visibleBottom = _scrollController.offset + scrollRegionBox.size.height - _selectedRevealInset;
+    final maxScrollExtent = _scrollController.position.maxScrollExtent;
+
+    if (selectedTop < visibleTop) {
+      _scrollController.jumpTo((selectedTop - _selectedRevealInset).clamp(0, maxScrollExtent));
+      return;
+    }
+
+    if (selectedBottom > visibleBottom) {
+      _scrollController.jumpTo((selectedBottom - scrollRegionBox.size.height + _selectedRevealInset).clamp(0, maxScrollExtent));
+    }
   }
 
   double _agentListHeight(int count) {
@@ -706,10 +753,10 @@ class _AgentGroupState extends State<_AgentGroup> {
 }
 
 class _AgentList extends StatelessWidget {
-  const _AgentList({required this.agents, required this.selectedAgentTitle, required this.onAgentSelected});
+  const _AgentList({required this.agents, required this.selectedAgentKey, required this.onAgentSelected});
 
   final List<PbAgentListItemData> agents;
-  final String selectedAgentTitle;
+  final String selectedAgentKey;
   final ValueChanged<PbAgentListItemData> onAgentSelected;
 
   @override
@@ -724,7 +771,7 @@ class _AgentList extends StatelessWidget {
           children: [
             for (var i = 0; i < agents.length; i++) ...[
               PbAgentCard(
-                data: agents[i].copyWith(selected: agents[i].title == selectedAgentTitle),
+                data: agents[i].copyWith(selected: agents[i].identity == selectedAgentKey),
                 onPressed: () => onAgentSelected(agents[i]),
               ),
               if (i != agents.length - 1) const SizedBox(height: _agentListGap),
@@ -943,6 +990,7 @@ class _PbAgentCardState extends State<PbAgentCard> {
       PbAgentStatusTone.online => PbColors.statusOnline,
       PbAgentStatusTone.amber => PbColors.customAmber,
       PbAgentStatusTone.gray => PbColors.customGray,
+      PbAgentStatusTone.error => PbColors.alert,
     };
   }
 
@@ -2048,6 +2096,8 @@ class PbAgentListItemData {
   final String icon;
   final PbAgentStatusTone statusTone;
   final bool selected;
+
+  String get identity => id ?? title;
 
   PbAgentListItemData copyWith({String? id, String? title, String? status, String? icon, PbAgentStatusTone? statusTone, bool? selected}) {
     return PbAgentListItemData(

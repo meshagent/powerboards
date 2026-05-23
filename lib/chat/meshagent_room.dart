@@ -3403,15 +3403,52 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     };
   }
 
-  String _desktopPreviewAgentStatusForService(ServiceSpec service) {
-    final descriptor = serviceConversationDescriptor(service, remoteParticipants: widget.room.messaging.remoteParticipants);
-    if (descriptor?.isVoiceOnly == true) {
-      return 'Voice agent';
+  AgentRuntimeStatus _desktopPreviewAgentRuntimeStatusForService(ServiceSpec service) {
+    if (!hasMessagingParticipant(service)) {
+      return AgentRuntimeStatus.running;
     }
-    if (descriptor?.isChat == true) {
-      return descriptor?.threadListPath == null ? 'Connected' : 'Threads enabled';
+
+    final identity = _serviceAgentName(service);
+    if (identity == null) {
+      return AgentRuntimeStatus.notRunning;
     }
-    return 'Connected';
+
+    final participant = widget.room.messaging.remoteParticipants.firstWhereOrNull(
+      (candidate) => candidate.getAttribute("name") == identity,
+    );
+    return participant == null ? AgentRuntimeStatus.notRunning : AgentRuntimeStatus.running;
+  }
+
+  String _desktopPreviewAgentStatusText(AgentRuntimeStatus status) {
+    return switch (status) {
+      AgentRuntimeStatus.running => 'Available',
+      AgentRuntimeStatus.pulling => 'Downloading',
+      AgentRuntimeStatus.notRunning => 'Initializing',
+      AgentRuntimeStatus.error => 'Error',
+      AgentRuntimeStatus.invalid => 'Invalid',
+      AgentRuntimeStatus.unknown => 'Unknown',
+    };
+  }
+
+  PbAgentStatusTone _desktopPreviewAgentStatusTone(AgentRuntimeStatus status) {
+    return switch (status) {
+      AgentRuntimeStatus.running => PbAgentStatusTone.online,
+      AgentRuntimeStatus.pulling => PbAgentStatusTone.amber,
+      AgentRuntimeStatus.notRunning => PbAgentStatusTone.gray,
+      AgentRuntimeStatus.error || AgentRuntimeStatus.invalid || AgentRuntimeStatus.unknown => PbAgentStatusTone.error,
+    };
+  }
+
+  PbAgentListItemData _desktopPreviewAgentItemForService(ServiceSpec service, _ResolvedAgentSelection selected) {
+    final status = _desktopPreviewAgentRuntimeStatusForService(service);
+    return PbAgentListItemData(
+      id: _serviceId(service),
+      title: service.agents.firstOrNull?.name ?? service.metadata.name,
+      status: _desktopPreviewAgentStatusText(status),
+      icon: _desktopPreviewAgentIconAssetForService(service),
+      statusTone: _desktopPreviewAgentStatusTone(status),
+      selected: selected.service == service,
+    );
   }
 
   List<PbAgentListItemData> _desktopPreviewAgentItems(List<ServiceSpec> supported, _ResolvedAgentSelection selected) {
@@ -3419,21 +3456,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     services.sort((a, b) => a.metadata.name.toLowerCase().compareTo(b.metadata.name.toLowerCase()));
     final developmentParticipants = _developmentParticipants(supported);
     return [
-      for (final service in services)
-        PbAgentListItemData(
-          id: _serviceId(service),
-          title: service.agents.firstOrNull?.name ?? service.metadata.name,
-          status: _desktopPreviewAgentStatusForService(service),
-          icon: _desktopPreviewAgentIconAssetForService(service),
-          selected: selected.service == service,
-        ),
+      for (final service in services) _desktopPreviewAgentItemForService(service, selected),
       for (final participant in developmentParticipants)
         if (participantDisplayName(participant) case final String name)
           PbAgentListItemData(
             id: developmentAgentRouteId(name),
             title: name,
-            status: 'Development agent',
+            status: 'Available',
             icon: _developmentAgentIcon(participant) == LucideIcons.audioWaveform ? 'video' : 'bot',
+            statusTone: PbAgentStatusTone.online,
             selected: selected.developmentParticipant == participant,
           ),
     ];
