@@ -1785,7 +1785,6 @@ class _FileManagerViewState extends State<FileManagerView> {
             },
           ),
         ),
-        const SizedBox(height: desktopPaneSecondaryControlTopOffset),
         _buildDesktopContextToolbar(selected),
       ],
     );
