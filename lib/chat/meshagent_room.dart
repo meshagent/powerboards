@@ -3254,6 +3254,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 desktopHeaderActionLeadingWidthFloor: meetingSessionActive ? _meetingActivePaneActionLeadingWidthFloor : 0,
                 desktopHeaderActionMinimumLeadingWidth: meetingSessionActive ? 160 : 0,
                 desktopHeaderActionReserve: meetingSessionActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
+                showDesktopRootBreadcrumb: !powerboardsUsesDesktopUiPreview(context),
               ),
             ),
           ),
@@ -3358,17 +3359,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   spacing: desktopPaneHeaderButtonGap,
                                   children: [
                                     ?sidetrayOpenButton,
-                                    Expanded(
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Text(
-                                          "Get ready to meet",
-                                          style: meetingHeaderTitleStyle,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                    if (!powerboardsUsesDesktopUiPreview(context))
+                                      Expanded(
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            "Get ready to meet",
+                                            style: meetingHeaderTitleStyle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
-                                      ),
-                                    ),
+                                      )
+                                    else
+                                      const Spacer(),
                                     if (visibleActions.isNotEmpty)
                                       Align(
                                         alignment: Alignment.centerRight,
