@@ -11,6 +11,7 @@ class PbMenuAnchor extends StatefulWidget {
     this.gap = 10,
     this.triggerWidth,
     this.triggerHeight = 48,
+    this.onDismiss,
     this.onDismissRequested,
   });
 
@@ -20,6 +21,7 @@ class PbMenuAnchor extends StatefulWidget {
   final double gap;
   final double? triggerWidth;
   final double triggerHeight;
+  final VoidCallback? onDismiss;
   final VoidCallback? onDismissRequested;
 
   @override
@@ -65,14 +67,14 @@ class _PbMenuAnchorState extends State<PbMenuAnchor> {
       return;
     }
 
-    widget.onDismissRequested?.call();
+    (widget.onDismiss ?? widget.onDismissRequested)?.call();
   }
 
   @override
   Widget build(BuildContext context) {
     return TapRegion(
       groupId: _tapRegionGroupId,
-      onTapOutside: widget.onDismissRequested == null ? null : _handleTapOutside,
+      onTapOutside: widget.onDismiss == null && widget.onDismissRequested == null ? null : _handleTapOutside,
       child: OverlayPortal.overlayChildLayoutBuilder(
         controller: _controller,
         overlayChildBuilder: (context, info) {

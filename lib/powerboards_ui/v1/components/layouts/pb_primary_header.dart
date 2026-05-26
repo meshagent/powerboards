@@ -56,7 +56,6 @@ class PbPrimaryHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final switcherGap = shellIconOnly ? 8.0 : 12.0;
         final actionGap = shellIconOnly ? 6.0 : 16.0;
 
         return Container(
@@ -69,40 +68,24 @@ class PbPrimaryHeader extends StatelessWidget {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    PbMenuAnchor(
-                      panel: projectMenu,
-                      onDismissRequested: onProjectDismissRequested,
-                      child: PbSwitcherField(
-                        eyebrow: 'Project',
-                        value: projectValue,
-                        selected: projectSelected,
-                        onPressed: onProjectPressed,
+                    if (showRoomSwitcher)
+                      PbMenuAnchor(
+                        panel: roomMenu,
+                        onDismissRequested: onRoomDismissRequested,
+                        child: PbSwitcherField(eyebrow: 'Room', value: roomValue, selected: roomSelected, onPressed: onRoomPressed),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    PbMenuAnchor(
-                      panel: roomMenu,
-                      onDismissRequested: onRoomDismissRequested,
-                      child: PbSwitcherField(eyebrow: 'Room', value: roomValue, selected: roomSelected, onPressed: onRoomPressed),
-                    ),
                   ],
                 )
               : Row(
                   children: [
-                    _SwitcherRow(
-                      gap: switcherGap,
-                      showRoomSwitcher: showRoomSwitcher,
-                      projectValue: projectValue,
-                      roomValue: roomValue,
-                      projectSelected: projectSelected,
-                      roomSelected: roomSelected,
-                      projectMenu: projectMenu,
-                      roomMenu: roomMenu,
-                      onProjectPressed: onProjectPressed,
-                      onRoomPressed: onRoomPressed,
-                      onProjectDismissRequested: onProjectDismissRequested,
-                      onRoomDismissRequested: onRoomDismissRequested,
-                    ),
+                    if (showRoomSwitcher)
+                      _RoomSwitcher(
+                        roomValue: roomValue,
+                        roomSelected: roomSelected,
+                        roomMenu: roomMenu,
+                        onRoomPressed: onRoomPressed,
+                        onRoomDismissRequested: onRoomDismissRequested,
+                      ),
                     const Spacer(),
                     trailingActions ??
                         Row(
@@ -147,59 +130,30 @@ class PbPrimaryHeader extends StatelessWidget {
   }
 }
 
-class _SwitcherRow extends StatelessWidget {
-  const _SwitcherRow({
-    required this.gap,
-    required this.showRoomSwitcher,
-    required this.projectValue,
+class _RoomSwitcher extends StatelessWidget {
+  const _RoomSwitcher({
     required this.roomValue,
-    required this.projectSelected,
     required this.roomSelected,
-    this.projectMenu,
     this.roomMenu,
-    this.onProjectPressed,
     this.onRoomPressed,
-    this.onProjectDismissRequested,
     this.onRoomDismissRequested,
   });
 
-  final double gap;
-  final bool showRoomSwitcher;
-  final String projectValue;
   final String roomValue;
-  final bool projectSelected;
   final bool roomSelected;
-  final Widget? projectMenu;
   final Widget? roomMenu;
-  final VoidCallback? onProjectPressed;
   final VoidCallback? onRoomPressed;
-  final VoidCallback? onProjectDismissRequested;
   final VoidCallback? onRoomDismissRequested;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 196,
-          child: PbMenuAnchor(
-            panel: projectMenu,
-            onDismissRequested: onProjectDismissRequested,
-            child: PbSwitcherField(eyebrow: 'Project', value: projectValue, selected: projectSelected, onPressed: onProjectPressed),
-          ),
-        ),
-        if (showRoomSwitcher) ...[
-          SizedBox(width: gap),
-          SizedBox(
-            width: 196,
-            child: PbMenuAnchor(
-              panel: roomMenu,
-              onDismissRequested: onRoomDismissRequested,
-              child: PbSwitcherField(eyebrow: 'Room', value: roomValue, selected: roomSelected, onPressed: onRoomPressed),
-            ),
-          ),
-        ],
-      ],
+    return SizedBox(
+      width: 196,
+      child: PbMenuAnchor(
+        panel: roomMenu,
+        onDismissRequested: onRoomDismissRequested,
+        child: PbSwitcherField(eyebrow: 'Room', value: roomValue, selected: roomSelected, onPressed: onRoomPressed),
+      ),
     );
   }
 }
