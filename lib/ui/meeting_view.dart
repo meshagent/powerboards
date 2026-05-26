@@ -33,6 +33,7 @@ const _mobileMeetingToolbarFixedControlCount = 4;
 const _mobileTranscriptionButtonMaxWidth = 260.0;
 const _mobileTranscriptionCompactThreshold = 110.0;
 const _mobileTranscriptionShortLabelThreshold = 148.0;
+const _desktopLobbyMaxWidth = 880.0;
 
 enum MeetingViewState { preview, joined }
 
@@ -129,30 +130,36 @@ class _MeetingViewState extends State<MeetingView> {
           return _voiceSessionMeetingBlockedState();
         }
 
-        return Padding(
-          padding: const .symmetric(horizontal: 20.0),
-          child: DevicePreview(
-            onJoin: ({required enableVideo, required enableAudio, required videoUnavailable, required audioUnavailable}) {
-              final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
-              final navController = Controller.ofType<NavController>(context);
+        return Align(
+          alignment: Alignment.center,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _desktopLobbyMaxWidth),
+            child: Padding(
+              padding: const .symmetric(horizontal: 20.0),
+              child: DevicePreview(
+                onJoin: ({required enableVideo, required enableAudio, required videoUnavailable, required audioUnavailable}) {
+                  final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
+                  final navController = Controller.ofType<NavController>(context);
 
-              if (videoChatConnection != null) {
-                videoChatConnection.setRoomFromDoc(
-                  "",
-                  widget.room,
-                  "",
-                  video: enableVideo,
-                  audio: enableAudio,
-                  videoUnavailable: videoUnavailable,
-                  audioUnavailable: audioUnavailable,
-                  agentID: null,
-                );
-              }
+                  if (videoChatConnection != null) {
+                    videoChatConnection.setRoomFromDoc(
+                      "",
+                      widget.room,
+                      "",
+                      video: enableVideo,
+                      audio: enableAudio,
+                      videoUnavailable: videoUnavailable,
+                      audioUnavailable: audioUnavailable,
+                      agentID: null,
+                    );
+                  }
 
-              meetingViewController.enterMeeting();
-              navController.hideNav();
-            },
-            onCancel: widget.onCancel,
+                  meetingViewController.enterMeeting();
+                  navController.hideNav();
+                },
+                onCancel: widget.onCancel,
+              ),
+            ),
           ),
         );
       } else if (meetingViewController.state == MeetingViewState.joined) {
