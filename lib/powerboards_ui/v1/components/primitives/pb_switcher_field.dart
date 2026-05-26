@@ -46,8 +46,10 @@ class _PbSwitcherFieldState extends State<PbSwitcherField> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTap: widget.onPressed,
+        onTapUp: (_) {
+          setState(() => _pressed = false);
+          widget.onPressed?.call();
+        },
         onTapCancel: () => setState(() => _pressed = false),
         child: Transform.translate(
           offset: Offset(0, _lifted ? -1 : 0),
@@ -75,9 +77,12 @@ class _PbSwitcherFieldState extends State<PbSwitcherField> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(widget.eyebrow, style: PowerboardsTypography.fieldEyebrow),
+                      Text(
+                        widget.eyebrow,
+                        style: PowerboardsTypography.textXSmall.copyWith(fontWeight: FontWeight.w500, color: PbColors.textMuted),
+                      ),
                       const SizedBox(height: 2),
-                      Text(widget.value, style: PowerboardsTypography.fieldValue, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(widget.value, style: PowerboardsTypography.label, maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),

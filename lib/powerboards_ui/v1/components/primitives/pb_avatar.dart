@@ -10,6 +10,7 @@ class PbAvatar extends StatelessWidget {
     this.size = 34,
     this.borderColor,
     this.boxShadow,
+    this.textStyle,
     this.backgroundColor = const LinearGradient(
       colors: [PbColors.surfaceRailActive, PbColors.surfaceActionPrimary],
       begin: Alignment.topCenter,
@@ -21,6 +22,7 @@ class PbAvatar extends StatelessWidget {
   final double size;
   final Color? borderColor;
   final List<BoxShadow>? boxShadow;
+  final TextStyle? textStyle;
   final Gradient backgroundColor;
 
   @override
@@ -35,7 +37,7 @@ class PbAvatar extends StatelessWidget {
         boxShadow: boxShadow,
       ),
       alignment: Alignment.center,
-      child: Text(initials, style: PowerboardsTypography.avatarInitials),
+      child: Text(initials, style: textStyle ?? PowerboardsTypography.avatarInitials),
     );
   }
 }

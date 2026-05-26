@@ -54,6 +54,9 @@ import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_header.dart';
 import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
 import 'package:powerboards/settings/selected_room.dart';
 import 'package:powerboards/settings/ui_mode.dart';
@@ -353,6 +356,193 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+class _DesktopPreviewThreadEntry {
+  const _DesktopPreviewThreadEntry({
+    required this.element,
+    required this.path,
+    required this.name,
+    required this.createdAt,
+    required this.modifiedAt,
+  });
+
+  final MeshElement element;
+  final String path;
+  final String name;
+  final String createdAt;
+  final String modifiedAt;
+}
+
+class _DesktopPreviewThreadList extends StatefulWidget {
+  const _DesktopPreviewThreadList({required this.client, required this.threadListPath, required this.builder});
+
+  final RoomClient client;
+  final String? threadListPath;
+  final Widget Function(BuildContext context, List<_DesktopPreviewThreadEntry> threads) builder;
+
+  @override
+  State<_DesktopPreviewThreadList> createState() => _DesktopPreviewThreadListState();
+}
+
+class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
+  MeshDocument? _document;
+  String? _openedThreadListPath;
+
+  String? _normalizedThreadListPath() {
+    final path = widget.threadListPath?.trim();
+    if (path == null || path.isEmpty) {
+      return null;
+    }
+    return path;
+  }
+
+  DateTime _parseThreadDate(String value) {
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) {
+      return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    }
+    return parsed.toUtc();
+  }
+
+  DateTime _threadSortDate(_DesktopPreviewThreadEntry entry) {
+    if (entry.modifiedAt.trim().isNotEmpty) {
+      return _parseThreadDate(entry.modifiedAt);
+    }
+    if (entry.createdAt.trim().isNotEmpty) {
+      return _parseThreadDate(entry.createdAt);
+    }
+    return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  }
+
+  List<_DesktopPreviewThreadEntry> _entries() {
+    final document = _document;
+    if (document == null) {
+      return const <_DesktopPreviewThreadEntry>[];
+    }
+
+    final entries = <_DesktopPreviewThreadEntry>[];
+    for (final node in document.root.getChildren()) {
+      if (node is! MeshElement || node.tagName != "thread") {
+        continue;
+      }
+
+      final rawPath = node.getAttribute("path");
+      if (rawPath is! String || rawPath.trim().isEmpty) {
+        continue;
+      }
+
+      final path = rawPath.trim();
+      final rawName = node.getAttribute("name");
+      final createdAt = node.getAttribute("created_at");
+      final modifiedAt = node.getAttribute("modified_at");
+      entries.add(
+        _DesktopPreviewThreadEntry(
+          element: node,
+          path: path,
+          name: rawName is String && rawName.trim().isNotEmpty ? rawName.trim() : defaultThreadDisplayNameFromPath(path),
+          createdAt: createdAt is String ? createdAt : "",
+          modifiedAt: modifiedAt is String ? modifiedAt : "",
+        ),
+      );
+    }
+
+    entries.sort((a, b) {
+      final dateComparison = _threadSortDate(b).compareTo(_threadSortDate(a));
+      if (dateComparison != 0) {
+        return dateComparison;
+      }
+      return a.path.compareTo(b.path);
+    });
+    return entries;
+  }
+
+  void _onThreadListChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {});
+  }
+
+  Future<void> _closeDocument() async {
+    final document = _document;
+    final openedThreadListPath = _openedThreadListPath;
+
+    if (document != null) {
+      document.removeListener(_onThreadListChanged);
+    }
+
+    _document = null;
+    _openedThreadListPath = null;
+
+    if (openedThreadListPath != null) {
+      try {
+        await widget.client.sync.close(openedThreadListPath);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _rebindDocument() async {
+    final nextThreadListPath = _normalizedThreadListPath();
+    if (nextThreadListPath == _openedThreadListPath && _document != null) {
+      return;
+    }
+
+    await _closeDocument();
+
+    if (nextThreadListPath == null) {
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
+
+    try {
+      final document = await widget.client.sync.open(nextThreadListPath);
+      if (!mounted || _normalizedThreadListPath() != nextThreadListPath) {
+        try {
+          await widget.client.sync.close(nextThreadListPath);
+        } catch (_) {}
+        return;
+      }
+
+      document.addListener(_onThreadListChanged);
+      setState(() {
+        _document = document;
+        _openedThreadListPath = nextThreadListPath;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {});
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_rebindDocument());
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopPreviewThreadList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath) {
+      unawaited(_rebindDocument());
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_closeDocument());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _entries());
 }
 
 EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
@@ -1078,6 +1268,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   String? _lastPersistedMobileAgentRouteId;
   String? _lastSyncedRoutePath;
   _MobileRoomPane? _lastSyncedRoutePane;
+  PbRoomPanelTab _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
+  bool _desktopPreviewRoomPanelCollapsed = false;
+  bool _desktopPreviewAgentsExpanded = true;
   bool _didNormalizeInitialDesktopPane = false;
   _MobileMeetingOrigin? _mobileMeetingOrigin;
   StreamSubscription<RoomStatusEvent>? _roomStatusSubscription;
@@ -1573,11 +1766,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
 
       final serviceName = service.agents.firstOrNull?.name ?? service.metadata.name;
-      final threadListPath = _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: serviceName);
+      final isVoiceOnly = supportsVoice && !supportsChat;
+      final threadListPath = isVoiceOnly
+          ? null
+          : _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: serviceName);
       final supportsThreads = threadListPath != null;
       final rawServiceDescription = service.metadata.description;
       final serviceDescription = rawServiceDescription == null || rawServiceDescription.trim().isEmpty
-          ? (supportsVoice && !supportsChat ? "Voice agent" : "Chat agent")
+          ? (isVoiceOnly ? "Voice agent" : "Chat agent")
           : rawServiceDescription;
       options.add(
         _MobileRoomContextAgentOption(
@@ -1587,7 +1783,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           threadListPath: threadListPath,
           leadingIcon: supportsVoice ? LucideIcons.audioWaveform : LucideIcons.bot,
           supportsThreads: supportsThreads,
-          isVoiceOnly: supportsVoice && !supportsChat,
+          isVoiceOnly: isVoiceOnly,
         ),
       );
     }
@@ -1604,22 +1800,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       if (participantName == null) {
         continue;
       }
-      final threadListPath = _resolvedThreadListPath(
-        descriptor?.threadListPath,
-        threadDir: descriptor?.threadDir,
-        agentName: participantName,
-      );
+      final isVoiceOnly = supportsVoice && !supportsChat;
+      final threadListPath = isVoiceOnly
+          ? null
+          : _resolvedThreadListPath(descriptor?.threadListPath, threadDir: descriptor?.threadDir, agentName: participantName);
       final supportsThreads = threadListPath != null;
 
       options.add(
         _MobileRoomContextAgentOption(
           routeId: developmentAgentRouteId(participantName),
           name: participantName,
-          description: supportsVoice && !supportsChat ? "Development mode voice agent" : "Development mode agent",
+          description: isVoiceOnly ? "Development mode voice agent" : "Development mode agent",
           threadListPath: threadListPath,
           leadingIcon: _developmentAgentIcon(participant),
           supportsThreads: supportsThreads,
-          isVoiceOnly: supportsVoice && !supportsChat,
+          isVoiceOnly: isVoiceOnly,
         ),
       );
     }
@@ -1675,9 +1870,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       if (agentName == null) {
         return null;
       }
-      threadListPath = _resolvedThreadListPath(descriptor.threadListPath, threadDir: descriptor.threadDir, agentName: agentName);
-      supportsThreads = threadListPath != null;
       isVoiceOnly = descriptor.isVoiceOnly == true && descriptor.isChat != true;
+      threadListPath = isVoiceOnly
+          ? null
+          : _resolvedThreadListPath(descriptor.threadListPath, threadDir: descriptor.threadDir, agentName: agentName);
+      supportsThreads = threadListPath != null;
       currentThreadLabel = isVoiceOnly ? "Audio session" : "New thread";
     } else if (selection.service != null) {
       final service = selection.service!;
@@ -1687,9 +1884,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
 
       agentName = service.agents.firstOrNull?.name ?? service.metadata.name;
-      threadListPath = _resolvedThreadListPath(descriptor.threadListPath, threadDir: descriptor.threadDir, agentName: agentName);
-      supportsThreads = threadListPath != null;
       isVoiceOnly = descriptor.isVoiceOnly == true && descriptor.isChat != true;
+      threadListPath = isVoiceOnly
+          ? null
+          : _resolvedThreadListPath(descriptor.threadListPath, threadDir: descriptor.threadDir, agentName: agentName);
+      supportsThreads = threadListPath != null;
       currentThreadLabel = isVoiceOnly ? "Audio session" : "New thread";
     }
 
@@ -2005,7 +2204,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       showKeychain: true,
       showConsoleToggle: canViewDeveloperLogs.state.value == true,
       showShutdown: isOwner.state.value == true,
-      consoleLabel: controller.isDebugShown ? 'Hide console' : 'Show console',
+      consoleLabel: 'Developer console',
       onRenamePressed: () => unawaited(_renameCurrentRoomFromPreviewRail()),
       onPermissionsPressed: () => unawaited(_openCurrentRoomPermissionsFromPreviewRail()),
       onManageAgentsPressed: () => unawaited(showManageAgents()),
@@ -2727,6 +2926,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     Widget? emptyState,
     bool hideChatInput = false,
     bool embedMobileChrome = true,
+    bool showDesktopThreadListAlternatives = true,
   }) {
     final user = MeshagentAuth.current.getUser();
     final userEmail = user?["email"];
@@ -2743,7 +2943,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final resolvedThreadListPath = _resolvedThreadListPath(threadListPath, threadDir: threadDir, agentName: agentName);
     final hasThreadList = isMultiThread && resolvedThreadListPath != null;
     final showThreadRail = !isMobile && showEmbeddedThreadList && hasThreadList;
-    final showInlineThreadList = !isMobile && !showEmbeddedThreadList && hasThreadList;
+    final showInlineThreadList = !isMobile && !showEmbeddedThreadList && hasThreadList && showDesktopThreadListAlternatives;
     final showMobileThreadActions = isMobile && isMultiThread;
     final newThreadEmptyStateVerticalOffset = showInlineThreadList
         ? -((desktopPaneSecondaryControlHeight + desktopPaneBottomInset + desktopPaneSecondaryRowContentGap) / 2)
@@ -3088,6 +3288,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 final sidetrayOpenButton = showDesktopSidetrayToggle && sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
                     ? DesktopSidetrayToggleButton(collapsed: true, onPressed: sidetrayScope!.onExpand)
                     : null;
+                final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
+                if (!meetingIsActive && usesDesktopUiPreview && sidetrayOpenButton == null && actions.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
                 final sidetrayLeadingWidth = sidetrayOpenButton == null
                     ? 0.0
                     : (desktopPaneHeaderCompactButtonWidth + desktopPaneHeaderButtonGap);
@@ -3158,17 +3363,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   spacing: desktopPaneHeaderButtonGap,
                                   children: [
                                     ?sidetrayOpenButton,
-                                    Expanded(
-                                      child: Align(
-                                        alignment: Alignment.centerLeft,
-                                        child: Text(
-                                          "Get ready to meet",
-                                          style: meetingHeaderTitleStyle,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                    if (!usesDesktopUiPreview)
+                                      Expanded(
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            "Get ready to meet",
+                                            style: meetingHeaderTitleStyle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
-                                      ),
-                                    ),
+                                      )
+                                    else
+                                      const Spacer(),
                                     if (visibleActions.isNotEmpty)
                                       Align(
                                         alignment: Alignment.centerRight,
@@ -3201,6 +3409,169 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  String _desktopPreviewAgentIconAssetForService(ServiceSpec service) {
+    final type = _serviceType(service);
+    return switch (type) {
+      'VoiceBot' => 'video',
+      'Shell' => 'terminal',
+      _ => 'bot',
+    };
+  }
+
+  AgentRuntimeStatus _desktopPreviewAgentRuntimeStatusForService(ServiceSpec service) {
+    if (!hasMessagingParticipant(service)) {
+      return AgentRuntimeStatus.running;
+    }
+
+    final identity = _serviceAgentName(service);
+    if (identity == null) {
+      return AgentRuntimeStatus.notRunning;
+    }
+
+    final participant = widget.room.messaging.remoteParticipants.firstWhereOrNull(
+      (candidate) => candidate.getAttribute("name") == identity,
+    );
+    return participant == null ? AgentRuntimeStatus.notRunning : AgentRuntimeStatus.running;
+  }
+
+  String _desktopPreviewAgentStatusText(AgentRuntimeStatus status) {
+    return switch (status) {
+      AgentRuntimeStatus.running => 'Available',
+      AgentRuntimeStatus.pulling => 'Downloading',
+      AgentRuntimeStatus.notRunning => 'Initializing',
+      AgentRuntimeStatus.error => 'Error',
+      AgentRuntimeStatus.invalid => 'Invalid',
+      AgentRuntimeStatus.unknown => 'Unknown',
+    };
+  }
+
+  PbAgentStatusTone _desktopPreviewAgentStatusTone(AgentRuntimeStatus status) {
+    return switch (status) {
+      AgentRuntimeStatus.running => PbAgentStatusTone.online,
+      AgentRuntimeStatus.pulling => PbAgentStatusTone.amber,
+      AgentRuntimeStatus.notRunning => PbAgentStatusTone.gray,
+      AgentRuntimeStatus.error || AgentRuntimeStatus.invalid || AgentRuntimeStatus.unknown => PbAgentStatusTone.error,
+    };
+  }
+
+  PbAgentListItemData _desktopPreviewAgentItemForService(ServiceSpec service, _ResolvedAgentSelection selected) {
+    final status = _desktopPreviewAgentRuntimeStatusForService(service);
+    return PbAgentListItemData(
+      id: _serviceId(service),
+      title: service.agents.firstOrNull?.name ?? service.metadata.name,
+      status: _desktopPreviewAgentStatusText(status),
+      icon: _desktopPreviewAgentIconAssetForService(service),
+      statusTone: _desktopPreviewAgentStatusTone(status),
+      selected: selected.service == service,
+    );
+  }
+
+  List<PbAgentListItemData> _desktopPreviewAgentItems(List<ServiceSpec> supported, _ResolvedAgentSelection selected) {
+    final services = supported.where((service) => _serviceType(service) != 'MeetingTranscriber').toList();
+    services.sort((a, b) => a.metadata.name.toLowerCase().compareTo(b.metadata.name.toLowerCase()));
+    final developmentParticipants = _developmentParticipants(supported);
+    return [
+      for (final service in services) _desktopPreviewAgentItemForService(service, selected),
+      for (final participant in developmentParticipants)
+        if (participantDisplayName(participant) case final String name)
+          PbAgentListItemData(
+            id: developmentAgentRouteId(name),
+            title: name,
+            status: 'Available',
+            icon: _developmentAgentIcon(participant) == LucideIcons.audioWaveform ? 'video' : 'bot',
+            statusTone: PbAgentStatusTone.online,
+            selected: selected.developmentParticipant == participant,
+          ),
+    ];
+  }
+
+  String _desktopPreviewSelectedThreadTitle(_MobileChatHeaderContext? chatContext, List<_DesktopPreviewThreadEntry> threads) {
+    final selectedThreadPath = chatContext?.selectedThreadPath;
+    if (selectedThreadPath == null) {
+      return chatContext?.currentThreadLabel ?? 'New thread';
+    }
+
+    for (final thread in threads) {
+      if (thread.path == selectedThreadPath) {
+        return thread.name;
+      }
+    }
+
+    return chatContext?.currentThreadLabel ?? defaultThreadDisplayNameFromPath(selectedThreadPath);
+  }
+
+  void _selectDesktopPreviewThread(_MobileChatHeaderContext? chatContext, String? path, {String? displayName}) {
+    final agentKey = chatContext?.agentKey;
+    if (agentKey == null) {
+      return;
+    }
+
+    _setSelectedThreadPath(agentKey, path, displayName: displayName);
+  }
+
+  Future<void> _renameDesktopPreviewThread(_DesktopPreviewThreadEntry entry) async {
+    final newName = await showRenameRoomDialog(
+      context,
+      title: "Rename thread",
+      description: "Choose a clear name for this conversation.",
+      initialValue: entry.name,
+      label: "Name",
+      placeholder: "e.g. Sprint planning",
+    );
+    if (!mounted || newName == null) {
+      return;
+    }
+
+    final trimmed = newName.trim();
+    if (trimmed.isEmpty || trimmed == entry.name) {
+      return;
+    }
+
+    entry.element.setAttribute("name", trimmed);
+  }
+
+  Future<void> _deleteDesktopPreviewThread(_MobileChatHeaderContext? chatContext, _DesktopPreviewThreadEntry entry) async {
+    final confirmed =
+        await showDeleteRoomDialog(
+          context,
+          title: "Delete thread",
+          description: "Are you sure you want to delete \"${entry.name}\"? This cannot be undone.",
+          confirmText: "Delete",
+          destructive: true,
+        ) ??
+        false;
+    if (!confirmed || !mounted) {
+      return;
+    }
+
+    if (chatContext?.selectedThreadPath == entry.path) {
+      _selectDesktopPreviewThread(chatContext, null);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) {
+        return;
+      }
+    }
+
+    try {
+      await widget.room.storage.delete(entry.path);
+      entry.element.delete();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to delete thread: $error")));
+    }
+  }
+
+  void _selectDesktopPreviewAgent(PbAgentListItemData agent) {
+    final routeId = agent.id;
+    if (routeId == null || routeId.isEmpty) {
+      return;
+    }
+
+    _navigateToAgentRoute(context, routeId);
+  }
+
   Widget _buildDesktopPreviewRoomSection(
     BuildContext context, {
     required List<ServiceSpec> supported,
@@ -3217,26 +3588,145 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return _buildFilesArea(context, const [], showDesktopSidetrayToggle: false);
     }
 
-    final chatActions = <Widget>[
-      AgentsDropdown(
-        projectId: widget.projectId,
-        room: widget.room,
-        roomDisplayNameOverride: _roomDisplayName,
-        roomBreadcrumbMaxWidth: isAdaptiveWebapp ? 96 : null,
-        roomBreadcrumbEllipsisOnly: isAdaptiveWebapp,
-        showAdaptiveWebappNavOpener: isAdaptiveWebapp,
-        onRoomPressed: () => _showChatPane(context),
-        selectedService: selected.service,
-        selectedAgentRouteId: selected.routeId,
-        services: supported,
-        onOpen: services.refresh,
-        onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-        showRoomBreadcrumb: true,
-      ),
-      ParticipantsButton(participants: participants, localParticipant: widget.room.localParticipant),
-    ];
+    final chatContext = _resolveMobileChatHeaderContext(supported, selected);
+    final threadListPath = chatContext?.threadListPath;
+    final agentItems = _desktopPreviewAgentItems(supported, selected);
+    final hasVisibleAgents = _hasVisibleAgents(supported);
 
-    return ColoredBox(color: ShadTheme.of(context).colorScheme.card, child: _buildAgentArea(context, chatActions));
+    return _DesktopPreviewThreadList(
+      client: widget.room,
+      threadListPath: threadListPath,
+      builder: (context, threads) {
+        final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads);
+        final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
+        final agentName = chatContext?.agentName ?? selected.service?.agents.firstOrNull?.name ?? 'Assistant';
+        final threadPanel = hasVisibleAgents
+            ? Column(
+                children: [
+                  PbThreadHeader(
+                    title: selectedThreadTitle,
+                    agentName: agentName,
+                    threads: [for (final thread in threads) thread.name],
+                    selectedThreadTitle: selectedThreadTitle,
+                    threadMenuEnabled: threadListPath != null,
+                    roomPanelExpanded: !_desktopPreviewRoomPanelCollapsed,
+                    onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
+                    onThreadSelected: (threadTitle) {
+                      for (final thread in threads) {
+                        if (thread.name == threadTitle) {
+                          _selectDesktopPreviewThread(chatContext, thread.path, displayName: thread.name);
+                          return;
+                        }
+                      }
+                    },
+                    onRoomPanelToggle: () {
+                      setState(() {
+                        _desktopPreviewRoomPanelCollapsed = !_desktopPreviewRoomPanelCollapsed;
+                      });
+                    },
+                    onOpenAllAgentsAndThreads: () {
+                      setState(() {
+                        _desktopPreviewRoomPanelCollapsed = false;
+                        _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
+                      });
+                    },
+                  ),
+                  Expanded(
+                    child: _buildAgentArea(
+                      context,
+                      const [],
+                      showEmbeddedThreadList: false,
+                      embedMobileChrome: false,
+                      showDesktopThreadListAlternatives: false,
+                    ),
+                  ),
+                ],
+              )
+            : SignalBuilder(
+                builder: (context, _) {
+                  final ownerResolved = isOwner.state.isReady || isOwner.state.hasError;
+                  final canInstallAgent = isOwner.state.value == true;
+
+                  if (!ownerResolved) {
+                    return _buildRoomLoading(context, title: "Loading room permissions");
+                  }
+
+                  return PaneEmptyState(
+                    title: "Welcome to your room",
+                    description: canInstallAgent ? "Install an agent in this room to get started" : null,
+                    action: !canInstallAgent
+                        ? null
+                        : ShadButton(
+                            onPressed: () async {
+                              await showManageAgentsSurface(
+                                context: context,
+                                room: widget.room,
+                                projectId: widget.projectId,
+                                onServiceChanged: () {
+                                  services.refresh();
+                                },
+                              );
+                            },
+                            child: const Text("Install an Agent"),
+                          ),
+                  );
+                },
+              );
+
+        return ColoredBox(
+          color: ShadTheme.of(context).colorScheme.card,
+          child: hasVisibleAgents
+              ? PbRoomPanelMount(
+                  activeTab: _desktopPreviewRoomPanelTab,
+                  roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
+                  threadPanel: threadPanel,
+                  roomPanelBuilder: (context, resizing) => PbRoomPanel(
+                    selectedTab: _desktopPreviewRoomPanelTab,
+                    onTabSelected: (tab) {
+                      setState(() {
+                        _desktopPreviewRoomPanelTab = tab;
+                      });
+                    },
+                    agents: agentItems,
+                    selectedAgentId: selected.routeId,
+                    selectedAgentTitle: agentName,
+                    onAgentItemSelected: _selectDesktopPreviewAgent,
+                    onManageAgents: isOwner.state.value == true ? showManageAgents : null,
+                    agentsExpanded: _desktopPreviewAgentsExpanded,
+                    onAgentsExpandedChanged: (expanded) {
+                      setState(() {
+                        _desktopPreviewAgentsExpanded = expanded;
+                      });
+                    },
+                    showThreadsSection: threadListPath != null,
+                    showFilesTab: false,
+                    threads: [for (final thread in threads) thread.name],
+                    threadItems: threadItems,
+                    selectedThreadId: chatContext?.selectedThreadPath,
+                    selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
+                    onThreadSelected: (_) {},
+                    onThreadItemSelected: (thread) => _selectDesktopPreviewThread(chatContext, thread.id, displayName: thread.title),
+                    onThreadRename: (thread) {
+                      final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                      if (entry != null) {
+                        unawaited(_renameDesktopPreviewThread(entry));
+                      }
+                    },
+                    onThreadDelete: (thread) {
+                      final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                      if (entry != null) {
+                        unawaited(_deleteDesktopPreviewThread(chatContext, entry));
+                      }
+                    },
+                    onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
+                    attachments: const [],
+                    filePreviewResizing: resizing,
+                  ),
+                )
+              : SizedBox.expand(child: threadPanel),
+        );
+      },
+    );
   }
 
   void _leaveMeeting() {
@@ -3749,7 +4239,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return const SizedBox(height: desktopPaneSecondaryControlTopOffset);
   }
 
-  Widget _buildAgentArea(BuildContext context, List<Widget> actions, {bool showEmbeddedThreadList = true, bool embedMobileChrome = true}) {
+  Widget _buildAgentArea(
+    BuildContext context,
+    List<Widget> actions, {
+    bool showEmbeddedThreadList = true,
+    bool embedMobileChrome = true,
+    bool showDesktopThreadListAlternatives = true,
+  }) {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = _usesMobileRoomLayout(context);
 
@@ -3825,6 +4321,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
                   onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                   embedMobileChrome: embedMobileChrome,
+                  showDesktopThreadListAlternatives: showDesktopThreadListAlternatives,
                 );
               }
 
@@ -3853,6 +4350,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
                 onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                 embedMobileChrome: embedMobileChrome,
+                showDesktopThreadListAlternatives: showDesktopThreadListAlternatives,
               );
             } else if (descriptor?.isMeeting == true) {
               return _buildMeetingTranscriberArea(context, service.agents[0].name, actions, embedMobileChrome: embedMobileChrome);
@@ -3971,7 +4469,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
                             final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
 
-                            if (!_hasVisibleAgents(supported)) {
+                            if (!_hasVisibleAgents(supported) && !(useDesktopUiPreview && !isMobile)) {
                               final actions = _emptyRoomHeaderActions(isMobile: isMobile);
                               final cs = ShadTheme.of(context).colorScheme;
                               final emptyStateBody = SignalBuilder(

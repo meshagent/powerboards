@@ -9,17 +9,27 @@ enum PbButtonVariant { primary, secondary }
 class PbButton extends StatefulWidget {
   const PbButton({
     super.key,
-    required this.iconAssetName,
+    this.iconAssetName,
     required this.label,
     required this.variant,
     this.iconOnly = false,
+    this.iconOnlySize = 48,
+    this.height = 40,
+    this.horizontalPadding = 18,
+    this.iconSize = 18,
+    this.iconGap = 10,
     this.onPressed,
   });
 
-  final String iconAssetName;
+  final String? iconAssetName;
   final String label;
   final PbButtonVariant variant;
   final bool iconOnly;
+  final double iconOnlySize;
+  final double height;
+  final double horizontalPadding;
+  final double iconSize;
+  final double iconGap;
   final VoidCallback? onPressed;
 
   @override
@@ -47,7 +57,7 @@ class _PbButtonState extends State<PbButton> {
               ? const [PbColors.surfaceRailActive, PbColors.surfaceActionPrimary]
               : const [PbColors.surfacePanel, PbColors.surfacePanelSoft]);
     final boxShadow = _pressed
-        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 2, offset: Offset(0, 1))]
+        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 2, offset: Offset(0, 1), blurStyle: BlurStyle.inner)]
         : _lifted
         ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 30, offset: Offset(0, 14))]
         : null;
@@ -79,35 +89,67 @@ class _PbButtonState extends State<PbButton> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
               curve: Curves.easeOut,
-              height: widget.iconOnly ? 48 : 40,
-              constraints: BoxConstraints(minWidth: widget.iconOnly ? 48 : 0),
-              padding: EdgeInsets.symmetric(horizontal: widget.iconOnly ? 0 : 18),
+              height: widget.iconOnly ? widget.iconOnlySize : widget.height,
+              constraints: BoxConstraints(minWidth: widget.iconOnly ? widget.iconOnlySize : 0),
+              padding: EdgeInsets.symmetric(horizontal: widget.iconOnly ? 0 : widget.horizontalPadding),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(widget.iconOnly ? 14 : 10),
                 border: Border.all(color: borderColor),
                 gradient: LinearGradient(colors: gradientColors, begin: Alignment.topCenter, end: Alignment.bottomCenter),
                 boxShadow: boxShadow,
               ),
-              child: Row(
-                mainAxisSize: widget.iconOnly ? MainAxisSize.min : MainAxisSize.max,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  PbSvgIcon(assetName: widget.iconAssetName, size: widget.iconOnly ? 20 : 18, color: textColor),
-                  if (!widget.iconOnly) ...[
-                    const SizedBox(width: 10),
-                    Text(
-                      widget.label,
-                      style: (_isPrimary ? PowerboardsTypography.buttonPrimary : PowerboardsTypography.buttonSecondary).copyWith(
-                        color: textColor,
-                      ),
-                    ),
-                  ],
-                ],
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final label = Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: PowerboardsTypography.button.copyWith(color: textColor),
+                  );
+                  final shouldFlexLabel = constraints.maxWidth.isFinite && constraints.maxWidth < 180;
+
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (widget.iconAssetName != null)
+                        PbSvgIcon(assetName: widget.iconAssetName!, size: widget.iconOnly ? 20 : widget.iconSize, color: textColor),
+                      if (!widget.iconOnly && widget.iconAssetName != null) SizedBox(width: widget.iconGap),
+                      if (!widget.iconOnly) shouldFlexLabel ? Flexible(child: label) : label,
+                    ],
+                  );
+                },
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class PbTertiaryButton extends StatelessWidget {
+  const PbTertiaryButton({super.key, this.iconAssetName, required this.label, this.solid = false, this.onPressed});
+
+  const PbTertiaryButton.solid({super.key, this.iconAssetName, required this.label, this.onPressed}) : solid = true;
+
+  final String? iconAssetName;
+  final String label;
+  final bool solid;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return PbButton(
+      iconAssetName: iconAssetName,
+      label: label,
+      variant: solid ? PbButtonVariant.primary : PbButtonVariant.secondary,
+      height: 36,
+      horizontalPadding: 14,
+      iconSize: 16,
+      iconGap: 8,
+      onPressed: onPressed,
     );
   }
 }

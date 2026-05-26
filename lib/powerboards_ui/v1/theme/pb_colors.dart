@@ -4,6 +4,7 @@ abstract final class PbColors {
   static const surfaceApp = Color(0xFFF6F7FB);
   static const surfacePanel = Color(0xFFFFFFFF);
   static const surfacePanelSoft = Color(0xFFF8FAFC);
+  static const surfacePanelWash = Color(0xFFFBFCFE);
   static const surfaceAccentSoft = Color(0xFFEDF3FF);
   static const surfaceRail = Color(0xFF04172B);
   static const surfaceRailActive = Color(0xFF173257);
@@ -25,4 +26,17 @@ abstract final class PbColors {
   static const alert = Color(0xFFC83B3B);
   static const alertSoft = Color(0xFFFFF1F1);
   static const statusPositive = Color(0xFF2FB64A);
+
+  static const statusOnline = Color(0xFF28B446);
+  static const customGray = Color(0xFF98A2B3);
+  static const customBlue = Color(0xFF2563EB);
+  static const customAmber = Color(0xFFD98A0F);
+  static const customTeal = Color(0xFF0D9488);
+  static const customViolet = Color(0xFF7C3AED);
+  static const customRose = Color(0xFFE11D48);
+  static const customBrandInk = brandInk;
+  static const customStateSelectedBorder = borderStateSelected;
+  static const customStateSelectedSurface = surfaceStateSelected;
+  static const customRailSelectedSurface = surfaceRailSelected;
+  static const customMenuOpenSurface = Color(0xFFF5F8FF);
 }

@@ -8,7 +8,7 @@ import 'pb_menu_option.dart';
 class PbRoomOptionsMenu extends StatelessWidget {
   const PbRoomOptionsMenu({
     super.key,
-    this.consoleLabel = 'Show console',
+    this.consoleLabel = 'Developer console',
     this.width = 240,
     this.showRename = true,
     this.showPermissions = true,
@@ -66,7 +66,7 @@ class PbRoomOptionsMenu extends StatelessWidget {
               ),
             if (showDeleteRoom)
               PbMenuOption(
-                title: 'Delete Room',
+                title: 'Delete room',
                 leadingIconAssetName: 'trash',
                 alert: true,
                 singleLine: true,

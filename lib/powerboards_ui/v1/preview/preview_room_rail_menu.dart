@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 
 class PreviewRoomRailMenuBridge extends ChangeNotifier {
   bool showDestinations = true;
@@ -10,7 +11,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
   bool showKeychain = true;
   bool showConsoleToggle = false;
   bool showShutdown = false;
-  String consoleLabel = 'Show console';
+  String consoleLabel = 'Developer console';
 
   VoidCallback? onRenamePressed;
   VoidCallback? onPermissionsPressed;
@@ -19,6 +20,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
   VoidCallback? onKeychainPressed;
   VoidCallback? onToggleConsolePressed;
   VoidCallback? onShutdownPressed;
+  bool _notificationScheduled = false;
 
   void configure({
     required bool showDestinations,
@@ -71,8 +73,24 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
     this.consoleLabel = consoleLabel;
 
     if (changed) {
-      notifyListeners();
+      _notifyListenersSafely();
     }
+  }
+
+  void _notifyListenersSafely() {
+    if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.persistentCallbacks) {
+      notifyListeners();
+      return;
+    }
+
+    if (_notificationScheduled) {
+      return;
+    }
+    _notificationScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _notificationScheduled = false;
+      notifyListeners();
+    });
   }
 }
 

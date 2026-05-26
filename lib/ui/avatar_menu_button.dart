@@ -7,6 +7,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:meshagent/client.dart';
 import 'package:meshagent_flutter_auth/meshagent_auth.dart';
+import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/nav/switch_project_dialog.dart';
@@ -176,6 +177,18 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
     togglePowerboardsUiModeAndReload();
   }
 
+  Future<void> _runDesktopUpdateAction(DesktopUpdateController controller) async {
+    if (controller.state.busy) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    await showDesktopUpdateCheckDialog(context: context, controller: controller, appName: 'Powerboards');
+  }
+
   Future<void> _onNewProject() async {
     final p = await createMeshagentProject(context);
 
@@ -258,6 +271,11 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
         final projectsList = projectsState.value ?? const <Project>[];
         final currentProject = widget.projectId == null ? null : projectsList.firstWhereOrNull((p) => p.id == widget.projectId);
         final description = currentProject?.name ?? "Signed in";
+        final desktopUpdateController = DesktopUpdateControllerScope.maybeOf(context);
+        final desktopUpdateState = desktopUpdateController?.state;
+        final desktopUpdateCopy = desktopUpdateState == null
+            ? null
+            : desktopUpdateMenuCopy(state: desktopUpdateState, appName: 'Powerboards');
 
         final entries = <AppMenuEntry>[
           AppMenuEntry(
@@ -274,8 +292,8 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
           ),
           if (!isMobile && canPreviewNewUi)
             AppMenuEntry(
-              title: currentUiMode == PowerboardsUiMode.v1 ? "End new UI Preview" : "Preview new UI",
-              description: currentUiMode == PowerboardsUiMode.v1 ? "Switch back" : "In-development",
+              title: currentUiMode == PowerboardsUiMode.v1 ? "Old Theme" : "New Theme",
+              description: currentUiMode == PowerboardsUiMode.v1 ? "Switch to old theme" : "Switch to new theme",
               icon: currentUiMode == PowerboardsUiMode.v1 ? LucideIcons.rotateCcw : LucideIcons.eye,
               onPressed: _toggleUiMode,
             ),
@@ -287,7 +305,14 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
               icon: LucideIcons.users,
               onPressed: _goToAccounts,
             ),
-          AppMenuEntry(title: "Sign out", description: "Sign out of your account.", icon: LucideIcons.logOut, onPressed: _signOut),
+          if (desktopUpdateController != null && desktopUpdateState != null && desktopUpdateState.config.canCheckForUpdates)
+            AppMenuEntry(
+              title: desktopUpdateCopy!.title,
+              description: desktopUpdateCopy.description,
+              icon: desktopUpdateState.readyToRestart ? LucideIcons.refreshCw : LucideIcons.download,
+              onPressed: desktopUpdateState.busy ? null : () => _runDesktopUpdateAction(desktopUpdateController),
+            ),
+          AppMenuEntry(title: "Sign out", description: "Sign out of your account", icon: LucideIcons.logOut, onPressed: _signOut),
         ];
 
         if (isMobile) {

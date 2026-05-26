@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater.dart';
 
 import '../theme/pb_colors.dart';
 import '../components/layouts/pb_primary_header.dart';
@@ -47,6 +48,36 @@ class _PreviewPageState extends State<PreviewPage> {
     }
 
     setState(() => _openMenu = _PreviewOpenMenu.none);
+  }
+
+  void _closeMenusAndRun(VoidCallback action) {
+    final hadOpenMenu = _openMenu != _PreviewOpenMenu.none;
+    _closeMenus();
+
+    if (!hadOpenMenu) {
+      action();
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        action();
+      }
+    });
+  }
+
+  Widget _buildAccountMenu() {
+    final desktopUpdateController = DesktopUpdateControllerScope.maybeOf(context);
+
+    return PbAccountMenu(
+      onManageAccountPressed: _closeMenus,
+      onCheckForUpdatesPressed: desktopUpdateController == null
+          ? null
+          : () => _closeMenusAndRun(
+              () => showDesktopUpdateCheckDialog(context: context, controller: desktopUpdateController, appName: 'Powerboards'),
+            ),
+      onLogoutPressed: _closeMenus,
+    );
   }
 
   List<PbSwitcherMenuItem> get _projectItems {
@@ -219,7 +250,7 @@ class _PreviewPageState extends State<PreviewPage> {
   Widget _buildRoomOptionsMenu(double width) {
     return PbRoomOptionsMenu(
       width: width,
-      consoleLabel: _consoleVisible ? 'Hide console' : 'Show console',
+      consoleLabel: 'Developer console',
       onRenamePressed: _renameRoom,
       onDeleteRoomPressed: _deleteRoom,
       onToggleConsolePressed: _toggleConsole,
@@ -251,9 +282,7 @@ class _PreviewPageState extends State<PreviewPage> {
                     moreMenu: _openMenu == _PreviewOpenMenu.more ? _buildRoomOptionsMenu(mobileMenuWidth) : null,
                     onMorePressed: () => _toggleMenu(_PreviewOpenMenu.more),
                     accountSelected: _openMenu == _PreviewOpenMenu.account,
-                    accountMenu: _openMenu == _PreviewOpenMenu.account
-                        ? PbAccountMenu(onManageAccountPressed: _closeMenus, onLogoutPressed: _closeMenus)
-                        : null,
+                    accountMenu: _openMenu == _PreviewOpenMenu.account ? _buildAccountMenu() : null,
                     onAccountPressed: () => _toggleMenu(_PreviewOpenMenu.account),
                   ),
                 ),
@@ -311,9 +340,7 @@ class _PreviewPageState extends State<PreviewPage> {
                             avatarSelected: _openMenu == _PreviewOpenMenu.account,
                             projectMenu: _openMenu == _PreviewOpenMenu.project ? _buildProjectMenu(240) : null,
                             roomMenu: _openMenu == _PreviewOpenMenu.room ? _buildRoomMenu(240) : null,
-                            avatarMenu: _openMenu == _PreviewOpenMenu.account
-                                ? PbAccountMenu(onManageAccountPressed: _closeMenus, onLogoutPressed: _closeMenus)
-                                : null,
+                            avatarMenu: _openMenu == _PreviewOpenMenu.account ? _buildAccountMenu() : null,
                             onProjectPressed: () => _toggleMenu(_PreviewOpenMenu.project),
                             onRoomPressed: () => _toggleMenu(_PreviewOpenMenu.room),
                             onAvatarPressed: () => _toggleMenu(_PreviewOpenMenu.account),

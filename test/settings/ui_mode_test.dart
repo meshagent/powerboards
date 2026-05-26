@@ -4,6 +4,16 @@ import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
 
 void main() {
+  group('defaultPowerboardsUiModeForPlatform', () {
+    test('defaults to the new theme on web', () {
+      expect(defaultPowerboardsUiModeForPlatform(isWeb: true), PowerboardsUiMode.v1);
+    });
+
+    test('defaults to the old theme off web', () {
+      expect(defaultPowerboardsUiModeForPlatform(isWeb: false), PowerboardsUiMode.legacy);
+    });
+  });
+
   group('powerboardsUsesDesktopUiPreview', () {
     final originalMode = powerboardsUiModeSignal.value;
 

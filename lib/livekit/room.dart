@@ -269,20 +269,10 @@ class VideoRoomProviderState extends State<VideoRoomProvider> {
   }
 }
 
-class VideoChatConnectionConfiguration {
-  VideoChatConnectionConfiguration({required this.chatID, this.breakout, this.agent});
-
-  final String chatID;
-  final String? breakout;
-  final String? agent;
-}
-
 class VideoChatConnection extends StatefulWidget {
-  const VideoChatConnection({super.key, required this.child, this.configuration});
+  const VideoChatConnection({super.key, required this.child});
 
   final Widget child;
-
-  final VideoChatConnectionConfiguration? configuration;
 
   @override
   State createState() => VideoChatConnectionState();
