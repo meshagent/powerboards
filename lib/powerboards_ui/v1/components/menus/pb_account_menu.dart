@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater.dart';
 
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_typography.dart';
@@ -20,6 +21,7 @@ class PbAccountMenu extends StatelessWidget {
     this.previewTitle,
     this.previewIconAssetName = 'rotate-ccw',
     this.onPreviewPressed,
+    this.onCheckForUpdatesPressed,
     this.onLogoutPressed,
   });
 
@@ -32,6 +34,7 @@ class PbAccountMenu extends StatelessWidget {
   final String? previewTitle;
   final String previewIconAssetName;
   final VoidCallback? onPreviewPressed;
+  final VoidCallback? onCheckForUpdatesPressed;
   final VoidCallback? onLogoutPressed;
 
   @override
@@ -39,6 +42,18 @@ class PbAccountMenu extends StatelessWidget {
     final resolvedPreviewTitle = previewTitle?.trim();
     final showPreviewOption = resolvedPreviewTitle != null && resolvedPreviewTitle.isNotEmpty && onPreviewPressed != null;
     final showManageAccountOption = onManageAccountPressed != null;
+    final desktopUpdateController = DesktopUpdateControllerScope.maybeOf(context);
+    final desktopUpdateState = desktopUpdateController?.state;
+    final showCheckForUpdatesOption =
+        desktopUpdateController != null && desktopUpdateState != null && desktopUpdateState.config.canCheckForUpdates;
+    final desktopUpdateCopy = desktopUpdateState == null ? null : desktopUpdateMenuCopy(state: desktopUpdateState, appName: 'Powerboards');
+    final checkForUpdatesPressed =
+        onCheckForUpdatesPressed ??
+        (desktopUpdateController == null
+            ? null
+            : () {
+                showDesktopUpdateCheckDialog(context: context, controller: desktopUpdateController, appName: 'Powerboards');
+              });
 
     return SizedBox(
       width: width ?? 284,
@@ -74,6 +89,17 @@ class PbAccountMenu extends StatelessWidget {
             const PbMenuDivider(),
             PbMenuList(
               children: [
+                if (showCheckForUpdatesOption) ...[
+                  PbMenuOption(
+                    title: desktopUpdateCopy!.title,
+                    subtitle: desktopUpdateCopy.description,
+                    leadingIconAssetName: desktopUpdateState.readyToRestart ? 'rotate-ccw' : 'arrow-down-to-line',
+                    singleLine: false,
+                    state: desktopUpdateState.busy ? PbMenuOptionVisualState.disabled : null,
+                    onPressed: desktopUpdateState.busy ? null : checkForUpdatesPressed,
+                  ),
+                  const PbMenuDivider(),
+                ],
                 PbMenuOption(title: 'Logout of account', singleLine: true, leadingIconAssetName: 'power', onPressed: onLogoutPressed),
               ],
             ),

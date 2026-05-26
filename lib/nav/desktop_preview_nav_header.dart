@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/nav/nav_rooms.dart';
 import 'package:powerboards/powerboards_ui/active.dart';
@@ -217,6 +218,7 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
     final canPreviewNewUi = emailCanPreviewPowerboardsUiMode(widget.avatarEmail);
     final currentUiMode = powerboardsUiModeSignal.value;
     final currentProject = _currentProject;
+    final desktopUpdateController = DesktopUpdateControllerScope.maybeOf(context);
 
     return PbAccountMenu(
       initials: widget.avatarInitials,
@@ -227,6 +229,11 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
       previewTitle: canPreviewNewUi ? (currentUiMode == PowerboardsUiMode.v1 ? 'Old Theme' : 'New Theme') : null,
       previewIconAssetName: currentUiMode == PowerboardsUiMode.v1 ? 'rotate-ccw' : 'eye',
       onPreviewPressed: canPreviewNewUi ? () => _closeMenuAndRun(widget.onPreviewTogglePressed) : null,
+      onCheckForUpdatesPressed: desktopUpdateController == null
+          ? null
+          : () => _closeMenuAndRun(
+              () => showDesktopUpdateCheckDialog(context: context, controller: desktopUpdateController, appName: 'Powerboards'),
+            ),
       onLogoutPressed: widget.onLogoutPressed == null ? null : () => _closeMenuAndRun(widget.onLogoutPressed),
     );
   }

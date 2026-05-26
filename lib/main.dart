@@ -451,7 +451,10 @@ class _RootProvidersState extends State<_RootProviders> {
                   child: ControllerProvider(
                     controller: meetingViewController,
                     child: Portal(
-                      child: PowerboardsDesktopUpdateBanner(controller: desktopUpdateController, child: widget.child),
+                      child: DesktopUpdateControllerScope(
+                        controller: desktopUpdateController,
+                        child: PowerboardsDesktopUpdateBanner(controller: desktopUpdateController, child: widget.child),
+                      ),
                     ),
                   ),
                 ),
