@@ -56,6 +56,31 @@ void main() {
     expect(find.text('New Thread'), findsOneWidget);
   });
 
+  testWidgets('thread menu renders duplicate thread titles without duplicate keys', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 720,
+            child: PbThreadHeader(
+              title: 'Planning',
+              agentName: 'assistant',
+              threads: ['Planning', 'Planning'],
+              selectedThreadTitle: 'Planning',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Planning'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Planning'), findsNWidgets(3));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('thread meta capitalizes multi-word agent display names', (tester) async {
     await tester.pumpWidget(buildHarness(threadMenuEnabled: true, agentName: 'research assistant'));
     await tester.pump();

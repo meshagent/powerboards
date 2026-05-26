@@ -2204,7 +2204,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       showKeychain: true,
       showConsoleToggle: canViewDeveloperLogs.state.value == true,
       showShutdown: isOwner.state.value == true,
-      consoleLabel: controller.isDebugShown ? 'Hide console' : 'Show console',
+      consoleLabel: 'Developer console',
       onRenamePressed: () => unawaited(_renameCurrentRoomFromPreviewRail()),
       onPermissionsPressed: () => unawaited(_openCurrentRoomPermissionsFromPreviewRail()),
       onManageAgentsPressed: () => unawaited(showManageAgents()),
@@ -3583,6 +3583,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final chatContext = _resolveMobileChatHeaderContext(supported, selected);
     final threadListPath = chatContext?.threadListPath;
     final agentItems = _desktopPreviewAgentItems(supported, selected);
+    final hasVisibleAgents = _hasVisibleAgents(supported);
 
     return _DesktopPreviewThreadList(
       client: widget.room,
@@ -3591,96 +3592,130 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads);
         final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
         final agentName = chatContext?.agentName ?? selected.service?.agents.firstOrNull?.name ?? 'Assistant';
+        final threadPanel = hasVisibleAgents
+            ? Column(
+                children: [
+                  PbThreadHeader(
+                    title: selectedThreadTitle,
+                    agentName: agentName,
+                    threads: [for (final thread in threads) thread.name],
+                    selectedThreadTitle: selectedThreadTitle,
+                    threadMenuEnabled: threadListPath != null,
+                    roomPanelExpanded: !_desktopPreviewRoomPanelCollapsed,
+                    onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
+                    onThreadSelected: (threadTitle) {
+                      for (final thread in threads) {
+                        if (thread.name == threadTitle) {
+                          _selectDesktopPreviewThread(chatContext, thread.path, displayName: thread.name);
+                          return;
+                        }
+                      }
+                    },
+                    onRoomPanelToggle: () {
+                      setState(() {
+                        _desktopPreviewRoomPanelCollapsed = !_desktopPreviewRoomPanelCollapsed;
+                      });
+                    },
+                    onOpenAllAgentsAndThreads: () {
+                      setState(() {
+                        _desktopPreviewRoomPanelCollapsed = false;
+                        _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
+                      });
+                    },
+                  ),
+                  Expanded(
+                    child: _buildAgentArea(
+                      context,
+                      const [],
+                      showEmbeddedThreadList: false,
+                      embedMobileChrome: false,
+                      showDesktopThreadListAlternatives: false,
+                    ),
+                  ),
+                ],
+              )
+            : SignalBuilder(
+                builder: (context, _) {
+                  final ownerResolved = isOwner.state.isReady || isOwner.state.hasError;
+                  final canInstallAgent = isOwner.state.value == true;
+
+                  if (!ownerResolved) {
+                    return _buildRoomLoading(context, title: "Loading room permissions");
+                  }
+
+                  return PaneEmptyState(
+                    title: "Welcome to your room",
+                    description: canInstallAgent ? "Install an agent in this room to get started" : null,
+                    action: !canInstallAgent
+                        ? null
+                        : ShadButton(
+                            onPressed: () async {
+                              await showManageAgentsSurface(
+                                context: context,
+                                room: widget.room,
+                                projectId: widget.projectId,
+                                onServiceChanged: () {
+                                  services.refresh();
+                                },
+                              );
+                            },
+                            child: const Text("Install an Agent"),
+                          ),
+                  );
+                },
+              );
 
         return ColoredBox(
           color: ShadTheme.of(context).colorScheme.card,
-          child: PbRoomPanelMount(
-            activeTab: _desktopPreviewRoomPanelTab,
-            roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
-            threadPanel: Column(
-              children: [
-                PbThreadHeader(
-                  title: selectedThreadTitle,
-                  agentName: agentName,
-                  threads: [for (final thread in threads) thread.name],
-                  selectedThreadTitle: selectedThreadTitle,
-                  threadMenuEnabled: threadListPath != null,
-                  roomPanelExpanded: !_desktopPreviewRoomPanelCollapsed,
-                  onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
-                  onThreadSelected: (threadTitle) {
-                    for (final thread in threads) {
-                      if (thread.name == threadTitle) {
-                        _selectDesktopPreviewThread(chatContext, thread.path, displayName: thread.name);
-                        return;
+          child: hasVisibleAgents
+              ? PbRoomPanelMount(
+                  activeTab: _desktopPreviewRoomPanelTab,
+                  roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
+                  threadPanel: threadPanel,
+                  roomPanelBuilder: (context, resizing) => PbRoomPanel(
+                    selectedTab: _desktopPreviewRoomPanelTab,
+                    onTabSelected: (tab) {
+                      setState(() {
+                        _desktopPreviewRoomPanelTab = tab;
+                      });
+                    },
+                    agents: agentItems,
+                    selectedAgentId: selected.routeId,
+                    selectedAgentTitle: agentName,
+                    onAgentItemSelected: _selectDesktopPreviewAgent,
+                    onManageAgents: isOwner.state.value == true ? showManageAgents : null,
+                    agentsExpanded: _desktopPreviewAgentsExpanded,
+                    onAgentsExpandedChanged: (expanded) {
+                      setState(() {
+                        _desktopPreviewAgentsExpanded = expanded;
+                      });
+                    },
+                    showThreadsSection: threadListPath != null,
+                    showFilesTab: false,
+                    threads: [for (final thread in threads) thread.name],
+                    threadItems: threadItems,
+                    selectedThreadId: chatContext?.selectedThreadPath,
+                    selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
+                    onThreadSelected: (_) {},
+                    onThreadItemSelected: (thread) => _selectDesktopPreviewThread(chatContext, thread.id, displayName: thread.title),
+                    onThreadRename: (thread) {
+                      final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                      if (entry != null) {
+                        unawaited(_renameDesktopPreviewThread(entry));
                       }
-                    }
-                  },
-                  onRoomPanelToggle: () {
-                    setState(() {
-                      _desktopPreviewRoomPanelCollapsed = !_desktopPreviewRoomPanelCollapsed;
-                    });
-                  },
-                  onOpenAllAgentsAndThreads: () {
-                    setState(() {
-                      _desktopPreviewRoomPanelCollapsed = false;
-                      _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
-                    });
-                  },
-                ),
-                Expanded(
-                  child: _buildAgentArea(
-                    context,
-                    const [],
-                    showEmbeddedThreadList: false,
-                    embedMobileChrome: false,
-                    showDesktopThreadListAlternatives: false,
+                    },
+                    onThreadDelete: (thread) {
+                      final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                      if (entry != null) {
+                        unawaited(_deleteDesktopPreviewThread(chatContext, entry));
+                      }
+                    },
+                    onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
+                    attachments: const [],
+                    filePreviewResizing: resizing,
                   ),
-                ),
-              ],
-            ),
-            roomPanelBuilder: (context, resizing) => PbRoomPanel(
-              selectedTab: _desktopPreviewRoomPanelTab,
-              onTabSelected: (tab) {
-                setState(() {
-                  _desktopPreviewRoomPanelTab = tab;
-                });
-              },
-              agents: agentItems,
-              selectedAgentId: selected.routeId,
-              selectedAgentTitle: agentName,
-              onAgentItemSelected: _selectDesktopPreviewAgent,
-              onManageAgents: isOwner.state.value == true ? showManageAgents : null,
-              agentsExpanded: _desktopPreviewAgentsExpanded,
-              onAgentsExpandedChanged: (expanded) {
-                setState(() {
-                  _desktopPreviewAgentsExpanded = expanded;
-                });
-              },
-              showThreadsSection: threadListPath != null,
-              showFilesTab: false,
-              threads: [for (final thread in threads) thread.name],
-              threadItems: threadItems,
-              selectedThreadId: chatContext?.selectedThreadPath,
-              selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
-              onThreadSelected: (_) {},
-              onThreadItemSelected: (thread) => _selectDesktopPreviewThread(chatContext, thread.id, displayName: thread.title),
-              onThreadRename: (thread) {
-                final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
-                if (entry != null) {
-                  unawaited(_renameDesktopPreviewThread(entry));
-                }
-              },
-              onThreadDelete: (thread) {
-                final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
-                if (entry != null) {
-                  unawaited(_deleteDesktopPreviewThread(chatContext, entry));
-                }
-              },
-              onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
-              attachments: const [],
-              filePreviewResizing: resizing,
-            ),
-          ),
+                )
+              : SizedBox.expand(child: threadPanel),
         );
       },
     );
@@ -4426,7 +4461,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
                             final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
 
-                            if (!_hasVisibleAgents(supported)) {
+                            if (!_hasVisibleAgents(supported) && !(useDesktopUiPreview && !isMobile)) {
                               final actions = _emptyRoomHeaderActions(isMobile: isMobile);
                               final cs = ShadTheme.of(context).colorScheme;
                               final emptyStateBody = SignalBuilder(

@@ -219,7 +219,7 @@ class _PreviewPageState extends State<PreviewPage> {
   Widget _buildRoomOptionsMenu(double width) {
     return PbRoomOptionsMenu(
       width: width,
-      consoleLabel: _consoleVisible ? 'Hide console' : 'Show console',
+      consoleLabel: 'Developer console',
       onRenamePressed: _renameRoom,
       onDeleteRoomPressed: _deleteRoom,
       onToggleConsolePressed: _toggleConsole,

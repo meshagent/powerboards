@@ -111,9 +111,9 @@ class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
                                   if (widget.items.isEmpty)
                                     PbMenuOption(title: widget.emptyLabel, singleLine: true, state: PbMenuOptionVisualState.disabled)
                                   else
-                                    for (final item in widget.items)
+                                    for (final (index, item) in widget.items.indexed)
                                       KeyedSubtree(
-                                        key: _keyForItem(item.title),
+                                        key: _keyForItem(index, item.title),
                                         child: PbMenuOption(
                                           title: item.title,
                                           singleLine: true,
@@ -154,20 +154,24 @@ class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
     );
   }
 
-  GlobalKey _keyForItem(String title) {
-    return _itemKeys.putIfAbsent(title, GlobalKey.new);
+  GlobalKey _keyForItem(int index, String title) {
+    return _itemKeys.putIfAbsent(_itemKey(index, title), GlobalKey.new);
+  }
+
+  String _itemKey(int index, String title) {
+    return '$index:$title';
   }
 
   void _scheduleSelectedItemReveal() {
-    String? selectedItem;
-    for (final item in widget.items) {
+    String? selectedItemKey;
+    for (final (index, item) in widget.items.indexed) {
       if (item.selected) {
-        selectedItem = item.title;
+        selectedItemKey = _itemKey(index, item.title);
         break;
       }
     }
 
-    if (selectedItem == null) {
+    if (selectedItemKey == null) {
       return;
     }
 
@@ -176,7 +180,7 @@ class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
         return;
       }
 
-      final selectedContext = _itemKeys[selectedItem]?.currentContext;
+      final selectedContext = _itemKeys[selectedItemKey]?.currentContext;
       final scrollRegionContext = _scrollRegionKey.currentContext;
       final selectedBox = selectedContext?.findRenderObject();
       final scrollRegionBox = scrollRegionContext?.findRenderObject();

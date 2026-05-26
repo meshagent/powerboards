@@ -70,8 +70,13 @@ PowerboardsUiMode? getDefaultPowerboardsUiMode() {
   return _parseOptionalPowerboardsUiMode(const String.fromEnvironment(_powerboardsUiModeDefaultDefine));
 }
 
+@visibleForTesting
+PowerboardsUiMode defaultPowerboardsUiModeForPlatform({bool isWeb = kIsWeb}) {
+  return isWeb ? PowerboardsUiMode.v1 : PowerboardsUiMode.legacy;
+}
+
 PowerboardsUiMode getConfiguredPowerboardsUiMode() {
-  return getQueryParameterPowerboardsUiMode() ?? getDefaultPowerboardsUiMode() ?? PowerboardsUiMode.legacy;
+  return getQueryParameterPowerboardsUiMode() ?? getDefaultPowerboardsUiMode() ?? defaultPowerboardsUiModeForPlatform();
 }
 
 bool emailCanPreviewPowerboardsUiMode(String? email) {
@@ -157,7 +162,7 @@ void resetPowerboardsUiMode() {
   if (scopedKey != _powerboardsUiModeStorageKey) {
     localStorage.removeItem(_powerboardsUiModeStorageKey);
   }
-  powerboardsUiModeSignal.value = PowerboardsUiMode.legacy;
+  powerboardsUiModeSignal.value = getConfiguredPowerboardsUiMode();
 }
 
 bool powerboardsUsesDesktopUiPreview(BuildContext context) {

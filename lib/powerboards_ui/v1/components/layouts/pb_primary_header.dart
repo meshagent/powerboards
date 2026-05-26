@@ -93,7 +93,7 @@ class PbPrimaryHeader extends StatelessWidget {
                             if (onSharePressed != null) ...[
                               PbButton(
                                 iconAssetName: 'user-plus',
-                                label: 'Share',
+                                label: 'Invite',
                                 variant: PbButtonVariant.primary,
                                 iconOnly: shellIconOnly,
                                 onPressed: onSharePressed,

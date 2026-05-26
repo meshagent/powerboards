@@ -50,7 +50,7 @@ class PbAccountMenu extends StatelessWidget {
               children: [
                 _AccountSummaryCard(initials: initials, email: email, projectLabel: projectLabel),
                 PbMenuOption(
-                  title: 'Select a Project',
+                  title: 'Switch projects',
                   singleLine: true,
                   leadingIconAssetName: 'book-copy',
                   onPressed: onSelectProjectPressed,

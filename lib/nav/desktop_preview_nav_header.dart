@@ -215,6 +215,7 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
 
   Widget _buildAccountMenu() {
     final canPreviewNewUi = emailCanPreviewPowerboardsUiMode(widget.avatarEmail);
+    final currentUiMode = powerboardsUiModeSignal.value;
     final currentProject = _currentProject;
 
     return PbAccountMenu(
@@ -223,7 +224,8 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
       projectLabel: 'Browsing project: ${currentProject?.name ?? 'No project selected'}',
       onSelectProjectPressed: () => _closeMenuAndRun(_openProjectDialog),
       onManageAccountPressed: widget.onManageAccountPressed,
-      previewTitle: canPreviewNewUi ? 'End new UI Preview' : null,
+      previewTitle: canPreviewNewUi ? (currentUiMode == PowerboardsUiMode.v1 ? 'Old Theme' : 'New Theme') : null,
+      previewIconAssetName: currentUiMode == PowerboardsUiMode.v1 ? 'rotate-ccw' : 'eye',
       onPreviewPressed: canPreviewNewUi ? () => _closeMenuAndRun(widget.onPreviewTogglePressed) : null,
       onLogoutPressed: widget.onLogoutPressed == null ? null : () => _closeMenuAndRun(widget.onLogoutPressed),
     );

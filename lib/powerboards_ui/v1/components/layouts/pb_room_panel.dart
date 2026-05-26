@@ -493,7 +493,7 @@ class _AgentsPanelState extends State<_AgentsPanel> {
   @override
   Widget build(BuildContext context) {
     if (widget.agents.isEmpty) {
-      return const SizedBox.shrink();
+      return _EmptyAgentsPanel(onManageAgents: widget.onManageAgents);
     }
 
     final selectedAgent = widget.agents.firstWhere((agent) => agent.identity == _selectedAgentKey, orElse: () => widget.agents.first);
@@ -552,6 +552,24 @@ class _AgentsPanelState extends State<_AgentsPanel> {
           ],
         );
       },
+    );
+  }
+}
+
+class _EmptyAgentsPanel extends StatelessWidget {
+  const _EmptyAgentsPanel({this.onManageAgents});
+
+  final VoidCallback? onManageAgents;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _RoomPanelDescription('Install an agent in this room to get started.'),
+        const SizedBox(height: 20),
+        PbTertiaryButton.solid(label: 'Install an Agent', onPressed: onManageAgents),
+      ],
     );
   }
 }

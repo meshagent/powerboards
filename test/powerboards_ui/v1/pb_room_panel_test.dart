@@ -260,4 +260,36 @@ void main() {
     expect(find.text('Browse threads by selected agent.'), findsOneWidget);
     expect(find.text('Browse attachments by selected agent.'), findsNothing);
   });
+
+  testWidgets('empty agent install state stays inside agents tab', (tester) async {
+    var manageAgentsPressed = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            height: 640,
+            child: PbRoomPanel(
+              agents: const [],
+              onManageAgents: () => manageAgentsPressed = true,
+              threads: const [],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Agents'), findsOneWidget);
+    expect(find.text('Files'), findsOneWidget);
+    expect(find.text('Install an agent in this room to get started.'), findsOneWidget);
+
+    await tester.tap(find.text('Install an Agent'));
+
+    expect(manageAgentsPressed, isTrue);
+  });
 }

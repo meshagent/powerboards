@@ -274,8 +274,8 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
           ),
           if (!isMobile && canPreviewNewUi)
             AppMenuEntry(
-              title: currentUiMode == PowerboardsUiMode.v1 ? "End new UI Preview" : "Preview new UI",
-              description: currentUiMode == PowerboardsUiMode.v1 ? "Switch back" : "In-development",
+              title: currentUiMode == PowerboardsUiMode.v1 ? "Old Theme" : "New Theme",
+              description: currentUiMode == PowerboardsUiMode.v1 ? "Switch to old theme" : "Switch to new theme",
               icon: currentUiMode == PowerboardsUiMode.v1 ? LucideIcons.rotateCcw : LucideIcons.eye,
               onPressed: _toggleUiMode,
             ),
