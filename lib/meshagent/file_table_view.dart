@@ -212,7 +212,6 @@ class FileManagerView extends StatefulWidget {
   final double desktopHeaderActionMinimumLeadingWidth;
   final double desktopHeaderActionReserve;
   final bool showDesktopSidetrayToggle;
-  final bool showDesktopRootBreadcrumb;
 
   const FileManagerView({
     super.key,
@@ -228,7 +227,6 @@ class FileManagerView extends StatefulWidget {
     this.desktopHeaderActionMinimumLeadingWidth = 0,
     this.desktopHeaderActionReserve = desktopPaneHeaderActionReserve,
     this.showDesktopSidetrayToggle = true,
-    this.showDesktopRootBreadcrumb = true,
   });
 
   @override
@@ -2319,7 +2317,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   List<FileBreadcrumbSegment> _folderBreadcrumbSegments() {
-    final segments = <FileBreadcrumbSegment>[if (widget.showDesktopRootBreadcrumb) const FileBreadcrumbSegment(label: "Files", path: "")];
+    final segments = <FileBreadcrumbSegment>[const FileBreadcrumbSegment(label: "Files", path: "")];
     final folderSegments = _folderSig.value.split('/').where((s) => s.isNotEmpty).toList();
 
     var accumulated = "";
@@ -2431,10 +2429,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     final segments = _folderBreadcrumbSegments();
-    if (segments.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     if (segments.length <= 1) {
       return _buildBreadcrumbCrumb(segments.first);
     }

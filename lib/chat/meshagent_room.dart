@@ -3254,7 +3254,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 desktopHeaderActionLeadingWidthFloor: meetingSessionActive ? _meetingActivePaneActionLeadingWidthFloor : 0,
                 desktopHeaderActionMinimumLeadingWidth: meetingSessionActive ? 160 : 0,
                 desktopHeaderActionReserve: meetingSessionActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
-                showDesktopRootBreadcrumb: !powerboardsUsesDesktopUiPreview(context),
               ),
             ),
           ),
@@ -3289,6 +3288,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 final sidetrayOpenButton = showDesktopSidetrayToggle && sidetrayScope?.enabled == true && sidetrayScope?.collapsed == true
                     ? DesktopSidetrayToggleButton(collapsed: true, onPressed: sidetrayScope!.onExpand)
                     : null;
+                final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
+                if (!meetingIsActive && usesDesktopUiPreview && sidetrayOpenButton == null && actions.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
                 final sidetrayLeadingWidth = sidetrayOpenButton == null
                     ? 0.0
                     : (desktopPaneHeaderCompactButtonWidth + desktopPaneHeaderButtonGap);
@@ -3359,7 +3363,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                   spacing: desktopPaneHeaderButtonGap,
                                   children: [
                                     ?sidetrayOpenButton,
-                                    if (!powerboardsUsesDesktopUiPreview(context))
+                                    if (!usesDesktopUiPreview)
                                       Expanded(
                                         child: Align(
                                           alignment: Alignment.centerLeft,
