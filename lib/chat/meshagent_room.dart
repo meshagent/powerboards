@@ -13,6 +13,7 @@ import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
 import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:meshagent_flutter_dev/developer_console.dart';
@@ -213,12 +214,14 @@ class _MobileSelectedThreadLabelResolver extends StatefulWidget {
   const _MobileSelectedThreadLabelResolver({
     super.key,
     required this.client,
+    required this.agentName,
     required this.threadListPath,
     required this.selectedThreadPath,
     required this.onResolved,
   });
 
   final RoomClient client;
+  final String? agentName;
   final String threadListPath;
   final String selectedThreadPath;
   final ValueChanged<String?> onResolved;
@@ -228,34 +231,25 @@ class _MobileSelectedThreadLabelResolver extends StatefulWidget {
 }
 
 class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThreadLabelResolver> {
-  MeshDocument? _document;
+  agent_sessions.MessagingChatClient? _chatClient;
+  agent_sessions.AgentThreadStorageRepository? _storage;
   String? _openedThreadListPath;
+  String? _openedAgentName;
   String? _lastResolvedDisplayName;
 
   String _normalizedSelectedThreadPath() => widget.selectedThreadPath.trim();
 
   String? _displayNameForSelectedThread() {
-    final document = _document;
+    final storage = _storage;
     final selectedThreadPath = _normalizedSelectedThreadPath();
-    if (document == null) {
+    if (storage == null) {
       return defaultThreadDisplayNameFromPath(selectedThreadPath);
     }
-    for (final node in document.root.getChildren()) {
-      if (node is! MeshElement || node.tagName != "thread") {
+    for (final entry in storage.entries()) {
+      if (entry.path.trim() != selectedThreadPath) {
         continue;
       }
-
-      final rawPath = node.getAttribute("path");
-      if (rawPath is! String || rawPath.trim() != selectedThreadPath) {
-        continue;
-      }
-
-      final rawName = node.getAttribute("name");
-      if (rawName is! String) {
-        return defaultThreadDisplayNameFromPath(selectedThreadPath);
-      }
-
-      final trimmedName = rawName.trim();
+      final trimmedName = entry.name.trim();
       return trimmedName.isEmpty ? defaultThreadDisplayNameFromPath(selectedThreadPath) : trimmedName;
     }
 
@@ -281,26 +275,23 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
   }
 
   Future<void> _closeDocument() async {
-    final document = _document;
-    final openedThreadListPath = _openedThreadListPath;
+    final storage = _storage;
+    final chatClient = _chatClient;
 
-    if (document != null) {
-      document.removeListener(_onThreadListChanged);
-    }
-
-    _document = null;
+    storage?.removeListener(_onThreadListChanged);
+    _storage = null;
+    _chatClient = null;
     _openedThreadListPath = null;
+    _openedAgentName = null;
 
-    if (openedThreadListPath != null) {
-      try {
-        await widget.client.sync.close(openedThreadListPath);
-      } catch (_) {}
-    }
+    await storage?.close();
+    await chatClient?.stop();
   }
 
   Future<void> _rebindDocument() async {
     final nextThreadListPath = widget.threadListPath.trim();
-    if (_openedThreadListPath == nextThreadListPath && _document != null) {
+    final nextAgentName = widget.agentName?.trim();
+    if (_openedThreadListPath == nextThreadListPath && _openedAgentName == nextAgentName && _storage != null) {
       _emitResolved();
       return;
     }
@@ -308,17 +299,22 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
     await _closeDocument();
 
     try {
-      final document = await widget.client.sync.open(nextThreadListPath);
+      final chatClient = agent_sessions.MessagingChatClient(room: widget.client, agentName: nextAgentName);
+      final storage = agent_sessions.AgentThreadStorageRepository(chatClient: chatClient);
+      storage.addListener(_onThreadListChanged);
+      await chatClient.start();
+      await storage.open();
       if (!mounted || widget.threadListPath.trim() != nextThreadListPath) {
-        try {
-          await widget.client.sync.close(nextThreadListPath);
-        } catch (_) {}
+        storage.removeListener(_onThreadListChanged);
+        await storage.close();
+        await chatClient.stop();
         return;
       }
 
-      document.addListener(_onThreadListChanged);
-      _document = document;
+      _storage = storage;
+      _chatClient = chatClient;
       _openedThreadListPath = nextThreadListPath;
+      _openedAgentName = nextAgentName;
       _emitResolved();
     } catch (_) {
       if (!mounted) {
@@ -338,7 +334,7 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
   void didUpdateWidget(covariant _MobileSelectedThreadLabelResolver oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath) {
+    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath || oldWidget.agentName != widget.agentName) {
       unawaited(_rebindDocument());
       return;
     }
@@ -360,14 +356,14 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
 
 class _DesktopPreviewThreadEntry {
   const _DesktopPreviewThreadEntry({
-    required this.element,
+    required this.storage,
     required this.path,
     required this.name,
     required this.createdAt,
     required this.modifiedAt,
   });
 
-  final MeshElement element;
+  final agent_sessions.AgentThreadStorageRepository storage;
   final String path;
   final String name;
   final String createdAt;
@@ -375,9 +371,10 @@ class _DesktopPreviewThreadEntry {
 }
 
 class _DesktopPreviewThreadList extends StatefulWidget {
-  const _DesktopPreviewThreadList({required this.client, required this.threadListPath, required this.builder});
+  const _DesktopPreviewThreadList({required this.client, required this.agentName, required this.threadListPath, required this.builder});
 
   final RoomClient client;
+  final String? agentName;
   final String? threadListPath;
   final Widget Function(BuildContext context, List<_DesktopPreviewThreadEntry> threads) builder;
 
@@ -386,8 +383,10 @@ class _DesktopPreviewThreadList extends StatefulWidget {
 }
 
 class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
-  MeshDocument? _document;
+  agent_sessions.MessagingChatClient? _chatClient;
+  agent_sessions.AgentThreadStorageRepository? _storage;
   String? _openedThreadListPath;
+  String? _openedAgentName;
 
   String? _normalizedThreadListPath() {
     final path = widget.threadListPath?.trim();
@@ -416,36 +415,20 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
   }
 
   List<_DesktopPreviewThreadEntry> _entries() {
-    final document = _document;
-    if (document == null) {
+    final storage = _storage;
+    if (storage == null) {
       return const <_DesktopPreviewThreadEntry>[];
     }
 
-    final entries = <_DesktopPreviewThreadEntry>[];
-    for (final node in document.root.getChildren()) {
-      if (node is! MeshElement || node.tagName != "thread") {
-        continue;
-      }
-
-      final rawPath = node.getAttribute("path");
-      if (rawPath is! String || rawPath.trim().isEmpty) {
-        continue;
-      }
-
-      final path = rawPath.trim();
-      final rawName = node.getAttribute("name");
-      final createdAt = node.getAttribute("created_at");
-      final modifiedAt = node.getAttribute("modified_at");
-      entries.add(
-        _DesktopPreviewThreadEntry(
-          element: node,
-          path: path,
-          name: rawName is String && rawName.trim().isNotEmpty ? rawName.trim() : defaultThreadDisplayNameFromPath(path),
-          createdAt: createdAt is String ? createdAt : "",
-          modifiedAt: modifiedAt is String ? modifiedAt : "",
-        ),
+    final entries = storage.entries().map((entry) {
+      return _DesktopPreviewThreadEntry(
+        storage: storage,
+        path: entry.path,
+        name: entry.name.trim().isNotEmpty ? entry.name.trim() : defaultThreadDisplayNameFromPath(entry.path),
+        createdAt: entry.createdAt,
+        modifiedAt: entry.modifiedAt,
       );
-    }
+    }).toList();
 
     entries.sort((a, b) {
       final dateComparison = _threadSortDate(b).compareTo(_threadSortDate(a));
@@ -466,26 +449,23 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
   }
 
   Future<void> _closeDocument() async {
-    final document = _document;
-    final openedThreadListPath = _openedThreadListPath;
+    final storage = _storage;
+    final chatClient = _chatClient;
 
-    if (document != null) {
-      document.removeListener(_onThreadListChanged);
-    }
-
-    _document = null;
+    storage?.removeListener(_onThreadListChanged);
+    _storage = null;
+    _chatClient = null;
     _openedThreadListPath = null;
+    _openedAgentName = null;
 
-    if (openedThreadListPath != null) {
-      try {
-        await widget.client.sync.close(openedThreadListPath);
-      } catch (_) {}
-    }
+    await storage?.close();
+    await chatClient?.stop();
   }
 
   Future<void> _rebindDocument() async {
     final nextThreadListPath = _normalizedThreadListPath();
-    if (nextThreadListPath == _openedThreadListPath && _document != null) {
+    final nextAgentName = widget.agentName?.trim();
+    if (nextThreadListPath == _openedThreadListPath && nextAgentName == _openedAgentName && _storage != null) {
       return;
     }
 
@@ -499,18 +479,23 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
     }
 
     try {
-      final document = await widget.client.sync.open(nextThreadListPath);
+      final chatClient = agent_sessions.MessagingChatClient(room: widget.client, agentName: nextAgentName);
+      final storage = agent_sessions.AgentThreadStorageRepository(chatClient: chatClient);
+      storage.addListener(_onThreadListChanged);
+      await chatClient.start();
+      await storage.open();
       if (!mounted || _normalizedThreadListPath() != nextThreadListPath) {
-        try {
-          await widget.client.sync.close(nextThreadListPath);
-        } catch (_) {}
+        storage.removeListener(_onThreadListChanged);
+        await storage.close();
+        await chatClient.stop();
         return;
       }
 
-      document.addListener(_onThreadListChanged);
       setState(() {
-        _document = document;
+        _storage = storage;
+        _chatClient = chatClient;
         _openedThreadListPath = nextThreadListPath;
+        _openedAgentName = nextAgentName;
       });
     } catch (_) {
       if (!mounted) {
@@ -530,7 +515,7 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
   void didUpdateWidget(covariant _DesktopPreviewThreadList oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath) {
+    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath || oldWidget.agentName != widget.agentName) {
       unawaited(_rebindDocument());
     }
   }
@@ -3002,6 +2987,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             _MobileSelectedThreadLabelResolver(
               key: ValueKey("mobile-thread-label-$agentKey-$selectedThreadPath"),
               client: widget.room,
+              agentName: agentName,
               threadListPath: resolvedThreadListPath,
               selectedThreadPath: selectedThreadPath,
               onResolved: (displayName) => _setSelectedThreadPath(agentKey, selectedThreadPath, displayName: displayName),
@@ -3527,7 +3513,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    entry.element.setAttribute("name", trimmed);
+    try {
+      await entry.storage.renameThread(entry.path, trimmed);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to rename thread: $error")));
+    }
   }
 
   Future<void> _deleteDesktopPreviewThread(_MobileChatHeaderContext? chatContext, _DesktopPreviewThreadEntry entry) async {
@@ -3553,8 +3546,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     try {
-      await widget.room.storage.delete(entry.path);
-      entry.element.delete();
+      await entry.storage.deleteThread(entry.path);
     } catch (error) {
       if (!mounted) {
         return;
@@ -3595,6 +3587,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     return _DesktopPreviewThreadList(
       client: widget.room,
+      agentName: chatContext?.agentName,
       threadListPath: threadListPath,
       builder: (context, threads) {
         final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads);

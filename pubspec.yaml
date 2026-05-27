@@ -79,6 +79,7 @@ dependencies:
   super_clipboard: ^0.9.1
   meshagent: ^0.42.2
   meshagent_flutter: ^0.42.2
+  meshagent_agents: ^0.42.2
   meshagent_flutter_shadcn: ^0.42.2
   meshagent_flutter_dev: ^0.42.2
   meshagent_flutter_auth: ^0.42.2

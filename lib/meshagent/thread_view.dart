@@ -18,6 +18,7 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat_bot_view.dart';
 import 'package:meshagent_flutter_shadcn/chat_bubble_markdown_config.dart';
@@ -542,9 +543,10 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     );
   }
 
-  MeshDocument? _threadListDocument;
-  RoomClient? _threadListClient;
+  agent_sessions.MessagingChatClient? _threadListChatClient;
+  agent_sessions.AgentThreadStorageRepository? _threadListStorage;
   String? _threadListPath;
+  String? _threadListAgentName;
   Object? _threadListError;
   bool _threadListLoading = true;
   StreamSubscription<RoomEvent>? _roomSubscription;
@@ -591,50 +593,22 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     return defaultThreadDisplayNameFromPath(path);
   }
 
-  String? _threadDisplayNameFromNode(MeshElement node) {
-    final rawName = node.getAttribute("name");
-    if (rawName is! String) {
-      return null;
-    }
-
-    final trimmed = rawName.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
   List<_ThreadListEntry> _threadListEntries() {
-    final document = _threadListDocument;
-    if (document == null) {
+    final storage = _threadListStorage;
+    if (storage == null) {
       return const [];
     }
 
-    final entries = <_ThreadListEntry>[];
-    for (final node in document.root.getChildren()) {
-      if (node is! MeshElement || node.tagName != "thread") {
-        continue;
-      }
-
-      final rawPath = node.getAttribute("path");
-      if (rawPath is! String || rawPath.trim().isEmpty) {
-        continue;
-      }
-      final path = rawPath.trim();
-
-      final displayName = _threadDisplayNameFromNode(node);
-      final name = displayName ?? _threadNameFromPath(path);
-      final createdAt = node.getAttribute("created_at");
-      final modifiedAt = node.getAttribute("modified_at");
-
-      entries.add(
-        _ThreadListEntry(
-          element: node,
-          displayName: displayName,
-          name: name,
-          path: path,
-          createdAt: createdAt is String ? createdAt : "",
-          modifiedAt: modifiedAt is String ? modifiedAt : "",
-        ),
+    final entries = storage.entries().map((entry) {
+      final displayName = entry.name.trim().isEmpty ? null : entry.name.trim();
+      return _ThreadListEntry(
+        displayName: displayName,
+        name: displayName ?? _threadNameFromPath(entry.path),
+        path: entry.path,
+        createdAt: entry.createdAt,
+        modifiedAt: entry.modifiedAt,
       );
-    }
+    }).toList();
 
     entries.sort((a, b) {
       final dateComparison = _threadSortDate(b).compareTo(_threadSortDate(a));
@@ -690,29 +664,27 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   }
 
   Future<void> _closeThreadListDocument() async {
-    final document = _threadListDocument;
-    final path = _threadListPath;
-    final closeClient = _threadListClient ?? widget.client;
+    final storage = _threadListStorage;
+    final chatClient = _threadListChatClient;
 
-    if (document != null) {
-      document.removeListener(_onThreadListChanged);
+    if (storage != null) {
+      storage.removeListener(_onThreadListChanged);
     }
 
-    _threadListDocument = null;
-    _threadListClient = null;
+    _threadListStorage = null;
+    _threadListChatClient = null;
     _threadListPath = null;
+    _threadListAgentName = null;
     _threadListLoading = false;
 
-    if (path != null) {
-      try {
-        await closeClient.sync.close(path);
-      } catch (_) {}
-    }
+    await storage?.close();
+    await chatClient?.stop();
   }
 
   Future<void> _rebindThreadListDocument() async {
     final nextPath = _normalizedThreadListPath(widget.threadListPath);
-    if (nextPath == _threadListPath && _threadListDocument != null) {
+    final nextAgentName = widget.agentName?.trim();
+    if (nextPath == _threadListPath && nextAgentName == _threadListAgentName && _threadListStorage != null) {
       return;
     }
 
@@ -735,19 +707,23 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     });
 
     try {
-      final document = await widget.client.sync.open(nextPath);
+      final chatClient = agent_sessions.MessagingChatClient(room: widget.client, agentName: nextAgentName);
+      final storage = agent_sessions.AgentThreadStorageRepository(chatClient: chatClient);
+      storage.addListener(_onThreadListChanged);
+      await chatClient.start();
+      await storage.open();
       if (!mounted || _normalizedThreadListPath(widget.threadListPath) != nextPath) {
-        try {
-          await widget.client.sync.close(nextPath);
-        } catch (_) {}
+        storage.removeListener(_onThreadListChanged);
+        await storage.close();
+        await chatClient.stop();
         return;
       }
 
-      document.addListener(_onThreadListChanged);
       setState(() {
-        _threadListDocument = document;
-        _threadListClient = widget.client;
+        _threadListStorage = storage;
+        _threadListChatClient = chatClient;
         _threadListPath = nextPath;
+        _threadListAgentName = nextAgentName;
         _threadListLoading = false;
         _threadListError = null;
       });
@@ -756,9 +732,10 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
         return;
       }
       setState(() {
-        _threadListDocument = null;
-        _threadListClient = null;
+        _threadListStorage = null;
+        _threadListChatClient = null;
         _threadListPath = null;
+        _threadListAgentName = null;
         _threadListLoading = false;
         _threadListError = e;
       });
@@ -783,7 +760,14 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       return;
     }
 
-    entry.element.setAttribute("name", trimmed);
+    try {
+      await _threadListStorage?.renameThread(entry.path, trimmed);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to rename thread: $e")));
+    }
   }
 
   Future<void> _deleteThread(_ThreadListEntry entry) async {
@@ -806,8 +790,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
     }
 
     try {
-      await widget.client.storage.delete(entry.path);
-      entry.element.delete();
+      await _threadListStorage?.deleteThread(entry.path);
     } catch (e) {
       if (!mounted) {
         return;
@@ -835,7 +818,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       widget.client.messaging.addListener(_onThreadStatusChanged);
     }
 
-    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath) {
+    if (oldWidget.client != widget.client || oldWidget.threadListPath != widget.threadListPath || oldWidget.agentName != widget.agentName) {
       unawaited(_rebindThreadListDocument());
     }
 
@@ -989,7 +972,6 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
 
 class _ThreadListEntry {
   const _ThreadListEntry({
-    required this.element,
     required this.displayName,
     required this.name,
     required this.path,
@@ -997,7 +979,6 @@ class _ThreadListEntry {
     required this.modifiedAt,
   });
 
-  final MeshElement element;
   final String? displayName;
   final String name;
   final String path;
