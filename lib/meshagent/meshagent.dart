@@ -32,6 +32,7 @@ class MeshagentConfig {
     required this.sentryEnvironment,
     required this.imageTagPrefix,
     required this.domains,
+    required this.meshagentMailDomain,
   });
 
   final Uri serverUrl;
@@ -44,6 +45,7 @@ class MeshagentConfig {
   final String sentryEnvironment;
   final String imageTagPrefix;
   final List<String> domains;
+  final String meshagentMailDomain;
 
   Uri get oauth2CallbackUrl => oauthCallbackUrl.replace(path: "/oauth2/callback");
 
@@ -67,6 +69,7 @@ class MeshagentConfig {
         sentryEnvironment: const String.fromEnvironment("SENTRY_ENVIRONMENT"),
         imageTagPrefix: const String.fromEnvironment("IMAGE_TAG_PREFIX"),
         domains: domains,
+        meshagentMailDomain: const String.fromEnvironment("MESHAGENT_MAIL_DOMAIN"),
       );
     }
 
@@ -81,6 +84,7 @@ class MeshagentConfig {
       sentryEnvironment: const String.fromEnvironment("SENTRY_ENVIRONMENT"),
       imageTagPrefix: const String.fromEnvironment("IMAGE_TAG_PREFIX"),
       domains: domains,
+      meshagentMailDomain: const String.fromEnvironment("MESHAGENT_MAIL_DOMAIN"),
     );
   }
 
@@ -99,6 +103,7 @@ class MeshagentConfig {
       sentryEnvironment: data["SENTRY_ENVIRONMENT"] ?? "",
       imageTagPrefix: data["IMAGE_TAG_PREFIX"],
       domains: _parseEnvList(data["DOMAINS"]),
+      meshagentMailDomain: data["MESHAGENT_MAIL_DOMAIN"],
     );
   }
 
