@@ -3599,19 +3599,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   PbThreadHeader(
                     title: selectedThreadTitle,
                     agentName: agentName,
-                    threads: [for (final thread in threads) thread.name],
                     selectedThreadTitle: selectedThreadTitle,
-                    threadMenuEnabled: threadListPath != null,
                     roomPanelExpanded: !_desktopPreviewRoomPanelCollapsed,
-                    onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
-                    onThreadSelected: (threadTitle) {
-                      for (final thread in threads) {
-                        if (thread.name == threadTitle) {
-                          _selectDesktopPreviewThread(chatContext, thread.path, displayName: thread.name);
-                          return;
-                        }
-                      }
-                    },
                     onRoomPanelToggle: () {
                       setState(() {
                         _desktopPreviewRoomPanelCollapsed = !_desktopPreviewRoomPanelCollapsed;
