@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent/runtime.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/chat/new_chat_thread.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
@@ -268,11 +269,12 @@ void main() {
 
     final newThread = tester.widget<NewChatThread>(newThreadFinder);
     newThread.onThreadPathChanged?.call('.threads/created.thread');
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
 
     final selectedNewThread = tester.widget<NewChatThread>(newThreadFinder);
     expect(selectedNewThread.selectedThreadPath, '.threads/created.thread');
-    expect(find.byType(ChatThread), findsOneWidget);
+    expect(find.byType(DatasetChatThread), findsOneWidget);
   });
 
   testWidgets('uses the mobile attach flow dialog entry point only on native mobile layouts', (tester) async {
