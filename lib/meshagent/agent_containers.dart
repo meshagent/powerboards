@@ -736,6 +736,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
       spec: widget.manifest,
       prefilledVars: widget.prefilledVars,
       routeDomains: routeDomains,
+      meshagentMailDomain: MeshagentConfig.current?.meshagentMailDomain,
       desktopHorizontalPadding: 0,
       desktopSectionSpacing: 20,
       desktopHeaderBottomSpacing: 44,
