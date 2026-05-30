@@ -273,6 +273,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   PbFilesSortKey _v1SortKey = PbFilesSortKey.updated;
   bool _v1SortDirectionDescending = true;
   bool _v1FilesRoomPanelCollapsed = false;
+  bool _v1FilePreviewFullscreen = false;
+  PbFilesItemData? _v1PreviewFile;
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
 
@@ -502,6 +504,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     final name = path.split('/').where((s) => s.isNotEmpty).last;
     final next = List<StorageEntry>.of(ready.value);
     next.removeWhere((e) => e.name == name);
+    final previewFile = _v1PreviewFile;
+    if (previewFile != null && _v1PathForItem(previewFile) == path) {
+      _v1PreviewFile = null;
+      _v1FilePreviewFullscreen = false;
+    }
     _toggleSelected(_FilePathKey.keyForPath(path, false), false);
     _optimisticEmptyTextFiles.remove(path);
 
@@ -842,6 +849,35 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   bool _v1IsFolder(PbFilesItemData item) {
     return item.kind == PbFilesItemKind.folder;
+  }
+
+  void _openV1Preview(PbFilesItemData item) {
+    if (!item.canPreview) {
+      return;
+    }
+
+    setState(() {
+      _v1PreviewFile = item;
+      _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelCollapsed = false;
+      _clearSelected();
+    });
+  }
+
+  void _closeV1Preview() {
+    setState(() {
+      _v1PreviewFile = null;
+      _v1FilePreviewFullscreen = false;
+    });
+  }
+
+  void _setV1PreviewFullscreen(bool fullscreen) {
+    setState(() => _v1FilePreviewFullscreen = fullscreen);
+  }
+
+  Widget _buildV1PreviewContent(PbFilesItemData item) {
+    final path = _v1PathForItem(item);
+    return fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client);
   }
 
   void _toggleV1VisibleSelection(List<PbFilesItemData> items) {
@@ -1882,7 +1918,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           hasActiveFilter: _v1FilterController.text.trim().isNotEmpty,
           roomPanelExpanded: !_v1FilesRoomPanelCollapsed,
           responsiveMode: PbFilesResponsiveMode.docked,
-          previewFileId: null,
+          previewFileId: _v1PreviewFile?.id,
           keyboardPreviewFileId: null,
           keyboardPreviewDirection: 0,
           enableDropTarget: false,
@@ -1900,7 +1936,13 @@ class _FileManagerViewState extends State<FileManagerView> {
           onFilesDropped: (_) {},
           onOpenRecentFiles: () => setState(() => _v1FilesRoomPanelCollapsed = false),
           onRoomPanelToggle: () => setState(() => _v1FilesRoomPanelCollapsed = !_v1FilesRoomPanelCollapsed),
-          onItemPressed: (item) => _openEntry(_v1PathForItem(item), _v1IsFolder(item)),
+          onItemPressed: (item) {
+            if (_v1IsFolder(item)) {
+              _openEntry(_v1PathForItem(item), true);
+              return;
+            }
+            _openV1Preview(item);
+          },
           onBrowseFolder: (item) => _openEntry(item.folderPath, true),
           onRemoveProcessingRow: (_) {},
           onLinkedThreadPressed: _openV1LinkedThread,
@@ -1934,15 +1976,19 @@ class _FileManagerViewState extends State<FileManagerView> {
             threadPanel: mainPanel,
             roomPanelBuilder: (context, resizing) => PbFilesSidePane(
               files: recentFiles,
-              previewFile: null,
-              fullscreen: false,
+              previewFile: _v1PreviewFile,
+              fullscreen: _v1FilePreviewFullscreen,
               resizing: resizing,
               borderOnTop: false,
               responsiveOverlay: false,
               responsiveOverlayMobile: false,
-              onPreviewFile: (item) => _openEntry(_v1PathForItem(item), false),
-              onToggleFullscreen: () {},
-              onClosePreview: () {},
+              onPreviewFile: _openV1Preview,
+              previewBuilder: _buildV1PreviewContent,
+              onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
+              onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
+              onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
+              onToggleFullscreen: () => _setV1PreviewFullscreen(!_v1FilePreviewFullscreen),
+              onClosePreview: _closeV1Preview,
             ),
           ),
         ),

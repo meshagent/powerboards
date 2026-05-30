@@ -56,6 +56,10 @@ class PbRoomPanel extends StatefulWidget {
     this.showThreadsSection = true,
     this.showFilesTab = true,
     this.attachments,
+    this.filePreviewBuilder,
+    this.onAskFileAgent,
+    this.onShareFile,
+    this.onDownloadFile,
     required this.threads,
     this.threadItems,
     this.selectedThreadId,
@@ -84,6 +88,10 @@ class PbRoomPanel extends StatefulWidget {
   final bool showThreadsSection;
   final bool showFilesTab;
   final List<PbAttachmentListItemData>? attachments;
+  final Widget Function(PbAttachmentListItemData file)? filePreviewBuilder;
+  final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
+  final ValueChanged<PbAttachmentListItemData>? onShareFile;
+  final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
   final List<String> threads;
   final List<PbThreadListItemData>? threadItems;
   final String? selectedThreadId;
@@ -256,8 +264,12 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
               file: _previewFile,
               fullscreen: _filePreviewFullscreen,
               resizing: widget.filePreviewResizing,
+              onAskAgent: widget.onAskFileAgent == null ? null : () => widget.onAskFileAgent!(_previewFile),
+              onShare: widget.onShareFile == null ? null : () => widget.onShareFile!(_previewFile),
+              onDownload: widget.onDownloadFile == null ? null : () => widget.onDownloadFile!(_previewFile),
               onToggleFullscreen: () => _setFilePreviewFullscreen(!_filePreviewFullscreen),
               onClose: _closeFilePreview,
+              child: widget.filePreviewBuilder?.call(_previewFile),
             ),
           ),
       ],
@@ -1721,6 +1733,10 @@ class PbFilePreviewPane extends StatelessWidget {
     this.borderOnTop = false,
     this.showInlineBorder = true,
     this.hideFullscreenToggle = false,
+    this.child,
+    this.onAskAgent,
+    this.onShare,
+    this.onDownload,
     this.onToggleFullscreen,
     this.onClose,
   });
@@ -1731,6 +1747,10 @@ class PbFilePreviewPane extends StatelessWidget {
   final bool borderOnTop;
   final bool showInlineBorder;
   final bool hideFullscreenToggle;
+  final Widget? child;
+  final VoidCallback? onAskAgent;
+  final VoidCallback? onShare;
+  final VoidCallback? onDownload;
   final VoidCallback? onToggleFullscreen;
   final VoidCallback? onClose;
 
@@ -1773,7 +1793,7 @@ class PbFilePreviewPane extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 7),
-                    _FilePreviewToolbar(state: toolbarState, onAskAgent: () {}, onShare: () {}, onDownload: () {}),
+                    _FilePreviewToolbar(state: toolbarState, onAskAgent: onAskAgent, onShare: onShare, onDownload: onDownload),
                     if (!hideFullscreenToggle)
                       _GhostIcon(assetName: fullscreen ? 'minimize-2' : 'maximize-2', size: 40, onPressed: onToggleFullscreen),
                     _GhostIcon(assetName: 'x', size: 40, onPressed: onClose),
@@ -1802,6 +1822,14 @@ class PbFilePreviewPane extends StatelessWidget {
                 boxShadow: fullscreen
                     ? null
                     : const [BoxShadow(color: Color.fromRGBO(255, 255, 255, 0.5), blurRadius: 0, offset: Offset(0, 1))],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(fullscreen ? 0 : 10),
+                child:
+                    child ??
+                    Center(
+                      child: PbSvgIcon(assetName: file.iconAssetName, size: 48, color: file.iconColor),
+                    ),
               ),
             ),
           ),
@@ -1956,6 +1984,9 @@ class _FilePreviewToolbar extends StatelessWidget {
                 showAskAgent: state.isInMenu(_FilePreviewAction.askAgent),
                 showShare: state.isInMenu(_FilePreviewAction.share),
                 showDownload: state.isInMenu(_FilePreviewAction.download),
+                onAskAgent: onAskAgent,
+                onShare: onShare,
+                onDownload: onDownload,
                 onDismiss: closeMenu,
               ),
             ),
@@ -2190,6 +2221,7 @@ class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
             title: 'Ask agent',
             leadingIconAssetName: 'message-square-plus',
             singleLine: true,
+            state: onAskAgent == null ? PbMenuOptionVisualState.disabled : null,
             onPressed: () => _runMenuAction(onAskAgent, onDismiss),
           ),
         if (showShare)
@@ -2197,6 +2229,7 @@ class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
             title: 'Share',
             leadingIconAssetName: 'share',
             singleLine: true,
+            state: onShare == null ? PbMenuOptionVisualState.disabled : null,
             onPressed: () => _runMenuAction(onShare, onDismiss),
           ),
         if (showDownload)
@@ -2204,6 +2237,7 @@ class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
             title: 'Download',
             leadingIconAssetName: 'arrow-down-to-line',
             singleLine: true,
+            state: onDownload == null ? PbMenuOptionVisualState.disabled : null,
             onPressed: () => _runMenuAction(onDownload, onDismiss),
           ),
       ],

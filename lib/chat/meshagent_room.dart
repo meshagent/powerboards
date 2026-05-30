@@ -19,12 +19,14 @@ import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 import 'package:meshagent_flutter_dev/developer_console.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/conversation_descriptor.dart' as ma;
+import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
 import 'package:meshagent_flutter_shadcn/secrets/keychain_dialog.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
+import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
 import 'package:powerboards/chat/hangup_button.dart';
@@ -33,6 +35,7 @@ import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
+import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
@@ -43,6 +46,7 @@ import 'package:powerboards/meshagent/loader.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/options_menu.dart';
 import 'package:powerboards/meshagent/path.dart';
+import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:powerboards/meshagent/tool_connection_scope.dart';
 import 'package:powerboards/meshagent/tools/ui_toolkit.dart';
@@ -77,6 +81,7 @@ import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/resizable_split_view.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 const defaultDebugSize = 0.4;
 final meetingHeaderTitleStyle = powerboardsSectionTitleStyle();
@@ -912,6 +917,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
           title: metadata.displayTitle,
           subtitle: displayThreadName.isEmpty ? metadata.displayType : '${metadata.displayType} / $displayThreadName',
           fileType: metadata.fileType,
+          path: filePath,
         ),
       );
     }
@@ -4142,6 +4148,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       },
                       onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
                       attachments: attachments,
+                      filePreviewBuilder: _buildAttachmentPreviewContent,
+                      onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey)),
+                      onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
+                      onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
                       filePreviewResizing: resizing,
                     ),
                   )
@@ -4871,6 +4881,87 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     if (changed && mounted) {
       setState(() {});
+    }
+  }
+
+  String? _previewAttachmentPath(PbAttachmentListItemData file) {
+    final path = file.path?.trim();
+    if (path == null || path.isEmpty) {
+      return null;
+    }
+    return path;
+  }
+
+  Widget _buildAttachmentPreviewContent(PbAttachmentListItemData file) {
+    final path = _previewAttachmentPath(file);
+    if (path == null) {
+      return Center(child: Text(file.title, style: powerboardsSectionTitleStyle()));
+    }
+
+    return fileViewer(widget.room, path) ?? DocumentPane(path: path, room: widget.room);
+  }
+
+  List<ChatFilePromptAction> _attachmentFilePromptActions(String path) {
+    if (!services.state.isReady) {
+      return const <ChatFilePromptAction>[];
+    }
+
+    return resolveChatFilePromptActions(services: services.state.value!, filePath: path);
+  }
+
+  Future<void> _startDefaultAttachmentFilePrompt(PbAttachmentListItemData file, {String? agentKey}) async {
+    final path = _previewAttachmentPath(file);
+    if (path == null) {
+      return;
+    }
+
+    final action = _attachmentFilePromptActions(path).firstOrNull;
+    if (action == null) {
+      return;
+    }
+
+    try {
+      final threadPath = await startChatFilePromptThread(room: widget.room, action: action, filePath: path);
+      if (!mounted) {
+        return;
+      }
+
+      if (agentKey != null) {
+        _setSelectedThreadPath(agentKey, threadPath, displayName: defaultThreadDisplayNameFromPath(threadPath));
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to start chat"), description: Text("$error")));
+    }
+  }
+
+  Future<void> _downloadAttachmentFile(PbAttachmentListItemData file) async {
+    final path = _previewAttachmentPath(file);
+    if (path == null) {
+      return;
+    }
+
+    final url = await widget.room.storage.downloadUrl(path, download: true);
+    await launchUrl(Uri.parse(url));
+  }
+
+  Future<void> _shareAttachmentFile(PbAttachmentListItemData file) async {
+    final path = _previewAttachmentPath(file);
+    if (path == null) {
+      return;
+    }
+
+    try {
+      await shareRemoteStorageFile(context: context, client: widget.room, path: path);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ShadToaster.of(context).show(ShadToast.destructive(title: const Text('Unable to share file'), description: Text('$error')));
     }
   }
 

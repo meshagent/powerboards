@@ -17,6 +17,10 @@ class PbFilesSidePane extends StatelessWidget {
     required this.responsiveOverlay,
     required this.responsiveOverlayMobile,
     required this.onPreviewFile,
+    this.previewBuilder,
+    this.onAskAgent,
+    this.onShare,
+    this.onDownload,
     required this.onToggleFullscreen,
     required this.onClosePreview,
   });
@@ -35,6 +39,10 @@ class PbFilesSidePane extends StatelessWidget {
   final bool responsiveOverlay;
   final bool responsiveOverlayMobile;
   final ValueChanged<PbFilesItemData> onPreviewFile;
+  final Widget Function(PbFilesItemData file)? previewBuilder;
+  final ValueChanged<PbFilesItemData>? onAskAgent;
+  final ValueChanged<PbFilesItemData>? onShare;
+  final ValueChanged<PbFilesItemData>? onDownload;
   final VoidCallback onToggleFullscreen;
   final VoidCallback onClosePreview;
 
@@ -49,8 +57,12 @@ class PbFilesSidePane extends StatelessWidget {
         borderOnTop: borderOnTop,
         showInlineBorder: !responsiveOverlay,
         hideFullscreenToggle: responsiveOverlayMobile,
+        onAskAgent: onAskAgent == null ? null : () => onAskAgent!(preview),
+        onShare: onShare == null ? null : () => onShare!(preview),
+        onDownload: onDownload == null ? null : () => onDownload!(preview),
         onToggleFullscreen: onToggleFullscreen,
         onClose: onClosePreview,
+        child: previewBuilder?.call(preview),
       );
     }
 

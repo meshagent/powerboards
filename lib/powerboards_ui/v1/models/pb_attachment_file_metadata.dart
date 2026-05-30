@@ -57,8 +57,8 @@ class PbResolvedAttachmentMetadata {
   String get iconAssetName => fileType.iconAssetName;
   Color get iconColor => fileType.iconColor;
 
-  PbAttachmentListItemData toListItemData() {
-    return PbAttachmentListItemData(title: displayTitle, subtitle: displayType, fileType: fileType);
+  PbAttachmentListItemData toListItemData({String? path}) {
+    return PbAttachmentListItemData(title: displayTitle, subtitle: displayType, fileType: fileType, path: path);
   }
 }
 
@@ -308,11 +308,12 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
 }
 
 class PbAttachmentListItemData {
-  const PbAttachmentListItemData({required this.title, required this.subtitle, required this.fileType});
+  const PbAttachmentListItemData({required this.title, required this.subtitle, required this.fileType, this.path});
 
   factory PbAttachmentListItemData.fromFileName({
     required String title,
     String subtitle = '',
+    String? path,
     PbAttachmentFileType? fileType,
     String? fileTypeKey,
   }) {
@@ -321,12 +322,13 @@ class PbAttachmentListItemData {
       descriptor: subtitle,
       explicitFileType: fileType,
       explicitFileTypeKey: fileTypeKey,
-    ).toListItemData();
+    ).toListItemData(path: path);
   }
 
   final String title;
   final String subtitle;
   final PbAttachmentFileType fileType;
+  final String? path;
 
   PbAttachmentCategory get category => fileType.category;
 
