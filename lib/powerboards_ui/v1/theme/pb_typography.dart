@@ -115,6 +115,15 @@ abstract final class PowerboardsTypography {
     color: PbColors.textBody,
   );
 
+  static const TextStyle smallStrong = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 13,
+    height: 1.35,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    color: PbColors.textBody,
+  );
+
   static const TextStyle textXSmall = TextStyle(
     fontFamily: fontFamily,
     fontSize: 12.5,
@@ -147,6 +156,15 @@ abstract final class PowerboardsTypography {
     fontSize: 13,
     height: 1.3,
     fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    color: PbColors.textPrimary,
+  );
+
+  static const TextStyle customEmptyStateTitle = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 28,
+    height: 1.15,
+    fontWeight: FontWeight.w700,
     letterSpacing: 0,
     color: PbColors.textPrimary,
   );

@@ -1,14 +1,16 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/pb_colors.dart';
+import '../../theme/pb_tokens.dart';
 import 'pb_room_panel.dart';
 
-const double _roomPanelDefaultWidth = 348;
-const double _roomPanelMinWidth = 348;
-const double _roomPanelResizeHandleWidth = 16;
+const double _roomPanelDefaultWidth = PbSizes.roomPanelDefault;
+const double _roomPanelMinWidth = PbSizes.roomPanelDefault;
+const double _roomPanelResizeHandleWidth = PbSizes.roomPanelResizeHandle;
 const double _roomPanelDefaultMaxViewportRatio = 1 / 3;
 const double _roomPanelFilePreviewDefaultThreadViewportRatio = 2 / 3;
 const double _roomPanelFilesMaxViewportRatio = 0.5;
@@ -25,6 +27,8 @@ class PbRoomPanelMount extends StatefulWidget {
     this.filePreviewOpen = false,
     this.filePreviewFullscreen = false,
     this.roomPanelCollapsed = false,
+    this.panelWidth,
+    this.onPanelWidthChanged,
   }) : assert(roomPanel != null || roomPanelBuilder != null, 'Either roomPanel or roomPanelBuilder must be provided.');
 
   final Widget threadPanel;
@@ -34,6 +38,8 @@ class PbRoomPanelMount extends StatefulWidget {
   final bool filePreviewOpen;
   final bool filePreviewFullscreen;
   final bool roomPanelCollapsed;
+  final double? panelWidth;
+  final ValueChanged<double>? onPanelWidthChanged;
 
   @override
   State<PbRoomPanelMount> createState() => _PbRoomPanelMountState();
@@ -41,6 +47,8 @@ class PbRoomPanelMount extends StatefulWidget {
 
 class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
   double _panelWidth = _roomPanelDefaultWidth;
+  double? _resizeStartX;
+  double? _resizeStartWidth;
   bool _resizing = false;
   bool _hovered = false;
   bool _focused = false;
@@ -64,12 +72,52 @@ class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
     return _clampWidth(workspaceWidth, workspaceWidth * (1 - _roomPanelFilePreviewDefaultThreadViewportRatio));
   }
 
+  double get _effectivePanelWidth => widget.panelWidth ?? _panelWidth;
+
+  void _commitWidth(double width) {
+    if (widget.onPanelWidthChanged != null) {
+      widget.onPanelWidthChanged!(width);
+      return;
+    }
+
+    setState(() => _panelWidth = width);
+  }
+
   void _setWidth(double workspaceWidth, double proposedWidth) {
-    setState(() => _panelWidth = _clampWidth(workspaceWidth, proposedWidth));
+    _commitWidth(_clampWidth(workspaceWidth, proposedWidth));
   }
 
   Widget _buildRoomPanel(BuildContext context) {
     return widget.roomPanelBuilder?.call(context, _resizing) ?? widget.roomPanel!;
+  }
+
+  void _startResize(double globalX, double panelWidth) {
+    setState(() {
+      _resizing = true;
+      _hovered = false;
+      _resizeStartX = globalX;
+      _resizeStartWidth = panelWidth;
+    });
+  }
+
+  void _stopResize() {
+    setState(() {
+      _resizing = false;
+      _hovered = false;
+      _resizeStartX = null;
+      _resizeStartWidth = null;
+    });
+  }
+
+  void _updateResize(double workspaceWidth, double globalX) {
+    final startX = _resizeStartX;
+    final startWidth = _resizeStartWidth;
+
+    if (startX == null || startWidth == null) {
+      return;
+    }
+
+    _setWidth(workspaceWidth, startWidth - (globalX - startX));
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event, double width) {
@@ -78,12 +126,12 @@ class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      _setWidth(width, _panelWidth + _roomPanelKeyboardStep);
+      _setWidth(width, _effectivePanelWidth + _roomPanelKeyboardStep);
       return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      _setWidth(width, _panelWidth - _roomPanelKeyboardStep);
+      _setWidth(width, _effectivePanelWidth - _roomPanelKeyboardStep);
       return KeyEventResult.handled;
     }
 
@@ -117,7 +165,7 @@ class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
         }
 
         final workspaceWidth = box.size.width;
-        _setWidth(workspaceWidth, math.max(_panelWidth, _filePreviewDefaultWidth(workspaceWidth)));
+        _setWidth(workspaceWidth, math.max(_effectivePanelWidth, _filePreviewDefaultWidth(workspaceWidth)));
       });
     }
   }
@@ -127,7 +175,8 @@ class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final workspaceWidth = constraints.maxWidth;
-        final panelWidth = _clampWidth(workspaceWidth, _panelWidth);
+        final currentPanelWidth = _effectivePanelWidth;
+        final panelWidth = _clampWidth(workspaceWidth, currentPanelWidth);
         final roomPanel = _buildRoomPanel(context);
 
         if (widget.filePreviewFullscreen) {
@@ -138,44 +187,56 @@ class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
           return SizedBox.expand(child: widget.threadPanel);
         }
 
-        if (panelWidth != _panelWidth) {
+        if (panelWidth != currentPanelWidth) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              setState(() => _panelWidth = panelWidth);
+              _commitWidth(panelWidth);
             }
           });
         }
 
-        return Row(
+        return Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(child: widget.threadPanel),
-            SizedBox(
-              width: panelWidth,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Positioned.fill(child: roomPanel),
-                  Positioned(
-                    top: 0,
-                    bottom: 0,
-                    left: -(_roomPanelResizeHandleWidth / 2),
-                    width: _roomPanelResizeHandleWidth,
-                    child: _RoomPanelResizer(
-                      active: _resizing || _hovered || _focused,
-                      value: panelWidth,
-                      min: _roomPanelMinWidth,
-                      max: _maxWidth(workspaceWidth),
-                      onFocusChanged: (focused) => setState(() => _focused = focused),
-                      onHoverChanged: (hovered) => setState(() => _hovered = hovered),
-                      onKeyEvent: (node, event) => _handleKeyEvent(node, event, workspaceWidth),
-                      onDragStart: () => setState(() => _resizing = true),
-                      onDragEnd: () => setState(() => _resizing = false),
-                      onDragUpdate: (delta) => _setWidth(workspaceWidth, _panelWidth - delta),
-                    ),
+            Row(
+              children: [
+                Expanded(child: widget.threadPanel),
+                SizedBox(
+                  width: panelWidth,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(child: roomPanel),
+                      Positioned(
+                        top: 0,
+                        bottom: 0,
+                        left: -(_roomPanelResizeHandleWidth / 2),
+                        width: _roomPanelResizeHandleWidth,
+                        child: _RoomPanelResizer(
+                          active: _resizing || _hovered || _focused,
+                          value: panelWidth,
+                          min: _roomPanelMinWidth,
+                          max: _maxWidth(workspaceWidth),
+                          onFocusChanged: (focused) => setState(() => _focused = focused),
+                          onHoverChanged: (hovered) {
+                            if (_resizing) {
+                              return;
+                            }
+
+                            setState(() => _hovered = hovered);
+                          },
+                          onKeyEvent: (node, event) => _handleKeyEvent(node, event, workspaceWidth),
+                          onDragStart: (globalX) => _startResize(globalX, panelWidth),
+                          onDragEnd: _stopResize,
+                          onDragUpdate: (globalX) => _updateResize(workspaceWidth, globalX),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+            if (_resizing) const Positioned.fill(child: _RoomPanelResizeShield()),
           ],
         );
       },
@@ -204,7 +265,7 @@ class _RoomPanelResizer extends StatelessWidget {
   final ValueChanged<bool> onFocusChanged;
   final ValueChanged<bool> onHoverChanged;
   final FocusOnKeyEventCallback onKeyEvent;
-  final VoidCallback onDragStart;
+  final ValueChanged<double> onDragStart;
   final VoidCallback onDragEnd;
   final ValueChanged<double> onDragUpdate;
 
@@ -226,12 +287,24 @@ class _RoomPanelResizer extends StatelessWidget {
           cursor: SystemMouseCursors.resizeColumn,
           onEnter: (_) => onHoverChanged(true),
           onExit: (_) => onHoverChanged(false),
-          child: GestureDetector(
+          child: Listener(
             behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (_) => onDragStart(),
-            onHorizontalDragCancel: onDragEnd,
-            onHorizontalDragEnd: (_) => onDragEnd(),
-            onHorizontalDragUpdate: (details) => onDragUpdate(details.delta.dx),
+            onPointerDown: (event) {
+              if (event.buttons & kPrimaryButton == 0) {
+                return;
+              }
+
+              onDragStart(event.position.dx);
+            },
+            onPointerMove: (event) {
+              if (event.buttons & kPrimaryButton == 0) {
+                return;
+              }
+
+              onDragUpdate(event.position.dx);
+            },
+            onPointerUp: (_) => onDragEnd(),
+            onPointerCancel: (_) => onDragEnd(),
             child: Stack(
               alignment: Alignment.center,
               children: [
@@ -244,7 +317,7 @@ class _RoomPanelResizer extends StatelessWidget {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     width: 4,
-                    height: 72,
+                    height: PbSizes.mobileRailHeight,
                     decoration: BoxDecoration(
                       color: handleColor,
                       borderRadius: BorderRadius.circular(999),
@@ -258,6 +331,20 @@ class _RoomPanelResizer extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _RoomPanelResizeShield extends StatelessWidget {
+  const _RoomPanelResizeShield();
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      child: AbsorbPointer(
+        child: ColoredBox(color: Colors.transparent, child: SizedBox.expand()),
       ),
     );
   }

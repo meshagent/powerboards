@@ -35,6 +35,8 @@ abstract final class PbColors {
   static const customViolet = Color(0xFF7C3AED);
   static const customRose = Color(0xFFE11D48);
   static const customBrandInk = brandInk;
+  static const customAlert = alert;
+  static const customAlertSoft = alertSoft;
   static const customStateSelectedBorder = borderStateSelected;
   static const customStateSelectedSurface = surfaceStateSelected;
   static const customRailSelectedSurface = surfaceRailSelected;

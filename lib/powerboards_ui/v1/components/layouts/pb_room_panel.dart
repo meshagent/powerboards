@@ -1,8 +1,12 @@
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 
 import '../../models/pb_attachment_file_metadata.dart';
 import '../../models/pb_agent_display.dart';
 import '../../theme/pb_colors.dart';
+import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
 import '../menus/pb_menu_anchor.dart';
 import '../menus/pb_menu_card.dart';
@@ -14,6 +18,10 @@ import '../primitives/pb_svg_icon.dart';
 enum PbRoomPanelTab { agents, files }
 
 enum PbAgentStatusTone { online, amber, gray, error }
+
+const double pbShellCompactBreakpoint = PbBreakpoints.shellCompact;
+const double pbShellMobileBreakpoint = PbBreakpoints.shellMobile;
+const double pbRoomPanelStackBreakpoint = PbBreakpoints.roomPanelStack;
 
 const double _sidepaneInlinePadding = 22;
 const double _sidepaneScrollTopPadding = 8;
@@ -257,6 +265,88 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
   }
 }
 
+class PbResponsiveRoomPanelOverlayFrame extends StatelessWidget {
+  const PbResponsiveRoomPanelOverlayFrame({super.key, required this.child, this.preview, this.mobile = false, this.onClose});
+
+  final Widget child;
+  final Widget? preview;
+  final bool mobile;
+  final VoidCallback? onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final sidePadding = mobile ? 12.0 : 16.0;
+
+    return Material(
+      type: MaterialType.transparency,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxSheetHeight = mobile
+              ? math.min(constraints.maxHeight * 0.8, constraints.maxHeight - 32)
+              : math.min(680.0, constraints.maxHeight - 80);
+
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onClose,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                    child: ColoredBox(color: PbColors.surfaceRailActive.withValues(alpha: 0.52)),
+                  ),
+                ),
+              ),
+              if (preview == null)
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(sidePadding, 0, sidePadding, sidePadding),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: maxSheetHeight, maxWidth: double.infinity),
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          boxShadow: const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 80, offset: Offset(0, 30))],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: PbColors.borderSoft),
+                              gradient: const LinearGradient(
+                                colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                            ),
+                            child: Stack(
+                              children: [
+                                Positioned.fill(child: child),
+                                Positioned(
+                                  top: 18,
+                                  right: 16,
+                                  child: _GhostIcon(assetName: 'x', onPressed: onClose),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Positioned.fill(child: preview!),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class PbRoomTabs extends StatefulWidget {
   const PbRoomTabs({super.key, required this.selectedTab, this.showFilesTab = true, required this.onTabSelected});
 
@@ -317,6 +407,23 @@ class _PbRoomTabsState extends State<PbRoomTabs> {
   }
 }
 
+class PbStaticRoomTabs extends StatelessWidget {
+  const PbStaticRoomTabs({super.key, required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Text(label, style: PowerboardsTypography.label.copyWith(color: PbColors.textPrimary)),
+      ),
+    );
+  }
+}
+
 class _RoomTab extends StatelessWidget {
   const _RoomTab({
     required this.label,
@@ -371,6 +478,17 @@ class _RoomTab extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class PbRoomPanelDescription extends StatelessWidget {
+  const PbRoomPanelDescription(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text, style: PowerboardsTypography.meta.copyWith(color: PbColors.textMuted));
   }
 }
 
@@ -1600,6 +1718,9 @@ class PbFilePreviewPane extends StatelessWidget {
     required this.file,
     required this.fullscreen,
     this.resizing = false,
+    this.borderOnTop = false,
+    this.showInlineBorder = true,
+    this.hideFullscreenToggle = false,
     this.onToggleFullscreen,
     this.onClose,
   });
@@ -1607,16 +1728,23 @@ class PbFilePreviewPane extends StatelessWidget {
   final PbAttachmentListItemData file;
   final bool fullscreen;
   final bool resizing;
+  final bool borderOnTop;
+  final bool showInlineBorder;
+  final bool hideFullscreenToggle;
   final VoidCallback? onToggleFullscreen;
   final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: fullscreen ? EdgeInsets.zero : const EdgeInsets.fromLTRB(22, 26, 22, 24),
-      decoration: const BoxDecoration(
+      padding: fullscreen ? EdgeInsets.zero : const EdgeInsets.fromLTRB(22, 18, 22, 24),
+      decoration: BoxDecoration(
         color: PbColors.surfacePanelWash,
-        border: Border(left: BorderSide(color: PbColors.borderSoft)),
+        border: fullscreen || !showInlineBorder
+            ? null
+            : borderOnTop
+            ? const Border(top: BorderSide(color: PbColors.borderSoft))
+            : const Border(left: BorderSide(color: PbColors.borderSoft)),
       ),
       child: Column(
         children: [
@@ -1646,7 +1774,8 @@ class PbFilePreviewPane extends StatelessWidget {
                     ),
                     const SizedBox(width: 7),
                     _FilePreviewToolbar(state: toolbarState, onAskAgent: () {}, onShare: () {}, onDownload: () {}),
-                    _GhostIcon(assetName: fullscreen ? 'minimize-2' : 'maximize-2', size: 40, onPressed: onToggleFullscreen),
+                    if (!hideFullscreenToggle)
+                      _GhostIcon(assetName: fullscreen ? 'minimize-2' : 'maximize-2', size: 40, onPressed: onToggleFullscreen),
                     _GhostIcon(assetName: 'x', size: 40, onPressed: onClose),
                   ],
                 ),

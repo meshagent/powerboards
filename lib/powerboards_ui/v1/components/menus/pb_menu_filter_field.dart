@@ -4,11 +4,22 @@ import '../../theme/pb_colors.dart';
 import '../../theme/pb_typography.dart';
 
 class PbMenuFilterField extends StatefulWidget {
-  const PbMenuFilterField({super.key, this.placeholder = 'Filter...', this.focused, this.hovered, this.controller, this.onChanged});
+  const PbMenuFilterField({
+    super.key,
+    this.placeholder = 'Filter...',
+    this.focused,
+    this.hovered,
+    this.height = 40,
+    this.margin = const EdgeInsets.only(bottom: 4),
+    this.controller,
+    this.onChanged,
+  });
 
   final String placeholder;
   final bool? focused;
   final bool? hovered;
+  final double height;
+  final EdgeInsetsGeometry margin;
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
 
@@ -64,8 +75,8 @@ class _PbMenuFilterFieldState extends State<PbMenuFilterField> {
       child: Transform.translate(
         offset: Offset(0, hovered && !focused ? -1 : 0),
         child: Container(
-          height: 40,
-          margin: const EdgeInsets.only(bottom: 4),
+          height: widget.height,
+          margin: widget.margin,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.centerLeft,
           decoration: BoxDecoration(
@@ -79,12 +90,12 @@ class _PbMenuFilterFieldState extends State<PbMenuFilterField> {
             focusNode: _focusNode,
             onChanged: widget.onChanged,
             cursorColor: PbColors.textPrimary,
-            style: PowerboardsTypography.p.copyWith(height: 1.3, color: PbColors.textPrimary),
+            style: PowerboardsTypography.p.copyWith(fontSize: 14, height: 1.3, color: PbColors.textPrimary),
             decoration: InputDecoration(
               isCollapsed: true,
               border: InputBorder.none,
               hintText: widget.placeholder,
-              hintStyle: PowerboardsTypography.p.copyWith(height: 1.3, color: PbColors.textMuted),
+              hintStyle: PowerboardsTypography.p.copyWith(fontSize: 14, height: 1.3, color: PbColors.textMuted),
             ),
           ),
         ),

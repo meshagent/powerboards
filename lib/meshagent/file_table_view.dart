@@ -31,8 +31,13 @@ import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_files_page.dart';
+import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
@@ -259,6 +264,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   late final _folderSig = Signal<String>(_location.folder);
   final _sortSig = Signal<FileSort>(const FileSort(FileSortField.name, true));
   final _selectedSig = Signal<Set<String>>(<String>{});
+  final TextEditingController _v1FilterController = TextEditingController();
+  PbFilesSortKey _v1SortKey = PbFilesSortKey.updated;
+  bool _v1SortDirectionDescending = true;
 
   PendingStorageDeleteScope get _deleteScope => PendingStorageDeleteScope(projectId: widget.projectId, roomName: widget.client.roomName);
 
@@ -331,6 +339,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     roomSub.cancel();
 
     uploadNotifications.dispose();
+    _v1FilterController.dispose();
     _collapsedBreadcrumbMenuController.dispose();
     popoverController.dispose();
     _codePreviewController.dispose();
@@ -577,6 +586,146 @@ class _FileManagerViewState extends State<FileManagerView> {
   String _displayNameForEntry(StorageEntry entry) {
     final path = joinPaths(_folderSig.value, entry.name);
     return entry.isFolder ? entry.name : _displayNameForPath(path);
+  }
+
+  String _v1UpdatedLabel(StorageEntry entry) {
+    return entry.updatedAt?.modified() ?? entry.createdAt?.modified() ?? '';
+  }
+
+  int _v1UpdatedSort(StorageEntry entry) {
+    return (entry.updatedAt ?? entry.createdAt)?.millisecondsSinceEpoch ?? 0;
+  }
+
+  PbFilesItemData _v1ItemForEntry(StorageEntry entry) {
+    final folder = _folderSig.value;
+    final fullPath = _FilePathKey.pathForEntry(folder, entry);
+    final key = _FilePathKey.keyForEntry(folder, entry);
+    final updatedLabel = _v1UpdatedLabel(entry);
+    final updatedSort = _v1UpdatedSort(entry);
+
+    if (entry.isFolder) {
+      return PbFilesItemData(
+        id: key,
+        title: entry.name,
+        type: PbAttachmentFileType.folder.defaultDisplayLabel,
+        thread: '',
+        creator: 'Powerboards',
+        creatorInitials: 'PB',
+        updatedLabel: updatedLabel,
+        updatedSort: updatedSort,
+        parentPath: folder,
+        folderPath: fullPath,
+        fileType: PbAttachmentFileType.folder,
+        kind: PbFilesItemKind.folder,
+      );
+    }
+
+    return PbFilesItemData.fromFileName(
+      id: key,
+      title: _displayNameForEntry(entry),
+      thread: '',
+      creator: 'Powerboards',
+      creatorInitials: 'PB',
+      updatedLabel: updatedLabel,
+      updatedSort: updatedSort,
+      parentPath: folder,
+    );
+  }
+
+  List<PbFilesItemData> _v1VisibleItems(List<StorageEntry> entries) {
+    final query = _v1FilterController.text.trim().toLowerCase();
+    final items = entries
+        .where((entry) => !widget.hideSystem || !entry.name.startsWith('.'))
+        .where((entry) => !_isDeletePending(_FilePathKey.pathForEntry(_folderSig.value, entry), entry.isFolder))
+        .map(_v1ItemForEntry)
+        .where((item) => query.isEmpty || item.filterText.contains(query))
+        .toList();
+
+    items.sort(_compareV1Files);
+    return items;
+  }
+
+  int _compareV1Files(PbFilesItemData left, PbFilesItemData right) {
+    if (left.kind == PbFilesItemKind.folder && right.kind != PbFilesItemKind.folder) {
+      return -1;
+    }
+    if (left.kind != PbFilesItemKind.folder && right.kind == PbFilesItemKind.folder) {
+      return 1;
+    }
+
+    final result = switch (_v1SortKey) {
+      PbFilesSortKey.updated => left.updatedSort.compareTo(right.updatedSort),
+      PbFilesSortKey.name => left.title.toLowerCase().compareTo(right.title.toLowerCase()),
+      PbFilesSortKey.type => left.type.toLowerCase().compareTo(right.type.toLowerCase()),
+      PbFilesSortKey.thread => left.threadLabel.toLowerCase().compareTo(right.threadLabel.toLowerCase()),
+      PbFilesSortKey.creator => left.creator.toLowerCase().compareTo(right.creator.toLowerCase()),
+    };
+
+    return _v1SortDirectionDescending ? -result : result;
+  }
+
+  void _setV1Sort(PbFilesSortKey key) {
+    setState(() {
+      if (_v1SortKey == key) {
+        _v1SortDirectionDescending = !_v1SortDirectionDescending;
+      } else {
+        _v1SortKey = key;
+        _v1SortDirectionDescending = key == PbFilesSortKey.updated;
+      }
+    });
+  }
+
+  String _v1PathForItem(PbFilesItemData item) {
+    return _FilePathKey.pathFromKey(item.id);
+  }
+
+  bool _v1IsFolder(PbFilesItemData item) {
+    return item.kind == PbFilesItemKind.folder;
+  }
+
+  void _toggleV1VisibleSelection(List<PbFilesItemData> items) {
+    final visibleIds = items.map((item) => item.id).toSet();
+    final selected = _visibleSelected.value;
+    final allSelected = visibleIds.isNotEmpty && visibleIds.every(selected.contains);
+
+    _mutateSelected((next) {
+      if (allSelected) {
+        next.removeAll(visibleIds);
+      } else {
+        next.addAll(visibleIds);
+      }
+      return next;
+    });
+  }
+
+  List<ChatFilePromptAction> _filePromptActionsForPath(String fullPath, {required bool isFolder}) {
+    if (isFolder || widget.services?.state.isReady != true) {
+      return const <ChatFilePromptAction>[];
+    }
+
+    return resolveChatFilePromptActions(services: widget.services!.state.value!, filePath: fullPath);
+  }
+
+  Future<void> _startDefaultFilePrompt(String fullPath) async {
+    final action = _filePromptActionsForPath(fullPath, isFolder: false).firstOrNull;
+    if (action == null) {
+      return;
+    }
+
+    try {
+      final threadPath = await startChatFilePromptThread(room: widget.client, action: action, filePath: fullPath);
+      if (!mounted) {
+        return;
+      }
+
+      _openEntry(threadPath, false);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to start chat"), description: Text("$error")));
+    }
   }
 
   Future<void> _closeThreadIndexDocument({bool refreshUi = true}) async {
@@ -1548,6 +1697,88 @@ class _FileManagerViewState extends State<FileManagerView> {
         );
       },
     );
+  }
+
+  Widget _buildDesktopV1FilesBrowser(
+    BuildContext context, {
+    required List<StorageEntry> entries,
+    required Set<String> selected,
+    required bool isRefreshing,
+  }) {
+    final items = _v1VisibleItems(entries);
+    final currentFolder = _folderSig.value;
+
+    return IconTheme(
+      data: IconThemeData(color: ShadTheme.of(context).colorScheme.primary),
+      child: ShadPopover(
+        controller: popoverController,
+        padding: EdgeInsets.zero,
+        anchor: ShadAnchor(
+          childAlignment: Alignment.bottomRight,
+          overlayAlignment: Alignment.bottomRight,
+          offset: const Offset(-20.0, -20.0),
+        ),
+        popover: _popover,
+        child: Stack(
+          children: [
+            PbFilesMainPanel(
+              currentPath: currentFolder,
+              folderLabelForPath: _v1FolderLabelForPath,
+              items: items,
+              selectedIds: selected,
+              sortKey: _v1SortKey,
+              sortDirectionDescending: _v1SortDirectionDescending,
+              filterController: _v1FilterController,
+              hasActiveFilter: _v1FilterController.text.trim().isNotEmpty,
+              roomPanelExpanded: true,
+              responsiveMode: PbFilesResponsiveMode.docked,
+              previewFileId: null,
+              keyboardPreviewFileId: null,
+              keyboardPreviewDirection: 0,
+              showRoomPanelControls: false,
+              enableDropTarget: false,
+              onBreadcrumbPressed: (path) => _openEntry(path, true),
+              onSortChanged: _setV1Sort,
+              onFilterChanged: (_) => setState(() {}),
+              onToggleSelection: (id) => _toggleSelected(id, !selected.contains(id)),
+              onToggleVisibleSelection: () => _toggleV1VisibleSelection(items),
+              onClearSelection: _clearSelected,
+              onDeleteSelection: _confirmAndDeleteSelected,
+              onDownloadSelection: _downloadSelected,
+              onCreateFolder: () => unawaited(_addFolder(currentFolder)),
+              onCreateTextFile: _showNewTextFileDialog,
+              onUpload: () => unawaited(_addFiles(currentFolder)),
+              onFilesDropped: (_) {},
+              onOpenRecentFiles: () {},
+              onRoomPanelToggle: () {},
+              onItemPressed: (item) => _openEntry(_v1PathForItem(item), _v1IsFolder(item)),
+              onBrowseFolder: (item) => _openEntry(item.folderPath, true),
+              onRemoveProcessingRow: (_) {},
+              onLinkedThreadPressed: (_, _) {},
+              onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
+              onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
+              onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
+              onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
+              onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
+            ),
+            if (isRefreshing)
+              const Positioned(
+                right: 30,
+                top: 28,
+                child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _v1FolderLabelForPath(String path) {
+    if (path.isEmpty) {
+      return 'Files';
+    }
+
+    return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
   }
 
   Widget _buildActionsMenu(BuildContext? boundaryContext, String fullPath, bool isFolder, bool showTrigger) {
@@ -2616,6 +2847,22 @@ class _FileManagerViewState extends State<FileManagerView> {
               final selected = _visibleSelected.value;
               final isAdaptiveMobile = widget.mobileShellOwnsHeader && _usesAdaptiveMobileLayout(context);
               final hasOpenedFile = _openedFile != null;
+              final useDesktopV1FilesBrowser = !hasOpenedFile && !isAdaptiveMobile && powerboardsUsesDesktopUiPreview(context);
+              if (useDesktopV1FilesBrowser) {
+                return SizedBox.expand(
+                  child: storageEntries.state.when(
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, st) => Center(child: Text("Error loading files: $e")),
+                    ready: (entries) => _buildDesktopV1FilesBrowser(
+                      context,
+                      entries: entries,
+                      selected: selected,
+                      isRefreshing: storageEntries.state.isRefreshing,
+                    ),
+                  ),
+                );
+              }
+
               final hideEmbeddedMobileToolbar = isAdaptiveMobile && !hasOpenedFile;
               final showAdaptiveOpenedFileDivider = isAdaptiveMobile && hasOpenedFile;
               final adaptiveSecondaryRow = showAdaptiveOpenedFileDivider
