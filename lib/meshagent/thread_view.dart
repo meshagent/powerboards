@@ -26,6 +26,7 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
+import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
@@ -229,7 +230,49 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     super.dispose();
   }
 
-  void _onMessageSent(ma.ChatMessage message) {}
+  String _currentParticipantDisplayName() {
+    final name = widget.client.localParticipant?.getAttribute("name");
+    if (name is String && name.trim().isNotEmpty) {
+      return name.trim();
+    }
+    return 'Unknown';
+  }
+
+  String _currentThreadPathForAttachmentIndex() {
+    final selectedThreadPath = widget.selectedThreadPath?.trim();
+    if (selectedThreadPath != null && selectedThreadPath.isNotEmpty) {
+      return selectedThreadPath;
+    }
+    return widget.documentPath.trim();
+  }
+
+  String _currentThreadNameForAttachmentIndex(String threadPath) {
+    final selectedDisplayName = widget.selectedThreadDisplayName?.trim();
+    if (selectedDisplayName != null && selectedDisplayName.isNotEmpty) {
+      return selectedDisplayName;
+    }
+    return defaultThreadDisplayNameFromPath(threadPath);
+  }
+
+  void _onMessageSent(ma.ChatMessage message) {
+    final attachmentPaths = message.attachments;
+    if (attachmentPaths.isEmpty) {
+      return;
+    }
+
+    final threadPath = _currentThreadPathForAttachmentIndex();
+    unawaited(
+      recordPowerboardsFileAttachmentLinks(
+        room: widget.client,
+        threadPath: threadPath,
+        threadName: _currentThreadNameForAttachmentIndex(threadPath),
+        createdBy: _currentParticipantDisplayName(),
+        attachmentPaths: attachmentPaths,
+      ).catchError((Object error, StackTrace stackTrace) {
+        debugPrint('Failed to record file attachment index: $error');
+      }),
+    );
+  }
 
   Uri? _currentRouteUriOrNull() {
     try {

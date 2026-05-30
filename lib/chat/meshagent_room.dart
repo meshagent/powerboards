@@ -3212,11 +3212,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }) {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = _usesMobileRoomLayout(context);
+    final usesDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
     final mobileFilesLocation = isMobile ? _mobileFilesLocation(context) : null;
     final hasOpenedFile = mobileFilesLocation?.openedFile != null;
-    final horizontalInset = isMobile ? 0.0 : 20.0;
+    final horizontalInset = isMobile || usesDesktopUiPreview ? 0.0 : 20.0;
     final topInset = 0.0;
-    final bottomInset = isMobile ? (hasOpenedFile ? 0.0 : 8.0) : desktopPaneBottomInset;
+    final bottomInset = isMobile
+        ? (hasOpenedFile ? 0.0 : 8.0)
+        : usesDesktopUiPreview
+        ? 0.0
+        : desktopPaneBottomInset;
     final meetingSessionActive = _isMeetingSessionActive(context);
 
     return ColoredBox(

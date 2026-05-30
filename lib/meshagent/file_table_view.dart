@@ -25,6 +25,7 @@ import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
+import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
@@ -33,8 +34,12 @@ import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_side_pane.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_files_page.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
 import 'package:powerboards/settings/ui_mode.dart';
@@ -267,6 +272,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   final TextEditingController _v1FilterController = TextEditingController();
   PbFilesSortKey _v1SortKey = PbFilesSortKey.updated;
   bool _v1SortDirectionDescending = true;
+  bool _v1FilesRoomPanelCollapsed = false;
+  List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
+  final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
 
   PendingStorageDeleteScope get _deleteScope => PendingStorageDeleteScope(projectId: widget.projectId, roomName: widget.client.roomName);
 
@@ -315,6 +323,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     roomSub = widget.client.listen(_onRoomEvent);
     _bindController(widget.controller);
     unawaited(_rebindThreadIndexDocument());
+    unawaited(_refreshFileAttachmentLinks());
   }
 
   @override
@@ -420,18 +429,34 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _onRoomEvent(RoomEvent event) {
     if (event is FileUpdatedEvent) {
+      _rememberFileCreator(event.path, event.participantId);
+      if (normalizePowerboardsAttachmentPath(event.path) == powerboardsFileAttachmentIndexPath) {
+        unawaited(_refreshFileAttachmentLinks());
+      }
       _onFileUpdated(event.path);
       return;
     }
 
     if (event is FileDeletedEvent) {
+      if (normalizePowerboardsAttachmentPath(event.path) == powerboardsFileAttachmentIndexPath) {
+        unawaited(_refreshFileAttachmentLinks());
+      }
       _onFileDeleted(event.path);
       return;
     }
 
     if (event is FileMovedEvent) {
+      _moveFileCreatorState(event.sourcePath, event.destinationPath);
       _onFileMoved(event.sourcePath, event.destinationPath);
     }
+  }
+
+  void _moveFileCreatorState(String sourcePath, String destinationPath) {
+    final creator = _fileCreatorNamesByPath.remove(normalizePowerboardsAttachmentPath(sourcePath));
+    if (creator == null) {
+      return;
+    }
+    _fileCreatorNamesByPath[normalizePowerboardsAttachmentPath(destinationPath)] = creator;
   }
 
   void _onFileUpdated(String path) {
@@ -588,6 +613,125 @@ class _FileManagerViewState extends State<FileManagerView> {
     return entry.isFolder ? entry.name : _displayNameForPath(path);
   }
 
+  Future<void> _refreshFileAttachmentLinks() async {
+    final links = await loadPowerboardsFileAttachmentLinks(widget.client);
+    if (!_canUpdateUi) {
+      return;
+    }
+
+    setState(() {
+      _fileAttachmentLinks = links;
+    });
+  }
+
+  String? _participantDisplayNameForId(String participantId) {
+    final localParticipant = widget.client.localParticipant;
+    if (localParticipant != null && localParticipant.id == participantId) {
+      final name = localParticipant.getAttribute("name");
+      if (name is String && name.trim().isNotEmpty) {
+        return name.trim();
+      }
+    }
+
+    for (final participant in widget.client.messaging.remoteParticipants) {
+      if (participant.id != participantId) {
+        continue;
+      }
+
+      final name = participant.getAttribute("name");
+      if (name is String && name.trim().isNotEmpty) {
+        return name.trim();
+      }
+    }
+
+    return null;
+  }
+
+  void _rememberFileCreator(String path, String participantId) {
+    final name = _participantDisplayNameForId(participantId);
+    if (name == null) {
+      return;
+    }
+
+    _fileCreatorNamesByPath[normalizePowerboardsAttachmentPath(path)] = name;
+  }
+
+  String _fallbackCreatorName() {
+    final name = widget.client.localParticipant?.getAttribute("name");
+    if (name is String && name.trim().isNotEmpty) {
+      return name.trim();
+    }
+    return 'Unknown';
+  }
+
+  List<PowerboardsFileAttachmentLink> _fileAttachmentLinksForPath(String path) {
+    final normalizedPath = normalizePowerboardsAttachmentPath(path);
+    final links = _fileAttachmentLinks.where((link) => link.filePath == normalizedPath).toList()
+      ..sort((left, right) {
+        final rightCreatedAt = right.createdAt?.millisecondsSinceEpoch ?? 0;
+        final leftCreatedAt = left.createdAt?.millisecondsSinceEpoch ?? 0;
+        return rightCreatedAt.compareTo(leftCreatedAt);
+      });
+    return links;
+  }
+
+  List<String> _linkedThreadNamesForPath(String path) {
+    final seen = <String>{};
+    final names = <String>[];
+    for (final link in _fileAttachmentLinksForPath(path)) {
+      final name = link.threadDisplayName.trim();
+      final key = name.toLowerCase();
+      if (name.isEmpty || seen.contains(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      names.add(name);
+    }
+    return names;
+  }
+
+  String _creatorNameForPath(String path) {
+    final normalizedPath = normalizePowerboardsAttachmentPath(path);
+    final creator = _fileCreatorNamesByPath[normalizedPath];
+    if (creator != null && creator.trim().isNotEmpty) {
+      return creator.trim();
+    }
+
+    for (final link in _fileAttachmentLinksForPath(path)) {
+      final attachedBy = link.createdBy.trim();
+      if (attachedBy.isNotEmpty) {
+        return attachedBy;
+      }
+    }
+
+    return _fallbackCreatorName();
+  }
+
+  String _creatorInitialsForName(String creator) {
+    final parts = creator.trim().split(RegExp(r'[\s@._-]+')).where((part) => part.trim().isNotEmpty).toList(growable: false);
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+
+    final compact = creator.trim().replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    if (compact.isEmpty) {
+      return '?';
+    }
+    return compact.substring(0, math.min(2, compact.length)).toUpperCase();
+  }
+
+  void _openV1LinkedThread(PbFilesItemData item, String threadName) {
+    final target = _fileAttachmentLinksForPath(
+      _v1PathForItem(item),
+    ).firstWhereOrNull((link) => link.threadDisplayName.toLowerCase() == threadName.toLowerCase());
+    if (target == null) {
+      return;
+    }
+
+    _openEntry(target.threadPath, false);
+  }
+
   String _v1UpdatedLabel(StorageEntry entry) {
     return entry.updatedAt?.modified() ?? entry.createdAt?.modified() ?? '';
   }
@@ -602,6 +746,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     final key = _FilePathKey.keyForEntry(folder, entry);
     final updatedLabel = _v1UpdatedLabel(entry);
     final updatedSort = _v1UpdatedSort(entry);
+    final creator = _creatorNameForPath(fullPath);
+    final creatorInitials = _creatorInitialsForName(creator);
 
     if (entry.isFolder) {
       return PbFilesItemData(
@@ -609,8 +755,8 @@ class _FileManagerViewState extends State<FileManagerView> {
         title: entry.name,
         type: PbAttachmentFileType.folder.defaultDisplayLabel,
         thread: '',
-        creator: 'Powerboards',
-        creatorInitials: 'PB',
+        creator: creator,
+        creatorInitials: creatorInitials,
         updatedLabel: updatedLabel,
         updatedSort: updatedSort,
         parentPath: folder,
@@ -620,12 +766,14 @@ class _FileManagerViewState extends State<FileManagerView> {
       );
     }
 
+    final linkedThreads = _linkedThreadNamesForPath(fullPath);
     return PbFilesItemData.fromFileName(
       id: key,
       title: _displayNameForEntry(entry),
-      thread: '',
-      creator: 'Powerboards',
-      creatorInitials: 'PB',
+      thread: linkedThreads.firstOrNull ?? '',
+      linkedThreads: linkedThreads,
+      creator: creator,
+      creatorInitials: creatorInitials,
       updatedLabel: updatedLabel,
       updatedSort: updatedSort,
       parentPath: folder,
@@ -643,6 +791,19 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     items.sort(_compareV1Files);
     return items;
+  }
+
+  List<PbFilesItemData> _v1RecentFiles(List<StorageEntry> entries) {
+    final items =
+        entries
+            .where((entry) => !entry.isFolder)
+            .where((entry) => !widget.hideSystem || !entry.name.startsWith('.'))
+            .where((entry) => !_isDeletePending(_FilePathKey.pathForEntry(_folderSig.value, entry), entry.isFolder))
+            .map(_v1ItemForEntry)
+            .toList()
+          ..sort((left, right) => right.updatedSort.compareTo(left.updatedSort));
+
+    return items.take(8).toList(growable: false);
   }
 
   int _compareV1Files(PbFilesItemData left, PbFilesItemData right) {
@@ -1706,7 +1867,53 @@ class _FileManagerViewState extends State<FileManagerView> {
     required bool isRefreshing,
   }) {
     final items = _v1VisibleItems(entries);
+    final recentFiles = _v1RecentFiles(entries);
     final currentFolder = _folderSig.value;
+    final mainPanel = Stack(
+      children: [
+        PbFilesMainPanel(
+          currentPath: currentFolder,
+          folderLabelForPath: _v1FolderLabelForPath,
+          items: items,
+          selectedIds: selected,
+          sortKey: _v1SortKey,
+          sortDirectionDescending: _v1SortDirectionDescending,
+          filterController: _v1FilterController,
+          hasActiveFilter: _v1FilterController.text.trim().isNotEmpty,
+          roomPanelExpanded: !_v1FilesRoomPanelCollapsed,
+          responsiveMode: PbFilesResponsiveMode.docked,
+          previewFileId: null,
+          keyboardPreviewFileId: null,
+          keyboardPreviewDirection: 0,
+          enableDropTarget: false,
+          onBreadcrumbPressed: (path) => _openEntry(path, true),
+          onSortChanged: _setV1Sort,
+          onFilterChanged: (_) => setState(() {}),
+          onToggleSelection: (id) => _toggleSelected(id, !selected.contains(id)),
+          onToggleVisibleSelection: () => _toggleV1VisibleSelection(items),
+          onClearSelection: _clearSelected,
+          onDeleteSelection: _confirmAndDeleteSelected,
+          onDownloadSelection: _downloadSelected,
+          onCreateFolder: () => unawaited(_addFolder(currentFolder)),
+          onCreateTextFile: _showNewTextFileDialog,
+          onUpload: () => unawaited(_addFiles(currentFolder)),
+          onFilesDropped: (_) {},
+          onOpenRecentFiles: () => setState(() => _v1FilesRoomPanelCollapsed = false),
+          onRoomPanelToggle: () => setState(() => _v1FilesRoomPanelCollapsed = !_v1FilesRoomPanelCollapsed),
+          onItemPressed: (item) => _openEntry(_v1PathForItem(item), _v1IsFolder(item)),
+          onBrowseFolder: (item) => _openEntry(item.folderPath, true),
+          onRemoveProcessingRow: (_) {},
+          onLinkedThreadPressed: _openV1LinkedThread,
+          onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
+          onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
+          onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
+          onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
+          onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
+        ),
+        if (isRefreshing)
+          const Positioned(right: 30, top: 28, child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+      ],
+    );
 
     return IconTheme(
       data: IconThemeData(color: ShadTheme.of(context).colorScheme.primary),
@@ -1719,55 +1926,25 @@ class _FileManagerViewState extends State<FileManagerView> {
           offset: const Offset(-20.0, -20.0),
         ),
         popover: _popover,
-        child: Stack(
-          children: [
-            PbFilesMainPanel(
-              currentPath: currentFolder,
-              folderLabelForPath: _v1FolderLabelForPath,
-              items: items,
-              selectedIds: selected,
-              sortKey: _v1SortKey,
-              sortDirectionDescending: _v1SortDirectionDescending,
-              filterController: _v1FilterController,
-              hasActiveFilter: _v1FilterController.text.trim().isNotEmpty,
-              roomPanelExpanded: true,
-              responsiveMode: PbFilesResponsiveMode.docked,
-              previewFileId: null,
-              keyboardPreviewFileId: null,
-              keyboardPreviewDirection: 0,
-              showRoomPanelControls: false,
-              enableDropTarget: false,
-              onBreadcrumbPressed: (path) => _openEntry(path, true),
-              onSortChanged: _setV1Sort,
-              onFilterChanged: (_) => setState(() {}),
-              onToggleSelection: (id) => _toggleSelected(id, !selected.contains(id)),
-              onToggleVisibleSelection: () => _toggleV1VisibleSelection(items),
-              onClearSelection: _clearSelected,
-              onDeleteSelection: _confirmAndDeleteSelected,
-              onDownloadSelection: _downloadSelected,
-              onCreateFolder: () => unawaited(_addFolder(currentFolder)),
-              onCreateTextFile: _showNewTextFileDialog,
-              onUpload: () => unawaited(_addFiles(currentFolder)),
-              onFilesDropped: (_) {},
-              onOpenRecentFiles: () {},
-              onRoomPanelToggle: () {},
-              onItemPressed: (item) => _openEntry(_v1PathForItem(item), _v1IsFolder(item)),
-              onBrowseFolder: (item) => _openEntry(item.folderPath, true),
-              onRemoveProcessingRow: (_) {},
-              onLinkedThreadPressed: (_, _) {},
-              onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
-              onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
-              onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
-              onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
-              onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
+        child: ColoredBox(
+          color: PbColors.surfacePanelWash,
+          child: PbRoomPanelMount(
+            activeTab: PbRoomPanelTab.files,
+            roomPanelCollapsed: _v1FilesRoomPanelCollapsed,
+            threadPanel: mainPanel,
+            roomPanelBuilder: (context, resizing) => PbFilesSidePane(
+              files: recentFiles,
+              previewFile: null,
+              fullscreen: false,
+              resizing: resizing,
+              borderOnTop: false,
+              responsiveOverlay: false,
+              responsiveOverlayMobile: false,
+              onPreviewFile: (item) => _openEntry(_v1PathForItem(item), false),
+              onToggleFullscreen: () {},
+              onClosePreview: () {},
             ),
-            if (isRefreshing)
-              const Positioned(
-                right: 30,
-                top: 28,
-                child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-              ),
-          ],
+          ),
         ),
       ),
     );
