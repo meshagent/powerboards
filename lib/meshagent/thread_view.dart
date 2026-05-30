@@ -36,6 +36,14 @@ import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 
+typedef PowerboardsThreadAttachmentsChanged =
+    void Function({
+      required String threadPath,
+      required String threadName,
+      required String createdBy,
+      required Iterable<String> attachmentPaths,
+    });
+
 class MeshagentRoomChatThreadController extends ChatThreadController {
   MeshagentRoomChatThreadController({required super.room});
 
@@ -84,6 +92,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.onInvite,
     this.onOpenFiles,
     this.onOpenMeet,
+    this.onThreadAttachmentsChanged,
   });
 
   final String projectId;
@@ -110,6 +119,7 @@ class MeshagentThreadView extends StatefulWidget {
   final VoidCallback? onInvite;
   final VoidCallback? onOpenFiles;
   final VoidCallback? onOpenMeet;
+  final PowerboardsThreadAttachmentsChanged? onThreadAttachmentsChanged;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -121,6 +131,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   late final ChatThreadController _chatController;
   String? _lastRestoredThreadScrollOffsetValue;
+  final Set<String> _reportedAttachmentKeys = <String>{};
 
   bool _usesCompactMobileThreadEmptyState(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -216,6 +227,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   void initState() {
     super.initState();
     _chatController = MeshagentRoomChatThreadController(room: widget.client);
+    _chatController.addListener(_onChatControllerChanged);
   }
 
   @override
@@ -226,6 +238,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   @override
   void dispose() {
+    _chatController.removeListener(_onChatControllerChanged);
     _chatController.dispose();
     super.dispose();
   }
@@ -254,6 +267,49 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     return defaultThreadDisplayNameFromPath(threadPath);
   }
 
+  void _notifyThreadAttachments({required String threadPath, required String threadName, required Iterable<String> attachmentPaths}) {
+    final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+    if (normalizedThreadPath.isEmpty) {
+      return;
+    }
+
+    final normalizedAttachmentPaths = attachmentPaths
+        .where(isPowerboardsStorageAttachmentPath)
+        .map(normalizePowerboardsAttachmentPath)
+        .where((path) => path.isNotEmpty)
+        .toList(growable: false);
+    if (normalizedAttachmentPaths.isEmpty) {
+      return;
+    }
+
+    final freshAttachmentPaths = <String>[];
+    for (final attachmentPath in normalizedAttachmentPaths) {
+      if (_reportedAttachmentKeys.add('$normalizedThreadPath\n$attachmentPath')) {
+        freshAttachmentPaths.add(attachmentPath);
+      }
+    }
+    if (freshAttachmentPaths.isEmpty) {
+      return;
+    }
+
+    widget.onThreadAttachmentsChanged?.call(
+      threadPath: normalizedThreadPath,
+      threadName: threadName,
+      createdBy: _currentParticipantDisplayName(),
+      attachmentPaths: freshAttachmentPaths,
+    );
+  }
+
+  void _onChatControllerChanged() {
+    for (final message in _chatController.pendingAgentMessages) {
+      _notifyThreadAttachments(
+        threadPath: message.threadPath,
+        threadName: _currentThreadNameForAttachmentIndex(message.threadPath),
+        attachmentPaths: message.attachments.map((attachment) => attachment.url),
+      );
+    }
+  }
+
   void _onMessageSent(ma.ChatMessage message) {
     final attachmentPaths = message.attachments;
     if (attachmentPaths.isEmpty) {
@@ -261,6 +317,11 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
 
     final threadPath = _currentThreadPathForAttachmentIndex();
+    _notifyThreadAttachments(
+      threadPath: threadPath,
+      threadName: _currentThreadNameForAttachmentIndex(threadPath),
+      attachmentPaths: attachmentPaths,
+    );
     unawaited(
       recordPowerboardsFileAttachmentLinks(
         room: widget.client,

@@ -33,6 +33,7 @@ import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
+import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
@@ -58,6 +59,7 @@ import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_header.dart';
+import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
 import 'package:powerboards/settings/selected_room.dart';
 import 'package:powerboards/settings/ui_mode.dart';
@@ -528,6 +530,431 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
 
   @override
   Widget build(BuildContext context) => widget.builder(context, _entries());
+}
+
+class _DesktopPreviewThreadAttachments extends StatefulWidget {
+  const _DesktopPreviewThreadAttachments({
+    required this.client,
+    required this.threads,
+    required this.selectedThreadPath,
+    required this.selectedThreadName,
+    required this.localLinks,
+    required this.builder,
+  });
+
+  final RoomClient client;
+  final List<_DesktopPreviewThreadEntry> threads;
+  final String? selectedThreadPath;
+  final String? selectedThreadName;
+  final List<PowerboardsFileAttachmentLink> localLinks;
+  final Widget Function(BuildContext context, List<PbAttachmentListItemData> attachments) builder;
+
+  @override
+  State<_DesktopPreviewThreadAttachments> createState() => _DesktopPreviewThreadAttachmentsState();
+}
+
+class _DesktopPreviewAttachmentThreadRef {
+  const _DesktopPreviewAttachmentThreadRef({required this.path, required this.name});
+
+  final String path;
+  final String name;
+}
+
+class _DesktopPreviewThreadAttachmentRecord {
+  const _DesktopPreviewThreadAttachmentRecord({required this.filePath, required this.threadPath, required this.threadName});
+
+  final String filePath;
+  final String threadPath;
+  final String threadName;
+}
+
+class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadAttachments> {
+  StreamSubscription<RoomEvent>? _roomSubscription;
+  final Map<String, MeshDocument> _threadDocuments = <String, MeshDocument>{};
+  final Map<String, StorageEntry> _attachmentEntriesByPath = <String, StorageEntry>{};
+  List<PowerboardsFileAttachmentLink> _links = const <PowerboardsFileAttachmentLink>[];
+  List<_DesktopPreviewThreadAttachmentRecord> _threadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
+  int _loadGeneration = 0;
+  int _attachmentEntryGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _bindRoom();
+    unawaited(_loadAttachments());
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopPreviewThreadAttachments oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.client != widget.client) {
+      unawaited(_closeThreadDocuments(client: oldWidget.client));
+      _bindRoom();
+      unawaited(_loadAttachments());
+      return;
+    }
+
+    if (_threadSignature(oldWidget) != _threadSignature(widget)) {
+      unawaited(_loadAttachments());
+      return;
+    }
+
+    if (_localLinksSignature(oldWidget.localLinks) != _localLinksSignature(widget.localLinks)) {
+      unawaited(_syncAttachmentEntries());
+    }
+  }
+
+  @override
+  void dispose() {
+    _roomSubscription?.cancel();
+    _roomSubscription = null;
+    unawaited(_closeThreadDocuments(client: widget.client));
+    super.dispose();
+  }
+
+  void _bindRoom() {
+    _roomSubscription?.cancel();
+    _roomSubscription = widget.client.listen(_onRoomEvent);
+  }
+
+  void _onRoomEvent(RoomEvent event) {
+    final path = switch (event) {
+      FileUpdatedEvent() => normalizePowerboardsAttachmentPath(event.path),
+      FileDeletedEvent() => normalizePowerboardsAttachmentPath(event.path),
+      _ => null,
+    };
+
+    if (path == null) {
+      return;
+    }
+
+    if (path == powerboardsFileAttachmentIndexPath) {
+      unawaited(_loadAttachments());
+      return;
+    }
+
+    if (!_scopedAttachmentPaths().contains(path)) {
+      return;
+    }
+
+    if (event is FileDeletedEvent) {
+      setState(() {
+        _attachmentEntriesByPath.remove(path);
+      });
+      return;
+    }
+
+    if (event is FileUpdatedEvent) {
+      unawaited(_refreshAttachmentEntry(path));
+    }
+  }
+
+  String _threadSignature(_DesktopPreviewThreadAttachments widget) {
+    final threadPaths = widget.threads
+        .map((thread) => '${thread.path}\u{1f}${thread.name}\u{1f}${thread.createdAt}\u{1f}${thread.modifiedAt}')
+        .join('\u{1e}');
+    return '$threadPaths\u{1d}${widget.selectedThreadPath ?? ''}\u{1d}${widget.selectedThreadName ?? ''}';
+  }
+
+  String _localLinksSignature(List<PowerboardsFileAttachmentLink> links) {
+    return links.map((link) => '${link.threadPath}\u{1f}${link.filePath}\u{1f}${link.createdAt?.toIso8601String() ?? ''}').join('\u{1e}');
+  }
+
+  List<_DesktopPreviewAttachmentThreadRef> _threadRefs() {
+    final seen = <String>{};
+    final refs = <_DesktopPreviewAttachmentThreadRef>[];
+
+    void addRef(String path, String name) {
+      final normalizedPath = normalizePowerboardsAttachmentPath(path);
+      if (normalizedPath.isEmpty || !seen.add(normalizedPath)) {
+        return;
+      }
+
+      final trimmedName = name.trim();
+      refs.add(
+        _DesktopPreviewAttachmentThreadRef(
+          path: normalizedPath,
+          name: trimmedName.isNotEmpty ? trimmedName : defaultThreadDisplayNameFromPath(normalizedPath),
+        ),
+      );
+    }
+
+    for (final thread in widget.threads) {
+      addRef(thread.path, thread.name);
+    }
+
+    final selectedThreadPath = widget.selectedThreadPath;
+    if (selectedThreadPath != null && selectedThreadPath.trim().isNotEmpty) {
+      addRef(selectedThreadPath, widget.selectedThreadName ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
+    }
+
+    return refs;
+  }
+
+  Future<void> _loadAttachments() async {
+    final generation = ++_loadGeneration;
+    final threadRefs = _threadRefs();
+    final links = await loadPowerboardsFileAttachmentLinks(widget.client);
+    await _syncThreadDocuments(threadRefs, generation: generation);
+    if (!mounted || generation != _loadGeneration) {
+      return;
+    }
+
+    setState(() {
+      _links = links;
+      _threadAttachments = _collectThreadAttachments(threadRefs);
+    });
+    unawaited(_syncAttachmentEntries());
+  }
+
+  Future<void> _syncThreadDocuments(List<_DesktopPreviewAttachmentThreadRef> threads, {required int generation}) async {
+    final desiredPaths = threads.map((thread) => thread.path).toSet();
+    final currentPaths = _threadDocuments.keys.toSet();
+
+    for (final path in currentPaths.difference(desiredPaths)) {
+      final document = _threadDocuments.remove(path);
+      if (document != null) {
+        document.removeListener(_onThreadDocumentChanged);
+      }
+      try {
+        await widget.client.sync.close(path);
+      } catch (_) {}
+    }
+
+    for (final thread in threads) {
+      if (_threadDocuments.containsKey(thread.path)) {
+        continue;
+      }
+
+      MeshDocument? document;
+      try {
+        document = await widget.client.sync.open(thread.path, create: false);
+        if (!mounted || generation != _loadGeneration || !_threadRefs().any((candidate) => candidate.path == thread.path)) {
+          try {
+            await widget.client.sync.close(thread.path);
+          } catch (_) {}
+          continue;
+        }
+
+        document.addListener(_onThreadDocumentChanged);
+        _threadDocuments[thread.path] = document;
+      } catch (_) {
+        if (document != null) {
+          try {
+            await widget.client.sync.close(thread.path);
+          } catch (_) {}
+        }
+      }
+    }
+  }
+
+  Future<void> _closeThreadDocuments({required RoomClient client}) async {
+    final documents = Map<String, MeshDocument>.of(_threadDocuments);
+    _threadDocuments.clear();
+
+    for (final entry in documents.entries) {
+      entry.value.removeListener(_onThreadDocumentChanged);
+      try {
+        await client.sync.close(entry.key);
+      } catch (_) {}
+    }
+  }
+
+  void _onThreadDocumentChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _threadAttachments = _collectThreadAttachments(_threadRefs());
+    });
+    unawaited(_syncAttachmentEntries());
+  }
+
+  List<_DesktopPreviewThreadAttachmentRecord> _collectThreadAttachments(List<_DesktopPreviewAttachmentThreadRef> threads) {
+    final attachments = <_DesktopPreviewThreadAttachmentRecord>[];
+    final threadNamesByPath = {for (final thread in threads) thread.path: thread.name};
+
+    for (final entry in _threadDocuments.entries) {
+      final threadName = threadNamesByPath[entry.key];
+      if (threadName == null) {
+        continue;
+      }
+
+      final messages = entry.value.root.getChildren().whereType<MeshElement>().firstWhereOrNull((node) => node.tagName == 'messages');
+      final messageElements = messages?.getChildren().whereType<MeshElement>() ?? const Iterable<MeshElement>.empty();
+
+      for (final message in messageElements) {
+        for (final attachment in message.getChildren().whereType<MeshElement>()) {
+          if (attachment.tagName != 'file' && attachment.tagName != 'image') {
+            continue;
+          }
+
+          final rawPath = attachment.getAttribute('path');
+          if (rawPath is! String || !isPowerboardsStorageAttachmentPath(rawPath)) {
+            continue;
+          }
+
+          final filePath = normalizePowerboardsAttachmentPath(rawPath);
+          if (filePath.isEmpty) {
+            continue;
+          }
+
+          attachments.add(_DesktopPreviewThreadAttachmentRecord(filePath: filePath, threadPath: entry.key, threadName: threadName));
+        }
+      }
+    }
+
+    return attachments;
+  }
+
+  String _attachmentTitle(String path) {
+    final storageName = _attachmentEntriesByPath[path]?.name.trim();
+    if (storageName != null && storageName.isNotEmpty) {
+      return storageName;
+    }
+
+    return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+  }
+
+  Set<String> _scopedAttachmentPaths() {
+    final threadPaths = _threadRefs().map((thread) => thread.path).toSet();
+    final paths = <String>{};
+
+    for (final link in widget.localLinks) {
+      if (threadPaths.contains(link.threadPath) && link.filePath.isNotEmpty) {
+        paths.add(link.filePath);
+      }
+    }
+
+    for (final attachment in _threadAttachments) {
+      if (threadPaths.contains(attachment.threadPath) && attachment.filePath.isNotEmpty) {
+        paths.add(attachment.filePath);
+      }
+    }
+
+    for (final link in _links) {
+      if (threadPaths.contains(link.threadPath) && link.filePath.isNotEmpty) {
+        paths.add(link.filePath);
+      }
+    }
+
+    return paths;
+  }
+
+  Future<void> _syncAttachmentEntries() async {
+    final generation = ++_attachmentEntryGeneration;
+    final paths = _scopedAttachmentPaths();
+    final retained = Map<String, StorageEntry>.of(_attachmentEntriesByPath)..removeWhere((path, _) => !paths.contains(path));
+
+    final missingPaths = paths.where((path) => !retained.containsKey(path)).toList(growable: false);
+    final loaded = <String, StorageEntry>{};
+    for (final path in missingPaths) {
+      try {
+        final entry = await widget.client.storage.stat(path);
+        if (entry != null && !entry.isFolder) {
+          loaded[path] = entry;
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted || generation != _attachmentEntryGeneration) {
+      return;
+    }
+
+    setState(() {
+      _attachmentEntriesByPath
+        ..clear()
+        ..addAll(retained)
+        ..addAll(loaded);
+    });
+  }
+
+  Future<void> _refreshAttachmentEntry(String path) async {
+    final generation = ++_attachmentEntryGeneration;
+    StorageEntry? entry;
+    try {
+      entry = await widget.client.storage.stat(path);
+    } catch (_) {}
+
+    if (!mounted || generation != _attachmentEntryGeneration) {
+      return;
+    }
+
+    final loadedEntry = entry;
+    setState(() {
+      if (loadedEntry == null || loadedEntry.isFolder) {
+        _attachmentEntriesByPath.remove(path);
+      } else {
+        _attachmentEntriesByPath[path] = loadedEntry;
+      }
+    });
+  }
+
+  List<PbAttachmentListItemData> _attachments() {
+    final threadRefs = _threadRefs();
+    final threadNamesByPath = {for (final thread in threadRefs) thread.path: thread.name};
+    final threadPaths = threadNamesByPath.keys.toSet();
+    final seenAttachments = <String>{};
+    final attachments = <PbAttachmentListItemData>[];
+
+    void addAttachment({required String filePath, required String threadPath, required String threadName}) {
+      final key = '$threadPath\n$filePath';
+      if (!seenAttachments.add(key)) {
+        return;
+      }
+
+      final title = _attachmentTitle(filePath);
+      final metadata = PbResolvedAttachmentMetadata.resolve(title: title);
+      final displayThreadName = threadName.trim().isNotEmpty ? threadName.trim() : defaultThreadDisplayNameFromPath(threadPath);
+      attachments.add(
+        PbAttachmentListItemData(
+          title: metadata.displayTitle,
+          subtitle: displayThreadName.isEmpty ? metadata.displayType : '${metadata.displayType} / $displayThreadName',
+          fileType: metadata.fileType,
+        ),
+      );
+    }
+
+    for (final link in widget.localLinks) {
+      if (!threadPaths.contains(link.threadPath)) {
+        continue;
+      }
+
+      addAttachment(
+        filePath: link.filePath,
+        threadPath: link.threadPath,
+        threadName: threadNamesByPath[link.threadPath] ?? link.threadDisplayName,
+      );
+    }
+
+    for (final attachment in _threadAttachments) {
+      if (!threadPaths.contains(attachment.threadPath)) {
+        continue;
+      }
+
+      addAttachment(filePath: attachment.filePath, threadPath: attachment.threadPath, threadName: attachment.threadName);
+    }
+
+    for (final link in _links) {
+      if (!threadPaths.contains(link.threadPath)) {
+        continue;
+      }
+
+      addAttachment(
+        filePath: link.filePath,
+        threadPath: link.threadPath,
+        threadName: threadNamesByPath[link.threadPath] ?? link.threadDisplayName,
+      );
+    }
+
+    return attachments;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(context, _attachments());
+  }
 }
 
 EdgeInsetsGeometry _paneHeaderButtonPadding({required bool compact}) {
@@ -1244,6 +1671,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   final Map<String, String> _selectedThreadPathByAgentKey = <String, String>{};
   final Map<String, String> _selectedThreadLabelByAgentKey = <String, String>{};
+  final Map<String, PowerboardsFileAttachmentLink> _localThreadAttachmentLinksByKey = <String, PowerboardsFileAttachmentLink>{};
   static const Duration _roomResourceTimeout = Duration(seconds: 30);
 
   final MeshagentRoomController controller = MeshagentRoomController();
@@ -2975,6 +3403,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         },
         onOpenFiles: () => _showFilesPane(context),
         onOpenMeet: () => _showMeetingPane(context),
+        onThreadAttachmentsChanged: _recordLocalThreadAttachments,
         projectId: widget.projectId,
       ),
     );
@@ -3660,57 +4089,64 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 },
               );
 
-        return ColoredBox(
-          color: ShadTheme.of(context).colorScheme.card,
-          child: hasVisibleAgents
-              ? PbRoomPanelMount(
-                  activeTab: _desktopPreviewRoomPanelTab,
-                  roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
-                  threadPanel: threadPanel,
-                  roomPanelBuilder: (context, resizing) => PbRoomPanel(
-                    selectedTab: _desktopPreviewRoomPanelTab,
-                    onTabSelected: (tab) {
-                      setState(() {
-                        _desktopPreviewRoomPanelTab = tab;
-                      });
-                    },
-                    agents: agentItems,
-                    selectedAgentId: selected.routeId,
-                    selectedAgentTitle: agentName,
-                    onAgentItemSelected: _selectDesktopPreviewAgent,
-                    onManageAgents: isOwner.state.value == true ? showManageAgents : null,
-                    agentsExpanded: _desktopPreviewAgentsExpanded,
-                    onAgentsExpandedChanged: (expanded) {
-                      setState(() {
-                        _desktopPreviewAgentsExpanded = expanded;
-                      });
-                    },
-                    showThreadsSection: threadListPath != null,
-                    showFilesTab: false,
-                    threads: [for (final thread in threads) thread.name],
-                    threadItems: threadItems,
-                    selectedThreadId: chatContext?.selectedThreadPath,
-                    selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
-                    onThreadSelected: (_) {},
-                    onThreadItemSelected: (thread) => _selectDesktopPreviewThread(chatContext, thread.id, displayName: thread.title),
-                    onThreadRename: (thread) {
-                      final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
-                      if (entry != null) {
-                        unawaited(_renameDesktopPreviewThread(entry));
-                      }
-                    },
-                    onThreadDelete: (thread) {
-                      final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
-                      if (entry != null) {
-                        unawaited(_deleteDesktopPreviewThread(chatContext, entry));
-                      }
-                    },
-                    onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
-                    attachments: const [],
-                    filePreviewResizing: resizing,
-                  ),
-                )
-              : SizedBox.expand(child: threadPanel),
+        return _DesktopPreviewThreadAttachments(
+          client: widget.room,
+          threads: threads,
+          selectedThreadPath: chatContext?.selectedThreadPath,
+          selectedThreadName: selectedThreadTitle,
+          localLinks: _localThreadAttachmentLinks,
+          builder: (context, attachments) => ColoredBox(
+            color: ShadTheme.of(context).colorScheme.card,
+            child: hasVisibleAgents
+                ? PbRoomPanelMount(
+                    activeTab: _desktopPreviewRoomPanelTab,
+                    roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
+                    threadPanel: threadPanel,
+                    roomPanelBuilder: (context, resizing) => PbRoomPanel(
+                      selectedTab: _desktopPreviewRoomPanelTab,
+                      onTabSelected: (tab) {
+                        setState(() {
+                          _desktopPreviewRoomPanelTab = tab;
+                        });
+                      },
+                      agents: agentItems,
+                      selectedAgentId: selected.routeId,
+                      selectedAgentTitle: agentName,
+                      onAgentItemSelected: _selectDesktopPreviewAgent,
+                      onManageAgents: isOwner.state.value == true ? showManageAgents : null,
+                      agentsExpanded: _desktopPreviewAgentsExpanded,
+                      onAgentsExpandedChanged: (expanded) {
+                        setState(() {
+                          _desktopPreviewAgentsExpanded = expanded;
+                        });
+                      },
+                      showThreadsSection: threadListPath != null,
+                      showFilesTab: true,
+                      threads: [for (final thread in threads) thread.name],
+                      threadItems: threadItems,
+                      selectedThreadId: chatContext?.selectedThreadPath,
+                      selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
+                      onThreadSelected: (_) {},
+                      onThreadItemSelected: (thread) => _selectDesktopPreviewThread(chatContext, thread.id, displayName: thread.title),
+                      onThreadRename: (thread) {
+                        final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                        if (entry != null) {
+                          unawaited(_renameDesktopPreviewThread(entry));
+                        }
+                      },
+                      onThreadDelete: (thread) {
+                        final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                        if (entry != null) {
+                          unawaited(_deleteDesktopPreviewThread(chatContext, entry));
+                        }
+                      },
+                      onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
+                      attachments: attachments,
+                      filePreviewResizing: resizing,
+                    ),
+                  )
+                : SizedBox.expand(child: threadPanel),
+          ),
         );
       },
     );
@@ -4383,6 +4819,59 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   bool _usesMobileRoomLayout(BuildContext context) {
     return ResponsiveBreakpoints.of(context).isMobile || _isLandscapePhoneViewport(context);
+  }
+
+  List<PowerboardsFileAttachmentLink> get _localThreadAttachmentLinks {
+    final links = _localThreadAttachmentLinksByKey.values.toList(growable: false)
+      ..sort((left, right) {
+        final rightCreatedAt = right.createdAt?.millisecondsSinceEpoch ?? 0;
+        final leftCreatedAt = left.createdAt?.millisecondsSinceEpoch ?? 0;
+        return rightCreatedAt.compareTo(leftCreatedAt);
+      });
+    return links;
+  }
+
+  void _recordLocalThreadAttachments({
+    required String threadPath,
+    required String threadName,
+    required String createdBy,
+    required Iterable<String> attachmentPaths,
+  }) {
+    final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+    if (normalizedThreadPath.isEmpty) {
+      return;
+    }
+
+    final normalizedAttachmentPaths = attachmentPaths
+        .where(isPowerboardsStorageAttachmentPath)
+        .map(normalizePowerboardsAttachmentPath)
+        .where((path) => path.isNotEmpty)
+        .toSet();
+    if (normalizedAttachmentPaths.isEmpty) {
+      return;
+    }
+
+    final now = DateTime.now().toUtc();
+    var changed = false;
+    for (final filePath in normalizedAttachmentPaths) {
+      final key = '$filePath\n$normalizedThreadPath';
+      if (_localThreadAttachmentLinksByKey.containsKey(key)) {
+        continue;
+      }
+
+      _localThreadAttachmentLinksByKey[key] = PowerboardsFileAttachmentLink(
+        filePath: filePath,
+        threadPath: normalizedThreadPath,
+        threadName: threadName.trim(),
+        createdBy: createdBy.trim(),
+        createdAt: now,
+      );
+      changed = true;
+    }
+
+    if (changed && mounted) {
+      setState(() {});
+    }
   }
 
   @override
