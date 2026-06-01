@@ -233,7 +233,7 @@ class _FilesTableColumns {
     final horizontalPadding = compact ? 8.0 : 10.0;
     final innerWidth = math.max(0.0, width - 2 - (horizontalPadding * 2));
     final showType = width > 1180;
-    final showThread = width > 980;
+    const showThread = false;
     const showCreator = false;
     const showCreatorName = false;
     final responsiveSort = width <= 720;
@@ -249,7 +249,7 @@ class _FilesTableColumns {
       gap: gap,
       nameWidth: widths.name,
       typeWidth: widths.type,
-      threadWidth: widths.thread,
+      threadWidth: 0,
       creatorWidth: 0,
       updatedWidth: widths.updated,
     );
@@ -257,24 +257,13 @@ class _FilesTableColumns {
 
   static _FilesTableTrackWidths _resolveWidths({required double width, required double innerWidth, required double gap}) {
     if (width > 1180) {
-      final trackWidths = _resolveFlexibleTracks(innerWidth - selectWidth - optionsWidth - (gap * 5), const [
+      final trackWidths = _resolveFlexibleTracks(innerWidth - selectWidth - optionsWidth - (gap * 4), const [
         _FilesTableFlexTrack(min: 240, flex: 3.875),
         _FilesTableFlexTrack(min: 132, flex: 1.75),
-        _FilesTableFlexTrack(min: 160, flex: 1.75),
         _FilesTableFlexTrack(min: 128, flex: 0.875),
       ]);
 
-      return _FilesTableTrackWidths(name: trackWidths[0], type: trackWidths[1], thread: trackWidths[2], updated: trackWidths[3]);
-    }
-
-    if (width > 980) {
-      const thread = 188.0;
-      const updated = 128.0;
-      return _FilesTableTrackWidths(
-        name: _remainingName(innerWidth, min: 180, fixed: selectWidth + thread + updated + optionsWidth, gaps: gap * 4),
-        thread: thread,
-        updated: updated,
-      );
+      return _FilesTableTrackWidths(name: trackWidths[0], type: trackWidths[1], updated: trackWidths[2]);
     }
 
     if (width > 560) {
@@ -351,11 +340,10 @@ class _FilesTableFlexTrack {
 }
 
 class _FilesTableTrackWidths {
-  const _FilesTableTrackWidths({required this.name, this.type = 0, this.thread = 0, required this.updated});
+  const _FilesTableTrackWidths({required this.name, this.type = 0, required this.updated});
 
   final double name;
   final double type;
-  final double thread;
   final double updated;
 }
 
@@ -562,7 +550,7 @@ class _FilesResponsiveSortButtonState extends State<_FilesResponsiveSortButton> 
               width: 220,
               child: PbMenuList(
                 children: [
-                  for (final key in PbFilesSortKey.values.where((key) => key != PbFilesSortKey.creator))
+                  for (final key in PbFilesSortKey.values.where((key) => key != PbFilesSortKey.thread && key != PbFilesSortKey.creator))
                     PbMenuOption(
                       title: key.label,
                       singleLine: true,
