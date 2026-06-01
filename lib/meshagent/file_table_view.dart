@@ -39,6 +39,7 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_files_page.d
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
+import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
@@ -270,9 +271,11 @@ class _FileManagerViewState extends State<FileManagerView> {
   final _sortSig = Signal<FileSort>(const FileSort(FileSortField.name, true));
   final _selectedSig = Signal<Set<String>>(<String>{});
   final TextEditingController _v1FilterController = TextEditingController();
+  final OverlayPortalController _v1FilesRoomPanelOverlayController = OverlayPortalController();
   PbFilesSortKey _v1SortKey = PbFilesSortKey.updated;
   bool _v1SortDirectionDescending = true;
   bool _v1FilesRoomPanelCollapsed = false;
+  bool _v1FilesRoomPanelOverlayOpen = false;
   bool _v1FilePreviewFullscreen = false;
   PbFilesItemData? _v1PreviewFile;
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
@@ -347,6 +350,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   void dispose() {
     _unbindController(widget.controller);
     _isDisposing = true;
+    if (previewFilePreviewFullscreenListenable.value) {
+      setPreviewFilePreviewFullscreen(false);
+    }
     roomSub.cancel();
 
     uploadNotifications.dispose();
@@ -508,6 +514,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (previewFile != null && _v1PathForItem(previewFile) == path) {
       _v1PreviewFile = null;
       _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelOverlayOpen = false;
+      setPreviewFilePreviewFullscreen(false);
     }
     _toggleSelected(_FilePathKey.keyForPath(path, false), false);
     _optimisticEmptyTextFiles.remove(path);
@@ -851,7 +859,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     return item.kind == PbFilesItemKind.folder;
   }
 
-  void _openV1Preview(PbFilesItemData item) {
+  void _openV1Preview(PbFilesItemData item, {bool openOverlay = false}) {
     if (!item.canPreview) {
       return;
     }
@@ -860,19 +868,34 @@ class _FileManagerViewState extends State<FileManagerView> {
       _v1PreviewFile = item;
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelCollapsed = false;
+      _v1FilesRoomPanelOverlayOpen = openOverlay;
       _clearSelected();
     });
+    setPreviewFilePreviewFullscreen(false);
   }
 
   void _closeV1Preview() {
     setState(() {
       _v1PreviewFile = null;
       _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelOverlayOpen = false;
     });
+    setPreviewFilePreviewFullscreen(false);
   }
 
   void _setV1PreviewFullscreen(bool fullscreen) {
-    setState(() => _v1FilePreviewFullscreen = fullscreen);
+    setState(() {
+      _v1FilePreviewFullscreen = fullscreen;
+      if (fullscreen) {
+        _v1FilesRoomPanelOverlayOpen = false;
+      }
+    });
+    setPreviewFilePreviewFullscreen(fullscreen);
+  }
+
+  void _closeV1FilesRoomPanelOverlay() {
+    _v1FilesRoomPanelOverlayController.hide();
+    setState(() => _v1FilesRoomPanelOverlayOpen = false);
   }
 
   Widget _buildV1PreviewContent(PbFilesItemData item) {
@@ -1905,57 +1928,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     final items = _v1VisibleItems(entries);
     final recentFiles = _v1RecentFiles(entries);
     final currentFolder = _folderSig.value;
-    final mainPanel = Stack(
-      children: [
-        PbFilesMainPanel(
-          currentPath: currentFolder,
-          folderLabelForPath: _v1FolderLabelForPath,
-          items: items,
-          selectedIds: selected,
-          sortKey: _v1SortKey,
-          sortDirectionDescending: _v1SortDirectionDescending,
-          filterController: _v1FilterController,
-          hasActiveFilter: _v1FilterController.text.trim().isNotEmpty,
-          roomPanelExpanded: !_v1FilesRoomPanelCollapsed,
-          responsiveMode: PbFilesResponsiveMode.docked,
-          previewFileId: _v1PreviewFile?.id,
-          keyboardPreviewFileId: null,
-          keyboardPreviewDirection: 0,
-          enableDropTarget: false,
-          onBreadcrumbPressed: (path) => _openEntry(path, true),
-          onSortChanged: _setV1Sort,
-          onFilterChanged: (_) => setState(() {}),
-          onToggleSelection: (id) => _toggleSelected(id, !selected.contains(id)),
-          onToggleVisibleSelection: () => _toggleV1VisibleSelection(items),
-          onClearSelection: _clearSelected,
-          onDeleteSelection: _confirmAndDeleteSelected,
-          onDownloadSelection: _downloadSelected,
-          onCreateFolder: () => unawaited(_addFolder(currentFolder)),
-          onCreateTextFile: _showNewTextFileDialog,
-          onUpload: () => unawaited(_addFiles(currentFolder)),
-          onFilesDropped: (_) {},
-          onOpenRecentFiles: () => setState(() => _v1FilesRoomPanelCollapsed = false),
-          onRoomPanelToggle: () => setState(() => _v1FilesRoomPanelCollapsed = !_v1FilesRoomPanelCollapsed),
-          onItemPressed: (item) {
-            if (_v1IsFolder(item)) {
-              _openEntry(_v1PathForItem(item), true);
-              return;
-            }
-            _openV1Preview(item);
-          },
-          onBrowseFolder: (item) => _openEntry(item.folderPath, true),
-          onRemoveProcessingRow: (_) {},
-          onLinkedThreadPressed: _openV1LinkedThread,
-          onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
-          onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
-          onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
-          onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
-          onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
-        ),
-        if (isRefreshing)
-          const Positioned(right: 30, top: 28, child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
-      ],
-    );
 
     return IconTheme(
       data: IconThemeData(color: ShadTheme.of(context).colorScheme.primary),
@@ -1968,29 +1940,139 @@ class _FileManagerViewState extends State<FileManagerView> {
           offset: const Offset(-20.0, -20.0),
         ),
         popover: _popover,
-        child: ColoredBox(
-          color: PbColors.surfacePanelWash,
-          child: PbRoomPanelMount(
-            activeTab: PbRoomPanelTab.files,
-            roomPanelCollapsed: _v1FilesRoomPanelCollapsed,
-            threadPanel: mainPanel,
-            roomPanelBuilder: (context, resizing) => PbFilesSidePane(
-              files: recentFiles,
-              previewFile: _v1PreviewFile,
-              fullscreen: _v1FilePreviewFullscreen,
-              resizing: resizing,
-              borderOnTop: false,
-              responsiveOverlay: false,
-              responsiveOverlayMobile: false,
-              onPreviewFile: _openV1Preview,
-              previewBuilder: _buildV1PreviewContent,
-              onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
-              onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
-              onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
-              onToggleFullscreen: () => _setV1PreviewFullscreen(!_v1FilePreviewFullscreen),
-              onClosePreview: _closeV1Preview,
-            ),
-          ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_v1FilePreviewFullscreen;
+            final responsiveMode = responsivePanel ? PbFilesResponsiveMode.overlay : PbFilesResponsiveMode.docked;
+            final roomPanelExpanded = responsivePanel ? false : !_v1FilesRoomPanelCollapsed;
+            final mainPanel = Stack(
+              children: [
+                PbFilesMainPanel(
+                  currentPath: currentFolder,
+                  folderLabelForPath: _v1FolderLabelForPath,
+                  items: items,
+                  selectedIds: selected,
+                  sortKey: _v1SortKey,
+                  sortDirectionDescending: _v1SortDirectionDescending,
+                  filterController: _v1FilterController,
+                  hasActiveFilter: _v1FilterController.text.trim().isNotEmpty,
+                  roomPanelExpanded: roomPanelExpanded,
+                  responsiveMode: responsiveMode,
+                  previewFileId: _v1PreviewFile?.id,
+                  keyboardPreviewFileId: null,
+                  keyboardPreviewDirection: 0,
+                  enableDropTarget: false,
+                  onBreadcrumbPressed: (path) => _openEntry(path, true),
+                  onSortChanged: _setV1Sort,
+                  onFilterChanged: (_) => setState(() {}),
+                  onToggleSelection: (id) => _toggleSelected(id, !selected.contains(id)),
+                  onToggleVisibleSelection: () => _toggleV1VisibleSelection(items),
+                  onClearSelection: _clearSelected,
+                  onDeleteSelection: _confirmAndDeleteSelected,
+                  onDownloadSelection: _downloadSelected,
+                  onCreateFolder: () => unawaited(_addFolder(currentFolder)),
+                  onCreateTextFile: _showNewTextFileDialog,
+                  onUpload: () => unawaited(_addFiles(currentFolder)),
+                  onFilesDropped: (_) {},
+                  onOpenRecentFiles: () => setState(() {
+                    if (responsivePanel) {
+                      _v1FilesRoomPanelOverlayOpen = true;
+                    } else {
+                      _v1FilesRoomPanelCollapsed = false;
+                    }
+                  }),
+                  onRoomPanelToggle: () => setState(() {
+                    if (responsivePanel) {
+                      _v1FilesRoomPanelOverlayOpen = true;
+                    } else {
+                      _v1FilesRoomPanelCollapsed = !_v1FilesRoomPanelCollapsed;
+                    }
+                  }),
+                  onItemPressed: (item) {
+                    if (_v1IsFolder(item)) {
+                      _openEntry(_v1PathForItem(item), true);
+                      return;
+                    }
+                    _openV1Preview(item, openOverlay: responsivePanel);
+                  },
+                  onBrowseFolder: (item) => _openEntry(item.folderPath, true),
+                  onRemoveProcessingRow: (_) {},
+                  onLinkedThreadPressed: _openV1LinkedThread,
+                  onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
+                  onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
+                  onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
+                  onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
+                  onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
+                ),
+                if (isRefreshing)
+                  const Positioned(
+                    right: 30,
+                    top: 28,
+                    child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+              ],
+            );
+
+            PbFilesSidePane sidePaneBuilder(BuildContext context, bool resizing) {
+              return PbFilesSidePane(
+                files: recentFiles,
+                previewFile: _v1PreviewFile,
+                fullscreen: _v1FilePreviewFullscreen,
+                resizing: resizing,
+                borderOnTop: responsivePanel,
+                responsiveOverlay: responsivePanel,
+                responsiveOverlayMobile: false,
+                onPreviewFile: (item) => _openV1Preview(item, openOverlay: responsivePanel),
+                previewBuilder: _buildV1PreviewContent,
+                onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
+                onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
+                onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
+                onToggleFullscreen: () => _setV1PreviewFullscreen(!_v1FilePreviewFullscreen),
+                onClosePreview: _closeV1Preview,
+              );
+            }
+
+            if (responsivePanel) {
+              if (_v1FilesRoomPanelOverlayOpen) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _v1FilesRoomPanelOverlayController.show();
+                  }
+                });
+              }
+
+              return OverlayPortal(
+                controller: _v1FilesRoomPanelOverlayController,
+                overlayChildBuilder: (context) => Positioned.fill(
+                  child: sidePaneBuilder(context, false).asOverlayFrame(mobile: false, onClose: _closeV1FilesRoomPanelOverlay),
+                ),
+                child: ColoredBox(color: PbColors.surfacePanelWash, child: mainPanel),
+              );
+            }
+
+            if (_v1FilesRoomPanelOverlayOpen) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  if (_v1FilesRoomPanelOverlayController.isShowing) {
+                    _v1FilesRoomPanelOverlayController.hide();
+                  }
+                  setState(() => _v1FilesRoomPanelOverlayOpen = false);
+                }
+              });
+            }
+
+            return ColoredBox(
+              color: PbColors.surfacePanelWash,
+              child: PbRoomPanelMount(
+                activeTab: PbRoomPanelTab.files,
+                filePreviewOpen: _v1PreviewFile != null,
+                filePreviewFullscreen: _v1FilePreviewFullscreen,
+                roomPanelCollapsed: _v1FilesRoomPanelCollapsed,
+                threadPanel: mainPanel,
+                roomPanelBuilder: sidePaneBuilder,
+              ),
+            );
+          },
         ),
       ),
     );

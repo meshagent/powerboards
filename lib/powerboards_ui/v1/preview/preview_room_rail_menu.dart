@@ -95,6 +95,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
 }
 
 final ValueNotifier<PreviewRoomRailMenuBridge?> previewRoomRailMenuBridgeListenable = ValueNotifier<PreviewRoomRailMenuBridge?>(null);
+final ValueNotifier<bool> previewFilePreviewFullscreenListenable = ValueNotifier<bool>(false);
 VoidCallback? _previewRoomListRefreshCallback;
 
 void exposePreviewRoomRailMenuBridge(PreviewRoomRailMenuBridge? bridge) {
@@ -103,6 +104,14 @@ void exposePreviewRoomRailMenuBridge(PreviewRoomRailMenuBridge? bridge) {
   }
 
   previewRoomRailMenuBridgeListenable.value = bridge;
+}
+
+void setPreviewFilePreviewFullscreen(bool fullscreen) {
+  if (previewFilePreviewFullscreenListenable.value == fullscreen) {
+    return;
+  }
+
+  previewFilePreviewFullscreenListenable.value = fullscreen;
 }
 
 void registerPreviewRoomListRefreshCallback(VoidCallback? callback) {

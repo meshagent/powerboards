@@ -45,6 +45,9 @@ class PbRoomPanel extends StatefulWidget {
     this.onTabSelected,
     this.onFilePreviewOpenChanged,
     this.onFilePreviewFullscreenChanged,
+    this.onFilePreviewSelected,
+    this.initialPreviewFile,
+    this.initialFilePreviewOpen = false,
     this.agents,
     this.selectedAgentId,
     this.selectedAgentTitle,
@@ -70,6 +73,11 @@ class PbRoomPanel extends StatefulWidget {
     this.onThreadDelete,
     required this.onCreateThread,
     this.filePreviewResizing = false,
+    this.borderOnTop = false,
+    this.responsiveOverlay = false,
+    this.responsiveOverlayMobile = false,
+    this.openFilePreviewAsFullscreen = false,
+    this.onResponsiveOverlayClose,
   });
 
   final PbRoomPanelTab initialTab;
@@ -77,6 +85,9 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<PbRoomPanelTab>? onTabSelected;
   final ValueChanged<bool>? onFilePreviewOpenChanged;
   final ValueChanged<bool>? onFilePreviewFullscreenChanged;
+  final ValueChanged<PbAttachmentListItemData>? onFilePreviewSelected;
+  final PbAttachmentListItemData? initialPreviewFile;
+  final bool initialFilePreviewOpen;
   final List<PbAgentListItemData>? agents;
   final String? selectedAgentId;
   final String? selectedAgentTitle;
@@ -102,6 +113,11 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<PbThreadListItemData>? onThreadDelete;
   final VoidCallback onCreateThread;
   final bool filePreviewResizing;
+  final bool borderOnTop;
+  final bool responsiveOverlay;
+  final bool responsiveOverlayMobile;
+  final bool openFilePreviewAsFullscreen;
+  final VoidCallback? onResponsiveOverlayClose;
 
   @override
   State<PbRoomPanel> createState() => _PbRoomPanelState();
@@ -109,9 +125,11 @@ class PbRoomPanel extends StatefulWidget {
 
 class _PbRoomPanelState extends State<PbRoomPanel> {
   late PbRoomPanelTab _selectedTab = widget.initialTab;
-  bool _filePreviewOpen = false;
+  late bool _filePreviewOpen = widget.initialFilePreviewOpen;
   bool _filePreviewFullscreen = false;
-  PbAttachmentListItemData _previewFile = const PbAttachmentListItemData(
+  late PbAttachmentListItemData _previewFile = widget.initialPreviewFile ?? _placeholderPreviewFile;
+
+  static const PbAttachmentListItemData _placeholderPreviewFile = PbAttachmentListItemData(
     title: 'File name.ext',
     subtitle: 'Type',
     fileType: PbAttachmentFileType.generic,
@@ -168,6 +186,15 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
     if (!widget.showFilesTab && _selectedTab == PbRoomPanelTab.files) {
       _selectedTab = PbRoomPanelTab.agents;
     }
+
+    if (widget.initialFilePreviewOpen != oldWidget.initialFilePreviewOpen) {
+      _filePreviewOpen = widget.initialFilePreviewOpen;
+    }
+
+    final nextPreviewFile = widget.initialPreviewFile;
+    if (nextPreviewFile != null && nextPreviewFile != oldWidget.initialPreviewFile) {
+      _previewFile = nextPreviewFile;
+    }
   }
 
   void _selectTab(PbRoomPanelTab tab) {
@@ -186,10 +213,11 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
     setState(() {
       _previewFile = file;
       _filePreviewOpen = true;
-      _filePreviewFullscreen = false;
+      _filePreviewFullscreen = widget.openFilePreviewAsFullscreen;
     });
+    widget.onFilePreviewSelected?.call(file);
     widget.onFilePreviewOpenChanged?.call(true);
-    widget.onFilePreviewFullscreenChanged?.call(false);
+    widget.onFilePreviewFullscreenChanged?.call(widget.openFilePreviewAsFullscreen);
   }
 
   void _setFilePreviewFullscreen(bool fullscreen) {
@@ -206,8 +234,89 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
     widget.onFilePreviewFullscreenChanged?.call(false);
   }
 
+  Widget _buildPanelContent({
+    required bool showInlineBorder,
+    required EdgeInsetsGeometry padding,
+    Color backgroundColor = PbColors.surfacePanelWash,
+  }) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        border: !showInlineBorder
+            ? null
+            : widget.borderOnTop
+            ? const Border(top: BorderSide(color: PbColors.borderSoft))
+            : const Border(left: BorderSide(color: PbColors.borderSoft)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          PbRoomTabs(selectedTab: _activeTab, showFilesTab: widget.showFilesTab, onTabSelected: _selectTab),
+          const SizedBox(height: 20),
+          Expanded(
+            child: _activeTab == PbRoomPanelTab.agents
+                ? _AgentsPanel(
+                    agents: widget.agents ?? _agents,
+                    threads: widget.threads,
+                    threadItems: widget.threadItems,
+                    selectedAgentId: widget.selectedAgentId,
+                    selectedAgentTitle: widget.selectedAgentTitle,
+                    onAgentSelected: widget.onAgentSelected,
+                    onAgentItemSelected: widget.onAgentItemSelected,
+                    onManageAgents: widget.onManageAgents,
+                    agentsExpanded: widget.agentsExpanded,
+                    onAgentsExpandedChanged: widget.onAgentsExpandedChanged,
+                    showThreadsSection: widget.showThreadsSection,
+                    selectedThreadId: widget.selectedThreadId,
+                    selectedThreadTitle: widget.selectedThreadTitle,
+                    onThreadSelected: widget.onThreadSelected,
+                    onThreadItemSelected: widget.onThreadItemSelected,
+                    onThreadRename: widget.onThreadRename,
+                    onThreadDelete: widget.onThreadDelete,
+                    onCreateThread: widget.onCreateThread,
+                  )
+                : _FilesPanel(attachments: widget.attachments ?? _attachments, onPreviewFile: _openFilePreview),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewPane({required bool showInlineBorder}) {
+    return PbFilePreviewPane(
+      file: _previewFile,
+      fullscreen: _filePreviewFullscreen,
+      resizing: widget.filePreviewResizing,
+      borderOnTop: widget.borderOnTop,
+      showInlineBorder: showInlineBorder,
+      hideFullscreenToggle: widget.openFilePreviewAsFullscreen,
+      onAskAgent: widget.onAskFileAgent == null ? null : () => widget.onAskFileAgent!(_previewFile),
+      onShare: widget.onShareFile == null ? null : () => widget.onShareFile!(_previewFile),
+      onDownload: widget.onDownloadFile == null ? null : () => widget.onDownloadFile!(_previewFile),
+      onToggleFullscreen: () => _setFilePreviewFullscreen(!_filePreviewFullscreen),
+      onClose: _closeFilePreview,
+      child: widget.filePreviewBuilder?.call(_previewFile),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.responsiveOverlay) {
+      return PbResponsiveRoomPanelOverlayFrame(
+        mobile: widget.responsiveOverlayMobile,
+        onClose: widget.onResponsiveOverlayClose,
+        preview: _filePreviewOpen ? _buildPreviewPane(showInlineBorder: false) : null,
+        child: _buildPanelContent(
+          showInlineBorder: false,
+          backgroundColor: Colors.transparent,
+          padding: const EdgeInsets.fromLTRB(_sidepaneInlinePadding, 26, _sidepaneInlinePadding, 0),
+        ),
+      );
+    }
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -216,62 +325,13 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
           opacity: _filePreviewOpen ? 0 : 1,
           child: IgnorePointer(
             ignoring: _filePreviewOpen,
-            child: Container(
-              width: double.infinity,
-              height: double.infinity,
+            child: _buildPanelContent(
+              showInlineBorder: true,
               padding: const EdgeInsets.fromLTRB(_sidepaneInlinePadding, 36, _sidepaneInlinePadding, 0),
-              decoration: const BoxDecoration(
-                color: PbColors.surfacePanelWash,
-                border: Border(left: BorderSide(color: PbColors.borderSoft)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  PbRoomTabs(selectedTab: _activeTab, showFilesTab: widget.showFilesTab, onTabSelected: _selectTab),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: _activeTab == PbRoomPanelTab.agents
-                        ? _AgentsPanel(
-                            agents: widget.agents ?? _agents,
-                            threads: widget.threads,
-                            threadItems: widget.threadItems,
-                            selectedAgentId: widget.selectedAgentId,
-                            selectedAgentTitle: widget.selectedAgentTitle,
-                            onAgentSelected: widget.onAgentSelected,
-                            onAgentItemSelected: widget.onAgentItemSelected,
-                            onManageAgents: widget.onManageAgents,
-                            agentsExpanded: widget.agentsExpanded,
-                            onAgentsExpandedChanged: widget.onAgentsExpandedChanged,
-                            showThreadsSection: widget.showThreadsSection,
-                            selectedThreadId: widget.selectedThreadId,
-                            selectedThreadTitle: widget.selectedThreadTitle,
-                            onThreadSelected: widget.onThreadSelected,
-                            onThreadItemSelected: widget.onThreadItemSelected,
-                            onThreadRename: widget.onThreadRename,
-                            onThreadDelete: widget.onThreadDelete,
-                            onCreateThread: widget.onCreateThread,
-                          )
-                        : _FilesPanel(attachments: widget.attachments ?? _attachments, onPreviewFile: _openFilePreview),
-                  ),
-                ],
-              ),
             ),
           ),
         ),
-        if (_filePreviewOpen)
-          Positioned.fill(
-            child: PbFilePreviewPane(
-              file: _previewFile,
-              fullscreen: _filePreviewFullscreen,
-              resizing: widget.filePreviewResizing,
-              onAskAgent: widget.onAskFileAgent == null ? null : () => widget.onAskFileAgent!(_previewFile),
-              onShare: widget.onShareFile == null ? null : () => widget.onShareFile!(_previewFile),
-              onDownload: widget.onDownloadFile == null ? null : () => widget.onDownloadFile!(_previewFile),
-              onToggleFullscreen: () => _setFilePreviewFullscreen(!_filePreviewFullscreen),
-              onClose: _closeFilePreview,
-              child: widget.filePreviewBuilder?.call(_previewFile),
-            ),
-          ),
+        if (_filePreviewOpen) Positioned.fill(child: _buildPreviewPane(showInlineBorder: true)),
       ],
     );
   }

@@ -1688,7 +1688,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   String? _lastSyncedRoutePath;
   _MobileRoomPane? _lastSyncedRoutePane;
   PbRoomPanelTab _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
+  final OverlayPortalController _desktopPreviewRoomPanelOverlayController = OverlayPortalController();
   bool _desktopPreviewRoomPanelCollapsed = false;
+  bool _desktopPreviewRoomPanelOverlayOpen = false;
+  bool _desktopPreviewFilePreviewOpen = false;
+  bool _desktopPreviewFilePreviewFullscreen = false;
+  PbAttachmentListItemData? _desktopPreviewFilePreviewFile;
   bool _desktopPreviewAgentsExpanded = true;
   bool _didNormalizeInitialDesktopPane = false;
   _MobileMeetingOrigin? _mobileMeetingOrigin;
@@ -1823,6 +1828,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   void dispose() {
     if (identical(previewRoomRailMenuBridgeListenable.value, _previewRoomRailMenuBridge)) {
       exposePreviewRoomRailMenuBridge(null);
+    }
+    if (previewFilePreviewFullscreenListenable.value) {
+      setPreviewFilePreviewFullscreen(false);
     }
     _meetingSplitViewController.dispose();
     _roomStatusSubscription?.cancel();
@@ -4004,6 +4012,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _navigateToAgentRoute(context, routeId);
   }
 
+  void _closeDesktopPreviewRoomPanelOverlay() {
+    _desktopPreviewRoomPanelOverlayController.hide();
+    setState(() => _desktopPreviewRoomPanelOverlayOpen = false);
+  }
+
+  void _setDesktopPreviewFilePreviewFullscreen(bool fullscreen, {bool closeOverlay = false}) {
+    setState(() {
+      _desktopPreviewFilePreviewFullscreen = fullscreen;
+      if (fullscreen || closeOverlay) {
+        _desktopPreviewRoomPanelOverlayOpen = false;
+      }
+    });
+    setPreviewFilePreviewFullscreen(fullscreen);
+  }
+
   Widget _buildDesktopPreviewRoomSection(
     BuildContext context, {
     required List<ServiceSpec> supported,
@@ -4101,61 +4124,170 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           selectedThreadPath: chatContext?.selectedThreadPath,
           selectedThreadName: selectedThreadTitle,
           localLinks: _localThreadAttachmentLinks,
-          builder: (context, attachments) => ColoredBox(
-            color: ShadTheme.of(context).colorScheme.card,
-            child: hasVisibleAgents
-                ? PbRoomPanelMount(
-                    activeTab: _desktopPreviewRoomPanelTab,
-                    roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
-                    threadPanel: threadPanel,
-                    roomPanelBuilder: (context, resizing) => PbRoomPanel(
-                      selectedTab: _desktopPreviewRoomPanelTab,
-                      onTabSelected: (tab) {
-                        setState(() {
-                          _desktopPreviewRoomPanelTab = tab;
-                        });
-                      },
-                      agents: agentItems,
-                      selectedAgentId: selected.routeId,
-                      selectedAgentTitle: agentName,
-                      onAgentItemSelected: _selectDesktopPreviewAgent,
-                      onManageAgents: isOwner.state.value == true ? showManageAgents : null,
-                      agentsExpanded: _desktopPreviewAgentsExpanded,
-                      onAgentsExpandedChanged: (expanded) {
-                        setState(() {
-                          _desktopPreviewAgentsExpanded = expanded;
-                        });
-                      },
-                      showThreadsSection: threadListPath != null,
-                      showFilesTab: true,
-                      threads: [for (final thread in threads) thread.name],
-                      threadItems: threadItems,
-                      selectedThreadId: chatContext?.selectedThreadPath,
-                      selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
-                      onThreadSelected: (_) {},
-                      onThreadItemSelected: (thread) => _selectDesktopPreviewThread(chatContext, thread.id, displayName: thread.title),
-                      onThreadRename: (thread) {
-                        final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
-                        if (entry != null) {
-                          unawaited(_renameDesktopPreviewThread(entry));
-                        }
-                      },
-                      onThreadDelete: (thread) {
-                        final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
-                        if (entry != null) {
-                          unawaited(_deleteDesktopPreviewThread(chatContext, entry));
-                        }
-                      },
-                      onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
-                      attachments: attachments,
-                      filePreviewBuilder: _buildAttachmentPreviewContent,
-                      onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey)),
-                      onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
-                      onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
-                      filePreviewResizing: resizing,
-                    ),
-                  )
-                : SizedBox.expand(child: threadPanel),
+          builder: (context, attachments) => LayoutBuilder(
+            builder: (context, constraints) {
+              final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_desktopPreviewFilePreviewFullscreen;
+              final roomPanelExpanded = responsivePanel ? false : !_desktopPreviewRoomPanelCollapsed;
+              final effectiveThreadPanel = hasVisibleAgents
+                  ? Column(
+                      children: [
+                        PbThreadHeader(
+                          title: selectedThreadTitle,
+                          agentName: agentName,
+                          selectedThreadTitle: selectedThreadTitle,
+                          roomPanelExpanded: roomPanelExpanded,
+                          onRoomPanelToggle: () {
+                            setState(() {
+                              if (responsivePanel) {
+                                _desktopPreviewRoomPanelOverlayOpen = true;
+                              } else {
+                                _desktopPreviewRoomPanelCollapsed = !_desktopPreviewRoomPanelCollapsed;
+                              }
+                            });
+                          },
+                          onOpenAllAgentsAndThreads: () {
+                            setState(() {
+                              _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
+                              if (responsivePanel) {
+                                _desktopPreviewRoomPanelOverlayOpen = true;
+                              } else {
+                                _desktopPreviewRoomPanelCollapsed = false;
+                              }
+                            });
+                          },
+                        ),
+                        Expanded(
+                          child: _buildAgentArea(
+                            context,
+                            const [],
+                            showEmbeddedThreadList: false,
+                            embedMobileChrome: false,
+                            showDesktopThreadListAlternatives: false,
+                          ),
+                        ),
+                      ],
+                    )
+                  : threadPanel;
+
+              PbRoomPanel buildRoomPanel({bool responsiveOverlay = false, bool resizing = false}) {
+                return PbRoomPanel(
+                  selectedTab: _desktopPreviewRoomPanelTab,
+                  onTabSelected: (tab) {
+                    setState(() {
+                      _desktopPreviewRoomPanelTab = tab;
+                    });
+                  },
+                  agents: agentItems,
+                  selectedAgentId: selected.routeId,
+                  selectedAgentTitle: agentName,
+                  onAgentItemSelected: _selectDesktopPreviewAgent,
+                  onManageAgents: isOwner.state.value == true ? showManageAgents : null,
+                  agentsExpanded: _desktopPreviewAgentsExpanded,
+                  onAgentsExpandedChanged: (expanded) {
+                    setState(() {
+                      _desktopPreviewAgentsExpanded = expanded;
+                    });
+                  },
+                  showThreadsSection: threadListPath != null,
+                  showFilesTab: true,
+                  threads: [for (final thread in threads) thread.name],
+                  threadItems: threadItems,
+                  selectedThreadId: chatContext?.selectedThreadPath,
+                  selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
+                  onThreadSelected: (_) {},
+                  onThreadItemSelected: (thread) => _selectDesktopPreviewThread(chatContext, thread.id, displayName: thread.title),
+                  onThreadRename: (thread) {
+                    final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                    if (entry != null) {
+                      unawaited(_renameDesktopPreviewThread(entry));
+                    }
+                  },
+                  onThreadDelete: (thread) {
+                    final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                    if (entry != null) {
+                      unawaited(_deleteDesktopPreviewThread(chatContext, entry));
+                    }
+                  },
+                  onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
+                  attachments: attachments,
+                  initialPreviewFile: _desktopPreviewFilePreviewFile,
+                  initialFilePreviewOpen: _desktopPreviewFilePreviewOpen,
+                  onFilePreviewSelected: (file) {
+                    setState(() => _desktopPreviewFilePreviewFile = file);
+                  },
+                  onFilePreviewOpenChanged: (open) {
+                    setState(() {
+                      _desktopPreviewFilePreviewOpen = open;
+                      if (!open) {
+                        _desktopPreviewFilePreviewFile = null;
+                        _desktopPreviewFilePreviewFullscreen = false;
+                      }
+                    });
+                    if (!open) {
+                      setPreviewFilePreviewFullscreen(false);
+                    }
+                  },
+                  onFilePreviewFullscreenChanged: (fullscreen) {
+                    _setDesktopPreviewFilePreviewFullscreen(fullscreen, closeOverlay: responsiveOverlay);
+                  },
+                  filePreviewBuilder: _buildAttachmentPreviewContent,
+                  onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey)),
+                  onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
+                  onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
+                  filePreviewResizing: resizing,
+                  borderOnTop: responsiveOverlay,
+                  responsiveOverlay: responsiveOverlay,
+                  responsiveOverlayMobile: false,
+                  onResponsiveOverlayClose: _closeDesktopPreviewRoomPanelOverlay,
+                );
+              }
+
+              if (!hasVisibleAgents) {
+                return ColoredBox(
+                  color: ShadTheme.of(context).colorScheme.card,
+                  child: SizedBox.expand(child: effectiveThreadPanel),
+                );
+              }
+
+              if (responsivePanel) {
+                if (_desktopPreviewRoomPanelOverlayOpen) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      _desktopPreviewRoomPanelOverlayController.show();
+                    }
+                  });
+                }
+
+                return OverlayPortal(
+                  controller: _desktopPreviewRoomPanelOverlayController,
+                  overlayChildBuilder: (context) => Positioned.fill(child: buildRoomPanel(responsiveOverlay: true)),
+                  child: ColoredBox(color: ShadTheme.of(context).colorScheme.card, child: effectiveThreadPanel),
+                );
+              }
+
+              if (_desktopPreviewRoomPanelOverlayOpen) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    if (_desktopPreviewRoomPanelOverlayController.isShowing) {
+                      _desktopPreviewRoomPanelOverlayController.hide();
+                    }
+                    setState(() => _desktopPreviewRoomPanelOverlayOpen = false);
+                  }
+                });
+              }
+
+              return ColoredBox(
+                color: ShadTheme.of(context).colorScheme.card,
+                child: PbRoomPanelMount(
+                  activeTab: _desktopPreviewRoomPanelTab,
+                  filePreviewOpen: _desktopPreviewFilePreviewOpen,
+                  filePreviewFullscreen: _desktopPreviewFilePreviewFullscreen,
+                  roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
+                  threadPanel: effectiveThreadPanel,
+                  roomPanelBuilder: (context, resizing) => buildRoomPanel(resizing: resizing),
+                ),
+              );
+            },
           ),
         );
       },
