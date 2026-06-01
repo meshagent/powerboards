@@ -3,6 +3,17 @@ import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
 
 void main() {
+  test('file manager maps Powerboards-native paths to v1 file type keys', () {
+    expect(powerboardsV1FileTypeKeyForPath('.threads/main.thread'), 'thread');
+    expect(powerboardsV1FileTypeKeyForPath('transcripts/2026-06-01 12-40 PM.transcript'), 'transcript');
+    expect(powerboardsV1FileTypeKeyForPath('widgets/customer-intake.widget'), 'widget');
+    expect(powerboardsV1FileTypeKeyForPath('docs/product brief.document'), 'document');
+    expect(powerboardsV1FileTypeKeyForPath('slides/roadmap.presentation'), 'presentation');
+    expect(powerboardsV1FileTypeKeyForPath('media/moodboard.gallery'), 'image');
+    expect(powerboardsV1FileTypeKeyForPath('forms/signup.form'), 'document');
+    expect(powerboardsV1FileTypeKeyForPath('notes/plain.md'), isNull);
+  });
+
   test('recently opened files move opened file to the front and de-dupe', () {
     final first = _file('first');
     final second = _file('second');

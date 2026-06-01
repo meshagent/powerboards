@@ -73,6 +73,26 @@ String _displayFileName(String fileName) {
 const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
 const int _v1RecentlyOpenedFilesLimit = 7;
 
+const Map<String, String> _powerboardsV1FileTypeKeysByExtension = {
+  'thread': 'thread',
+  'transcript': 'transcript',
+  'widget': 'widget',
+  'document': 'document',
+  'presentation': 'presentation',
+  'gallery': 'image',
+  'form': 'document',
+};
+
+@visibleForTesting
+String? powerboardsV1FileTypeKeyForPath(String path) {
+  final extension = p.extension(path).replaceFirst('.', '').toLowerCase();
+  if (extension.isEmpty) {
+    return null;
+  }
+
+  return _powerboardsV1FileTypeKeysByExtension[extension];
+}
+
 String _formatFileSizeBytes(int bytes) {
   if (bytes < 1024) {
     return '$bytes B';
@@ -900,6 +920,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       updatedLabel: updatedLabel,
       updatedSort: updatedSort,
       parentPath: folder,
+      fileTypeKey: powerboardsV1FileTypeKeyForPath(fullPath),
     );
   }
 

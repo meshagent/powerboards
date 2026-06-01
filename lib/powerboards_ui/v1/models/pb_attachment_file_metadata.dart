@@ -10,6 +10,7 @@ enum PbAttachmentFileType {
   pdf,
   archive,
   type,
+  widget,
   mediaGeneric,
   image,
   video,
@@ -104,6 +105,30 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
 
     if (extension == 'thread' || normalizedDescriptor == 'thread') {
       return PbAttachmentFileType.thread;
+    }
+
+    if (extension == 'transcript') {
+      return PbAttachmentFileType.transcript;
+    }
+
+    if (extension == 'widget' || normalizedDescriptor == 'widget') {
+      return PbAttachmentFileType.widget;
+    }
+
+    if (extension == 'document') {
+      return PbAttachmentFileType.document;
+    }
+
+    if (extension == 'presentation') {
+      return PbAttachmentFileType.presentation;
+    }
+
+    if (extension == 'gallery') {
+      return PbAttachmentFileType.image;
+    }
+
+    if (extension == 'form') {
+      return PbAttachmentFileType.document;
     }
 
     if (['zip', 'rar', '7z', 'tar', 'gz'].contains(extension)) {
@@ -223,7 +248,7 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
       PbAttachmentFileType.document ||
       PbAttachmentFileType.presentation => PbAttachmentCategory.businessDocument,
       PbAttachmentFileType.archive || PbAttachmentFileType.type => PbAttachmentCategory.archive,
-      PbAttachmentFileType.transcript => PbAttachmentCategory.transcript,
+      PbAttachmentFileType.transcript || PbAttachmentFileType.widget => PbAttachmentCategory.transcript,
       PbAttachmentFileType.thread => PbAttachmentCategory.thread,
       PbAttachmentFileType.mediaGeneric ||
       PbAttachmentFileType.image ||
@@ -245,6 +270,7 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
       PbAttachmentFileType.pdf => 'file',
       PbAttachmentFileType.archive => 'file-archive',
       PbAttachmentFileType.type => 'file-type-corner',
+      PbAttachmentFileType.widget => 'file-cog',
       PbAttachmentFileType.mediaGeneric => 'file',
       PbAttachmentFileType.image => 'file-image',
       PbAttachmentFileType.video => 'file-video-camera',
@@ -276,7 +302,7 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
       PbAttachmentCategory.media => PbColors.customTeal,
       PbAttachmentCategory.archive => PbColors.customAmber,
       PbAttachmentCategory.transcript => PbColors.customRose,
-      PbAttachmentCategory.thread => PbColors.customBrandInk,
+      PbAttachmentCategory.thread => PbColors.customRose,
     };
   }
 
@@ -287,6 +313,7 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
       PbAttachmentFileType.pdf => 'PDF',
       PbAttachmentFileType.archive => 'Archive',
       PbAttachmentFileType.type => 'Type',
+      PbAttachmentFileType.widget => 'Widget',
       PbAttachmentFileType.mediaGeneric => 'Media',
       PbAttachmentFileType.image => 'Image',
       PbAttachmentFileType.video => 'Video',
@@ -351,6 +378,7 @@ PbAttachmentFileType? _descriptorAppFileType(String descriptor) {
   return switch (normalizedDescriptor) {
     'transcript' => PbAttachmentFileType.transcript,
     'thread' => PbAttachmentFileType.thread,
+    'widget' => PbAttachmentFileType.widget,
     _ => null,
   };
 }
@@ -383,8 +411,13 @@ String? _displayTypeFromExtension(String extension) {
     'sh' => 'Script',
     'env' || 'pem' || 'key' => 'Key',
     'crt' => 'Certificate',
-    'srt' || 'vtt' => 'Transcript',
+    'srt' || 'vtt' || 'transcript' => 'Transcript',
     'thread' => 'Thread',
+    'widget' => 'Widget',
+    'document' => 'Document',
+    'presentation' => 'Presentation',
+    'gallery' => 'Gallery',
+    'form' => 'Form',
     _ => null,
   };
 }
