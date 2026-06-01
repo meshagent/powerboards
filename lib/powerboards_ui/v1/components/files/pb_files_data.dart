@@ -9,6 +9,7 @@ enum PbFilesSortKey {
   updated('updated', 'Last updated'),
   name('name', 'Name'),
   type('type', 'Type'),
+  size('size', 'Size'),
   thread('thread', 'Linked thread'),
   creator('creator', 'Created by');
 
@@ -25,6 +26,8 @@ class PbFilesItemData {
     required this.id,
     required this.title,
     required this.type,
+    this.sizeLabel = '',
+    this.sizeSort = 0,
     required this.thread,
     this.linkedThreads = const [],
     required this.creator,
@@ -41,6 +44,8 @@ class PbFilesItemData {
     required String id,
     required String title,
     String type = '',
+    String sizeLabel = '',
+    int sizeSort = 0,
     required String thread,
     List<String> linkedThreads = const [],
     required String creator,
@@ -64,6 +69,8 @@ class PbFilesItemData {
       id: id,
       title: resolved.displayTitle,
       type: resolved.displayType,
+      sizeLabel: sizeLabel,
+      sizeSort: sizeSort,
       thread: thread,
       linkedThreads: linkedThreads,
       creator: creator,
@@ -80,6 +87,8 @@ class PbFilesItemData {
   final String id;
   final String title;
   final String type;
+  final String sizeLabel;
+  final int sizeSort;
   final String thread;
   final List<String> linkedThreads;
   final String creator;
@@ -138,11 +147,14 @@ class PbFilesItemData {
   }
 
   String get filterText {
-    return [title, type, ...linkedThreadTargets, creator, updatedLabel].join(' ').toLowerCase();
+    return [title, type, sizeLabel, ...linkedThreadTargets, creator, updatedLabel].join(' ').toLowerCase();
   }
 
   String compactMeta({required bool showThread, required bool showCreator}) {
     final parts = <String>[type];
+    if (sizeLabel.isNotEmpty && sizeLabel != '-') {
+      parts.add(sizeLabel);
+    }
     if (showThread && threadLabel != '-') {
       parts.add(threadLabel);
     }

@@ -198,6 +198,7 @@ class _FilesTableState extends State<PbFilesTable> {
 class _FilesTableColumns {
   const _FilesTableColumns({
     required this.showType,
+    required this.showSize,
     required this.showThread,
     required this.showCreator,
     required this.showCreatorName,
@@ -208,6 +209,7 @@ class _FilesTableColumns {
     required this.typeWidth,
     required this.threadWidth,
     required this.creatorWidth,
+    required this.sizeWidth,
     required this.updatedWidth,
   });
 
@@ -215,6 +217,7 @@ class _FilesTableColumns {
   static const optionsWidth = 32.0;
 
   final bool showType;
+  final bool showSize;
   final bool showThread;
   final bool showCreator;
   final bool showCreatorName;
@@ -225,6 +228,7 @@ class _FilesTableColumns {
   final double typeWidth;
   final double threadWidth;
   final double creatorWidth;
+  final double sizeWidth;
   final double updatedWidth;
 
   static _FilesTableColumns resolve(double width) {
@@ -233,6 +237,7 @@ class _FilesTableColumns {
     final horizontalPadding = compact ? 8.0 : 10.0;
     final innerWidth = math.max(0.0, width - 2 - (horizontalPadding * 2));
     final showType = width > 1180;
+    final showSize = width > 720;
     const showThread = false;
     const showCreator = false;
     const showCreatorName = false;
@@ -241,6 +246,7 @@ class _FilesTableColumns {
 
     return _FilesTableColumns(
       showType: showType,
+      showSize: showSize,
       showThread: showThread,
       showCreator: showCreator,
       showCreatorName: showCreatorName,
@@ -251,19 +257,31 @@ class _FilesTableColumns {
       typeWidth: widths.type,
       threadWidth: 0,
       creatorWidth: 0,
+      sizeWidth: widths.size,
       updatedWidth: widths.updated,
     );
   }
 
   static _FilesTableTrackWidths _resolveWidths({required double width, required double innerWidth, required double gap}) {
     if (width > 1180) {
-      final trackWidths = _resolveFlexibleTracks(innerWidth - selectWidth - optionsWidth - (gap * 4), const [
+      final trackWidths = _resolveFlexibleTracks(innerWidth - selectWidth - optionsWidth - (gap * 5), const [
         _FilesTableFlexTrack(min: 240, flex: 3.875),
         _FilesTableFlexTrack(min: 132, flex: 1.75),
+        _FilesTableFlexTrack(min: 96, flex: 0.875),
         _FilesTableFlexTrack(min: 128, flex: 0.875),
       ]);
 
-      return _FilesTableTrackWidths(name: trackWidths[0], type: trackWidths[1], updated: trackWidths[2]);
+      return _FilesTableTrackWidths(name: trackWidths[0], type: trackWidths[1], size: trackWidths[2], updated: trackWidths[3]);
+    }
+
+    if (width > 720) {
+      const size = 104.0;
+      const updated = 128.0;
+      return _FilesTableTrackWidths(
+        name: _remainingName(innerWidth, min: 180, fixed: selectWidth + size + updated + optionsWidth, gaps: gap * 4),
+        size: size,
+        updated: updated,
+      );
     }
 
     if (width > 560) {
@@ -340,10 +358,11 @@ class _FilesTableFlexTrack {
 }
 
 class _FilesTableTrackWidths {
-  const _FilesTableTrackWidths({required this.name, this.type = 0, required this.updated});
+  const _FilesTableTrackWidths({required this.name, this.type = 0, this.size = 0, required this.updated});
 
   final double name;
   final double type;
+  final double size;
   final double updated;
 }
 
@@ -407,6 +426,19 @@ class _FilesTableHeader extends StatelessWidget {
               child: _FilesSortButton(
                 label: 'Type',
                 sortKey: PbFilesSortKey.type,
+                activeKey: sortKey,
+                descending: sortDirectionDescending,
+                onPressed: onSortChanged,
+              ),
+            ),
+          ],
+          if (columns.showSize) ...[
+            SizedBox(width: columns.gap),
+            SizedBox(
+              width: columns.sizeWidth,
+              child: _FilesSortButton(
+                label: 'Size',
+                sortKey: PbFilesSortKey.size,
                 activeKey: sortKey,
                 descending: sortDirectionDescending,
                 onPressed: onSortChanged,
@@ -800,6 +832,10 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
                 if (widget.columns.showType) ...[
                   SizedBox(width: widget.columns.gap),
                   SizedBox(width: widget.columns.typeWidth, child: _mutedCell(widget.item.type)),
+                ],
+                if (widget.columns.showSize) ...[
+                  SizedBox(width: widget.columns.gap),
+                  SizedBox(width: widget.columns.sizeWidth, child: _mutedCell(widget.item.sizeLabel)),
                 ],
                 if (widget.columns.showThread) ...[
                   SizedBox(width: widget.columns.gap),

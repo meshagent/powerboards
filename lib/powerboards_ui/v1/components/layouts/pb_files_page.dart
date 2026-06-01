@@ -104,6 +104,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
       PbFilesSortKey.updated => left.updatedSort.compareTo(right.updatedSort),
       PbFilesSortKey.name => left.title.toLowerCase().compareTo(right.title.toLowerCase()),
       PbFilesSortKey.type => left.type.toLowerCase().compareTo(right.type.toLowerCase()),
+      PbFilesSortKey.size => left.sizeSort.compareTo(right.sizeSort),
       PbFilesSortKey.thread => _threadSort(left).compareTo(_threadSort(right)),
       PbFilesSortKey.creator => left.creator.toLowerCase().compareTo(right.creator.toLowerCase()),
     };
@@ -126,7 +127,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
         _sortDirection = _sortDirection == _FilesSortDirection.desc ? _FilesSortDirection.asc : _FilesSortDirection.desc;
       } else {
         _sortKey = key;
-        _sortDirection = key == PbFilesSortKey.updated ? _FilesSortDirection.desc : _FilesSortDirection.asc;
+        _sortDirection = key == PbFilesSortKey.updated || key == PbFilesSortKey.size ? _FilesSortDirection.desc : _FilesSortDirection.asc;
       }
     });
   }
@@ -391,6 +392,8 @@ class _PbFilesPageState extends State<PbFilesPage> {
       id: 'processing-$_processingSequence',
       title: rowTitle,
       type: '',
+      sizeLabel: '',
+      sizeSort: 0,
       thread: '',
       creator: '',
       creatorInitials: '',

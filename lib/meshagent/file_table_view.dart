@@ -70,6 +70,24 @@ String _displayFileName(String fileName) {
   return formatTranscriptFileNameForDisplay(fileName);
 }
 
+const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
+
+String _formatFileSizeBytes(int bytes) {
+  if (bytes < 1024) {
+    return '$bytes B';
+  }
+
+  var value = bytes.toDouble();
+  var unitIndex = 0;
+  while (value >= 1024 && unitIndex < _fileSizeUnits.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  final decimals = value >= 10 || value == value.roundToDouble() ? 0 : 1;
+  return '${value.toStringAsFixed(decimals)} ${_fileSizeUnits[unitIndex]}';
+}
+
 enum FileSortField { name, modified }
 
 enum _FileAction { open, download, share, upload, compressFolder, rename, delete }
@@ -755,12 +773,35 @@ class _FileManagerViewState extends State<FileManagerView> {
     return (entry.updatedAt ?? entry.createdAt)?.millisecondsSinceEpoch ?? 0;
   }
 
+  String _v1SizeLabel(StorageEntry entry) {
+    if (entry.isFolder) {
+      return '-';
+    }
+
+    final size = entry.size;
+    if (size == null) {
+      return '-';
+    }
+
+    return _formatFileSizeBytes(size);
+  }
+
+  int _v1SizeSort(StorageEntry entry) {
+    if (entry.isFolder) {
+      return -1;
+    }
+
+    return entry.size ?? 0;
+  }
+
   PbFilesItemData _v1ItemForEntry(StorageEntry entry) {
     final folder = _folderSig.value;
     final fullPath = _FilePathKey.pathForEntry(folder, entry);
     final key = _FilePathKey.keyForEntry(folder, entry);
     final updatedLabel = _v1UpdatedLabel(entry);
     final updatedSort = _v1UpdatedSort(entry);
+    final sizeLabel = _v1SizeLabel(entry);
+    final sizeSort = _v1SizeSort(entry);
     final creator = _creatorNameForPath(fullPath);
     final creatorInitials = _creatorInitialsForName(creator);
 
@@ -769,6 +810,8 @@ class _FileManagerViewState extends State<FileManagerView> {
         id: key,
         title: entry.name,
         type: PbAttachmentFileType.folder.defaultDisplayLabel,
+        sizeLabel: sizeLabel,
+        sizeSort: sizeSort,
         thread: '',
         creator: creator,
         creatorInitials: creatorInitials,
@@ -787,6 +830,8 @@ class _FileManagerViewState extends State<FileManagerView> {
       title: _displayNameForEntry(entry),
       thread: linkedThreads.firstOrNull ?? '',
       linkedThreads: linkedThreads,
+      sizeLabel: sizeLabel,
+      sizeSort: sizeSort,
       creator: creator,
       creatorInitials: creatorInitials,
       updatedLabel: updatedLabel,
@@ -833,6 +878,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       PbFilesSortKey.updated => left.updatedSort.compareTo(right.updatedSort),
       PbFilesSortKey.name => left.title.toLowerCase().compareTo(right.title.toLowerCase()),
       PbFilesSortKey.type => left.type.toLowerCase().compareTo(right.type.toLowerCase()),
+      PbFilesSortKey.size => left.sizeSort.compareTo(right.sizeSort),
       PbFilesSortKey.thread => left.threadLabel.toLowerCase().compareTo(right.threadLabel.toLowerCase()),
       PbFilesSortKey.creator => left.creator.toLowerCase().compareTo(right.creator.toLowerCase()),
     };
@@ -846,7 +892,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         _v1SortDirectionDescending = !_v1SortDirectionDescending;
       } else {
         _v1SortKey = key;
-        _v1SortDirectionDescending = key == PbFilesSortKey.updated;
+        _v1SortDirectionDescending = key == PbFilesSortKey.updated || key == PbFilesSortKey.size;
       }
     });
   }
@@ -3313,7 +3359,6 @@ class FileTableView extends StatefulWidget {
 class _FileTableViewState extends State<FileTableView> {
   static TextStyle get dataStyle => powerboardsFileListTitleStyle();
   static TextStyle get headerStyle => powerboardsFileListMetadataStyle();
-  static const List<String> _sizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
   static const BorderRadius _fileCheckboxRadius = BorderRadius.all(Radius.circular(6));
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
@@ -3447,23 +3492,7 @@ class _FileTableViewState extends State<FileTableView> {
       return null;
     }
 
-    return _formatBytes(size);
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    }
-
-    var value = bytes.toDouble();
-    var unitIndex = 0;
-    while (value >= 1024 && unitIndex < _sizeUnits.length - 1) {
-      value /= 1024;
-      unitIndex++;
-    }
-
-    final decimals = value >= 10 || value == value.roundToDouble() ? 0 : 1;
-    return '${value.toStringAsFixed(decimals)} ${_sizeUnits[unitIndex]}';
+    return _formatFileSizeBytes(size);
   }
 
   Widget _hoverRegion(String rowKey, Widget child) {
