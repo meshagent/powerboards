@@ -71,6 +71,7 @@ String _displayFileName(String fileName) {
 }
 
 const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
+const int _v1RecentlyOpenedFilesLimit = 7;
 
 String _formatFileSizeBytes(int bytes) {
   if (bytes < 1024) {
@@ -91,6 +92,27 @@ String _formatFileSizeBytes(int bytes) {
 enum FileSortField { name, modified }
 
 enum _FileAction { open, download, share, upload, compressFolder, rename, delete }
+
+@visibleForTesting
+List<PbFilesItemData> powerboardsV1RecordRecentlyOpenedFile(
+  List<PbFilesItemData> current,
+  PbFilesItemData item, {
+  int limit = _v1RecentlyOpenedFilesLimit,
+}) {
+  final next = <PbFilesItemData>[];
+  if (item.canPreview) {
+    next.add(item);
+  }
+
+  for (final opened in current) {
+    if (!opened.canPreview || opened.id == item.id) {
+      continue;
+    }
+    next.add(opened);
+  }
+
+  return next.take(limit).toList(growable: false);
+}
 
 String _relocatePathForMove(String currentPath, String sourcePath, String destinationPath) {
   if (currentPath == sourcePath) {
@@ -304,6 +326,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   bool _v1FilesRoomPanelOverlayOpen = false;
   bool _v1FilePreviewFullscreen = false;
   PbFilesItemData? _v1PreviewFile;
+  List<PbFilesItemData> _v1RecentlyOpenedFiles = const <PbFilesItemData>[];
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
 
@@ -492,12 +515,14 @@ class _FileManagerViewState extends State<FileManagerView> {
         unawaited(_refreshFileAttachmentLinks());
       }
       _onFileDeleted(event.path);
+      _removeV1RecentlyOpenedPath(event.path);
       return;
     }
 
     if (event is FileMovedEvent) {
       _moveFileCreatorState(event.sourcePath, event.destinationPath);
       _onFileMoved(event.sourcePath, event.destinationPath);
+      _removeV1RecentlyOpenedPath(event.sourcePath);
     }
   }
 
@@ -507,6 +532,20 @@ class _FileManagerViewState extends State<FileManagerView> {
       return;
     }
     _fileCreatorNamesByPath[normalizePowerboardsAttachmentPath(destinationPath)] = creator;
+  }
+
+  void _removeV1RecentlyOpenedPath(String path) {
+    final key = _FilePathKey.keyForPath(path, false);
+    if (!_v1RecentlyOpenedFiles.any((item) => item.id == key)) {
+      return;
+    }
+
+    setState(() {
+      _v1RecentlyOpenedFiles = [
+        for (final item in _v1RecentlyOpenedFiles)
+          if (item.id != key) item,
+      ];
+    });
   }
 
   void _onFileUpdated(String path) {
@@ -877,17 +916,15 @@ class _FileManagerViewState extends State<FileManagerView> {
     return items;
   }
 
-  List<PbFilesItemData> _v1RecentFiles(List<StorageEntry> entries) {
-    final items =
-        entries
-            .where((entry) => !entry.isFolder)
-            .where((entry) => !widget.hideSystem || !entry.name.startsWith('.'))
-            .where((entry) => !_isDeletePending(_FilePathKey.pathForEntry(_folderSig.value, entry), entry.isFolder))
-            .map(_v1ItemForEntry)
-            .toList()
-          ..sort((left, right) => right.updatedSort.compareTo(left.updatedSort));
+  List<PbFilesItemData> get _v1RecentlyOpenedFilesForSidePane {
+    return [
+      for (final item in _v1RecentlyOpenedFiles)
+        if (item.canPreview && !_isDeletePending(_v1PathForItem(item), false)) item,
+    ].take(_v1RecentlyOpenedFilesLimit).toList(growable: false);
+  }
 
-    return items.take(8).toList(growable: false);
+  void _recordV1RecentlyOpenedFile(PbFilesItemData item) {
+    _v1RecentlyOpenedFiles = powerboardsV1RecordRecentlyOpenedFile(_v1RecentlyOpenedFiles, item);
   }
 
   int _compareV1Files(PbFilesItemData left, PbFilesItemData right) {
@@ -939,6 +976,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelCollapsed = false;
       _v1FilesRoomPanelOverlayOpen = openOverlay;
+      _recordV1RecentlyOpenedFile(item);
       _clearSelected();
     });
     _setV1FilesRoomPanelCollapsed(false);
@@ -1999,7 +2037,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     required bool isRefreshing,
   }) {
     final items = _v1VisibleItems(entries);
-    final recentFiles = _v1RecentFiles(entries);
+    final recentlyOpenedFiles = _v1RecentlyOpenedFilesForSidePane;
     final currentFolder = _folderSig.value;
 
     return IconTheme(
@@ -2091,7 +2129,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
             PbFilesSidePane sidePaneBuilder(BuildContext context, bool resizing) {
               return PbFilesSidePane(
-                files: recentFiles,
+                files: recentlyOpenedFiles,
                 previewFile: _v1PreviewFile,
                 fullscreen: _v1FilePreviewFullscreen,
                 resizing: resizing,

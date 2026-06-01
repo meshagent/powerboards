@@ -54,7 +54,7 @@ class PbFilesHeader extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!roomPanelExpanded) PbThreadHeaderQuaternaryButton(label: 'Recently updated files', onPressed: onOpenRecentFiles),
+                if (!roomPanelExpanded) PbThreadHeaderQuaternaryButton(label: 'Recently opened files', onPressed: onOpenRecentFiles),
                 if (!roomPanelExpanded) const SizedBox(width: 6),
                 PbThreadPanelToggle(expanded: roomPanelExpanded, onPressed: onRoomPanelToggle),
               ],

@@ -26,8 +26,8 @@ class PbFilesSidePane extends StatelessWidget {
   });
 
   static const _emptyRecentFiles = PbSidepaneFileEmptyStateData(
-    title: 'No recent files yet',
-    subtitle: 'Create or upload a file to see it here.',
+    title: 'No file history yet',
+    subtitle: 'Files you open will appear here.',
     fileType: PbAttachmentFileType.generic,
   );
 
@@ -81,9 +81,9 @@ class PbFilesSidePane extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const PbStaticRoomTabs(label: 'Recent files'),
+          const PbStaticRoomTabs(label: 'Recently opened'),
           const SizedBox(height: 16),
-          const PbRoomPanelDescription('Browse files recently added or edited.'),
+          const PbRoomPanelDescription('Your file session history appears here.'),
           const SizedBox(height: 20),
           PbSidepaneFileList(
             files: [for (final file in files) PbSidepaneFileListItem(data: file.toAttachmentData(), onPressed: () => onPreviewFile(file))],
