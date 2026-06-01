@@ -223,6 +223,8 @@ class _FilesBreadcrumb extends StatefulWidget {
 }
 
 class _FilesBreadcrumbState extends State<_FilesBreadcrumb> {
+  static const _layoutSlack = 2.0;
+
   bool _overflowOpen = false;
 
   void _closeOverflow() {
@@ -254,15 +256,10 @@ class _FilesBreadcrumbState extends State<_FilesBreadcrumb> {
               const _FilesBreadcrumbSeparator(),
             ],
             for (final crumb in layout.visibleAncestors) ...[
-              Flexible(
-                fit: FlexFit.loose,
-                child: _FilesBreadcrumbButton(crumb: crumb, current: false, onPressed: widget.onPressed),
-              ),
+              _FilesBreadcrumbButton(crumb: crumb, current: false, onPressed: widget.onPressed),
               const _FilesBreadcrumbSeparator(),
             ],
-            Expanded(
-              child: _FilesBreadcrumbButton(crumb: current, current: true, onPressed: widget.onPressed),
-            ),
+            _FilesBreadcrumbButton(crumb: current, current: true, onPressed: widget.onPressed),
           ],
         );
       },
@@ -309,7 +306,7 @@ class _FilesBreadcrumbState extends State<_FilesBreadcrumb> {
       textDirection: Directionality.of(context),
     )..layout();
 
-    return painter.width;
+    return painter.width.ceilToDouble() + _layoutSlack;
   }
 }
 

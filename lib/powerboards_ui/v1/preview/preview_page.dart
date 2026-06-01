@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater.dart';
 
 import '../theme/pb_colors.dart';
+import '../theme/pb_tokens.dart';
 import '../components/layouts/pb_primary_header.dart';
 import '../components/layouts/pb_side_rail.dart';
 import '../components/menus/pb_account_menu.dart';
@@ -306,7 +307,7 @@ class _PreviewPageState extends State<PreviewPage> {
           }
 
           const railWidth = 64.0;
-          const headerHeight = 75.0;
+          const headerHeight = PbSizes.workspaceTopbarHeight;
 
           return Stack(
             children: [

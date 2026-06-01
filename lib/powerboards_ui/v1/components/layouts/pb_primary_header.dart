@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/pb_colors.dart';
+import '../../theme/pb_tokens.dart';
 import '../primitives/pb_avatar_button.dart';
 import '../primitives/pb_button.dart';
 import '../primitives/pb_switcher_field.dart';
@@ -59,6 +60,7 @@ class PbPrimaryHeader extends StatelessWidget {
         final actionGap = shellIconOnly ? 6.0 : 16.0;
 
         return Container(
+          constraints: const BoxConstraints(minHeight: PbSizes.workspaceTopbarHeight),
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
           decoration: BoxDecoration(
             color: PbColors.surfacePanel.withValues(alpha: 0.86),

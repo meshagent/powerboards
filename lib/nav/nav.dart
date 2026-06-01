@@ -28,6 +28,7 @@ import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_side_rail.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_room_options_menu.dart';
 import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
 import 'package:powerboards/nav/switch_project_dialog.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
@@ -749,7 +750,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       final showPreviewRail = widget.projectId != null;
       final previewPane = _currentPreviewRoomPane(context);
       const railWidth = 64.0;
-      const headerHeight = 75.0;
+      const headerHeight = PbSizes.workspaceTopbarHeight;
 
       return ValueListenableBuilder<bool>(
         valueListenable: previewFilePreviewFullscreenListenable,
