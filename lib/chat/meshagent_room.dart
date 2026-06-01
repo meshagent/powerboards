@@ -1380,7 +1380,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final services = (await widget.room.services.list().timeout(
       _roomResourceTimeout,
       onTimeout: () => throw TimeoutException("Timed out while loading room services."),
-    )).where((x) => x.agents.isNotEmpty).toList();
+    )).where(hasAgentMetadata).toList();
     services.sort(_compareServices);
     return services;
   });
@@ -3453,7 +3453,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   List<PbAgentListItemData> _desktopPreviewAgentItems(List<ServiceSpec> supported, _ResolvedAgentSelection selected) {
-    final services = supported.where((service) => _serviceType(service) != 'MeetingTranscriber').toList();
+    final services = supported.where((service) => hasAgentMetadata(service) && _serviceType(service) != 'MeetingTranscriber').toList();
     services.sort((a, b) => a.metadata.name.toLowerCase().compareTo(b.metadata.name.toLowerCase()));
     final developmentParticipants = _developmentParticipants(supported);
     return [
