@@ -294,8 +294,12 @@ void main() {
     expect(manageAgentsPressed, isTrue);
   });
 
-  testWidgets('controlled side pane keeps shared width when active tab clamps narrower', (tester) async {
+  testWidgets('controlled side pane keeps shared width while agents tab is active', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     double? committedWidth;
+    const roomPanelKey = Key('room-panel');
 
     await tester.pumpWidget(
       MaterialApp(
@@ -308,7 +312,7 @@ void main() {
               panelWidth: 560,
               onPanelWidthChanged: (width) => committedWidth = width,
               threadPanel: const SizedBox.expand(),
-              roomPanel: const SizedBox.expand(),
+              roomPanel: const SizedBox.expand(key: roomPanelKey),
             ),
           ),
         ),
@@ -317,5 +321,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(committedWidth, isNull);
+    expect(tester.getSize(find.byKey(roomPanelKey)).width, 560);
   });
 }

@@ -11,9 +11,8 @@ import 'pb_room_panel.dart';
 const double _roomPanelDefaultWidth = PbSizes.roomPanelDefault;
 const double _roomPanelMinWidth = PbSizes.roomPanelDefault;
 const double _roomPanelResizeHandleWidth = PbSizes.roomPanelResizeHandle;
-const double _roomPanelDefaultMaxViewportRatio = 1 / 3;
 const double _roomPanelFilePreviewDefaultThreadViewportRatio = 2 / 3;
-const double _roomPanelFilesMaxViewportRatio = 0.5;
+const double _roomPanelMaxViewportRatio = 0.5;
 const double _roomPanelMinThreadWidth = 420;
 const double _roomPanelKeyboardStep = 16;
 
@@ -54,11 +53,7 @@ class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
   bool _focused = false;
 
   double _maxWidth(double workspaceWidth) {
-    final viewportRatio = switch (widget.activeTab) {
-      PbRoomPanelTab.files => _roomPanelFilesMaxViewportRatio,
-      PbRoomPanelTab.agents => _roomPanelDefaultMaxViewportRatio,
-    };
-    final viewportMax = workspaceWidth * viewportRatio;
+    final viewportMax = workspaceWidth * _roomPanelMaxViewportRatio;
     final boundedMax = math.min(viewportMax, workspaceWidth - _roomPanelMinThreadWidth);
 
     return math.max(_roomPanelMinWidth, boundedMax);
