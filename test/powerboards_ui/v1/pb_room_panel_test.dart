@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 
 void main() {
   Widget buildHarness({
@@ -291,5 +292,30 @@ void main() {
     await tester.tap(find.text('Install an Agent'));
 
     expect(manageAgentsPressed, isTrue);
+  });
+
+  testWidgets('controlled side pane keeps shared width when active tab clamps narrower', (tester) async {
+    double? committedWidth;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1200,
+            height: 640,
+            child: PbRoomPanelMount(
+              activeTab: PbRoomPanelTab.agents,
+              panelWidth: 560,
+              onPanelWidthChanged: (width) => committedWidth = width,
+              threadPanel: const SizedBox.expand(),
+              roomPanel: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(committedWidth, isNull);
   });
 }

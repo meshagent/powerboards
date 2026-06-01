@@ -1691,6 +1691,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final OverlayPortalController _desktopPreviewRoomPanelOverlayController = OverlayPortalController();
   bool _desktopPreviewRoomPanelCollapsed = false;
   bool _desktopPreviewRoomPanelOverlayOpen = false;
+  double? _desktopPreviewRoomPanelWidth;
   bool _desktopPreviewFilePreviewOpen = false;
   bool _desktopPreviewFilePreviewFullscreen = false;
   PbAttachmentListItemData? _desktopPreviewFilePreviewFile;
@@ -3688,6 +3689,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 desktopHeaderActionLeadingWidthFloor: meetingSessionActive ? _meetingActivePaneActionLeadingWidthFloor : 0,
                 desktopHeaderActionMinimumLeadingWidth: meetingSessionActive ? 160 : 0,
                 desktopHeaderActionReserve: meetingSessionActive ? desktopPaneHeaderActionReserve + 32 : desktopPaneHeaderActionReserve,
+                v1RoomPanelCollapsed: usesDesktopUiPreview ? _desktopPreviewRoomPanelCollapsed : null,
+                onV1RoomPanelCollapsedChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelCollapsed : null,
+                v1RoomPanelWidth: usesDesktopUiPreview ? _desktopPreviewRoomPanelWidth : null,
+                onV1RoomPanelWidthChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelWidth : null,
               ),
             ),
           ),
@@ -4017,11 +4022,30 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     setState(() => _desktopPreviewRoomPanelOverlayOpen = false);
   }
 
+  void _setDesktopPreviewRoomPanelCollapsed(bool collapsed) {
+    if (_desktopPreviewRoomPanelCollapsed == collapsed) {
+      return;
+    }
+
+    setState(() => _desktopPreviewRoomPanelCollapsed = collapsed);
+  }
+
+  void _setDesktopPreviewRoomPanelWidth(double width) {
+    final currentWidth = _desktopPreviewRoomPanelWidth;
+    if (currentWidth != null && (currentWidth - width).abs() < 0.5) {
+      return;
+    }
+
+    setState(() => _desktopPreviewRoomPanelWidth = width);
+  }
+
   void _setDesktopPreviewFilePreviewFullscreen(bool fullscreen, {bool closeOverlay = false}) {
     setState(() {
       _desktopPreviewFilePreviewFullscreen = fullscreen;
       if (fullscreen || closeOverlay) {
         _desktopPreviewRoomPanelOverlayOpen = false;
+      } else if (_desktopPreviewFilePreviewOpen) {
+        _desktopPreviewRoomPanelOverlayOpen = true;
       }
     });
     setPreviewFilePreviewFullscreen(fullscreen);
@@ -4283,6 +4307,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   filePreviewOpen: _desktopPreviewFilePreviewOpen,
                   filePreviewFullscreen: _desktopPreviewFilePreviewFullscreen,
                   roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
+                  panelWidth: _desktopPreviewRoomPanelWidth,
+                  onPanelWidthChanged: _setDesktopPreviewRoomPanelWidth,
                   threadPanel: effectiveThreadPanel,
                   roomPanelBuilder: (context, resizing) => buildRoomPanel(resizing: resizing),
                 ),

@@ -187,7 +187,7 @@ class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
           return SizedBox.expand(child: widget.threadPanel);
         }
 
-        if (panelWidth != currentPanelWidth) {
+        if (widget.panelWidth == null && panelWidth != currentPanelWidth) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               _commitWidth(panelWidth);

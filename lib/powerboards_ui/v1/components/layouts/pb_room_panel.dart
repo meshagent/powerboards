@@ -327,7 +327,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
             ignoring: _filePreviewOpen,
             child: _buildPanelContent(
               showInlineBorder: true,
-              padding: const EdgeInsets.fromLTRB(_sidepaneInlinePadding, 36, _sidepaneInlinePadding, 0),
+              padding: const EdgeInsets.fromLTRB(_sidepaneInlinePadding, 29, _sidepaneInlinePadding, 0),
             ),
           ),
         ),

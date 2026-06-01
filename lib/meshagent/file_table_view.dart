@@ -241,6 +241,10 @@ class FileManagerView extends StatefulWidget {
   final double desktopHeaderActionMinimumLeadingWidth;
   final double desktopHeaderActionReserve;
   final bool showDesktopSidetrayToggle;
+  final bool? v1RoomPanelCollapsed;
+  final ValueChanged<bool>? onV1RoomPanelCollapsedChanged;
+  final double? v1RoomPanelWidth;
+  final ValueChanged<double>? onV1RoomPanelWidthChanged;
 
   const FileManagerView({
     super.key,
@@ -256,6 +260,10 @@ class FileManagerView extends StatefulWidget {
     this.desktopHeaderActionMinimumLeadingWidth = 0,
     this.desktopHeaderActionReserve = desktopPaneHeaderActionReserve,
     this.showDesktopSidetrayToggle = true,
+    this.v1RoomPanelCollapsed,
+    this.onV1RoomPanelCollapsedChanged,
+    this.v1RoomPanelWidth,
+    this.onV1RoomPanelWidthChanged,
   });
 
   @override
@@ -300,6 +308,22 @@ class _FileManagerViewState extends State<FileManagerView> {
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
 
   PendingStorageDeleteScope get _deleteScope => PendingStorageDeleteScope(projectId: widget.projectId, roomName: widget.client.roomName);
+  bool get _effectiveV1FilesRoomPanelCollapsed => widget.v1RoomPanelCollapsed ?? _v1FilesRoomPanelCollapsed;
+
+  void _setV1FilesRoomPanelCollapsed(bool collapsed) {
+    if (widget.v1RoomPanelCollapsed != null) {
+      if (widget.v1RoomPanelCollapsed != collapsed) {
+        widget.onV1RoomPanelCollapsedChanged?.call(collapsed);
+      }
+      return;
+    }
+
+    if (_v1FilesRoomPanelCollapsed == collapsed) {
+      return;
+    }
+
+    setState(() => _v1FilesRoomPanelCollapsed = collapsed);
+  }
 
   bool _isDeletePending(String path, bool isFolder) {
     return PendingStorageDeletes.contains(scope: _deleteScope, path: path, isFolder: isFolder);
@@ -917,6 +941,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       _v1FilesRoomPanelOverlayOpen = openOverlay;
       _clearSelected();
     });
+    _setV1FilesRoomPanelCollapsed(false);
     setPreviewFilePreviewFullscreen(false);
   }
 
@@ -934,6 +959,8 @@ class _FileManagerViewState extends State<FileManagerView> {
       _v1FilePreviewFullscreen = fullscreen;
       if (fullscreen) {
         _v1FilesRoomPanelOverlayOpen = false;
+      } else if (_v1PreviewFile != null) {
+        _v1FilesRoomPanelOverlayOpen = true;
       }
     });
     setPreviewFilePreviewFullscreen(fullscreen);
@@ -1990,7 +2017,8 @@ class _FileManagerViewState extends State<FileManagerView> {
           builder: (context, constraints) {
             final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_v1FilePreviewFullscreen;
             final responsiveMode = responsivePanel ? PbFilesResponsiveMode.overlay : PbFilesResponsiveMode.docked;
-            final roomPanelExpanded = responsivePanel ? false : !_v1FilesRoomPanelCollapsed;
+            final roomPanelCollapsed = _effectiveV1FilesRoomPanelCollapsed;
+            final roomPanelExpanded = responsivePanel ? false : !roomPanelCollapsed;
             final mainPanel = Stack(
               children: [
                 PbFilesMainPanel(
@@ -2020,20 +2048,22 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onCreateTextFile: _showNewTextFileDialog,
                   onUpload: () => unawaited(_addFiles(currentFolder)),
                   onFilesDropped: (_) {},
-                  onOpenRecentFiles: () => setState(() {
+                  onOpenRecentFiles: () {
                     if (responsivePanel) {
-                      _v1FilesRoomPanelOverlayOpen = true;
-                    } else {
-                      _v1FilesRoomPanelCollapsed = false;
+                      setState(() => _v1FilesRoomPanelOverlayOpen = true);
+                      return;
                     }
-                  }),
-                  onRoomPanelToggle: () => setState(() {
+
+                    _setV1FilesRoomPanelCollapsed(false);
+                  },
+                  onRoomPanelToggle: () {
                     if (responsivePanel) {
-                      _v1FilesRoomPanelOverlayOpen = true;
-                    } else {
-                      _v1FilesRoomPanelCollapsed = !_v1FilesRoomPanelCollapsed;
+                      setState(() => _v1FilesRoomPanelOverlayOpen = true);
+                      return;
                     }
-                  }),
+
+                    _setV1FilesRoomPanelCollapsed(!roomPanelCollapsed);
+                  },
                   onItemPressed: (item) {
                     if (_v1IsFolder(item)) {
                       _openEntry(_v1PathForItem(item), true);
@@ -2113,7 +2143,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                 activeTab: PbRoomPanelTab.files,
                 filePreviewOpen: _v1PreviewFile != null,
                 filePreviewFullscreen: _v1FilePreviewFullscreen,
-                roomPanelCollapsed: _v1FilesRoomPanelCollapsed,
+                roomPanelCollapsed: roomPanelCollapsed,
+                panelWidth: widget.v1RoomPanelWidth,
+                onPanelWidthChanged: widget.onV1RoomPanelWidthChanged,
                 threadPanel: mainPanel,
                 roomPanelBuilder: sidePaneBuilder,
               ),
