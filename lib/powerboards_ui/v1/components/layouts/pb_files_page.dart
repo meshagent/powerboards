@@ -92,6 +92,31 @@ class _PbFilesPageState extends State<PbFilesPage> {
 
   String get _filterQuery => _filterController.text.trim().toLowerCase();
 
+  bool _itemCanEnableFilter(PbFilesItemData item) {
+    if (widget.blankRoom || widget.newRoom) {
+      return false;
+    }
+
+    return item.parentPath == _currentPath && (item.kind == PbFilesItemKind.file || item.kind == PbFilesItemKind.folder);
+  }
+
+  bool get _filterEnabled => _items.any(_itemCanEnableFilter);
+
+  void _clearFilterIfUnavailable(bool filterEnabled) {
+    if (filterEnabled || _filterController.text.isEmpty) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _filterEnabled || _filterController.text.isEmpty) {
+        return;
+      }
+
+      _filterController.clear();
+      setState(() {});
+    });
+  }
+
   List<PbFilesItemData> get _visibleItems {
     final rows = _items.where((item) {
       if (widget.blankRoom) {
@@ -509,6 +534,8 @@ class _PbFilesPageState extends State<PbFilesPage> {
             ? PbFilesResponsiveMode.overlay
             : PbFilesResponsiveMode.docked;
         final roomPanelExpanded = responsivePanel ? false : !widget.roomPanelCollapsed;
+        final filterEnabled = _filterEnabled;
+        _clearFilterIfUnavailable(filterEnabled);
         final mainPanel = PbFilesMainPanel(
           currentPath: _currentPath,
           folderLabelForPath: _folderLabelForPath,
@@ -517,6 +544,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
           sortKey: _sortKey,
           sortDirectionDescending: _sortDirection == _FilesSortDirection.desc,
           filterController: _filterController,
+          filterEnabled: filterEnabled,
           hasActiveFilter: _filterQuery.isNotEmpty,
           roomPanelExpanded: roomPanelExpanded,
           responsiveMode: responsiveMode,
@@ -633,6 +661,7 @@ class PbFilesMainPanel extends StatelessWidget {
     required this.sortKey,
     required this.sortDirectionDescending,
     required this.filterController,
+    required this.filterEnabled,
     required this.hasActiveFilter,
     required this.roomPanelExpanded,
     required this.responsiveMode,
@@ -673,6 +702,7 @@ class PbFilesMainPanel extends StatelessWidget {
   final PbFilesSortKey sortKey;
   final bool sortDirectionDescending;
   final TextEditingController filterController;
+  final bool filterEnabled;
   final bool hasActiveFilter;
   final bool roomPanelExpanded;
   final PbFilesResponsiveMode responsiveMode;
@@ -733,6 +763,7 @@ class PbFilesMainPanel extends StatelessWidget {
             hasSelection: _hasSelection,
             selectedCount: selectedIds.length,
             filterController: filterController,
+            filterEnabled: filterEnabled,
             responsiveMode: responsiveMode,
             padding: sidePadding,
             onFilterChanged: onFilterChanged,

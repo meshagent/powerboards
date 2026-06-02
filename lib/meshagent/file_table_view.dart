@@ -1135,6 +1135,39 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  bool _v1EntryCanEnableFilter(StorageEntry entry) {
+    final path = _FilePathKey.pathForEntry(_folderSig.value, entry);
+    if (widget.hideSystem && entry.name.startsWith('.')) {
+      return false;
+    }
+
+    if (_isDeletePending(path, entry.isFolder)) {
+      return false;
+    }
+
+    final key = _FilePathKey.keyForEntry(_folderSig.value, entry);
+    return !_v1FileStateRowsById.containsKey(key);
+  }
+
+  bool _v1FilterEnabled(List<StorageEntry> entries) {
+    return entries.any(_v1EntryCanEnableFilter);
+  }
+
+  void _clearV1FilterIfUnavailable(bool filterEnabled) {
+    if (filterEnabled || _v1FilterController.text.isEmpty) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _v1FilterEnabled(storageEntries.state.value ?? const <StorageEntry>[]) || _v1FilterController.text.isEmpty) {
+        return;
+      }
+
+      _v1FilterController.clear();
+      setState(() {});
+    });
+  }
+
   List<PbFilesItemData> _v1VisibleItems(List<StorageEntry> entries) {
     final query = _v1FilterController.text.trim().toLowerCase();
     final pendingDeleteItemsForFolder = PendingStorageDeletes.entriesFor(
@@ -2524,6 +2557,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     final previewFile = _v1PreviewFile ?? routePreviewFile;
     final recentlyOpenedFiles = _v1RecentlyOpenedFilesForSidePane;
     final currentFolder = _folderSig.value;
+    final filterEnabled = _v1FilterEnabled(entries);
+    _clearV1FilterIfUnavailable(filterEnabled);
 
     return IconTheme(
       data: IconThemeData(color: ShadTheme.of(context).colorScheme.primary),
@@ -2564,6 +2599,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   sortKey: _v1SortKey,
                   sortDirectionDescending: _v1SortDirectionDescending,
                   filterController: _v1FilterController,
+                  filterEnabled: filterEnabled,
                   hasActiveFilter: _v1FilterController.text.trim().isNotEmpty,
                   roomPanelExpanded: roomPanelExpanded,
                   responsiveMode: responsiveMode,

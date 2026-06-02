@@ -84,6 +84,7 @@ class PbFilesToolbar extends StatelessWidget {
     required this.hasSelection,
     required this.selectedCount,
     required this.filterController,
+    required this.filterEnabled,
     required this.responsiveMode,
     required this.padding,
     required this.onFilterChanged,
@@ -98,6 +99,7 @@ class PbFilesToolbar extends StatelessWidget {
   final bool hasSelection;
   final int selectedCount;
   final TextEditingController filterController;
+  final bool filterEnabled;
   final PbFilesResponsiveMode responsiveMode;
   final PbFilesPanelPadding padding;
   final ValueChanged<String> onFilterChanged;
@@ -126,6 +128,7 @@ class PbFilesToolbar extends StatelessWidget {
           height: PbSizes.buttonTertiaryHeight,
           margin: EdgeInsets.zero,
           controller: filterController,
+          enabled: filterEnabled,
           onChanged: onFilterChanged,
         );
 

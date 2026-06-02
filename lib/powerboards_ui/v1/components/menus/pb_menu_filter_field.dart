@@ -13,6 +13,7 @@ class PbMenuFilterField extends StatefulWidget {
     this.margin = const EdgeInsets.only(bottom: 4),
     this.controller,
     this.onChanged,
+    this.enabled = true,
   });
 
   final String placeholder;
@@ -22,6 +23,7 @@ class PbMenuFilterField extends StatefulWidget {
   final EdgeInsetsGeometry margin;
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
+  final bool enabled;
 
   @override
   State<PbMenuFilterField> createState() => _PbMenuFilterFieldState();
@@ -55,9 +57,17 @@ class _PbMenuFilterFieldState extends State<PbMenuFilterField> {
   }
 
   @override
+  void didUpdateWidget(covariant PbMenuFilterField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled && oldWidget.enabled && _focusNode.hasFocus) {
+      _focusNode.unfocus();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final focused = widget.focused ?? _focusNode.hasFocus;
-    final hovered = widget.hovered ?? _hovered;
+    final focused = widget.enabled && (widget.focused ?? _focusNode.hasFocus);
+    final hovered = widget.enabled && (widget.hovered ?? _hovered);
 
     final boxShadow = focused
         ? const [
@@ -69,9 +79,9 @@ class _PbMenuFilterFieldState extends State<PbMenuFilterField> {
         : null;
 
     return MouseRegion(
-      cursor: SystemMouseCursors.text,
-      onEnter: widget.hovered == null ? (_) => setState(() => _hovered = true) : null,
-      onExit: widget.hovered == null ? (_) => setState(() => _hovered = false) : null,
+      cursor: widget.enabled ? SystemMouseCursors.text : SystemMouseCursors.basic,
+      onEnter: widget.enabled && widget.hovered == null ? (_) => setState(() => _hovered = true) : null,
+      onExit: widget.enabled && widget.hovered == null ? (_) => setState(() => _hovered = false) : null,
       child: Transform.translate(
         offset: Offset(0, hovered && !focused ? -1 : 0),
         child: Container(
@@ -82,20 +92,29 @@ class _PbMenuFilterFieldState extends State<PbMenuFilterField> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: focused ? PbColors.borderStateSelected : PbColors.borderSoft),
-            color: PbColors.surfacePanel.withValues(alpha: 0.88),
+            color: widget.enabled ? PbColors.surfacePanel.withValues(alpha: 0.88) : PbColors.surfacePanelSoft.withValues(alpha: 0.64),
             boxShadow: boxShadow,
           ),
           child: TextField(
+            enabled: widget.enabled,
             controller: _controller,
             focusNode: _focusNode,
-            onChanged: widget.onChanged,
+            onChanged: widget.enabled ? widget.onChanged : null,
             cursorColor: PbColors.textPrimary,
-            style: PowerboardsTypography.p.copyWith(fontSize: 14, height: 1.3, color: PbColors.textPrimary),
+            style: PowerboardsTypography.p.copyWith(
+              fontSize: 14,
+              height: 1.3,
+              color: widget.enabled ? PbColors.textPrimary : PbColors.textMuted,
+            ),
             decoration: InputDecoration(
               isCollapsed: true,
               border: InputBorder.none,
               hintText: widget.placeholder,
-              hintStyle: PowerboardsTypography.p.copyWith(fontSize: 14, height: 1.3, color: PbColors.textMuted),
+              hintStyle: PowerboardsTypography.p.copyWith(
+                fontSize: 14,
+                height: 1.3,
+                color: widget.enabled ? PbColors.textMuted : PbColors.textMuted.withValues(alpha: 0.62),
+              ),
             ),
           ),
         ),
