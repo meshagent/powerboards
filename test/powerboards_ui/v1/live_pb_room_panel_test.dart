@@ -217,13 +217,10 @@ void main() {
             return;
           }
           final raw = event.message.message;
-          Object? type;
-          if (raw is Map) {
-            type = raw['type'];
-            final payload = raw['payload'];
-            if (type == null && payload is Map) {
-              type = payload['type'];
-            }
+          Object? type = raw['type'];
+          final payload = raw['payload'];
+          if (type == null && payload is Map) {
+            type = payload['type'];
           }
           // ignore: avoid_print
           print(

@@ -18,7 +18,7 @@ PODS:
   - Firebase/Messaging (12.14.0):
     - Firebase/CoreOnly
     - FirebaseMessaging (~> 12.14.0)
-  - firebase_core (4.9.0):
+  - firebase_core (4.10.0):
     - Firebase/CoreOnly (~> 12.14.0)
     - FlutterMacOS
   - firebase_messaging (16.2.2):
@@ -113,7 +113,7 @@ PODS:
   - record_macos (1.2.0):
     - FlutterMacOS
   - Sentry/HybridSDK (8.58.3)
-  - sentry_flutter (9.20.0):
+  - sentry_flutter (9.21.0):
     - Flutter
     - FlutterMacOS
     - Sentry/HybridSDK (= 8.58.3)
@@ -257,8 +257,8 @@ SPEC CHECKSUMS:
   file_picker: e716a70a9fe5fd9e09ebc922d7541464289443af
   file_selector_macos: 3e56eaea051180007b900eacb006686fd54da150
   Firebase: 7cc10425300768ec86292688af5cb228f0604bde
-  firebase_core: 9b1099e84e9228c67dfe7a36b6e6d96dbcc789cc
-  firebase_messaging: 1e064864a25c94718fd9b94897e87c83e0ea34b2
+  firebase_core: bc742c821e3b12138346586aac5a03cc22028e8e
+  firebase_messaging: 9727c527f98c4d4e424db5b4019ccb500e012db8
   FirebaseCore: 4939b340b9c598dc1f965d68f8fe57e630b65407
   FirebaseCoreInternal: 090369a5fffd7423cf88006ab4d2ccc2173a8db9
   FirebaseInstallations: 7cdc919e29dc54306edeffdbdc1eed1a40d7d1e7
@@ -282,7 +282,7 @@ SPEC CHECKSUMS:
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   record_macos: 4680f37daeebf52162e715efb7ff682f0a5ce4fd
   Sentry: 108fdbb76299c4189af12246bf0308c09c278922
-  sentry_flutter: aafdf112550e9550972852e71f44994bd4239254
+  sentry_flutter: 980e0c8a15a07075f508f941653786ced138609b
   share_plus: 1fa619de8392a4398bfaf176d441853922614e89
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6
   Sparkle: a4115cd9a339b297a61163256e6954d9e35297ce
