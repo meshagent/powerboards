@@ -477,6 +477,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             cameraUnavailable: _videoUnavailable,
             microphoneUnavailable: _audioUnavailable,
             presentation: ChangeDeviceButtonPresentation.dialog,
+            desktopV1Style: true,
             renderButton: (onPressed) => _V1MeetDeviceSettingsButton(onPressed: onPressed),
           );
         }
