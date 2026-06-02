@@ -69,6 +69,10 @@ const String placeholderFileName = ".placeholder";
 const double filePaneTableHeaderHeight = 48;
 
 bool _usesAdaptiveMobileLayout(BuildContext context) {
+  if (powerboardsUsesDesktopUiPreview(context)) {
+    return false;
+  }
+
   return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
 }
 
@@ -357,11 +361,16 @@ class _FileManagerViewState extends State<FileManagerView> {
   final _selectedSig = Signal<Set<String>>(<String>{});
   final TextEditingController _v1FilterController = TextEditingController();
   final OverlayPortalController _v1FilesRoomPanelOverlayController = OverlayPortalController();
+  final FocusNode _v1FilesKeyboardFocusNode = FocusNode(debugLabel: 'Files keyboard navigation');
   PbFilesSortKey _v1SortKey = PbFilesSortKey.updated;
   bool _v1SortDirectionDescending = true;
   bool _v1FilesRoomPanelCollapsed = false;
   bool _v1FilesRoomPanelOverlayOpen = false;
   bool _v1FilePreviewFullscreen = false;
+  bool _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+  String? _v1KeyboardPreviewFileId;
+  int _v1KeyboardPreviewDirection = 0;
+  bool _v1FilesKeyboardBrowseArmed = false;
   final ValueNotifier<bool> _v1FilesDropTargetActive = ValueNotifier(false);
   PbFilesItemData? _v1PreviewFile;
   List<PbFilesItemData> _v1RecentlyOpenedFiles = const <PbFilesItemData>[];
@@ -462,6 +471,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           _v1PreviewFile = null;
           _v1FilePreviewFullscreen = false;
           _v1FilesRoomPanelOverlayOpen = false;
+          _v1RestoreRoomPanelOverlayOnPreviewClose = false;
           setPreviewFilePreviewFullscreen(false);
         }
       });
@@ -555,6 +565,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     uploadNotifications.dispose();
     _v1FilterController.dispose();
+    _v1FilesKeyboardFocusNode.dispose();
     _v1FilesDropTargetActive.dispose();
     _collapsedBreadcrumbMenuController.dispose();
     popoverController.dispose();
@@ -629,6 +640,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     setState(() {
       if (openedFileChanged) {
         _tab = 'preview';
+      }
+      if (folderChanged || openedFileChanged) {
+        _clearV1KeyboardPreviewNavigationState();
       }
       _location = next;
     });
@@ -732,6 +746,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       _v1PreviewFile = null;
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelOverlayOpen = false;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = false;
       setPreviewFilePreviewFullscreen(false);
     }
     _toggleSelected(_FilePathKey.keyForPath(path, false), false);
@@ -1261,30 +1276,73 @@ class _FileManagerViewState extends State<FileManagerView> {
     return item.kind == PbFilesItemKind.folder;
   }
 
-  void _openV1Preview(PbFilesItemData item, {bool openOverlay = false}) {
+  bool get _v1KeyboardPreviewNavigationActive =>
+      _v1FilesKeyboardBrowseArmed || _v1KeyboardPreviewFileId != null || _v1KeyboardPreviewDirection != 0;
+
+  void _clearV1KeyboardPreviewNavigationState() {
+    _v1KeyboardPreviewFileId = null;
+    _v1KeyboardPreviewDirection = 0;
+    _v1FilesKeyboardBrowseArmed = false;
+  }
+
+  void _clearV1KeyboardPreviewNavigation() {
+    if (!_v1KeyboardPreviewNavigationActive) {
+      return;
+    }
+
+    setState(_clearV1KeyboardPreviewNavigationState);
+  }
+
+  bool _isV1FilesKeyboardNavigationBlocked() {
+    return FocusManager.instance.primaryFocus?.context?.widget is EditableText;
+  }
+
+  void _openV1Preview(
+    PbFilesItemData item, {
+    bool openOverlay = false,
+    bool openFullscreen = false,
+    bool restoreOverlayOnClose = false,
+    bool armKeyboardBrowse = true,
+    int keyboardDirection = 0,
+  }) {
     if (!item.canPreview) {
       return;
     }
 
+    if (armKeyboardBrowse) {
+      _v1FilesKeyboardFocusNode.requestFocus();
+    }
+
     setState(() {
       _v1PreviewFile = item;
-      _v1FilePreviewFullscreen = false;
+      _v1FilePreviewFullscreen = openFullscreen;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = restoreOverlayOnClose && (openOverlay || openFullscreen);
       _v1FilesRoomPanelCollapsed = false;
-      _v1FilesRoomPanelOverlayOpen = openOverlay;
+      _v1FilesRoomPanelOverlayOpen = openFullscreen ? false : openOverlay;
+      if (armKeyboardBrowse) {
+        _v1KeyboardPreviewFileId = keyboardDirection == 0 ? null : item.id;
+        _v1KeyboardPreviewDirection = keyboardDirection;
+        _v1FilesKeyboardBrowseArmed = true;
+      } else {
+        _clearV1KeyboardPreviewNavigationState();
+      }
       _recordV1RecentlyOpenedFile(item);
       _clearSelected();
     });
     _setV1FilesRoomPanelCollapsed(false);
-    setPreviewFilePreviewFullscreen(false);
+    setPreviewFilePreviewFullscreen(openFullscreen);
   }
 
   void _closeV1Preview() {
     final clearOpenedFileRoute = _openedFile != null && !_usesAdaptiveMobileLayout(context) && powerboardsUsesDesktopUiPreview(context);
+    final restoreRoomPanelOverlay = _v1RestoreRoomPanelOverlayOnPreviewClose && !clearOpenedFileRoute;
 
     setState(() {
       _v1PreviewFile = null;
       _v1FilePreviewFullscreen = false;
-      _v1FilesRoomPanelOverlayOpen = false;
+      _v1FilesRoomPanelOverlayOpen = restoreRoomPanelOverlay;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      _clearV1KeyboardPreviewNavigationState();
     });
     setPreviewFilePreviewFullscreen(false);
 
@@ -1293,10 +1351,77 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
   }
 
+  void _revealV1PreviewPanelForKeyboard({required bool openOverlay}) {
+    if (openOverlay) {
+      if (!_v1FilesRoomPanelOverlayOpen) {
+        setState(() => _v1FilesRoomPanelOverlayOpen = true);
+      }
+      return;
+    }
+
+    _setV1FilesRoomPanelCollapsed(false);
+  }
+
+  void _openV1PreviewFromKeyboard(PbFilesItemData item, {required bool openOverlay, required bool openFullscreen, required int direction}) {
+    _openV1Preview(item, openOverlay: openOverlay, openFullscreen: openFullscreen, keyboardDirection: direction);
+  }
+
+  KeyEventResult _handleV1FilesKeyEvent(
+    KeyEvent event, {
+    required List<PbFilesItemData> items,
+    required PbFilesItemData? previewFile,
+    required bool responsivePanel,
+    required bool openFullscreen,
+  }) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.escape) {
+      if (!_v1KeyboardPreviewNavigationActive) {
+        return KeyEventResult.ignored;
+      }
+
+      _clearV1KeyboardPreviewNavigation();
+      return KeyEventResult.handled;
+    }
+
+    if (key != LogicalKeyboardKey.arrowDown && key != LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.ignored;
+    }
+
+    if (_selectedSig.value.isNotEmpty || previewFile == null || !_v1FilesKeyboardBrowseArmed || _isV1FilesKeyboardNavigationBlocked()) {
+      return KeyEventResult.ignored;
+    }
+
+    final previewableItems = items.where((item) => item.canPreview).toList(growable: false);
+    final currentIndex = previewableItems.indexWhere((item) => item.id == previewFile.id);
+    if (currentIndex < 0) {
+      return KeyEventResult.ignored;
+    }
+
+    final direction = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
+    final nextIndex = math.max(0, math.min(previewableItems.length - 1, currentIndex + direction));
+    if (nextIndex == currentIndex) {
+      _revealV1PreviewPanelForKeyboard(openOverlay: responsivePanel);
+      return KeyEventResult.handled;
+    }
+
+    _openV1PreviewFromKeyboard(
+      previewableItems[nextIndex],
+      openOverlay: responsivePanel,
+      openFullscreen: openFullscreen,
+      direction: direction,
+    );
+    return KeyEventResult.handled;
+  }
+
   void _setV1PreviewFullscreen(bool fullscreen) {
     setState(() {
       _v1FilePreviewFullscreen = fullscreen;
       if (fullscreen) {
+        _v1RestoreRoomPanelOverlayOnPreviewClose = _v1RestoreRoomPanelOverlayOnPreviewClose || _v1FilesRoomPanelOverlayOpen;
         _v1FilesRoomPanelOverlayOpen = false;
       } else if (_v1PreviewFile != null || _openedFile != null) {
         _v1FilesRoomPanelOverlayOpen = true;
@@ -1307,7 +1432,12 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _closeV1FilesRoomPanelOverlay() {
     _v1FilesRoomPanelOverlayController.hide();
-    setState(() => _v1FilesRoomPanelOverlayOpen = false);
+    setState(() {
+      _v1FilesRoomPanelOverlayOpen = false;
+      if (_v1PreviewFile == null && _openedFile == null) {
+        _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      }
+    });
   }
 
   Widget _buildV1PreviewContent(PbFilesItemData item) {
@@ -1338,6 +1468,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _toggleV1VisibleSelection(List<PbFilesItemData> items) {
+    _clearV1KeyboardPreviewNavigation();
+
     final visibleIds = _v1SelectableItems(items).map((item) => item.id).toSet();
     final selected = _visibleSelected.value;
     final allSelected = visibleIds.isNotEmpty && visibleIds.every(selected.contains);
@@ -1683,6 +1815,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _openEntry(String path, bool isFolder) {
+    _clearV1KeyboardPreviewNavigation();
+
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
 
@@ -2575,7 +2709,9 @@ class _FileManagerViewState extends State<FileManagerView> {
         popover: _v1UploadProgressPopover,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_v1FilePreviewFullscreen;
+            final usesStackedRoomPanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint;
+            final filePreviewFullscreen = _v1FilePreviewFullscreen || (usesStackedRoomPanel && previewFile != null);
+            final responsivePanel = usesStackedRoomPanel && !filePreviewFullscreen;
             final responsiveMode = responsivePanel ? PbFilesResponsiveMode.overlay : PbFilesResponsiveMode.docked;
             final roomHasInstalledAgent = widget.services?.state.isReady == true && widget.services!.state.value!.isNotEmpty;
             final sidePaneAvailable =
@@ -2589,6 +2725,21 @@ class _FileManagerViewState extends State<FileManagerView> {
             final dropTargetPadding = responsiveMode == PbFilesResponsiveMode.overlay
                 ? const PbFilesPanelPadding(left: 20, right: 20)
                 : const PbFilesPanelPadding(left: 30, right: 28);
+            if (filePreviewFullscreen && !_v1FilePreviewFullscreen) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                final previewStillAvailable = _v1PreviewFile != null || routePreviewFile != null;
+                if (!mounted || !previewStillAvailable || _v1FilePreviewFullscreen) {
+                  return;
+                }
+
+                setState(() {
+                  _v1FilePreviewFullscreen = true;
+                  _v1RestoreRoomPanelOverlayOnPreviewClose = _v1RestoreRoomPanelOverlayOnPreviewClose || _v1FilesRoomPanelOverlayOpen;
+                  _v1FilesRoomPanelOverlayOpen = false;
+                });
+                setPreviewFilePreviewFullscreen(true);
+              });
+            }
             final mainPanel = Stack(
               children: [
                 PbFilesMainPanel(
@@ -2605,8 +2756,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                   responsiveMode: responsiveMode,
                   showRoomPanelControls: sidePaneAvailable,
                   previewFileId: previewFile?.id,
-                  keyboardPreviewFileId: null,
-                  keyboardPreviewDirection: 0,
+                  keyboardPreviewFileId: _v1KeyboardPreviewFileId,
+                  keyboardPreviewDirection: _v1KeyboardPreviewDirection,
                   enableDropTarget: false,
                   onBreadcrumbPressed: (path) => _openEntry(path, true),
                   onSortChanged: _setV1Sort,
@@ -2617,10 +2768,14 @@ class _FileManagerViewState extends State<FileManagerView> {
                       return;
                     }
 
+                    _clearV1KeyboardPreviewNavigation();
                     _toggleSelected(id, !selected.contains(id));
                   },
                   onToggleVisibleSelection: () => _toggleV1VisibleSelection(items),
-                  onClearSelection: _clearSelected,
+                  onClearSelection: () {
+                    _clearV1KeyboardPreviewNavigation();
+                    _clearSelected();
+                  },
                   onDeleteSelection: _confirmAndDeleteSelected,
                   onDownloadSelection: _downloadSelected,
                   onCreateFolder: () => unawaited(_addFolder(currentFolder)),
@@ -2656,7 +2811,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                       _openEntry(_v1PathForItem(item), true);
                       return;
                     }
-                    _openV1Preview(item, openOverlay: responsivePanel);
+                    _openV1Preview(item, openOverlay: responsivePanel, openFullscreen: usesStackedRoomPanel);
                   },
                   onBrowseFolder: (item) => _openEntry(item.folderPath, true),
                   onRemoveProcessingRow: _removeV1FileStateRow,
@@ -2680,17 +2835,35 @@ class _FileManagerViewState extends State<FileManagerView> {
                 ),
               ],
             );
+            final keyboardPanel = Focus(
+              focusNode: _v1FilesKeyboardFocusNode,
+              autofocus: true,
+              onKeyEvent: (node, event) => _handleV1FilesKeyEvent(
+                event,
+                items: items,
+                previewFile: previewFile,
+                responsivePanel: responsivePanel,
+                openFullscreen: usesStackedRoomPanel || filePreviewFullscreen,
+              ),
+              child: Listener(onPointerDown: (_) => _clearV1KeyboardPreviewNavigation(), child: mainPanel),
+            );
 
             PbFilesSidePane sidePaneBuilder(BuildContext context, bool resizing) {
               return PbFilesSidePane(
                 files: recentlyOpenedFiles,
                 previewFile: previewFile,
-                fullscreen: _v1FilePreviewFullscreen,
+                fullscreen: filePreviewFullscreen,
                 resizing: resizing,
                 borderOnTop: responsivePanel,
                 responsiveOverlay: responsivePanel,
-                responsiveOverlayMobile: false,
-                onPreviewFile: (item) => _openV1Preview(item, openOverlay: responsivePanel),
+                responsiveOverlayMobile: usesStackedRoomPanel,
+                onPreviewFile: (item) => _openV1Preview(
+                  item,
+                  openOverlay: responsivePanel,
+                  openFullscreen: usesStackedRoomPanel,
+                  restoreOverlayOnClose: responsivePanel,
+                  armKeyboardBrowse: false,
+                ),
                 previewBuilder: _buildV1PreviewContent,
                 onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item)),
                 onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
@@ -2721,7 +2894,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                       ? sidePaneBuilder(context, false).asOverlayFrame(mobile: false, onClose: _closeV1FilesRoomPanelOverlay)
                       : const SizedBox.shrink(),
                 ),
-                child: ColoredBox(color: PbColors.surfacePanelWash, child: mainPanel),
+                child: ColoredBox(color: PbColors.surfacePanelWash, child: keyboardPanel),
               );
             }
 
@@ -2741,11 +2914,11 @@ class _FileManagerViewState extends State<FileManagerView> {
               child: PbRoomPanelMount(
                 activeTab: PbRoomPanelTab.files,
                 filePreviewOpen: previewFile != null,
-                filePreviewFullscreen: _v1FilePreviewFullscreen,
+                filePreviewFullscreen: filePreviewFullscreen,
                 roomPanelCollapsed: roomPanelCollapsed,
                 panelWidth: widget.v1RoomPanelWidth,
                 onPanelWidthChanged: widget.onV1RoomPanelWidthChanged,
-                threadPanel: mainPanel,
+                threadPanel: keyboardPanel,
                 roomPanelBuilder: sidePaneBuilder,
               ),
             );

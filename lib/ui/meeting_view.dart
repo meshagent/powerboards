@@ -135,7 +135,7 @@ class _MeetingViewState extends State<MeetingView> {
           return _voiceSessionMeetingBlockedState();
         }
 
-        final usesDesktopUiPreview = !ResponsiveBreakpoints.of(context).isMobile && powerboardsUsesDesktopUiPreview(context);
+        final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
         final devicePreview = DevicePreview(
           desktopV1Style: usesDesktopUiPreview,
           onJoin: ({required enableVideo, required enableAudio, required videoUnavailable, required audioUnavailable}) {
@@ -175,7 +175,7 @@ class _MeetingViewState extends State<MeetingView> {
       } else if (meetingViewController.state == MeetingViewState.joined) {
         final room = VideoRoomModel.maybeOf(context)?.room;
         if (room == null) return const SizedBox.shrink();
-        final usesDesktopV1MeetingPadding = !ResponsiveBreakpoints.of(context).isMobile && powerboardsUsesDesktopUiPreview(context);
+        final usesDesktopV1MeetingPadding = powerboardsUsesDesktopUiPreview(context);
 
         return Padding(
           padding: usesDesktopV1MeetingPadding ? const .fromLTRB(20, 10, 20, 20) : const .all(20),
@@ -185,9 +185,9 @@ class _MeetingViewState extends State<MeetingView> {
               return ControllerBuilder<ExpandParticipantController>(
                 controller: expandParticipantController,
                 builder: (context) {
-                  final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+                  final usesDesktopV1MeetingStyle = powerboardsUsesDesktopUiPreview(context);
+                  final isMobile = !usesDesktopV1MeetingStyle && ResponsiveBreakpoints.of(context).isMobile;
                   final hasShare = participants.any(_participantHasActiveShare);
-                  final usesDesktopV1MeetingStyle = !isMobile && powerboardsUsesDesktopUiPreview(context);
 
                   if (isMobile) {
                     return _mobileLayout(room, participants, hasShare);
@@ -493,7 +493,7 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile || _isLandscapePhoneViewport(context);
+    final isMobile = !widget.desktopV1Style && (ResponsiveBreakpoints.of(context).isMobile || _isLandscapePhoneViewport(context));
 
     return SignalBuilder(
       builder: (context, _) {

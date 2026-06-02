@@ -42,3 +42,11 @@ bool powerboardsIsLandscapePhoneViewport(BuildContext context) {
   final size = MediaQuery.sizeOf(context);
   return size.width > size.height && size.shortestSide < 600;
 }
+
+bool powerboardsUsesNativeMobileAdaptiveLayout(BuildContext context) {
+  if (kIsWeb || !powerboardsIsMobileTargetPlatform(context)) {
+    return false;
+  }
+
+  return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
+}

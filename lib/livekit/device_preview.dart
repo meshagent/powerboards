@@ -414,7 +414,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final size = MediaQuery.sizeOf(context);
         final isLandscapePhone = _isLandscapePhoneViewport(context);
         final isMobile = size.width < 600;
-        final useMobileLobbyLayout = isMobile || isLandscapePhone;
+        final useMobileLobbyLayout = !widget.desktopV1Style && (isMobile || isLandscapePhone);
         final statusTextStyle = powerboardsInterTextStyle(fontSize: useMobileLobbyLayout ? 17.6 : 16, fontWeight: FontWeight.w600);
         final maxWidth = constraints.maxWidth;
         final contentHorizontalInset = switch (maxWidth) {

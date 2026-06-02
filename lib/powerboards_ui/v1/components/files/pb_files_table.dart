@@ -94,9 +94,27 @@ class PbFilesTable extends StatefulWidget {
 class _FilesTableState extends State<PbFilesTable> {
   String? _hoveredRowId;
   String? _menuOpenRowId;
+  bool _suppressHoverUntilPointerMove = false;
 
   bool _isSelectableRow(PbFilesItemData item) {
     return item.kind == PbFilesItemKind.file || item.kind == PbFilesItemKind.folder;
+  }
+
+  @override
+  void didUpdateWidget(covariant PbFilesTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final keyboardPreviewChanged =
+        widget.keyboardPreviewFileId != null &&
+        (widget.keyboardPreviewFileId != oldWidget.keyboardPreviewFileId ||
+            widget.keyboardPreviewDirection != oldWidget.keyboardPreviewDirection);
+
+    if (keyboardPreviewChanged) {
+      _suppressHoverUntilPointerMove = true;
+      _hoveredRowId = null;
+    } else if (widget.keyboardPreviewFileId == null && oldWidget.keyboardPreviewFileId != null) {
+      _suppressHoverUntilPointerMove = false;
+    }
   }
 
   @override
@@ -162,6 +180,7 @@ class _FilesTableState extends State<PbFilesTable> {
                               active: item.id == widget.previewFileId,
                               keyboardFocused: item.id == widget.keyboardPreviewFileId,
                               keyboardPreviewDirection: widget.keyboardPreviewDirection,
+                              hoverSuppressed: _suppressHoverUntilPointerMove,
                               previousSelected: previousSelected,
                               nextSelected: nextSelected,
                               beforeStateRow: nextStateful,
@@ -181,6 +200,12 @@ class _FilesTableState extends State<PbFilesTable> {
                                   _hoveredRowId = item.id;
                                 } else if (_hoveredRowId == item.id) {
                                   _hoveredRowId = null;
+                                }
+                              }),
+                              onHoverResumed: () => setState(() {
+                                _suppressHoverUntilPointerMove = false;
+                                if (widget.selectedIds.isEmpty) {
+                                  _hoveredRowId = item.id;
                                 }
                               }),
                               onMenuOpenChanged: (open) => setState(() {
@@ -654,6 +679,7 @@ class _PbFilesTableRow extends StatefulWidget {
     required this.active,
     required this.keyboardFocused,
     required this.keyboardPreviewDirection,
+    required this.hoverSuppressed,
     required this.previousSelected,
     required this.nextSelected,
     required this.beforeStateRow,
@@ -669,6 +695,7 @@ class _PbFilesTableRow extends StatefulWidget {
     this.onRename,
     this.onDelete,
     required this.onHoverChanged,
+    required this.onHoverResumed,
     required this.onMenuOpenChanged,
   });
 
@@ -679,6 +706,7 @@ class _PbFilesTableRow extends StatefulWidget {
   final bool active;
   final bool keyboardFocused;
   final int keyboardPreviewDirection;
+  final bool hoverSuppressed;
   final bool previousSelected;
   final bool nextSelected;
   final bool beforeStateRow;
@@ -694,6 +722,7 @@ class _PbFilesTableRow extends StatefulWidget {
   final VoidCallback? onRename;
   final VoidCallback? onDelete;
   final ValueChanged<bool> onHoverChanged;
+  final VoidCallback onHoverResumed;
   final ValueChanged<bool> onMenuOpenChanged;
 
   @override
@@ -737,6 +766,14 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
       });
     }
 
+    if (oldWidget.hoverSuppressed && !widget.hoverSuppressed && _hovered && !widget.selectionMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onHoverChanged(true);
+        }
+      });
+    }
+
     if (widget.selectionMode && _menuOpen) {
       _menuOpen = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -750,7 +787,7 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
   @override
   Widget build(BuildContext context) {
     final menuOpen = _menuOpen && !widget.selectionMode;
-    final hovered = _hovered && !widget.selectionMode;
+    final hovered = _hovered && !widget.hoverSuppressed && !widget.selectionMode;
     final normalHovered = hovered && !_processing;
     final processingHovered = hovered && _processing;
     final processingMenuOpen = menuOpen && _processing;
@@ -799,8 +836,13 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
       cursor: _processing ? SystemMouseCursors.basic : SystemMouseCursors.click,
       onEnter: (_) {
         setState(() => _hovered = true);
-        if (!widget.selectionMode) {
+        if (!widget.selectionMode && !widget.hoverSuppressed) {
           widget.onHoverChanged(true);
+        }
+      },
+      onHover: (_) {
+        if (widget.hoverSuppressed) {
+          widget.onHoverResumed();
         }
       },
       onExit: (_) {
@@ -909,7 +951,7 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
   BorderRadius _selectionRadius() {
     if (!widget.selected) {
       final menuOpen = _menuOpen && !widget.selectionMode;
-      final hovered = _hovered && !widget.selectionMode;
+      final hovered = _hovered && !widget.hoverSuppressed && !widget.selectionMode;
       return BorderRadius.circular(widget.active || _pressed || menuOpen || hovered ? 10 : 0);
     }
 

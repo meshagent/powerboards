@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
@@ -154,6 +155,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   bool _usesMobileThreadLayout(BuildContext context) {
+    if (powerboardsUsesDesktopUiPreview(context)) {
+      return false;
+    }
+
     return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
   }
 
@@ -502,6 +507,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   @override
   Widget build(BuildContext context) {
+    final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
     final usesMobileLayout = _usesMobileThreadLayout(context);
     final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
     final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
@@ -524,52 +530,54 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
               )
             : null);
 
+    final chatBotView = ChatBotView(
+      room: widget.client,
+      agentName: widget.agentName,
+      threadDisplayMode: widget.threadDisplayMode,
+      threadListPath: widget.threadListPath,
+      documentPath: widget.documentPath,
+      controller: _chatController,
+      onAttachmentOpen: _openComposerAttachment,
+      selectedThreadPath: widget.selectedThreadPath,
+      selectedThreadDisplayName: widget.selectedThreadDisplayName,
+      onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
+      onSelectedThreadResolved: widget.onSelectedThreadResolved,
+      newThreadResetVersion: widget.newThreadResetVersion,
+      participantNames: widget.participantNames,
+      initialMessage: widget.initialMessageText == null
+          ? null
+          : ChatMessage(
+              id: widget.initialMessageID ?? widget.documentPath,
+              text: widget.initialMessageText!,
+              attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
+            ),
+      onMessageSent: _onMessageSent,
+      fileInThreadBuilder: _fileInThreadBuilder,
+      openFile: _openThreadAttachment,
+      fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
+      chatInputBoxBuilder: usesMobileLayout ? (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox) : null,
+      toolsBuilder: (context, controller, snapshot) =>
+          buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
+      inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
+      emptyStateTitle: null,
+      emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
+      emptyState: resolvedEmptyState,
+      inputContextMenuBuilder: powerboardsUsesSystemAdaptiveTextSelectionToolbar()
+          ? powerboardsThreadMobileAttachmentContextMenuBuilder(
+              onPasteFile: (name, dataStream, size) => _chatController.uploadFile(name, dataStream, size),
+            )
+          : powerboardsAdaptiveInputContextMenuBuilder,
+      inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
+      mobileStorageSaveSurfacePresenter: usesMobileLayout ? showPowerboardsThreadStorageSaveSurface : null,
+      mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
+      centerComposer: false,
+      hideChatInput: widget.hideChatInput,
+      showThreadList: false,
+    );
+
     return IconTheme(
       data: const IconThemeData(size: 14),
-      child: ChatBotView(
-        room: widget.client,
-        agentName: widget.agentName,
-        threadDisplayMode: widget.threadDisplayMode,
-        threadListPath: widget.threadListPath,
-        documentPath: widget.documentPath,
-        controller: _chatController,
-        onAttachmentOpen: _openComposerAttachment,
-        selectedThreadPath: widget.selectedThreadPath,
-        selectedThreadDisplayName: widget.selectedThreadDisplayName,
-        onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
-        onSelectedThreadResolved: widget.onSelectedThreadResolved,
-        newThreadResetVersion: widget.newThreadResetVersion,
-        participantNames: widget.participantNames,
-        initialMessage: widget.initialMessageText == null
-            ? null
-            : ChatMessage(
-                id: widget.initialMessageID ?? widget.documentPath,
-                text: widget.initialMessageText!,
-                attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
-              ),
-        onMessageSent: _onMessageSent,
-        fileInThreadBuilder: _fileInThreadBuilder,
-        openFile: _openThreadAttachment,
-        fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
-        chatInputBoxBuilder: (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox),
-        toolsBuilder: (context, controller, snapshot) =>
-            buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
-        inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
-        emptyStateTitle: null,
-        emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
-        emptyState: resolvedEmptyState,
-        inputContextMenuBuilder: powerboardsUsesSystemAdaptiveTextSelectionToolbar()
-            ? powerboardsThreadMobileAttachmentContextMenuBuilder(
-                onPasteFile: (name, dataStream, size) => _chatController.uploadFile(name, dataStream, size),
-              )
-            : powerboardsAdaptiveInputContextMenuBuilder,
-        inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
-        mobileStorageSaveSurfacePresenter: showPowerboardsThreadStorageSaveSurface,
-        mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
-        centerComposer: false,
-        hideChatInput: widget.hideChatInput,
-        showThreadList: false,
-      ),
+      child: usesDesktopUiPreview ? ChatContextLayoutOverride(useMobileLayout: false, child: chatBotView) : chatBotView,
     );
   }
 }

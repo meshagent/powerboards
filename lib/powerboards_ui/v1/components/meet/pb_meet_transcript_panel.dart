@@ -54,7 +54,7 @@ class PbMeetTranscriptPanel extends StatefulWidget {
 
 class _PbMeetTranscriptPanelState extends State<PbMeetTranscriptPanel> {
   late bool _filePreviewOpen = widget.initialFilePreviewOpen;
-  bool _filePreviewFullscreen = false;
+  late bool _filePreviewFullscreen = widget.initialFilePreviewOpen && widget.openFilePreviewAsFullscreen;
   late PbAttachmentListItemData _previewFile = widget.initialPreviewFile ?? _fallbackPreviewFile;
 
   List<PbAttachmentListItemData> get _effectiveTranscripts {
@@ -75,11 +75,18 @@ class _PbMeetTranscriptPanelState extends State<PbMeetTranscriptPanel> {
 
     if (widget.initialFilePreviewOpen != oldWidget.initialFilePreviewOpen) {
       _filePreviewOpen = widget.initialFilePreviewOpen;
+      if (widget.initialFilePreviewOpen && widget.openFilePreviewAsFullscreen) {
+        _filePreviewFullscreen = true;
+      }
     }
 
     final nextPreviewFile = widget.initialPreviewFile;
     if (nextPreviewFile != null && nextPreviewFile != oldWidget.initialPreviewFile) {
       _previewFile = nextPreviewFile;
+    }
+
+    if (widget.openFilePreviewAsFullscreen && !oldWidget.openFilePreviewAsFullscreen && _filePreviewOpen) {
+      _filePreviewFullscreen = true;
     }
 
     if (widget.emptyTranscripts && !oldWidget.emptyTranscripts) {
@@ -144,9 +151,11 @@ class _PbMeetTranscriptPanelState extends State<PbMeetTranscriptPanel> {
   }
 
   Widget _buildPreviewPane({required bool showInlineBorder}) {
+    final previewFullscreen = _filePreviewFullscreen || widget.openFilePreviewAsFullscreen;
+
     return PbFilePreviewPane(
       file: _previewFile,
-      fullscreen: _filePreviewFullscreen,
+      fullscreen: previewFullscreen,
       resizing: widget.filePreviewResizing,
       borderOnTop: widget.borderOnTop,
       showInlineBorder: showInlineBorder,

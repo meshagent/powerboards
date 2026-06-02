@@ -1760,6 +1760,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   PbAttachmentListItemData? _desktopPreviewFilePreviewFile;
   bool _desktopPreviewMeetTranscriptPreviewOpen = false;
   bool _desktopPreviewMeetTranscriptPreviewFullscreen = false;
+  bool _desktopPreviewRestoreTranscriptOverlayOnPreviewClose = false;
   PbAttachmentListItemData? _desktopPreviewMeetTranscriptPreviewFile;
   bool _desktopPreviewMeetingFullscreen = false;
   bool _desktopPreviewAgentsExpanded = true;
@@ -2765,7 +2766,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _syncPreviewRoomRailMenuBridge(BuildContext context, {bool? meetingSessionActive}) {
-    final shouldExpose = !ResponsiveBreakpoints.of(context).isMobile && powerboardsUsesDesktopUiPreview(context);
+    final shouldExpose = powerboardsUsesDesktopUiPreview(context);
     if (!shouldExpose) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
@@ -3963,6 +3964,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     setState(() {
       _desktopPreviewMeetTranscriptPreviewFullscreen = fullscreen;
       if (fullscreen && closeOverlay) {
+        _desktopPreviewRestoreTranscriptOverlayOnPreviewClose = true;
         _desktopPreviewRoomPanelOverlayOpen = false;
       } else if (!fullscreen && _desktopPreviewMeetTranscriptPreviewOpen) {
         _desktopPreviewRoomPanelOverlayOpen = true;
@@ -4031,6 +4033,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 _desktopPreviewMeetTranscriptPreviewOpen = false;
                 _desktopPreviewMeetTranscriptPreviewFile = null;
                 _desktopPreviewMeetTranscriptPreviewFullscreen = false;
+                _desktopPreviewRestoreTranscriptOverlayOnPreviewClose = false;
                 _desktopPreviewRoomPanelOverlayOpen = false;
               });
               setPreviewFilePreviewFullscreen(false);
@@ -4126,6 +4129,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   emptyTranscripts: transcripts.isEmpty,
                   initialPreviewFile: transcriptPreviewFile,
                   initialFilePreviewOpen: transcriptPreviewOpen,
+                  openFilePreviewAsFullscreen: responsiveOverlay || transcriptPreviewFullscreen,
                   filePreviewBuilder: _buildAttachmentPreviewContent,
                   onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file)),
                   onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
@@ -4134,11 +4138,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     setState(() => _desktopPreviewMeetTranscriptPreviewFile = file);
                   },
                   onFilePreviewOpenChanged: (open) {
+                    final restoreTranscriptOverlay = _desktopPreviewRestoreTranscriptOverlayOnPreviewClose;
                     setState(() {
                       _desktopPreviewMeetTranscriptPreviewOpen = open;
                       if (!open) {
                         _desktopPreviewMeetTranscriptPreviewFile = null;
                         _desktopPreviewMeetTranscriptPreviewFullscreen = false;
+                        _desktopPreviewRestoreTranscriptOverlayOnPreviewClose = false;
+                        if (restoreTranscriptOverlay) {
+                          _desktopPreviewRoomPanelOverlayOpen = true;
+                        }
                       }
                     });
                     if (!open) {
@@ -4711,6 +4720,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   : threadPanel;
 
               PbRoomPanel buildRoomPanel({bool responsiveOverlay = false, bool resizing = false}) {
+                void selectThreadFromRoomPanel(String? path, {String? displayName}) {
+                  _selectDesktopPreviewThread(chatContext, path, displayName: displayName);
+                  if (responsiveOverlay) {
+                    _closeDesktopPreviewRoomPanelOverlay();
+                  }
+                }
+
                 return PbRoomPanel(
                   selectedTab: _desktopPreviewRoomPanelTab,
                   onTabSelected: (tab) {
@@ -4736,7 +4752,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   selectedThreadId: chatContext?.selectedThreadPath,
                   selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
                   onThreadSelected: (_) {},
-                  onThreadItemSelected: (thread) => _selectDesktopPreviewThread(chatContext, thread.id, displayName: thread.title),
+                  onThreadItemSelected: (thread) => selectThreadFromRoomPanel(thread.id, displayName: thread.title),
                   onThreadRename: (thread) {
                     final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
                     if (entry != null) {
@@ -4749,7 +4765,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       unawaited(_deleteDesktopPreviewThread(chatContext, entry));
                     }
                   },
-                  onCreateThread: () => _selectDesktopPreviewThread(chatContext, null),
+                  onCreateThread: () => selectThreadFromRoomPanel(null),
                   attachments: attachments,
                   initialPreviewFile: _desktopPreviewFilePreviewFile,
                   initialFilePreviewOpen: _desktopPreviewFilePreviewOpen,
@@ -5505,6 +5521,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   bool _usesMobileRoomLayout(BuildContext context) {
+    if (powerboardsUsesDesktopUiPreview(context)) {
+      return false;
+    }
+
     return ResponsiveBreakpoints.of(context).isMobile || _isLandscapePhoneViewport(context);
   }
 

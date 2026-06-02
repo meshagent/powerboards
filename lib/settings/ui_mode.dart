@@ -6,7 +6,6 @@ import 'package:meshagent_flutter_auth/meshagent_auth.dart';
 import 'package:powerboards/ui/app_reload.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
-import 'package:responsive_framework/responsive_framework.dart';
 
 enum PowerboardsUiMode { legacy, v1 }
 
@@ -166,6 +165,7 @@ void resetPowerboardsUiMode() {
 }
 
 bool powerboardsUsesDesktopUiPreview(BuildContext context) {
-  final useMobileNav = ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
-  return powerboardsUiModeSignal.value == PowerboardsUiMode.v1 && !useMobileNav && !powerboardsUsesNativeMobileDialogLayout(context);
+  return powerboardsUiModeSignal.value == PowerboardsUiMode.v1 &&
+      !powerboardsUsesNativeMobileAdaptiveLayout(context) &&
+      !powerboardsUsesNativeMobileDialogLayout(context);
 }

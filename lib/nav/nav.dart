@@ -1679,17 +1679,17 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
-    final useMobileNav = ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
+    final usesResponsiveMobileNav = ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
     final navController = Controller.ofType<NavController>(context);
 
     return SignalBuilder(
       builder: (context, _) {
+        final useDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
+        final useMobileNav = usesResponsiveMobileNav && !useDesktopUiPreview;
+
         if (!projects.state.isReady || !role.state.isReady) {
           return useMobileNav ? const SizedBox.shrink() : const Center(child: CircularProgressIndicator());
         }
-
-        final uiMode = powerboardsUiModeSignal.value;
-        final useDesktopUiPreview = uiMode == PowerboardsUiMode.v1 && !useMobileNav;
 
         if (projects.state.value!.isEmpty) {
           return useDesktopUiPreview ? _previewModeEmptyProjectsView(context) : EmptyProjectsState(onCreateProject: onCreateProject);

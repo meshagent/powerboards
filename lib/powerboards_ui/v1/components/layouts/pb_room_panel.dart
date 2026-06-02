@@ -293,13 +293,15 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
   }
 
   Widget _buildPreviewPane({required bool showInlineBorder}) {
+    final previewFullscreen = _filePreviewFullscreen || widget.responsiveOverlay;
+
     return PbFilePreviewPane(
       file: _previewFile,
-      fullscreen: _filePreviewFullscreen,
+      fullscreen: previewFullscreen,
       resizing: widget.filePreviewResizing,
       borderOnTop: widget.borderOnTop,
       showInlineBorder: showInlineBorder,
-      hideFullscreenToggle: widget.openFilePreviewAsFullscreen,
+      hideFullscreenToggle: widget.openFilePreviewAsFullscreen || widget.responsiveOverlay,
       onAskAgent: widget.onAskFileAgent == null ? null : () => widget.onAskFileAgent!(_previewFile),
       onShare: widget.onShareFile == null ? null : () => widget.onShareFile!(_previewFile),
       onDownload: widget.onDownloadFile == null ? null : () => widget.onDownloadFile!(_previewFile),
