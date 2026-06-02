@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/pb_colors.dart';
 import 'pb_svg_icon.dart';
 
-enum PbRailIconButtonVariant { outlineInverse, selected }
+enum PbRailIconButtonVariant { outlineInverse, selected, meetingActive }
 
 class PbIconButton extends StatefulWidget {
   const PbIconButton({
@@ -32,29 +32,35 @@ class _PbIconButtonState extends State<PbIconButton> {
   bool _pressed = false;
 
   bool get _isSelected => widget.variant == PbRailIconButtonVariant.selected;
-  bool get _isMenuOpen => widget.menuOpen && !_isSelected;
-  bool get _lifted => (_hovered || _isMenuOpen) && !_pressed && !_isSelected;
+  bool get _isMeetingActive => widget.variant == PbRailIconButtonVariant.meetingActive;
+  bool get _isFixed => _isSelected || _isMeetingActive;
+  bool get _isMenuOpen => widget.menuOpen && !_isFixed;
+  bool get _lifted => (_hovered || _isMenuOpen) && !_pressed && !_isFixed;
   bool get _interactive => widget.enabled && widget.onPressed != null;
 
   @override
   Widget build(BuildContext context) {
     final double size = widget.compact ? 44 : 48;
     final double radius = widget.compact ? 13 : 14;
-    final borderColor = _isSelected
+    final borderColor = _isMeetingActive
+        ? PbColors.meetControlAvailable
+        : _isSelected
         ? PbColors.surfaceActionPrimary
         : _pressed
         ? const Color.fromARGB(92, 248, 250, 252)
         : (_hovered || _isMenuOpen)
         ? const Color.fromARGB(87, 248, 250, 252)
         : const Color.fromARGB(61, 248, 250, 252);
-    final backgroundColor = _isSelected
+    final backgroundColor = _isMeetingActive
+        ? PbColors.meetControlAvailable
+        : _isSelected
         ? PbColors.surfaceRailSelected
         : _pressed
         ? const Color.fromARGB(26, 248, 250, 252)
         : (_hovered || _isMenuOpen)
         ? const Color.fromARGB(15, 248, 250, 252)
         : Colors.transparent;
-    final boxShadow = _isSelected
+    final boxShadow = _isFixed
         ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.22), blurRadius: 24, offset: Offset(0, 10))]
         : _pressed
         ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.18), blurRadius: 2, offset: Offset(0, 1))]

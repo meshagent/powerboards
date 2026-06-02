@@ -17,6 +17,7 @@ class PbSideRail extends StatelessWidget {
     this.destinationsEnabled = true,
     this.showMore = true,
     this.moreEnabled = true,
+    this.meetActive = false,
     this.selectedDestination = PbSideRailDestination.chat,
     this.onRecentPressed,
     this.onChatPressed,
@@ -37,6 +38,7 @@ class PbSideRail extends StatelessWidget {
   final bool destinationsEnabled;
   final bool showMore;
   final bool moreEnabled;
+  final bool meetActive;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
   final VoidCallback? onChatPressed;
@@ -74,6 +76,7 @@ class PbSideRail extends StatelessWidget {
                   destinationsEnabled: destinationsEnabled,
                   showMore: showMore,
                   moreEnabled: moreEnabled,
+                  meetActive: meetActive,
                   selectedDestination: selectedDestination,
                   onRecentPressed: onRecentPressed,
                   onChatPressed: onChatPressed,
@@ -94,6 +97,7 @@ class PbSideRail extends StatelessWidget {
                   destinationsEnabled: destinationsEnabled,
                   showMore: showMore,
                   moreEnabled: moreEnabled,
+                  meetActive: meetActive,
                   selectedDestination: selectedDestination,
                   onRecentPressed: onRecentPressed,
                   onChatPressed: onChatPressed,
@@ -117,6 +121,7 @@ class _DesktopRail extends StatelessWidget {
     required this.destinationsEnabled,
     required this.showMore,
     required this.moreEnabled,
+    required this.meetActive,
     required this.selectedDestination,
     required this.onRecentPressed,
     required this.onChatPressed,
@@ -133,6 +138,7 @@ class _DesktopRail extends StatelessWidget {
   final bool destinationsEnabled;
   final bool showMore;
   final bool moreEnabled;
+  final bool meetActive;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
   final VoidCallback? onChatPressed;
@@ -157,6 +163,7 @@ class _DesktopRail extends StatelessWidget {
           destinationsEnabled: destinationsEnabled,
           showMore: showMore,
           moreEnabled: moreEnabled,
+          meetActive: meetActive,
           selectedDestination: selectedDestination,
           onRecentPressed: onRecentPressed,
           onChatPressed: onChatPressed,
@@ -181,6 +188,7 @@ class _MobileRail extends StatelessWidget {
     required this.destinationsEnabled,
     required this.showMore,
     required this.moreEnabled,
+    required this.meetActive,
     required this.selectedDestination,
     required this.onRecentPressed,
     required this.onChatPressed,
@@ -201,6 +209,7 @@ class _MobileRail extends StatelessWidget {
   final bool destinationsEnabled;
   final bool showMore;
   final bool moreEnabled;
+  final bool meetActive;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
   final VoidCallback? onChatPressed;
@@ -232,6 +241,7 @@ class _MobileRail extends StatelessWidget {
             destinationsEnabled: destinationsEnabled,
             showMore: showMore,
             moreEnabled: moreEnabled,
+            meetActive: meetActive,
             selectedDestination: selectedDestination,
             onRecentPressed: onRecentPressed,
             onChatPressed: onChatPressed,
@@ -298,6 +308,7 @@ class _RailNav extends StatelessWidget {
     required this.destinationsEnabled,
     required this.showMore,
     required this.moreEnabled,
+    required this.meetActive,
     required this.selectedDestination,
     this.onRecentPressed,
     this.onChatPressed,
@@ -316,6 +327,7 @@ class _RailNav extends StatelessWidget {
   final bool destinationsEnabled;
   final bool showMore;
   final bool moreEnabled;
+  final bool meetActive;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
   final VoidCallback? onChatPressed;
@@ -359,9 +371,10 @@ class _RailNav extends StatelessWidget {
       if (showDestinations)
         _RailItemData(
           label: 'Meet',
-          iconAssetName: 'video',
+          iconAssetName: meetActive ? 'circle-dot' : 'video',
           destination: PbSideRailDestination.meet,
           active: destinationsEnabled && selectedDestination == PbSideRailDestination.meet,
+          attention: destinationsEnabled && meetActive,
           enabled: destinationsEnabled,
           onPressed: destinationsEnabled ? onMeetPressed : null,
         ),
@@ -382,6 +395,7 @@ class _RailNav extends StatelessWidget {
             label: item.label,
             iconAssetName: item.iconAssetName,
             active: item.active,
+            attention: item.attention,
             enabled: item.enabled,
             showLabel: showLabels,
             menuOpen: item.menuOpen,
@@ -427,6 +441,7 @@ class _RailItem extends StatelessWidget {
     required this.label,
     required this.iconAssetName,
     required this.active,
+    required this.attention,
     required this.enabled,
     required this.showLabel,
     this.menuOpen = false,
@@ -440,6 +455,7 @@ class _RailItem extends StatelessWidget {
   final String label;
   final String iconAssetName;
   final bool active;
+  final bool attention;
   final bool enabled;
   final bool showLabel;
   final bool menuOpen;
@@ -451,7 +467,7 @@ class _RailItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labelColor = active ? PbColors.textInverse : const Color(0xBDF8FAFC);
+    final labelColor = active || attention ? PbColors.textInverse : const Color(0xBDF8FAFC);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -463,7 +479,11 @@ class _RailItem extends StatelessWidget {
           onDismissRequested: onDismissRequested,
           child: PbIconButton(
             iconAssetName: iconAssetName,
-            variant: active ? PbRailIconButtonVariant.selected : PbRailIconButtonVariant.outlineInverse,
+            variant: attention
+                ? PbRailIconButtonVariant.meetingActive
+                : active
+                ? PbRailIconButtonVariant.selected
+                : PbRailIconButtonVariant.outlineInverse,
             enabled: enabled,
             menuOpen: menuOpen,
             onPressed: onPressed,
@@ -487,6 +507,7 @@ class _RailItemData {
     required this.iconAssetName,
     required this.active,
     required this.enabled,
+    this.attention = false,
     this.destination,
     this.menuOpen = false,
     this.onPressed,
@@ -496,6 +517,7 @@ class _RailItemData {
   final String iconAssetName;
   final bool active;
   final bool enabled;
+  final bool attention;
   final PbSideRailDestination? destination;
   final bool menuOpen;
   final VoidCallback? onPressed;

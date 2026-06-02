@@ -10,6 +10,10 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:meshagent/room_server_client.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/theme/theme.dart';
 
@@ -674,7 +678,9 @@ class VideoChatConnectionState extends State<VideoChatConnection> {
 }
 
 class CameraToggle extends StatefulWidget {
-  const CameraToggle({super.key});
+  const CameraToggle({super.key, this.desktopV1Style = false});
+
+  final bool desktopV1Style;
 
   @override
   State<StatefulWidget> createState() => _CameraToggleState();
@@ -835,14 +841,18 @@ class _CameraToggleState extends State<CameraToggle> {
       offColor: toggleColor,
       offForeground: toggleForeground,
       icon: showEnabled ? LucideIcons.video : LucideIcons.videoOff,
+      iconAssetName: showEnabled ? "video" : "video-off",
       loading: showPending,
       onPressed: local == null || _processing || showPending ? null : () => unawaited(_toggleCamera(local, !state)),
+      desktopV1Style: widget.desktopV1Style,
     );
   }
 }
 
 class MicToggle extends StatefulWidget {
-  const MicToggle({super.key});
+  const MicToggle({super.key, this.desktopV1Style = false});
+
+  final bool desktopV1Style;
 
   @override
   State<StatefulWidget> createState() => _MicToggleState();
@@ -1003,18 +1013,21 @@ class _MicToggleState extends State<MicToggle> {
       offColor: toggleColor,
       offForeground: toggleForeground,
       icon: showEnabled ? LucideIcons.mic : LucideIcons.micOff,
+      iconAssetName: showEnabled ? "mic" : "mic-off",
       loading: showPending,
       onPressed: local == null || _processing || showPending ? null : () => unawaited(_toggleMicrophone(local, !state)),
+      desktopV1Style: widget.desktopV1Style,
     );
   }
 }
 
 class ChangeSettings extends StatelessWidget {
-  const ChangeSettings({super.key, this.kind});
+  const ChangeSettings({super.key, this.kind, this.desktopV1Style = false});
 
   static const Duration _minimumPendingDuration = Duration(milliseconds: 350);
 
   final String? kind;
+  final bool desktopV1Style;
 
   Future<void> _runWithMinimumPendingDuration(Future<void> Function() action) async {
     final startedAt = DateTime.now();
@@ -1094,7 +1107,12 @@ class ChangeSettings extends StatelessWidget {
       selectedAudioOutputDeviceId: () => VideoRoomModel.maybeOf(context)?.room?.selectedAudioOutputDeviceId,
       cameraUnavailable: VideoRoomModel.maybeOf(context)?.pendingLocalMedia.cameraUnavailable ?? false,
       microphoneUnavailable: VideoRoomModel.maybeOf(context)?.pendingLocalMedia.microphoneUnavailable ?? false,
+      desktopV1Style: desktopV1Style,
       renderButton: (onPressed) {
+        if (desktopV1Style) {
+          return MeetV1ToolbarButton.secondary(label: "Device settings", iconAssetName: "settings", compact: true, onPressed: onPressed);
+        }
+
         return Tooltip(
           message: "Device settings",
           child: ShadIconButton.outline(
@@ -1104,6 +1122,158 @@ class ChangeSettings extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class MeetV1ToolbarButton extends StatefulWidget {
+  const MeetV1ToolbarButton({
+    super.key,
+    required this.label,
+    this.tooltip,
+    this.icon,
+    this.iconAssetName,
+    this.onPressed,
+    this.compact = true,
+    this.active = false,
+    this.loading = false,
+    this.backgroundColor,
+    this.foregroundColor,
+    this.borderColor,
+  }) : assert(icon != null || iconAssetName != null);
+
+  const MeetV1ToolbarButton.secondary({
+    super.key,
+    required this.label,
+    this.tooltip,
+    this.icon,
+    this.iconAssetName,
+    this.onPressed,
+    this.compact = true,
+    this.active = false,
+    this.loading = false,
+  }) : backgroundColor = null,
+       foregroundColor = null,
+       borderColor = null,
+       assert(icon != null || iconAssetName != null);
+
+  final String label;
+  final String? tooltip;
+  final IconData? icon;
+  final String? iconAssetName;
+  final VoidCallback? onPressed;
+  final bool compact;
+  final bool active;
+  final bool loading;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
+  final Color? borderColor;
+
+  @override
+  State<MeetV1ToolbarButton> createState() => _MeetV1ToolbarButtonState();
+}
+
+class _MeetV1ToolbarButtonState extends State<MeetV1ToolbarButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  bool get _enabled => widget.onPressed != null && !widget.loading;
+  bool get _secondary => widget.backgroundColor == null;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseBackground = widget.backgroundColor ?? (widget.active ? PbColors.surfaceStateSelected : PbColors.surfacePanel);
+    final baseForeground = widget.foregroundColor ?? PbColors.textPrimary;
+    final baseBorder = widget.borderColor ?? (widget.active ? PbColors.borderStateSelected : PbColors.borderSoft);
+    final effectiveBackground = _hovered && _enabled
+        ? Color.lerp(baseBackground, PbColors.customBrandInk, _secondary ? 0.03 : 0.06)!
+        : baseBackground;
+    final effectiveBorder = _hovered && _enabled ? Color.lerp(baseBorder, PbColors.customBrandInk, _secondary ? 0.08 : 0.12)! : baseBorder;
+    final lifted = _hovered && !_pressed && _enabled;
+    final child = widget.loading
+        ? SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(baseForeground)),
+          )
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (widget.iconAssetName != null)
+                PbSvgIcon(assetName: widget.iconAssetName!, size: 22, color: baseForeground)
+              else
+                Icon(widget.icon, size: 22, color: baseForeground),
+              if (!widget.compact) ...[
+                const SizedBox(width: 10),
+                Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: PowerboardsTypography.button.copyWith(color: baseForeground),
+                ),
+              ],
+            ],
+          );
+
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: Tooltip(
+        message: widget.tooltip ?? widget.label,
+        child: MouseRegion(
+          cursor: widget.loading
+              ? SystemMouseCursors.wait
+              : _enabled
+              ? SystemMouseCursors.click
+              : MouseCursor.defer,
+          onEnter: _enabled ? (_) => setState(() => _hovered = true) : null,
+          onExit: (_) {
+            setState(() {
+              _hovered = false;
+              _pressed = false;
+            });
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: _enabled ? (_) => setState(() => _pressed = true) : null,
+            onTapUp: _enabled
+                ? (_) {
+                    setState(() => _pressed = false);
+                    widget.onPressed?.call();
+                  }
+                : null,
+            onTapCancel: _enabled ? () => setState(() => _pressed = false) : null,
+            child: Transform.translate(
+              offset: Offset(0, lifted ? -1 : 0),
+              child: Opacity(
+                opacity: _enabled || widget.loading ? 1 : 0.46,
+                child: AnimatedContainer(
+                  duration: PbMotion.state,
+                  curve: Curves.easeOut,
+                  width: widget.compact ? 44 : null,
+                  height: 44,
+                  constraints: BoxConstraints(minWidth: widget.compact ? 44 : 44),
+                  padding: EdgeInsets.symmetric(horizontal: widget.compact ? 0 : 16),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: effectiveBackground,
+                    borderRadius: BorderRadius.circular(PbRadii.small),
+                    border: Border.all(color: effectiveBorder),
+                    boxShadow: _pressed
+                        ? PbShadows.statePressedInset
+                        : lifted
+                        ? PbShadows.stateHover
+                        : null,
+                  ),
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1123,6 +1293,8 @@ class RoomToolbarButton extends StatelessWidget {
     this.width,
     this.height,
     this.iconSize = 22,
+    this.desktopV1Style = false,
+    this.iconAssetName,
   });
 
   final void Function()? onPressed;
@@ -1135,6 +1307,8 @@ class RoomToolbarButton extends StatelessWidget {
   final double? width;
   final double? height;
   final double iconSize;
+  final bool desktopV1Style;
+  final String? iconAssetName;
 
   final bool on;
   final bool loading;
@@ -1142,6 +1316,19 @@ class RoomToolbarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final foregroundColor = on ? onForeground : offForeground;
+
+    if (desktopV1Style) {
+      return MeetV1ToolbarButton(
+        label: text,
+        icon: icon,
+        iconAssetName: iconAssetName,
+        onPressed: onPressed,
+        loading: loading,
+        backgroundColor: on ? onColor : offColor,
+        foregroundColor: foregroundColor,
+        borderColor: on ? onColor : offColor,
+      );
+    }
 
     return Tooltip(
       message: text,
@@ -1165,13 +1352,14 @@ class RoomToolbarButton extends StatelessWidget {
 }
 
 class ShareScreen extends StatefulWidget {
-  const ShareScreen({super.key, this.compact = false});
+  const ShareScreen({super.key, this.compact = false, this.desktopV1Style = false});
 
   bool canShareScreen() {
     return !lk.lkPlatformIsMobile();
   }
 
   final bool compact;
+  final bool desktopV1Style;
 
   @override
   State<ShareScreen> createState() => _ShareScreenState();
@@ -1247,6 +1435,17 @@ class _ShareScreenState extends State<ShareScreen> {
       listenable: room,
       builder: (context, _) {
         final on = _hasActiveScreenShare(room.localParticipant);
+        if (widget.desktopV1Style) {
+          return MeetV1ToolbarButton.secondary(
+            label: on ? "Stop sharing" : "Share screen",
+            tooltip: on ? "Stop sharing" : "Share screen",
+            iconAssetName: "monitor-up",
+            compact: widget.compact,
+            active: on,
+            onPressed: _processing ? null : () => _onPressed(context),
+          );
+        }
+
         return PresentButton(onPressed: _processing ? null : () => _onPressed(context), on: on, compact: widget.compact);
       },
     );

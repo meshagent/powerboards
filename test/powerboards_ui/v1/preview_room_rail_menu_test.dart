@@ -30,6 +30,7 @@ void main() {
                   showKeychain: true,
                   showConsoleToggle: false,
                   showShutdown: false,
+                  meetActive: false,
                   consoleLabel: 'Developer console',
                 );
                 return const SizedBox.shrink();

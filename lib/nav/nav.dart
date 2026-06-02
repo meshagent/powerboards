@@ -755,14 +755,12 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       return ValueListenableBuilder<bool>(
         valueListenable: previewFilePreviewFullscreenListenable,
         builder: (context, filePreviewFullscreen, _) {
-          if (filePreviewFullscreen) {
-            return _buildRoomContent(useStableGlobalKey: true);
-          }
+          final showPreviewChrome = !filePreviewFullscreen;
 
           return Row(
             key: const ValueKey('desktop-ui-preview-v1'),
             children: [
-              if (showPreviewRail)
+              if (showPreviewChrome && showPreviewRail)
                 SizedBox(
                   width: railWidth,
                   child: ValueListenableBuilder<PreviewRoomRailMenuBridge?>(
@@ -786,6 +784,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                           destinationsEnabled: destinationsEnabled,
                           showMore: showMore,
                           moreEnabled: moreEnabled,
+                          meetActive: false,
                           selectedDestination: switch (previewPane) {
                             'files' => PbSideRailDestination.files,
                             'meeting' => PbSideRailDestination.meet,
@@ -820,6 +819,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                             destinationsEnabled: destinationsEnabled,
                             showMore: showMore,
                             moreEnabled: moreEnabled,
+                            meetActive: bridge.meetActive,
                             selectedDestination: switch (previewPane) {
                               'files' => PbSideRailDestination.files,
                               'meeting' => PbSideRailDestination.meet,
@@ -843,49 +843,50 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                   children: [
                     Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.only(top: headerHeight),
+                        padding: EdgeInsets.only(top: showPreviewChrome ? headerHeight : 0),
                         child: desktopBody(context, userRole, balanceLow, canCreateRooms),
                       ),
                     ),
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: DesktopPreviewNavHeader(
-                        key: ValueKey('desktop-preview-header-${widget.projectId}-${widget.selectedRoom}'),
-                        projects: projects.state.value ?? const <Project>[],
-                        rooms: roomItems,
-                        projectId: widget.projectId,
-                        selectedRoom: widget.selectedRoom,
-                        canCreateRooms: canCreateRooms,
-                        avatarInitials: avatarInitials,
-                        avatarEmail: avatarEmail,
-                        onCreateProject: onCreateProject,
-                        onSelectProject: (project) {
-                          localStorage.setItem("lastProjectId", project.id);
-                          context.go("/p/${fromUUID(project.id)}");
-                        },
-                        onSelectRoom: (room) {
-                          final projectId = widget.projectId;
-                          if (projectId == null) {
-                            return;
-                          }
+                    if (showPreviewChrome)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: DesktopPreviewNavHeader(
+                          key: ValueKey('desktop-preview-header-${widget.projectId}-${widget.selectedRoom}'),
+                          projects: projects.state.value ?? const <Project>[],
+                          rooms: roomItems,
+                          projectId: widget.projectId,
+                          selectedRoom: widget.selectedRoom,
+                          canCreateRooms: canCreateRooms,
+                          avatarInitials: avatarInitials,
+                          avatarEmail: avatarEmail,
+                          onCreateProject: onCreateProject,
+                          onSelectProject: (project) {
+                            localStorage.setItem("lastProjectId", project.id);
+                            context.go("/p/${fromUUID(project.id)}");
+                          },
+                          onSelectRoom: (room) {
+                            final projectId = widget.projectId;
+                            if (projectId == null) {
+                              return;
+                            }
 
-                          context.go("/p/${fromUUID(projectId)}/r/${room.name}");
-                        },
-                        onCreateRoom: widget.projectId == null || !canCreateRooms
-                            ? null
-                            : () => _createRoomFromPreviewHeader(widget.projectId!),
-                        onManageAccountPressed: kIsWeb && userRole == ProjectRole.admin ? _goToAccountsFromPreviewHeader : null,
-                        onSharePressed: widget.projectId == null || widget.selectedRoom == null
-                            ? null
-                            : () {
-                                _openInviteFromPreviewHeader();
-                              },
-                        onPreviewTogglePressed: _toggleUiModeFromPreviewHeader,
-                        onLogoutPressed: _signOutFromPreviewHeader,
+                            context.go("/p/${fromUUID(projectId)}/r/${room.name}");
+                          },
+                          onCreateRoom: widget.projectId == null || !canCreateRooms
+                              ? null
+                              : () => _createRoomFromPreviewHeader(widget.projectId!),
+                          onManageAccountPressed: kIsWeb && userRole == ProjectRole.admin ? _goToAccountsFromPreviewHeader : null,
+                          onSharePressed: widget.projectId == null || widget.selectedRoom == null
+                              ? null
+                              : () {
+                                  _openInviteFromPreviewHeader();
+                                },
+                          onPreviewTogglePressed: _toggleUiModeFromPreviewHeader,
+                          onLogoutPressed: _signOutFromPreviewHeader,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

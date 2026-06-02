@@ -93,6 +93,7 @@ import 'package:url_launcher/url_launcher.dart';
 const defaultDebugSize = 0.4;
 final meetingHeaderTitleStyle = powerboardsSectionTitleStyle();
 const double _meetingToolbarCompactThreshold = 620;
+const double _desktopPreviewMeetingToolbarCompactThreshold = 720;
 const double _meetingToolbarPreferredExpandedWidth = 640;
 const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
 const double _mobileRoomHeaderGap = 8;
@@ -1758,6 +1759,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   bool _desktopPreviewMeetTranscriptPreviewOpen = false;
   bool _desktopPreviewMeetTranscriptPreviewFullscreen = false;
   PbAttachmentListItemData? _desktopPreviewMeetTranscriptPreviewFile;
+  bool _desktopPreviewMeetingFullscreen = false;
   bool _desktopPreviewAgentsExpanded = true;
   bool _didNormalizeInitialDesktopPane = false;
   _MobileMeetingOrigin? _mobileMeetingOrigin;
@@ -2493,6 +2495,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final usesMobileRoomLayout = _usesMobileRoomLayout(context);
     final meetingSessionActive = _isMeetingSessionActive(context);
     final showExpandSplitButton = !usesMobileRoomLayout && meetingSessionActive && _meetingSplitViewController.collapsed;
+    final useDesktopV1ActiveControls = !usesMobileRoomLayout && meetingSessionActive && powerboardsUsesDesktopUiPreview(context);
 
     return [
       if (showExpandSplitButton)
@@ -2507,10 +2510,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             },
           ),
         ),
-      HangupButton(onPressed: _endMeeting),
-      room.MicToggle(),
-      room.CameraToggle(),
-      room.ChangeSettings(),
+      HangupButton(onPressed: _endMeeting, desktopV1Style: useDesktopV1ActiveControls),
+      room.MicToggle(desktopV1Style: useDesktopV1ActiveControls),
+      room.CameraToggle(desktopV1Style: useDesktopV1ActiveControls),
+      room.ChangeSettings(desktopV1Style: useDesktopV1ActiveControls),
     ];
   }
 
@@ -2522,12 +2525,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     final usesMobileRoomLayout = _usesMobileRoomLayout(context);
     final isLandscapePhone = _isLandscapePhoneViewport(context);
+    final useDesktopV1ActiveControls =
+        !usesMobileRoomLayout && _isMeetingSessionActive(context) && powerboardsUsesDesktopUiPreview(context);
     final compactTranscriptionControl = compact && !isLandscapePhone;
 
     return [
       ...primaryControls,
-      if (!usesMobileRoomLayout) room.ShareScreen(compact: compact),
-      MeetingToolkits(room: widget.room, compact: compactTranscriptionControl),
+      if (!usesMobileRoomLayout) room.ShareScreen(compact: compact, desktopV1Style: useDesktopV1ActiveControls),
+      MeetingToolkits(room: widget.room, compact: compactTranscriptionControl, desktopV1Style: useDesktopV1ActiveControls),
     ];
   }
 
@@ -2756,10 +2761,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
-  void _syncPreviewRoomRailMenuBridge(BuildContext context) {
+  void _syncPreviewRoomRailMenuBridge(BuildContext context, {bool? meetingSessionActive}) {
     final shouldExpose = !ResponsiveBreakpoints.of(context).isMobile && powerboardsUsesDesktopUiPreview(context);
     if (!shouldExpose) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
         if (identical(previewRoomRailMenuBridgeListenable.value, _previewRoomRailMenuBridge)) {
           exposePreviewRoomRailMenuBridge(null);
         }
@@ -2767,38 +2775,43 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    _previewRoomRailMenuBridge.configure(
-      showDestinations: true,
-      showMore: true,
-      showRename: true,
-      showPermissions: true,
-      showManageAgents: isOwner.state.value == true,
-      showDeleteRoom: true,
-      showKeychain: true,
-      showConsoleToggle: canViewDeveloperLogs.state.value == true,
-      showShutdown: isOwner.state.value == true,
-      consoleLabel: 'Developer console',
-      onRenamePressed: () => unawaited(_renameCurrentRoomFromPreviewRail()),
-      onPermissionsPressed: () => unawaited(_openCurrentRoomPermissionsFromPreviewRail()),
-      onManageAgentsPressed: () => unawaited(showManageAgents()),
-      onDeleteRoomPressed: () => unawaited(_deleteCurrentRoomFromPreviewRail()),
-      onKeychainPressed: _openRoomKeychainFromPreviewRail,
-      onToggleConsolePressed: () {
-        if (controller.isDebugShown) {
-          controller.hideDebug();
-        } else {
-          controller.showDebug();
-        }
-        _syncPreviewRoomRailMenuBridge(context);
-      },
-      onShutdownPressed: () => unawaited(_shutdownRoomFromPreviewRail()),
-    );
+    final resolvedMeetActive = meetingSessionActive ?? _isMeetingSessionActive(context);
+    final canShowManageAgents = isOwner.state.value == true;
+    final showConsoleToggle = canViewDeveloperLogs.state.value == true;
+    final showShutdown = isOwner.state.value == true;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
 
+      _previewRoomRailMenuBridge.configure(
+        showDestinations: true,
+        showMore: true,
+        showRename: true,
+        showPermissions: true,
+        showManageAgents: canShowManageAgents,
+        showDeleteRoom: true,
+        showKeychain: true,
+        showConsoleToggle: showConsoleToggle,
+        showShutdown: showShutdown,
+        meetActive: resolvedMeetActive,
+        consoleLabel: 'Developer console',
+        onRenamePressed: () => unawaited(_renameCurrentRoomFromPreviewRail()),
+        onPermissionsPressed: () => unawaited(_openCurrentRoomPermissionsFromPreviewRail()),
+        onManageAgentsPressed: () => unawaited(showManageAgents()),
+        onDeleteRoomPressed: () => unawaited(_deleteCurrentRoomFromPreviewRail()),
+        onKeychainPressed: _openRoomKeychainFromPreviewRail,
+        onToggleConsolePressed: () {
+          if (controller.isDebugShown) {
+            controller.hideDebug();
+          } else {
+            controller.showDebug();
+          }
+          _syncPreviewRoomRailMenuBridge(context, meetingSessionActive: resolvedMeetActive);
+        },
+        onShutdownPressed: () => unawaited(_shutdownRoomFromPreviewRail()),
+      );
       exposePreviewRoomRailMenuBridge(_previewRoomRailMenuBridge);
     });
   }
@@ -3942,8 +3955,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     setPreviewFilePreviewFullscreen(fullscreen);
   }
 
-  Widget? _buildDesktopPreviewMeetingControls(BuildContext context) {
-    final controls = _meetingToolbarControls(context, compact: true);
+  void _setDesktopPreviewMeetingFullscreen(bool fullscreen) {
+    if (_desktopPreviewMeetingFullscreen == fullscreen) {
+      return;
+    }
+
+    setState(() => _desktopPreviewMeetingFullscreen = fullscreen);
+    setPreviewFilePreviewFullscreen(fullscreen);
+  }
+
+  Widget? _buildDesktopPreviewMeetingControls(BuildContext context, {required double availableWidth}) {
+    final compact = availableWidth < _desktopPreviewMeetingToolbarCompactThreshold;
+    final controls = _meetingToolbarControls(context, compact: compact);
     if (controls.isEmpty) {
       return null;
     }
@@ -3966,9 +3989,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           final transcripts = paneData?.transcripts ?? const <PbAttachmentListItemData>[];
           final transcriptPreviewFile = _desktopPreviewMeetTranscriptPreviewFile;
           final transcriptSidePaneAvailable =
-              roomPanelContentAvailable || paneData?.roomHasStoredFiles == true || transcripts.isNotEmpty || transcriptPreviewFile != null;
+              !meetingSessionActive &&
+              (roomPanelContentAvailable ||
+                  paneData?.roomHasStoredFiles == true ||
+                  transcripts.isNotEmpty ||
+                  transcriptPreviewFile != null);
           final transcriptPreviewOpen = transcriptSidePaneAvailable && _desktopPreviewMeetTranscriptPreviewOpen;
           final transcriptPreviewFullscreen = transcriptSidePaneAvailable && _desktopPreviewMeetTranscriptPreviewFullscreen;
+          final meetingFullscreen = meetingSessionActive && _desktopPreviewMeetingFullscreen;
 
           if (!transcriptSidePaneAvailable &&
               (_desktopPreviewMeetTranscriptPreviewOpen ||
@@ -3993,6 +4021,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             });
           }
 
+          if (!meetingSessionActive && _desktopPreviewMeetingFullscreen) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) {
+                return;
+              }
+
+              setState(() => _desktopPreviewMeetingFullscreen = false);
+              setPreviewFilePreviewFullscreen(false);
+            });
+          }
+
           return LayoutBuilder(
             builder: (context, constraints) {
               final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !transcriptPreviewFullscreen;
@@ -4004,6 +4043,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   PbMeetHeader(
                     roomPanelExpanded: roomPanelExpanded,
                     showRoomPanelControls: transcriptSidePaneAvailable,
+                    meetingFullscreen: meetingFullscreen,
+                    onMeetingFullscreenToggle: meetingSessionActive ? () => _setDesktopPreviewMeetingFullscreen(!meetingFullscreen) : null,
                     onRoomPanelToggle: () {
                       if (!transcriptSidePaneAvailable) {
                         return;
@@ -4030,7 +4071,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                         }
                       });
                     },
-                    controls: meetingSessionActive ? _buildDesktopPreviewMeetingControls(context) : null,
+                    controls: meetingSessionActive
+                        ? _buildDesktopPreviewMeetingControls(context, availableWidth: constraints.maxWidth)
+                        : null,
                   ),
                   Expanded(
                     child: MeetingView(
@@ -4043,6 +4086,23 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   ),
                 ],
               );
+
+              if (meetingSessionActive) {
+                if (_desktopPreviewRoomPanelOverlayOpen || _desktopPreviewRoomPanelOverlayController.isShowing) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) {
+                      return;
+                    }
+
+                    if (_desktopPreviewRoomPanelOverlayController.isShowing) {
+                      _desktopPreviewRoomPanelOverlayController.hide();
+                    }
+                    setState(() => _desktopPreviewRoomPanelOverlayOpen = false);
+                  });
+                }
+
+                return mainPanel;
+              }
 
               PbMeetTranscriptPanel buildTranscriptPanel({bool responsiveOverlay = false, bool resizing = false}) {
                 return PbMeetTranscriptPanel(
@@ -4768,6 +4828,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     videoChatKey.currentState?.hangup();
     meetingViewController.resetToLobby();
     navController.showNav();
+    _setDesktopPreviewMeetingFullscreen(false);
 
     if (isMobile) {
       _closeMobileMeetingLobby(context);
@@ -4784,6 +4845,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     videoChatKey.currentState?.hangup();
     meetingViewController.resetToLobby();
     navController.showNav();
+    _setDesktopPreviewMeetingFullscreen(false);
     _meetingSplitViewController.expand();
     _mobileMeetingOrigin = null;
     if (isMobile) {
@@ -5759,6 +5821,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             }
                             final roomCreateChatContext = _resolveMobileChatHeaderContext(supported, selected);
                             final meetingSessionActive = _isMeetingSessionActive(context);
+                            _syncPreviewRoomRailMenuBridge(context, meetingSessionActive: meetingSessionActive);
                             final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;
                             final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
                             final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);

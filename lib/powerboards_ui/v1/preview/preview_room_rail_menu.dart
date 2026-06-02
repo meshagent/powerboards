@@ -11,6 +11,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
   bool showKeychain = true;
   bool showConsoleToggle = false;
   bool showShutdown = false;
+  bool meetActive = false;
   String consoleLabel = 'Developer console';
 
   VoidCallback? onRenamePressed;
@@ -32,6 +33,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
     required bool showKeychain,
     required bool showConsoleToggle,
     required bool showShutdown,
+    required bool meetActive,
     required String consoleLabel,
     VoidCallback? onRenamePressed,
     VoidCallback? onPermissionsPressed,
@@ -59,6 +61,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
         this.showKeychain != showKeychain ||
         this.showConsoleToggle != showConsoleToggle ||
         this.showShutdown != showShutdown ||
+        this.meetActive != meetActive ||
         this.consoleLabel != consoleLabel;
 
     this.showDestinations = showDestinations;
@@ -70,6 +73,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
     this.showKeychain = showKeychain;
     this.showConsoleToggle = showConsoleToggle;
     this.showShutdown = showShutdown;
+    this.meetActive = meetActive;
     this.consoleLabel = consoleLabel;
 
     if (changed) {
@@ -78,7 +82,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
   }
 
   void _notifyListenersSafely() {
-    if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.persistentCallbacks) {
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
       notifyListeners();
       return;
     }
@@ -91,6 +95,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
       _notificationScheduled = false;
       notifyListeners();
     });
+    SchedulerBinding.instance.scheduleFrame();
   }
 }
 
@@ -107,6 +112,18 @@ void exposePreviewRoomRailMenuBridge(PreviewRoomRailMenuBridge? bridge) {
 }
 
 void setPreviewFilePreviewFullscreen(bool fullscreen) {
+  if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _setPreviewFilePreviewFullscreenNow(fullscreen);
+    });
+    SchedulerBinding.instance.scheduleFrame();
+    return;
+  }
+
+  _setPreviewFilePreviewFullscreenNow(fullscreen);
+}
+
+void _setPreviewFilePreviewFullscreenNow(bool fullscreen) {
   if (previewFilePreviewFullscreenListenable.value == fullscreen) {
     return;
   }
