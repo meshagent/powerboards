@@ -40,6 +40,7 @@ import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dar
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_side_pane.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_upload_progress_popover.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_files_page.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
@@ -77,6 +78,8 @@ String _displayFileName(String fileName) {
 
 const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
 const int _v1RecentlyOpenedFilesLimit = 7;
+const Duration _v1DeleteProcessingStep = Duration(milliseconds: 650);
+const Offset _uploadProgressPopoverOffset = Offset(20, -20);
 
 const Map<String, String> _powerboardsV1FileTypeKeysByExtension = {
   'thread': 'thread',
@@ -2109,13 +2112,42 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     final isFolder = uploads.length == 1 && uploads.first.upload.filename == placeholderFileName;
+    final failed = uploads.where((item) => item.failed).length;
+    final completed = uploads.where((item) => item.completed).length;
     if (isFolder) {
+      if (failed > 0) {
+        return "Folder failed";
+      }
+
       return isCompleted ? "Folder created" : "Creating folder";
     }
 
     final count = uploads.length;
+    if (isCompleted && failed > 0) {
+      if (completed == 0) {
+        return "Upload failed";
+      }
+
+      return "Uploaded $completed, $failed failed";
+    }
+
     final verb = isCompleted ? "Uploaded" : "Uploading";
     return "$verb $count file${count > 1 ? 's' : ''}";
+  }
+
+  String _uploadDisplayName(UploadProgressItem item) {
+    final upload = item.upload;
+    return upload.filename == placeholderFileName ? parentPath(upload.path) : upload.path.split('/').last;
+  }
+
+  Widget _v1UploadProgressPopover(BuildContext context) {
+    return PbUploadProgressPopover(
+      uploadsListenable: uploadNotifications.uploadsVN,
+      isCompletedListenable: uploadNotifications.isCompletedVN,
+      onClose: uploadNotifications.hide,
+      titleBuilder: _uploadTitle,
+      nameBuilder: _uploadDisplayName,
+    );
   }
 
   Widget _popover(BuildContext context) {
@@ -2213,12 +2245,14 @@ class _FileManagerViewState extends State<FileManagerView> {
       child: ShadPopover(
         controller: popoverController,
         padding: EdgeInsets.zero,
+        decoration: ShadDecoration.none,
+        shadows: const [],
         anchor: ShadAnchor(
-          childAlignment: Alignment.bottomRight,
-          overlayAlignment: Alignment.bottomRight,
-          offset: const Offset(-20.0, -20.0),
+          childAlignment: Alignment.bottomLeft,
+          overlayAlignment: Alignment.bottomLeft,
+          offset: _uploadProgressPopoverOffset,
         ),
-        popover: _popover,
+        popover: _v1UploadProgressPopover,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_v1FilePreviewFullscreen;
@@ -4255,78 +4289,6 @@ class _FileActionsMenuButtonState extends State<_FileActionsMenuButton> {
         ),
       ),
     );
-  }
-}
-
-class UploadProgressItem {
-  const UploadProgressItem({required this.upload, required this.totalBytes});
-
-  final MeshagentFileUpload upload;
-  final int totalBytes;
-}
-
-class UploadProgressNotifications {
-  UploadProgressNotifications({required this.popoverController});
-
-  final ShadPopoverController popoverController;
-
-  final _uploads = Signal<List<UploadProgressItem>>([]);
-  final _isCompleted = Signal<bool>(false);
-  final _activeUploads = <Future<void>>[];
-
-  late final isCompletedVN = _isCompleted.toValueNotifier();
-  late final uploadsVN = _uploads.toValueNotifier();
-
-  bool _running = false;
-  bool _resetUploads = true;
-  Timer? _autoHideTimer;
-
-  void addUpload(MeshagentFileUpload upload, int totalBytes) {
-    _autoHideTimer?.cancel();
-    _isCompleted.value = false;
-
-    final item = UploadProgressItem(upload: upload, totalBytes: totalBytes);
-    _uploads.value = _resetUploads ? [item] : [..._uploads.value, item];
-    _resetUploads = false;
-    _activeUploads.add(upload.done);
-
-    _ensureRunning();
-  }
-
-  void dispose() {
-    _autoHideTimer?.cancel();
-    _uploads.dispose();
-    _isCompleted.dispose();
-  }
-
-  void _ensureRunning() {
-    if (_running) return;
-
-    _running = true;
-    _run();
-  }
-
-  Future<void> _run() async {
-    if (!popoverController.isOpen) {
-      popoverController.show();
-    }
-
-    try {
-      while (_activeUploads.isNotEmpty) {
-        await _activeUploads.removeAt(0);
-      }
-      _resetUploads = true;
-      _isCompleted.value = true;
-      _autoHideTimer?.cancel();
-      _autoHideTimer = Timer(Duration(seconds: 3), hide);
-    } finally {
-      _running = false;
-    }
-  }
-
-  void hide() {
-    _autoHideTimer?.cancel();
-    popoverController.hide();
   }
 }
 
