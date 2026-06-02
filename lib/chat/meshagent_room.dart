@@ -62,6 +62,8 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_header.dart';
@@ -3545,6 +3547,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final currentThreadLabel = selectedThreadPath == null
         ? "New thread"
         : (_selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
+    final chatDropOverlayBuilder = !isMobile && powerboardsUsesDesktopUiPreview(context)
+        ? (BuildContext context, bool dragging) => PbFilesDropTargetOverlayLayer(
+            active: dragging,
+            top: 0,
+            padding: PbFilesPanelPadding(left: 18, right: 16),
+            title: 'Drop files to attach',
+            bottom: 24,
+          )
+        : null;
     final chatView = Padding(
       padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
       child: MeshagentThreadView(
@@ -3588,6 +3599,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         onThreadAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel)
             : null,
+        fileDropOverlayBuilder: chatDropOverlayBuilder,
         projectId: widget.projectId,
       ),
     );

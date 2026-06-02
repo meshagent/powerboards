@@ -92,18 +92,8 @@ class _PbFilesDropTargetLayerState extends State<PbFilesDropTargetLayer> {
             fit: StackFit.expand,
             children: [
               widget.child,
-              Positioned(
-                top: widget.dropTargetTop,
-                right: 0,
-                bottom: 0,
-                left: 0,
-                child: IgnorePointer(
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 160),
-                    opacity: dropTargetActive ? 1 : 0,
-                    child: _FilesDropTargetOverlay(padding: widget.padding),
-                  ),
-                ),
+              Positioned.fill(
+                child: PbFilesDropTargetOverlayLayer(active: dropTargetActive, top: widget.dropTargetTop, padding: widget.padding),
               ),
             ],
           ),
@@ -113,15 +103,48 @@ class _PbFilesDropTargetLayerState extends State<PbFilesDropTargetLayer> {
   }
 }
 
-class _FilesDropTargetOverlay extends StatelessWidget {
-  const _FilesDropTargetOverlay({required this.padding});
+class PbFilesDropTargetOverlayLayer extends StatelessWidget {
+  const PbFilesDropTargetOverlayLayer({
+    super.key,
+    required this.active,
+    required this.top,
+    required this.padding,
+    this.title = 'Drop files here',
+    this.bottom = 30,
+  });
 
+  final bool active;
+  final double top;
   final PbFilesPanelPadding padding;
+  final String title;
+  final double bottom;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(padding.left, 0, padding.right, 30),
+      padding: EdgeInsets.only(top: top),
+      child: IgnorePointer(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 160),
+          opacity: active ? 1 : 0,
+          child: PbFilesDropTargetOverlay(padding: padding, title: title, bottom: bottom),
+        ),
+      ),
+    );
+  }
+}
+
+class PbFilesDropTargetOverlay extends StatelessWidget {
+  const PbFilesDropTargetOverlay({super.key, required this.padding, this.title = 'Drop files here', this.bottom = 30});
+
+  final PbFilesPanelPadding padding;
+  final String title;
+  final double bottom;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(padding.left, 0, padding.right, bottom),
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(PbRadii.medium),
@@ -150,7 +173,7 @@ class _FilesDropTargetOverlay extends StatelessWidget {
                       child: const PbSvgIcon(assetName: 'arrow-down-to-line', size: 22, color: PbColors.customRailSelectedSurface),
                     ),
                     const SizedBox(width: 12),
-                    Text('Drop files here', style: PowerboardsTypography.h2.copyWith(color: PbColors.textPrimary)),
+                    Text(title, style: PowerboardsTypography.h2.copyWith(color: PbColors.textPrimary)),
                   ],
                 ),
               ),

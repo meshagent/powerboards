@@ -98,6 +98,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.onComposerAttachmentSeedApplied,
     this.onComposerAttachmentOpen,
     this.onThreadAttachmentOpen,
+    this.fileDropOverlayBuilder,
   });
 
   final String projectId;
@@ -130,6 +131,7 @@ class MeshagentThreadView extends StatefulWidget {
   final VoidCallback? onComposerAttachmentSeedApplied;
   final ValueChanged<String>? onComposerAttachmentOpen;
   final ValueChanged<String>? onThreadAttachmentOpen;
+  final FileDropOverlayBuilder? fileDropOverlayBuilder;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -548,6 +550,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         onMessageSent: _onMessageSent,
         fileInThreadBuilder: _fileInThreadBuilder,
         openFile: _openThreadAttachment,
+        fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
         chatInputBoxBuilder: (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox),
         toolsBuilder: (context, controller, snapshot) =>
             buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
