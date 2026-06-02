@@ -20,6 +20,7 @@ import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
@@ -130,36 +131,41 @@ class _MeetingViewState extends State<MeetingView> {
           return _voiceSessionMeetingBlockedState();
         }
 
+        final usesDesktopUiPreview = !ResponsiveBreakpoints.of(context).isMobile && powerboardsUsesDesktopUiPreview(context);
+        final devicePreview = DevicePreview(
+          desktopV1Style: usesDesktopUiPreview,
+          onJoin: ({required enableVideo, required enableAudio, required videoUnavailable, required audioUnavailable}) {
+            final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
+            final navController = Controller.ofType<NavController>(context);
+
+            if (videoChatConnection != null) {
+              videoChatConnection.setRoomFromDoc(
+                "",
+                widget.room,
+                "",
+                video: enableVideo,
+                audio: enableAudio,
+                videoUnavailable: videoUnavailable,
+                audioUnavailable: audioUnavailable,
+                agentID: null,
+              );
+            }
+
+            meetingViewController.enterMeeting();
+            navController.hideNav();
+          },
+          onCancel: widget.onCancel,
+        );
+
+        if (usesDesktopUiPreview) {
+          return devicePreview;
+        }
+
         return Align(
           alignment: Alignment.center,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _desktopLobbyMaxWidth),
-            child: Padding(
-              padding: const .symmetric(horizontal: 20.0),
-              child: DevicePreview(
-                onJoin: ({required enableVideo, required enableAudio, required videoUnavailable, required audioUnavailable}) {
-                  final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
-                  final navController = Controller.ofType<NavController>(context);
-
-                  if (videoChatConnection != null) {
-                    videoChatConnection.setRoomFromDoc(
-                      "",
-                      widget.room,
-                      "",
-                      video: enableVideo,
-                      audio: enableAudio,
-                      videoUnavailable: videoUnavailable,
-                      audioUnavailable: audioUnavailable,
-                      agentID: null,
-                    );
-                  }
-
-                  meetingViewController.enterMeeting();
-                  navController.hideNav();
-                },
-                onCancel: widget.onCancel,
-              ),
-            ),
+            child: Padding(padding: const .symmetric(horizontal: 20.0), child: devicePreview),
           ),
         );
       } else if (meetingViewController.state == MeetingViewState.joined) {

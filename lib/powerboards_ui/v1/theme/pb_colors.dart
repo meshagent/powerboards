@@ -41,4 +41,7 @@ abstract final class PbColors {
   static const customStateSelectedSurface = surfaceStateSelected;
   static const customRailSelectedSurface = surfaceRailSelected;
   static const customMenuOpenSurface = Color(0xFFF5F8FF);
+  static const meetCameraSurface = Color(0xFF222222);
+  static const meetControlAvailable = Color(0xFF0DAE4E);
+  static const meetControlUnavailable = Color(0xFFE5484D);
 }

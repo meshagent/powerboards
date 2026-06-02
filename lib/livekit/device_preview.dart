@@ -10,13 +10,22 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/device_manager.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
 
 import 'room.dart';
 
+const double _v1MeetLobbyHorizontalPaddingLeft = 30;
+const double _v1MeetLobbyHorizontalPaddingRight = 28;
+const double _v1MeetLobbyMinimumVerticalInset = 24;
+const double _v1MeetPreviewCompactBreakpoint = 720;
+
 class DevicePreview extends StatelessWidget {
-  const DevicePreview({super.key, this.onJoin, this.onCancel});
+  const DevicePreview({super.key, this.onJoin, this.onCancel, this.desktopV1Style = false});
 
   final void Function({
     required bool enableVideo,
@@ -26,17 +35,18 @@ class DevicePreview extends StatelessWidget {
   })?
   onJoin;
   final VoidCallback? onCancel;
+  final bool desktopV1Style;
 
   @override
   Widget build(BuildContext context) {
     return DeviceManager(
-      child: _DeviceSettings(onJoin: onJoin, onCancel: onCancel),
+      child: _DeviceSettings(onJoin: onJoin, onCancel: onCancel, desktopV1Style: desktopV1Style),
     );
   }
 }
 
 class _DeviceSettings extends StatefulWidget {
-  const _DeviceSettings({this.onJoin, this.onCancel});
+  const _DeviceSettings({this.onJoin, this.onCancel, this.desktopV1Style = false});
 
   final void Function({
     required bool enableVideo,
@@ -46,6 +56,7 @@ class _DeviceSettings extends StatefulWidget {
   })?
   onJoin;
   final VoidCallback? onCancel;
+  final bool desktopV1Style;
 
   @override
   State createState() => _DeviceSettingsState();
@@ -455,6 +466,21 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           );
         }
 
+        Widget buildV1DeviceSettingsButton() {
+          return ChangeDeviceButton(
+            onChangeVideoInput: _selectVideoInput,
+            onChangeAudioInput: _selectAudioInput,
+            onChangeAudioOutput: _selectAudioOutput,
+            selectedVideoInputDeviceId: () => _videoDeviceId,
+            selectedAudioInputDeviceId: () => _audioDeviceId,
+            selectedAudioOutputDeviceId: () => _audioOutputDeviceId ?? Hardware.instance.selectedAudioOutput?.deviceId,
+            cameraUnavailable: _videoUnavailable,
+            microphoneUnavailable: _audioUnavailable,
+            presentation: ChangeDeviceButtonPresentation.dialog,
+            renderButton: (onPressed) => _V1MeetDeviceSettingsButton(onPressed: onPressed),
+          );
+        }
+
         final availableToggleColor = ShadTheme.of(context).colorScheme.greenCustom;
         final availableToggleForeground = ShadTheme.of(context).colorScheme.greenCustomForeground;
         final unavailableToggleColor = ShadTheme.of(context).colorScheme.destructive;
@@ -523,6 +549,55 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           ),
         ];
 
+        final v1PreviewControls = <Widget>[
+          buildV1DeviceSettingsButton(),
+          _V1MeetControlButton(
+            label: audioTooltipText,
+            iconAssetName: (audioOn || audioPending) ? 'mic' : 'mic-off',
+            available: microphoneAvailable,
+            loading: audioPending,
+            onPressed: !audioPending
+                ? () {
+                    if (!deviceManager.canTurnOnMicrophone) {
+                      _showUnavailableMicrophoneToast();
+                      return;
+                    }
+                    audioOn ? _disableAudio() : _enableAudio(showErrors: true);
+                  }
+                : null,
+          ),
+          _V1MeetControlButton(
+            label: cameraTooltipText,
+            iconAssetName: (videoOn || videoPending) ? 'video' : 'video-off',
+            available: cameraAvailable,
+            loading: videoPending,
+            onPressed: !videoPending
+                ? () {
+                    if (!deviceManager.canTurnOnCamera) {
+                      _showUnavailableCameraToast();
+                      return;
+                    }
+                    videoOn ? _disableVideo() : _enableVideo(showErrors: true);
+                  }
+                : null,
+          ),
+          if (widget.onJoin != null)
+            _V1MeetNowButton(
+              loading: meetNowPending,
+              available: microphoneAvailable,
+              onPressed: meetNowPending
+                  ? null
+                  : () {
+                      widget.onJoin?.call(
+                        enableVideo: videoOn,
+                        enableAudio: audioOn,
+                        videoUnavailable: _videoUnavailable || !cameraAvailable,
+                        audioUnavailable: _audioUnavailable || !microphoneAvailable,
+                      );
+                    },
+            ),
+        ];
+
         final previewSectionControls = <Widget>[
           ...previewControls,
           if (useMobileLobbyLayout && !isLandscapePhone) buildDeviceSettingsButton(showLabel: false),
@@ -559,6 +634,101 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
               ),
           ],
         );
+
+        Widget buildDesktopV1PreviewSection(BoxConstraints previewConstraints, {required bool compact}) {
+          final availableWidth = previewConstraints.maxWidth;
+          final availableHeight = previewConstraints.hasBoundedHeight ? previewConstraints.maxHeight : double.infinity;
+          final inset = compact ? 32.0 : 40.0;
+          final preview = Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: PbColors.meetCameraSurface,
+              borderRadius: BorderRadius.circular(PbRadii.large),
+              border: Border.all(color: PbColors.borderSoft),
+              boxShadow: [PbShadows.softFromTextMuted(0.10)],
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (_video != null) VideoTrackRenderer(_video!, fit: VideoViewFit.cover),
+                if (_loaded)
+                  Positioned(
+                    top: inset,
+                    left: inset,
+                    right: inset,
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: PowerboardsTypography.large.copyWith(color: PbColors.textInverse),
+                    ),
+                  ),
+                Positioned(
+                  left: inset,
+                  right: inset,
+                  bottom: inset,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: v1PreviewControls,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+
+          if (compact) {
+            return SizedBox(
+              width: availableWidth.isFinite ? math.max(0.0, availableWidth) : null,
+              height: availableHeight.isFinite ? math.max(0.0, availableHeight) : null,
+              child: preview,
+            );
+          }
+
+          final fluidWidth = availableHeight.isFinite
+              ? math.min(availableWidth * 0.8, availableHeight * aspectRatio)
+              : availableWidth * 0.8;
+          var previewWidth = math.min(availableWidth, fluidWidth.clamp(800.0, 1120.0));
+          var previewHeight = previewWidth / aspectRatio;
+
+          if (availableHeight.isFinite && previewHeight > availableHeight) {
+            previewHeight = availableHeight;
+            previewWidth = previewHeight * aspectRatio;
+          }
+
+          return Center(
+            child: SizedBox(width: math.max(0.0, previewWidth), height: math.max(0.0, previewHeight), child: preview),
+          );
+        }
+
+        if (widget.desktopV1Style && !useMobileLobbyLayout) {
+          final compact = constraints.maxWidth <= _v1MeetPreviewCompactBreakpoint;
+          final topPadding = compact ? 0.0 : _v1MeetLobbyMinimumVerticalInset;
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              _v1MeetLobbyHorizontalPaddingLeft,
+              topPadding,
+              _v1MeetLobbyHorizontalPaddingRight,
+              _v1MeetLobbyMinimumVerticalInset,
+            ),
+            child: LayoutBuilder(
+              builder: (context, paddedConstraints) {
+                final previewStack = buildDesktopV1PreviewSection(paddedConstraints, compact: compact);
+
+                return compact ? Align(alignment: Alignment.topCenter, child: previewStack) : Center(child: previewStack);
+              },
+            ),
+          );
+        }
 
         if (useMobileLobbyLayout) {
           Widget buildLandscapePhoneFooter() {
@@ -808,6 +978,236 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           ),
         );
       },
+    );
+  }
+}
+
+class _V1MeetDeviceSettingsButton extends StatefulWidget {
+  const _V1MeetDeviceSettingsButton({required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  State<_V1MeetDeviceSettingsButton> createState() => _V1MeetDeviceSettingsButtonState();
+}
+
+class _V1MeetDeviceSettingsButtonState extends State<_V1MeetDeviceSettingsButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return _V1MeetButtonFrame(
+      label: 'Device settings',
+      width: 44,
+      backgroundColor: PbColors.surfacePanel,
+      foregroundColor: PbColors.textPrimary,
+      borderColor: PbColors.borderSoft,
+      hovered: _hovered,
+      pressed: _pressed,
+      onHoverChanged: (hovered) => setState(() => _hovered = hovered),
+      onPressedChanged: (pressed) => setState(() => _pressed = pressed),
+      onPressed: widget.onPressed,
+      child: const PbSvgIcon(assetName: 'settings', size: 22, color: PbColors.textPrimary),
+    );
+  }
+}
+
+class _V1MeetControlButton extends StatefulWidget {
+  const _V1MeetControlButton({
+    required this.label,
+    required this.iconAssetName,
+    required this.available,
+    required this.loading,
+    this.onPressed,
+  });
+
+  final String label;
+  final String iconAssetName;
+  final bool available;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  @override
+  State<_V1MeetControlButton> createState() => _V1MeetControlButtonState();
+}
+
+class _V1MeetControlButtonState extends State<_V1MeetControlButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColor = widget.available ? PbColors.meetControlAvailable : PbColors.meetControlUnavailable;
+
+    return _V1MeetButtonFrame(
+      label: widget.label,
+      width: 44,
+      backgroundColor: backgroundColor,
+      foregroundColor: PbColors.textInverse,
+      borderColor: backgroundColor,
+      hovered: _hovered,
+      pressed: _pressed,
+      waiting: widget.loading,
+      onHoverChanged: (hovered) => setState(() => _hovered = hovered),
+      onPressedChanged: (pressed) => setState(() => _pressed = pressed),
+      onPressed: widget.loading ? null : widget.onPressed,
+      child: widget.loading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(PbColors.textInverse)),
+            )
+          : PbSvgIcon(assetName: widget.iconAssetName, size: 22, color: PbColors.textInverse),
+    );
+  }
+}
+
+class _V1MeetNowButton extends StatefulWidget {
+  const _V1MeetNowButton({required this.available, required this.loading, this.onPressed});
+
+  final bool available;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  @override
+  State<_V1MeetNowButton> createState() => _V1MeetNowButtonState();
+}
+
+class _V1MeetNowButtonState extends State<_V1MeetNowButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final backgroundColor = widget.available ? PbColors.meetControlAvailable : PbColors.meetControlUnavailable;
+
+    return _V1MeetButtonFrame(
+      label: widget.loading ? 'Starting' : 'Meet now',
+      width: 196,
+      backgroundColor: backgroundColor,
+      foregroundColor: PbColors.textInverse,
+      borderColor: backgroundColor,
+      hovered: _hovered,
+      pressed: _pressed,
+      waiting: widget.loading,
+      onHoverChanged: (hovered) => setState(() => _hovered = hovered),
+      onPressedChanged: (pressed) => setState(() => _pressed = pressed),
+      onPressed: widget.loading ? null : widget.onPressed,
+      child: widget.loading
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(PbColors.textInverse)),
+                ),
+                SizedBox(width: 8),
+                Text('Starting'),
+              ],
+            )
+          : Text('Meet now', style: PowerboardsTypography.button.copyWith(color: PbColors.textInverse)),
+    );
+  }
+}
+
+class _V1MeetButtonFrame extends StatelessWidget {
+  const _V1MeetButtonFrame({
+    required this.label,
+    required this.width,
+    required this.backgroundColor,
+    required this.foregroundColor,
+    required this.borderColor,
+    required this.hovered,
+    required this.pressed,
+    required this.onHoverChanged,
+    required this.onPressedChanged,
+    required this.child,
+    this.waiting = false,
+    this.onPressed,
+  });
+
+  final String label;
+  final double width;
+  final Color backgroundColor;
+  final Color foregroundColor;
+  final Color borderColor;
+  final bool hovered;
+  final bool pressed;
+  final bool waiting;
+  final ValueChanged<bool> onHoverChanged;
+  final ValueChanged<bool> onPressedChanged;
+  final VoidCallback? onPressed;
+  final Widget child;
+
+  bool get _enabled => onPressed != null;
+
+  @override
+  Widget build(BuildContext context) {
+    final lifted = hovered && !pressed && _enabled;
+    final effectiveBackground = hovered && _enabled ? Color.lerp(backgroundColor, PbColors.customBrandInk, 0.06)! : backgroundColor;
+    final effectiveBorder = hovered && _enabled ? Color.lerp(borderColor, PbColors.customBrandInk, 0.12)! : borderColor;
+
+    return Semantics(
+      button: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: MouseRegion(
+          cursor: waiting
+              ? SystemMouseCursors.wait
+              : _enabled
+              ? SystemMouseCursors.click
+              : MouseCursor.defer,
+          onEnter: _enabled ? (_) => onHoverChanged(true) : null,
+          onExit: (_) {
+            onHoverChanged(false);
+            onPressedChanged(false);
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: _enabled ? (_) => onPressedChanged(true) : null,
+            onTapUp: _enabled
+                ? (_) {
+                    onPressedChanged(false);
+                    onPressed?.call();
+                  }
+                : null,
+            onTapCancel: _enabled ? () => onPressedChanged(false) : null,
+            child: Transform.translate(
+              offset: Offset(0, lifted ? -1 : 0),
+              child: Opacity(
+                opacity: _enabled || waiting ? 1 : 0.46,
+                child: AnimatedContainer(
+                  duration: PbMotion.state,
+                  curve: Curves.easeOut,
+                  width: width,
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: effectiveBackground,
+                    borderRadius: BorderRadius.circular(PbRadii.small),
+                    border: Border.all(color: effectiveBorder),
+                    boxShadow: pressed
+                        ? PbShadows.statePressedInset
+                        : lifted
+                        ? PbShadows.stateHover
+                        : null,
+                  ),
+                  child: DefaultTextStyle(
+                    style: PowerboardsTypography.button.copyWith(color: foregroundColor),
+                    child: IconTheme(
+                      data: IconThemeData(color: foregroundColor),
+                      child: child,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
