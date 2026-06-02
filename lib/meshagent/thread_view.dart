@@ -93,6 +93,10 @@ class MeshagentThreadView extends StatefulWidget {
     this.onOpenFiles,
     this.onOpenMeet,
     this.onThreadAttachmentsChanged,
+    this.composerAttachmentSeedVersion = 0,
+    this.composerAttachmentPaths = const [],
+    this.onComposerAttachmentSeedApplied,
+    this.onComposerAttachmentOpen,
   });
 
   final String projectId;
@@ -120,6 +124,10 @@ class MeshagentThreadView extends StatefulWidget {
   final VoidCallback? onOpenFiles;
   final VoidCallback? onOpenMeet;
   final PowerboardsThreadAttachmentsChanged? onThreadAttachmentsChanged;
+  final int composerAttachmentSeedVersion;
+  final List<String> composerAttachmentPaths;
+  final VoidCallback? onComposerAttachmentSeedApplied;
+  final ValueChanged<String>? onComposerAttachmentOpen;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -132,6 +140,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   late final ChatThreadController _chatController;
   String? _lastRestoredThreadScrollOffsetValue;
   final Set<String> _reportedAttachmentKeys = <String>{};
+  int _lastAppliedComposerAttachmentSeedVersion = 0;
 
   bool _usesCompactMobileThreadEmptyState(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -228,6 +237,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     super.initState();
     _chatController = MeshagentRoomChatThreadController(room: widget.client);
     _chatController.addListener(_onChatControllerChanged);
+    _scheduleComposerAttachmentSeed();
+  }
+
+  @override
+  void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _scheduleComposerAttachmentSeed();
   }
 
   @override
@@ -310,6 +326,45 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
   }
 
+  String _composerAttachmentDisplayName(String path) {
+    final normalized = path.trim();
+    if (normalized.isEmpty) {
+      return normalized;
+    }
+
+    final segments = normalized.split('/').where((segment) => segment.trim().isNotEmpty).toList(growable: false);
+    return segments.isEmpty ? normalized : segments.last;
+  }
+
+  void _scheduleComposerAttachmentSeed() {
+    final version = widget.composerAttachmentSeedVersion;
+    if (version <= 0 || version == _lastAppliedComposerAttachmentSeedVersion) {
+      return;
+    }
+
+    _lastAppliedComposerAttachmentSeedVersion = version;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.composerAttachmentSeedVersion != version) {
+        return;
+      }
+
+      final seen = <String>{};
+      final paths = [
+        for (final path in widget.composerAttachmentPaths)
+          if (path.trim().isNotEmpty && seen.add(path.trim())) path.trim(),
+      ];
+      if (paths.isEmpty) {
+        return;
+      }
+
+      _chatController.clear();
+      for (final path in paths) {
+        _chatController.attachFile(path, displayName: _composerAttachmentDisplayName(path));
+      }
+      widget.onComposerAttachmentSeedApplied?.call();
+    });
+  }
+
   void _onMessageSent(ma.ChatMessage message) {
     final attachmentPaths = message.attachments;
     if (attachmentPaths.isEmpty) {
@@ -376,6 +431,21 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
 
     context.go(newUri.toString());
+  }
+
+  void _openComposerAttachment(FileAttachment attachment) {
+    final path = attachment.path.trim();
+    if (path.isEmpty || path.startsWith('data:')) {
+      return;
+    }
+
+    final callback = widget.onComposerAttachmentOpen;
+    if (callback != null) {
+      callback(path);
+      return;
+    }
+
+    _open(path);
   }
 
   void _restoreThreadScrollOffsetFromRoute() {
@@ -448,6 +518,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         threadListPath: widget.threadListPath,
         documentPath: widget.documentPath,
         controller: _chatController,
+        onAttachmentOpen: _openComposerAttachment,
         selectedThreadPath: widget.selectedThreadPath,
         selectedThreadDisplayName: widget.selectedThreadDisplayName,
         onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,

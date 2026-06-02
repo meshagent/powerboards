@@ -1713,11 +1713,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   final Map<String, String> _selectedThreadPathByAgentKey = <String, String>{};
   final Map<String, String> _selectedThreadLabelByAgentKey = <String, String>{};
+  final Map<String, List<String>> _composerAttachmentPathsByAgentKey = <String, List<String>>{};
+  final Map<String, int> _composerAttachmentSeedVersionByAgentKey = <String, int>{};
   final Map<String, PowerboardsFileAttachmentLink> _localThreadAttachmentLinksByKey = <String, PowerboardsFileAttachmentLink>{};
   static const Duration _roomResourceTimeout = Duration(seconds: 30);
 
   final MeshagentRoomController controller = MeshagentRoomController();
   int _newThreadResetVersion = 0;
+  int _composerAttachmentSeedRevision = 0;
   String _lastRoomStatusText = "Connecting to room";
   String? _resolvedRoomDisplayName;
   String? _lastPersistedMobileAgentRouteId;
@@ -1908,6 +1911,62 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final nextPath = _isBaseRouteId(routeId) ? '/p/$pid/r/${widget.room.roomName}' : '/p/$pid/r/${widget.room.roomName}/a/$routeId';
     final nextUri = currentUri.replace(path: nextPath);
     context.go(nextUri.toString());
+  }
+
+  void _showDesktopPreviewChatPane(BuildContext context, {String? agentKey}) {
+    controller.showChat();
+
+    final currentUri = PathRouteMatch.of(context).uri;
+    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters)
+      ..[_roomPaneQueryParameter] = _roomPaneQueryValue(_MobileRoomPane.chat)
+      ..remove('p')
+      ..remove(filePreviewOriginQueryParameter);
+    var nextPath = currentUri.path;
+    if (agentKey != null) {
+      final pid = fromUUID(widget.projectId);
+      nextPath = _isBaseRouteId(agentKey) ? '/p/$pid/r/${widget.room.roomName}' : '/p/$pid/r/${widget.room.roomName}/a/$agentKey';
+    }
+
+    final nextUri = currentUri.replace(path: nextPath, queryParameters: updatedQueryParameters);
+    if (nextUri.toString() == currentUri.toString()) {
+      return;
+    }
+
+    context.go(nextUri.toString());
+  }
+
+  String? _agentRouteIdForFilePromptAction(ChatFilePromptAction action) {
+    final agentName = action.agentName.trim();
+    if (agentName.isEmpty) {
+      return null;
+    }
+
+    if (services.state.isReady) {
+      final supported = _supportedServices(services.state.value!);
+      for (final service in supported) {
+        final serviceName = service.metadata.name.trim();
+        if (serviceName == agentName) {
+          return _serviceId(service);
+        }
+
+        for (final agent in service.agents) {
+          if (agent.name.trim() == agentName) {
+            return _serviceId(service);
+          }
+        }
+      }
+
+      for (final participant in _developmentParticipants(supported)) {
+        if (participantDisplayName(participant) == agentName) {
+          return developmentAgentRouteId(agentName);
+        }
+      }
+    }
+
+    final developmentParticipant = widget.room.messaging.remoteParticipants.firstWhereOrNull(
+      (participant) => isChatOrVoiceBotParticipant(participant) && participantDisplayName(participant) == agentName,
+    );
+    return developmentParticipant == null ? null : developmentAgentRouteId(agentName);
   }
 
   IconData _developmentAgentIcon(RemoteParticipant participant) {
@@ -2156,6 +2215,32 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     setLastSelectedRoomThread(widget.projectId, roomName, agentKey, resolvedPath);
+  }
+
+  void _setComposerAttachmentSeed(String agentKey, Iterable<String> paths) {
+    final normalizedPaths = paths
+        .map((path) => normalizePowerboardsAttachmentPath(path))
+        .where((path) => path.isNotEmpty)
+        .toList(growable: false);
+    if (normalizedPaths.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _composerAttachmentPathsByAgentKey[agentKey] = normalizedPaths;
+      _composerAttachmentSeedVersionByAgentKey[agentKey] = ++_composerAttachmentSeedRevision;
+    });
+  }
+
+  void _clearComposerAttachmentSeed(String agentKey) {
+    if (!_composerAttachmentPathsByAgentKey.containsKey(agentKey) && !_composerAttachmentSeedVersionByAgentKey.containsKey(agentKey)) {
+      return;
+    }
+
+    setState(() {
+      _composerAttachmentPathsByAgentKey.remove(agentKey);
+      _composerAttachmentSeedVersionByAgentKey.remove(agentKey);
+    });
   }
 
   void updatePath(BuildContext context, String? path) {
@@ -3418,6 +3503,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             ? _buildMeetingSingleThreadChatEmptyState("Chat or share files")
             : null);
     final agentKey = selectedAgentRouteId;
+    final composerAttachmentPaths = agentKey == null ? const <String>[] : _composerAttachmentPathsByAgentKey[agentKey] ?? const <String>[];
+    final composerAttachmentSeedVersion = agentKey == null ? 0 : _composerAttachmentSeedVersionByAgentKey[agentKey] ?? 0;
     final currentThreadLabel = selectedThreadPath == null
         ? "New thread"
         : (_selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
@@ -3455,6 +3542,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         onOpenFiles: () => _showFilesPane(context),
         onOpenMeet: () => _showMeetingPane(context),
         onThreadAttachmentsChanged: _recordLocalThreadAttachments,
+        composerAttachmentPaths: composerAttachmentPaths,
+        composerAttachmentSeedVersion: composerAttachmentSeedVersion,
+        onComposerAttachmentSeedApplied: agentKey == null ? null : () => _clearComposerAttachmentSeed(agentKey),
+        onComposerAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
+            ? (path) => _openDesktopPreviewComposerAttachment(path, threadName: currentThreadLabel)
+            : null,
         projectId: widget.projectId,
       ),
     );
@@ -3729,6 +3822,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 onV1RoomPanelCollapsedChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelCollapsed : null,
                 v1RoomPanelWidth: usesDesktopUiPreview ? _desktopPreviewRoomPanelWidth : null,
                 onV1RoomPanelWidthChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelWidth : null,
+                onV1FilePromptRequested: usesDesktopUiPreview
+                    ? (action, filePath) => _handleDesktopPreviewFilePromptRequested(context, action: action, filePath: filePath)
+                    : null,
               ),
             ),
           ),
@@ -5075,6 +5171,78 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
+  PbAttachmentListItemData _attachmentDataForPromptPath(String filePath, {required String threadName}) {
+    final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
+    final title = normalizedPath.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? normalizedPath;
+    final metadata = PbResolvedAttachmentMetadata.resolve(title: title);
+    final displayThreadName = threadName.trim();
+
+    return PbAttachmentListItemData(
+      title: metadata.displayTitle,
+      subtitle: displayThreadName.isEmpty ? metadata.displayType : '${metadata.displayType} / $displayThreadName',
+      fileType: metadata.fileType,
+      path: normalizedPath,
+    );
+  }
+
+  void _openDesktopPreviewComposerAttachment(String filePath, {required String threadName}) {
+    final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
+    if (normalizedPath.isEmpty) {
+      return;
+    }
+
+    final previewFile = _attachmentDataForPromptPath(normalizedPath, threadName: threadName);
+    setState(() {
+      _desktopPreviewRoomPanelTab = PbRoomPanelTab.files;
+      _desktopPreviewRoomPanelCollapsed = false;
+      _desktopPreviewRoomPanelOverlayOpen = true;
+      _desktopPreviewFilePreviewFile = previewFile;
+      _desktopPreviewFilePreviewOpen = true;
+      _desktopPreviewFilePreviewFullscreen = false;
+    });
+    setPreviewFilePreviewFullscreen(false);
+  }
+
+  Future<void> _handleDesktopPreviewFilePromptRequested(
+    BuildContext context, {
+    required ChatFilePromptAction action,
+    required String filePath,
+    String? preferredAgentKey,
+  }) async {
+    if (!mounted || !context.mounted) {
+      return;
+    }
+
+    final agentKey = _agentRouteIdForFilePromptAction(action) ?? preferredAgentKey;
+    if (agentKey == null) {
+      await showManageAgents();
+      return;
+    }
+
+    final previewFile = _attachmentDataForPromptPath(filePath, threadName: 'New thread');
+    setState(() {
+      _selectedThreadPathByAgentKey.remove(agentKey);
+      _selectedThreadLabelByAgentKey.remove(agentKey);
+      _newThreadResetVersion++;
+      _desktopPreviewRoomPanelTab = PbRoomPanelTab.files;
+      _desktopPreviewRoomPanelCollapsed = false;
+      _desktopPreviewRoomPanelOverlayOpen = true;
+      _desktopPreviewFilePreviewFile = previewFile;
+      _desktopPreviewFilePreviewOpen = true;
+      _desktopPreviewFilePreviewFullscreen = false;
+    });
+    if (_roomNameForSelectionPersistence case final roomName?) {
+      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
+    }
+    _setComposerAttachmentSeed(agentKey, [filePath]);
+    setPreviewFilePreviewFullscreen(false);
+
+    if (!mounted || !context.mounted) {
+      return;
+    }
+    _showDesktopPreviewChatPane(context, agentKey: agentKey);
+  }
+
   String? _previewAttachmentPath(PbAttachmentListItemData file) {
     final path = file.path?.trim();
     if (path == null || path.isEmpty) {
@@ -5092,12 +5260,74 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return fileViewer(widget.room, path) ?? DocumentPane(path: path, room: widget.room);
   }
 
-  List<ChatFilePromptAction> _attachmentFilePromptActions(String path) {
+  String? _chatAgentNameForService(ServiceSpec service) {
+    final descriptor = serviceConversationDescriptor(service, remoteParticipants: widget.room.messaging.remoteParticipants);
+    if (descriptor?.isChat != true) {
+      return null;
+    }
+
+    final rawAgentName = service.agents.firstOrNull?.name;
+    if (rawAgentName == null) {
+      return null;
+    }
+
+    final agentName = rawAgentName.trim();
+    return agentName.isEmpty ? null : agentName;
+  }
+
+  ChatFilePromptAction? _fallbackAttachmentFilePromptAction({String? preferredAgentKey}) {
+    if (!services.state.isReady) {
+      return null;
+    }
+
+    final supported = _supportedServices(services.state.value!);
+    if (preferredAgentKey != null) {
+      final developmentAgentName = developmentAgentNameFromRoute(preferredAgentKey);
+      if (developmentAgentName != null) {
+        return defaultChatFilePromptAction(agentName: developmentAgentName);
+      }
+
+      for (final service in supported) {
+        if (_serviceId(service) != preferredAgentKey) {
+          continue;
+        }
+
+        final agentName = _chatAgentNameForService(service);
+        if (agentName != null) {
+          return defaultChatFilePromptAction(agentName: agentName);
+        }
+      }
+    }
+
+    for (final service in supported) {
+      final agentName = _chatAgentNameForService(service);
+      if (agentName != null) {
+        return defaultChatFilePromptAction(agentName: agentName);
+      }
+    }
+
+    for (final participant in _developmentParticipants(supported)) {
+      final agentName = participantDisplayName(participant);
+      if (agentName != null) {
+        return defaultChatFilePromptAction(agentName: agentName);
+      }
+    }
+
+    return null;
+  }
+
+  List<ChatFilePromptAction> _attachmentFilePromptActions(String path, {String? preferredAgentKey}) {
     if (!services.state.isReady) {
       return const <ChatFilePromptAction>[];
     }
 
-    return resolveChatFilePromptActions(services: services.state.value!, filePath: path);
+    final actions = resolveChatFilePromptActions(services: services.state.value!, filePath: path);
+    if (actions.isNotEmpty) {
+      return actions;
+    }
+
+    final fallback = _fallbackAttachmentFilePromptAction(preferredAgentKey: preferredAgentKey);
+    return fallback == null ? const <ChatFilePromptAction>[] : [fallback];
   }
 
   Future<void> _startDefaultAttachmentFilePrompt(PbAttachmentListItemData file, {String? agentKey}) async {
@@ -5106,27 +5336,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final action = _attachmentFilePromptActions(path).firstOrNull;
+    final action = _attachmentFilePromptActions(path, preferredAgentKey: agentKey).firstOrNull;
     if (action == null) {
+      await showManageAgents();
       return;
     }
 
-    try {
-      final threadPath = await startChatFilePromptThread(room: widget.room, action: action, filePath: path);
-      if (!mounted) {
-        return;
-      }
-
-      if (agentKey != null) {
-        _setSelectedThreadPath(agentKey, threadPath, displayName: defaultThreadDisplayNameFromPath(threadPath));
-      }
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to start chat"), description: Text("$error")));
-    }
+    await _handleDesktopPreviewFilePromptRequested(context, action: action, filePath: path, preferredAgentKey: agentKey);
   }
 
   Future<void> _downloadAttachmentFile(PbAttachmentListItemData file) async {

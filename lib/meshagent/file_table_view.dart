@@ -16,6 +16,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:meshagent/document.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/conversation_descriptor.dart' as ma;
 import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
@@ -26,6 +27,7 @@ import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
+import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
@@ -287,6 +289,7 @@ class FileManagerView extends StatefulWidget {
   final ValueChanged<bool>? onV1RoomPanelCollapsedChanged;
   final double? v1RoomPanelWidth;
   final ValueChanged<double>? onV1RoomPanelWidthChanged;
+  final FutureOr<void> Function(ChatFilePromptAction action, String filePath)? onV1FilePromptRequested;
 
   const FileManagerView({
     super.key,
@@ -306,6 +309,7 @@ class FileManagerView extends StatefulWidget {
     this.onV1RoomPanelCollapsedChanged,
     this.v1RoomPanelWidth,
     this.onV1RoomPanelWidthChanged,
+    this.onV1FilePromptRequested,
   });
 
   @override
@@ -1055,12 +1059,95 @@ class _FileManagerViewState extends State<FileManagerView> {
       return const <ChatFilePromptAction>[];
     }
 
-    return resolveChatFilePromptActions(services: widget.services!.state.value!, filePath: fullPath);
+    final actions = resolveChatFilePromptActions(services: widget.services!.state.value!, filePath: fullPath);
+    if (actions.isNotEmpty) {
+      return actions;
+    }
+
+    final fallback = _fallbackFilePromptAction();
+    return fallback == null ? const <ChatFilePromptAction>[] : [fallback];
   }
 
-  Future<void> _startDefaultFilePrompt(String fullPath) async {
+  ChatFilePromptAction? _fallbackFilePromptAction() {
+    if (widget.services?.state.isReady != true) {
+      return null;
+    }
+
+    for (final service in widget.services!.state.value!) {
+      final descriptor = ma.serviceConversationDescriptor(service, remoteParticipants: widget.client.messaging.remoteParticipants);
+      if (descriptor?.isChat != true) {
+        continue;
+      }
+
+      final rawAgentName = service.agents.firstOrNull?.name;
+      if (rawAgentName == null) {
+        continue;
+      }
+
+      final agentName = rawAgentName.trim();
+      if (agentName.isNotEmpty) {
+        return defaultChatFilePromptAction(agentName: agentName);
+      }
+    }
+
+    for (final participant in widget.client.messaging.remoteParticipants) {
+      final descriptor = ma.participantConversationDescriptor(participant);
+      if (descriptor?.isChat != true) {
+        continue;
+      }
+
+      final agentName = ma.participantDisplayName(participant);
+      if (agentName != null) {
+        return defaultChatFilePromptAction(agentName: agentName);
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _openManageAgentsForFilePrompt() async {
+    final projectId = widget.projectId?.trim();
+    if (projectId == null || projectId.isEmpty) {
+      if (mounted) {
+        ShadToaster.of(context).show(
+          const ShadToast.destructive(
+            title: Text("No chat agent available"),
+            description: Text("Install a chat agent before asking about files."),
+          ),
+        );
+      }
+      return;
+    }
+
+    await showManageAgentsSurface(
+      context: context,
+      projectId: projectId,
+      room: widget.client,
+      onServiceChanged: () {
+        widget.services?.refresh();
+      },
+    );
+    if (!mounted) {
+      return;
+    }
+    widget.services?.refresh();
+  }
+
+  Future<void> _startDefaultFilePrompt(String fullPath, {PbFilesItemData? recentlyOpenedItem}) async {
     final action = _filePromptActionsForPath(fullPath, isFolder: false).firstOrNull;
     if (action == null) {
+      await _openManageAgentsForFilePrompt();
+      return;
+    }
+
+    final callback = widget.onV1FilePromptRequested;
+    if (callback != null) {
+      if (recentlyOpenedItem != null && recentlyOpenedItem.canPreview) {
+        setState(() {
+          _recordV1RecentlyOpenedFile(recentlyOpenedItem);
+        });
+      }
+      await callback(action, fullPath);
       return;
     }
 
@@ -2149,8 +2236,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onBrowseFolder: (item) => _openEntry(item.folderPath, true),
                   onRemoveProcessingRow: (_) {},
                   onLinkedThreadPressed: _openV1LinkedThread,
-                  onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
-                  onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
+                  onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item)),
                   onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
                   onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
                   onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
@@ -2175,8 +2261,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 responsiveOverlayMobile: false,
                 onPreviewFile: (item) => _openV1Preview(item, openOverlay: responsivePanel),
                 previewBuilder: _buildV1PreviewContent,
-                onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item))),
-                onShare: supportsNativeFileShare ? (item) => unawaited(_shareFile(_v1PathForItem(item))) : null,
+                onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item)),
                 onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
                 onToggleFullscreen: () => _setV1PreviewFullscreen(!_v1FilePreviewFullscreen),
                 onClosePreview: _closeV1Preview,
@@ -2277,6 +2362,12 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     Future<void> onStartFilePrompt(ChatFilePromptAction action) async {
+      final callback = widget.onV1FilePromptRequested;
+      if (callback != null) {
+        await callback(action, fullPath);
+        return;
+      }
+
       try {
         final threadPath = await startChatFilePromptThread(room: widget.client, action: action, filePath: fullPath);
         if (!mounted) {
@@ -2294,11 +2385,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     List<ChatFilePromptAction> filePromptActions() {
-      if (isFolder || widget.services?.state.isReady != true) {
-        return const <ChatFilePromptAction>[];
-      }
-
-      return resolveChatFilePromptActions(services: widget.services!.state.value!, filePath: fullPath);
+      return _filePromptActionsForPath(fullPath, isFolder: isFolder);
     }
 
     List<Widget> items() {
