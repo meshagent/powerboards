@@ -187,6 +187,9 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   bool _mobileRoomListScrollCollapsed = false;
   int _mobileRoomListInstance = 0;
   bool _previewRailMoreMenuOpen = false;
+  String? _selectedRoomDisplayNameOverrideProjectId;
+  String? _selectedRoomDisplayNameOverrideRoomName;
+  String? _selectedRoomDisplayNameOverride;
   late final AnimationController _mobileRoomListCloseAnimationController;
   final childKey = GlobalKey();
 
@@ -266,6 +269,52 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
     return Resource<List<Room>>(() async {
       return projectId == null ? [] : await listMeshagentRooms(projectId);
+    });
+  }
+
+  String? get _effectiveSelectedRoomDisplayNameOverride {
+    final projectId = widget.projectId;
+    final roomName = widget.selectedRoom;
+    final displayName = _selectedRoomDisplayNameOverride?.trim();
+    if (projectId == null || roomName == null || displayName == null || displayName.isEmpty) {
+      return null;
+    }
+
+    if (_selectedRoomDisplayNameOverrideProjectId != projectId || _selectedRoomDisplayNameOverrideRoomName != roomName) {
+      return null;
+    }
+
+    return displayName;
+  }
+
+  void _setSelectedRoomDisplayNameOverride({required String projectId, required String roomName, required String displayName}) {
+    if (projectId != widget.projectId || roomName != widget.selectedRoom) {
+      return;
+    }
+
+    final trimmedDisplayName = displayName.trim();
+    if (trimmedDisplayName.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _selectedRoomDisplayNameOverrideProjectId = projectId;
+      _selectedRoomDisplayNameOverrideRoomName = roomName;
+      _selectedRoomDisplayNameOverride = trimmedDisplayName;
+    });
+  }
+
+  void _clearSelectedRoomDisplayNameOverride() {
+    if (_selectedRoomDisplayNameOverrideProjectId == null &&
+        _selectedRoomDisplayNameOverrideRoomName == null &&
+        _selectedRoomDisplayNameOverride == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedRoomDisplayNameOverrideProjectId = null;
+      _selectedRoomDisplayNameOverrideRoomName = null;
+      _selectedRoomDisplayNameOverride = null;
     });
   }
 
@@ -452,6 +501,9 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
         shouldStayOnMobileRoomList(widget.projectId!);
 
     if (oldWidget.projectId != widget.projectId || oldWidget.selectedRoom != widget.selectedRoom) {
+      _selectedRoomDisplayNameOverrideProjectId = null;
+      _selectedRoomDisplayNameOverrideRoomName = null;
+      _selectedRoomDisplayNameOverride = null;
       _closePreviewRailMoreMenu();
       exposePreviewRoomRailMenuBridge(null);
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -659,6 +711,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     syncPowerboardsUiModeFromStorage();
     rooms = _createRoomsResource(widget.projectId);
     registerPreviewRoomListRefreshCallback(() => rooms.refresh());
+    registerPreviewRoomDisplayNameOverrideCallback(_setSelectedRoomDisplayNameOverride);
 
     _mobileRoomListCloseAnimationController = AnimationController(vsync: this, duration: powerboardsMobileTransitionDuration)
       ..addListener(() {
@@ -699,6 +752,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     registerPreviewRoomListRefreshCallback(null);
+    registerPreviewRoomDisplayNameOverrideCallback(null);
     _mobileRoomListCloseAnimationController.dispose();
     _mobileRoomListProjectId.dispose();
     _mobileRoomListSelectedRoom.dispose();
@@ -746,11 +800,23 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       final avatarInitials = userAvatarInitialsFromEmail((user?['email'] as String?) ?? '');
       final avatarEmail = ((user?['email'] as String?) ?? '').trim();
       final roomItems = _roomsResourceProjectId == widget.projectId ? (rooms.state.value ?? const <Room>[]) : const <Room>[];
+      final selectedRoomDisplayNameOverride = _effectiveSelectedRoomDisplayNameOverride;
       final hasSelectedRoom = (widget.selectedRoom?.trim().isNotEmpty) ?? false;
       final showPreviewRail = widget.projectId != null;
       final previewPane = _currentPreviewRoomPane(context);
       const railWidth = 64.0;
       const headerHeight = PbSizes.workspaceTopbarHeight;
+
+      if (selectedRoomDisplayNameOverride != null) {
+        final selectedRoom = roomItems.firstWhereOrNull((room) => room.name == widget.selectedRoom);
+        if (selectedRoom != null && roomDisplayName(selectedRoom) == selectedRoomDisplayNameOverride) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _effectiveSelectedRoomDisplayNameOverride == selectedRoomDisplayNameOverride) {
+              _clearSelectedRoomDisplayNameOverride();
+            }
+          });
+        }
+      }
 
       return ValueListenableBuilder<bool>(
         valueListenable: previewFilePreviewFullscreenListenable,
@@ -859,6 +925,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                           projectId: widget.projectId,
                           selectedRoom: widget.selectedRoom,
                           canCreateRooms: canCreateRooms,
+                          selectedRoomDisplayNameOverride: selectedRoomDisplayNameOverride,
                           avatarInitials: avatarInitials,
                           avatarEmail: avatarEmail,
                           onCreateProject: onCreateProject,

@@ -2680,6 +2680,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
+    overridePreviewRoomDisplayName(projectId: widget.projectId, roomName: room.name, displayName: newName);
     refreshPreviewRoomList();
     setState(() {
       _resolvedRoomDisplayName = newName;

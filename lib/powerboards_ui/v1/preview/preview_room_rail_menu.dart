@@ -101,7 +101,11 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
 
 final ValueNotifier<PreviewRoomRailMenuBridge?> previewRoomRailMenuBridgeListenable = ValueNotifier<PreviewRoomRailMenuBridge?>(null);
 final ValueNotifier<bool> previewFilePreviewFullscreenListenable = ValueNotifier<bool>(false);
+typedef PreviewRoomDisplayNameOverrideCallback =
+    void Function({required String projectId, required String roomName, required String displayName});
+
 VoidCallback? _previewRoomListRefreshCallback;
+PreviewRoomDisplayNameOverrideCallback? _previewRoomDisplayNameOverrideCallback;
 
 void exposePreviewRoomRailMenuBridge(PreviewRoomRailMenuBridge? bridge) {
   if (identical(previewRoomRailMenuBridgeListenable.value, bridge)) {
@@ -135,6 +139,14 @@ void registerPreviewRoomListRefreshCallback(VoidCallback? callback) {
   _previewRoomListRefreshCallback = callback;
 }
 
+void registerPreviewRoomDisplayNameOverrideCallback(PreviewRoomDisplayNameOverrideCallback? callback) {
+  _previewRoomDisplayNameOverrideCallback = callback;
+}
+
 void refreshPreviewRoomList() {
   _previewRoomListRefreshCallback?.call();
+}
+
+void overridePreviewRoomDisplayName({required String projectId, required String roomName, required String displayName}) {
+  _previewRoomDisplayNameOverrideCallback?.call(projectId: projectId, roomName: roomName, displayName: displayName);
 }

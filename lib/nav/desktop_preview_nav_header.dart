@@ -16,6 +16,7 @@ class DesktopPreviewNavHeader extends StatefulWidget {
     required this.projectId,
     required this.selectedRoom,
     required this.canCreateRooms,
+    this.selectedRoomDisplayNameOverride,
     required this.onCreateProject,
     required this.onSelectProject,
     required this.onSelectRoom,
@@ -33,6 +34,7 @@ class DesktopPreviewNavHeader extends StatefulWidget {
   final String? projectId;
   final String? selectedRoom;
   final bool canCreateRooms;
+  final String? selectedRoomDisplayNameOverride;
   final Future<void> Function() onCreateProject;
   final ValueChanged<Project> onSelectProject;
   final ValueChanged<Room> onSelectRoom;
@@ -133,6 +135,10 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
 
   String get _projectQuery => _projectFilterController.text.trim().toLowerCase();
   String get _roomQuery => _roomFilterController.text.trim().toLowerCase();
+  String? get _selectedRoomDisplayNameOverride {
+    final override = widget.selectedRoomDisplayNameOverride?.trim();
+    return override == null || override.isEmpty ? null : override;
+  }
 
   Project? get _currentProject {
     for (final project in widget.projects) {
@@ -157,7 +163,16 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
       return widget.rooms;
     }
 
-    return widget.rooms.where((room) => roomDisplayName(room).toLowerCase().contains(_roomQuery)).toList();
+    return widget.rooms.where((room) => _roomDisplayName(room).toLowerCase().contains(_roomQuery)).toList();
+  }
+
+  String _roomDisplayName(Room room) {
+    final override = _selectedRoomDisplayNameOverride;
+    if (override != null && room.name == widget.selectedRoom) {
+      return override;
+    }
+
+    return roomDisplayName(room);
   }
 
   String? get _selectedRoomFallbackLabel {
@@ -167,7 +182,7 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
     }
 
     final hasSelectedRoom = widget.rooms.any((room) => room.name == selectedRoomName);
-    return hasSelectedRoom ? null : selectedRoomName;
+    return hasSelectedRoom ? null : (_selectedRoomDisplayNameOverride ?? selectedRoomName);
   }
 
   Widget _buildRoomMenu() {
@@ -183,7 +198,7 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
           PbSwitcherMenuItem(title: _selectedRoomFallbackLabel!, selected: true),
         ..._filteredRooms.map(
           (room) => PbSwitcherMenuItem(
-            title: roomDisplayName(room),
+            title: _roomDisplayName(room),
             selected: room.name == widget.selectedRoom,
             onPressed: () => _closeMenuAndRun(() => widget.onSelectRoom(room)),
           ),
@@ -283,7 +298,7 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
   Widget build(BuildContext context) {
     final currentProject = _currentProject;
     final currentRoom = widget.rooms.where((room) => room.name == widget.selectedRoom).firstOrNull;
-    final resolvedRoomValue = currentRoom != null ? roomDisplayName(currentRoom) : (_selectedRoomFallbackLabel ?? 'Select room');
+    final resolvedRoomValue = currentRoom != null ? _roomDisplayName(currentRoom) : (_selectedRoomFallbackLabel ?? 'Select room');
     final showRoomSwitcher = widget.rooms.isNotEmpty || ((widget.selectedRoom?.trim().isNotEmpty) ?? false);
 
     return OverlayPortal(
