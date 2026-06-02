@@ -55,6 +55,14 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
   }
 }
 
+String? _agentThreadListPath(String? path) {
+  final normalized = path?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    return null;
+  }
+  return "agent://threads";
+}
+
 class MeshagentThreadView extends StatefulWidget {
   const MeshagentThreadView({
     super.key,
@@ -72,6 +80,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.initialMessageText,
     this.initialMessageAttachments,
     this.agentName,
+    this.chatClient,
     this.selectedThreadPath,
     this.selectedThreadDisplayName,
     this.onSelectedThreadPathChanged,
@@ -87,6 +96,7 @@ class MeshagentThreadView extends StatefulWidget {
 
   final String projectId;
   final String? agentName;
+  final agent_sessions.BaseChatClient? chatClient;
   final ChatThreadDisplayMode threadDisplayMode;
   final String? threadListPath;
   final int newThreadResetVersion;
@@ -339,6 +349,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       data: const IconThemeData(size: 14),
       child: ChatBotView(
         room: widget.client,
+        chatClient: widget.chatClient,
         agentName: widget.agentName,
         threadDisplayMode: widget.threadDisplayMode,
         threadListPath: widget.threadListPath,
@@ -552,16 +563,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   StreamSubscription<RoomEvent>? _roomSubscription;
 
   String? _normalizedThreadListPath(String? path) {
-    if (path == null) {
-      return null;
-    }
-
-    final trimmed = path.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-
-    return trimmed;
+    return _agentThreadListPath(path);
   }
 
   DateTime _parseThreadDate(String value) {
