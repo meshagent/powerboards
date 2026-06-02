@@ -97,6 +97,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.composerAttachmentPaths = const [],
     this.onComposerAttachmentSeedApplied,
     this.onComposerAttachmentOpen,
+    this.onThreadAttachmentOpen,
   });
 
   final String projectId;
@@ -128,6 +129,7 @@ class MeshagentThreadView extends StatefulWidget {
   final List<String> composerAttachmentPaths;
   final VoidCallback? onComposerAttachmentSeedApplied;
   final ValueChanged<String>? onComposerAttachmentOpen;
+  final ValueChanged<String>? onThreadAttachmentOpen;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -398,16 +400,27 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
   }
 
+  void _openThreadAttachment(String path) {
+    final normalizedPath = path.trim();
+    if (normalizedPath.isEmpty || normalizedPath.startsWith('data:')) {
+      return;
+    }
+
+    final callback = widget.onThreadAttachmentOpen;
+    if (callback != null) {
+      callback(normalizedPath);
+      return;
+    }
+
+    _open(normalizedPath);
+  }
+
   Widget _fileInThreadBuilder(BuildContext context, String path) {
     if (path.endsWith('.meeting')) {
       return MeetingCard(onJoin: () => widget.joinMeeting());
     }
 
-    return ShadGestureDetector(
-      cursor: SystemMouseCursors.click,
-      onTap: () => _open(path),
-      child: ChatThreadPreview(room: widget.client, path: path),
-    );
+    return ChatThreadPreview(room: widget.client, path: path);
   }
 
   void _open(String path) {
@@ -534,7 +547,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
               ),
         onMessageSent: _onMessageSent,
         fileInThreadBuilder: _fileInThreadBuilder,
-        openFile: _open,
+        openFile: _openThreadAttachment,
         chatInputBoxBuilder: (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox),
         toolsBuilder: (context, controller, snapshot) =>
             buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),

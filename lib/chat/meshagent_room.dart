@@ -3583,7 +3583,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         composerAttachmentSeedVersion: composerAttachmentSeedVersion,
         onComposerAttachmentSeedApplied: agentKey == null ? null : () => _clearComposerAttachmentSeed(agentKey),
         onComposerAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
-            ? (path) => _openDesktopPreviewComposerAttachment(path, threadName: currentThreadLabel)
+            ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel)
+            : null,
+        onThreadAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
+            ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel)
             : null,
         projectId: widget.projectId,
       ),
@@ -5560,7 +5563,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  void _openDesktopPreviewComposerAttachment(String filePath, {required String threadName}) {
+  void _openDesktopPreviewAttachment(String filePath, {required String threadName}) {
     final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
     if (normalizedPath.isEmpty) {
       return;
