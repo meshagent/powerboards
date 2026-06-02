@@ -20,6 +20,8 @@ export 'components/layouts/pb_room_panel.dart';
 export 'components/layouts/pb_room_panel_mount.dart';
 export 'components/layouts/pb_side_rail.dart';
 export 'components/layouts/pb_thread_header.dart';
+export 'components/meet/pb_meet_header.dart';
+export 'components/meet/pb_meet_transcript_panel.dart';
 export 'components/menus/pb_account_menu.dart';
 export 'components/menus/pb_menu_anchor.dart';
 export 'components/menus/pb_menu_card.dart';

@@ -65,10 +65,13 @@ import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_s
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_header.dart';
+import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_header.dart';
+import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_transcript_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_empty_state.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/settings/selected_room.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
@@ -94,6 +97,7 @@ const double _meetingToolbarPreferredExpandedWidth = 640;
 const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
 const double _mobileRoomHeaderGap = 8;
 const String _roomPaneQueryParameter = 'pane';
+const String _meetingTranscriptFolder = 'transcripts/meetings';
 
 enum _MobileRoomPane { chat, files, meeting }
 
@@ -379,6 +383,20 @@ class _DesktopPreviewThreadEntry {
   final String name;
   final String createdAt;
   final String modifiedAt;
+}
+
+class _DesktopPreviewTranscriptRecord {
+  const _DesktopPreviewTranscriptRecord({required this.data, required this.sortDate});
+
+  final PbAttachmentListItemData data;
+  final DateTime? sortDate;
+}
+
+class _DesktopPreviewMeetPaneData {
+  const _DesktopPreviewMeetPaneData({required this.transcripts, required this.roomHasStoredFiles});
+
+  final List<PbAttachmentListItemData> transcripts;
+  final bool roomHasStoredFiles;
 }
 
 class _DesktopPreviewThreadList extends StatefulWidget {
@@ -1737,6 +1755,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   bool _desktopPreviewFilePreviewOpen = false;
   bool _desktopPreviewFilePreviewFullscreen = false;
   PbAttachmentListItemData? _desktopPreviewFilePreviewFile;
+  bool _desktopPreviewMeetTranscriptPreviewOpen = false;
+  bool _desktopPreviewMeetTranscriptPreviewFullscreen = false;
+  PbAttachmentListItemData? _desktopPreviewMeetTranscriptPreviewFile;
   bool _desktopPreviewAgentsExpanded = true;
   bool _didNormalizeInitialDesktopPane = false;
   _MobileMeetingOrigin? _mobileMeetingOrigin;
@@ -3836,18 +3857,300 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  DateTime? _desktopPreviewMeetTranscriptSortDate(StorageEntry entry) {
+    return entry.updatedAt ?? entry.createdAt;
+  }
+
+  PbAttachmentListItemData _desktopPreviewMeetTranscriptItem(StorageEntry entry) {
+    final path = joinPaths(_meetingTranscriptFolder, entry.name);
+    final displayTitle = formatTranscriptFileNameForDisplay(entry.name).trim();
+
+    return PbAttachmentListItemData.fromFileName(
+      title: displayTitle.isEmpty ? entry.name : displayTitle,
+      subtitle: 'Transcript',
+      path: path,
+      fileType: PbAttachmentFileType.transcript,
+    );
+  }
+
+  Future<List<PbAttachmentListItemData>> _loadDesktopPreviewMeetTranscripts() async {
+    final entries = await widget.room.storage.list(_meetingTranscriptFolder);
+    final records =
+        <_DesktopPreviewTranscriptRecord>[
+          for (final entry in entries)
+            if (!entry.isFolder)
+              _DesktopPreviewTranscriptRecord(
+                data: _desktopPreviewMeetTranscriptItem(entry),
+                sortDate: _desktopPreviewMeetTranscriptSortDate(entry),
+              ),
+        ]..sort((left, right) {
+          final leftDate = left.sortDate;
+          final rightDate = right.sortDate;
+          if (leftDate == null && rightDate == null) {
+            return left.data.title.compareTo(right.data.title);
+          }
+          if (leftDate == null) {
+            return 1;
+          }
+          if (rightDate == null) {
+            return -1;
+          }
+          return rightDate.compareTo(leftDate);
+        });
+
+    final now = DateTime.now();
+    final recentCutoff = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
+    final recent = records.where((record) {
+      final sortDate = record.sortDate;
+      return sortDate != null && !sortDate.isBefore(recentCutoff);
+    }).toList();
+    final selected = recent.isNotEmpty ? recent : records.take(7).toList();
+
+    return [for (final record in selected) record.data];
+  }
+
+  bool _desktopPreviewMeetRootEntryIsRoomFileContent(StorageEntry entry) {
+    final name = entry.name.trim();
+    return name.isNotEmpty && !name.startsWith('.') && name != 'transcripts';
+  }
+
+  Future<_DesktopPreviewMeetPaneData> _loadDesktopPreviewMeetPaneData() async {
+    final transcriptsFuture = _loadDesktopPreviewMeetTranscripts();
+    final rootEntriesFuture = widget.room.storage.list('');
+    final transcripts = await transcriptsFuture;
+    final rootEntries = await rootEntriesFuture;
+
+    return _DesktopPreviewMeetPaneData(
+      transcripts: transcripts,
+      roomHasStoredFiles: rootEntries.any(_desktopPreviewMeetRootEntryIsRoomFileContent),
+    );
+  }
+
+  void _setDesktopPreviewMeetTranscriptPreviewFullscreen(bool fullscreen, {bool closeOverlay = false}) {
+    if (fullscreen && closeOverlay) {
+      _desktopPreviewRoomPanelOverlayController.hide();
+    }
+
+    setState(() {
+      _desktopPreviewMeetTranscriptPreviewFullscreen = fullscreen;
+      if (fullscreen && closeOverlay) {
+        _desktopPreviewRoomPanelOverlayOpen = false;
+      } else if (!fullscreen && _desktopPreviewMeetTranscriptPreviewOpen) {
+        _desktopPreviewRoomPanelOverlayOpen = true;
+      }
+    });
+    setPreviewFilePreviewFullscreen(fullscreen);
+  }
+
+  Widget? _buildDesktopPreviewMeetingControls(BuildContext context) {
+    final controls = _meetingToolbarControls(context, compact: true);
+    if (controls.isEmpty) {
+      return null;
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(mainAxisSize: MainAxisSize.min, spacing: desktopPaneHeaderButtonGap, children: controls),
+    );
+  }
+
+  Widget _buildDesktopPreviewMeeting(BuildContext context, String? agentName, {required bool roomPanelContentAvailable}) {
+    final meetingSessionActive = _isMeetingSessionActive(context);
+
+    return ColoredBox(
+      color: PbColors.surfacePanelWash,
+      child: FutureBuilder<_DesktopPreviewMeetPaneData>(
+        future: _loadDesktopPreviewMeetPaneData(),
+        builder: (context, snapshot) {
+          final paneData = snapshot.data;
+          final transcripts = paneData?.transcripts ?? const <PbAttachmentListItemData>[];
+          final transcriptPreviewFile = _desktopPreviewMeetTranscriptPreviewFile;
+          final transcriptSidePaneAvailable =
+              roomPanelContentAvailable || paneData?.roomHasStoredFiles == true || transcripts.isNotEmpty || transcriptPreviewFile != null;
+          final transcriptPreviewOpen = transcriptSidePaneAvailable && _desktopPreviewMeetTranscriptPreviewOpen;
+          final transcriptPreviewFullscreen = transcriptSidePaneAvailable && _desktopPreviewMeetTranscriptPreviewFullscreen;
+
+          if (!transcriptSidePaneAvailable &&
+              (_desktopPreviewMeetTranscriptPreviewOpen ||
+                  _desktopPreviewMeetTranscriptPreviewFile != null ||
+                  _desktopPreviewMeetTranscriptPreviewFullscreen)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) {
+                return;
+              }
+
+              if (_desktopPreviewRoomPanelOverlayController.isShowing) {
+                _desktopPreviewRoomPanelOverlayController.hide();
+              }
+
+              setState(() {
+                _desktopPreviewMeetTranscriptPreviewOpen = false;
+                _desktopPreviewMeetTranscriptPreviewFile = null;
+                _desktopPreviewMeetTranscriptPreviewFullscreen = false;
+                _desktopPreviewRoomPanelOverlayOpen = false;
+              });
+              setPreviewFilePreviewFullscreen(false);
+            });
+          }
+
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !transcriptPreviewFullscreen;
+              final roomPanelCollapsed = !transcriptSidePaneAvailable || _desktopPreviewRoomPanelCollapsed;
+              final roomPanelExpanded = responsivePanel ? false : !roomPanelCollapsed;
+
+              final mainPanel = Column(
+                children: [
+                  PbMeetHeader(
+                    roomPanelExpanded: roomPanelExpanded,
+                    showRoomPanelControls: transcriptSidePaneAvailable,
+                    onRoomPanelToggle: () {
+                      if (!transcriptSidePaneAvailable) {
+                        return;
+                      }
+
+                      setState(() {
+                        if (responsivePanel) {
+                          _desktopPreviewRoomPanelOverlayOpen = true;
+                        } else {
+                          _desktopPreviewRoomPanelCollapsed = !roomPanelCollapsed;
+                        }
+                      });
+                    },
+                    onOpenTranscripts: () {
+                      if (!transcriptSidePaneAvailable) {
+                        return;
+                      }
+
+                      setState(() {
+                        if (responsivePanel) {
+                          _desktopPreviewRoomPanelOverlayOpen = true;
+                        } else {
+                          _desktopPreviewRoomPanelCollapsed = false;
+                        }
+                      });
+                    },
+                    controls: meetingSessionActive ? _buildDesktopPreviewMeetingControls(context) : null,
+                  ),
+                  Expanded(
+                    child: MeetingView(
+                      key: meetingViewKey,
+                      room: widget.room,
+                      onCancel: _leaveMeeting,
+                      joinMeeting: _joinMeeting,
+                      agentName: agentName,
+                    ),
+                  ),
+                ],
+              );
+
+              PbMeetTranscriptPanel buildTranscriptPanel({bool responsiveOverlay = false, bool resizing = false}) {
+                return PbMeetTranscriptPanel(
+                  transcripts: transcripts,
+                  emptyTranscripts: transcripts.isEmpty,
+                  initialPreviewFile: transcriptPreviewFile,
+                  initialFilePreviewOpen: transcriptPreviewOpen,
+                  filePreviewBuilder: _buildAttachmentPreviewContent,
+                  onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file)),
+                  onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
+                  onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
+                  onFilePreviewSelected: (file) {
+                    setState(() => _desktopPreviewMeetTranscriptPreviewFile = file);
+                  },
+                  onFilePreviewOpenChanged: (open) {
+                    setState(() {
+                      _desktopPreviewMeetTranscriptPreviewOpen = open;
+                      if (!open) {
+                        _desktopPreviewMeetTranscriptPreviewFile = null;
+                        _desktopPreviewMeetTranscriptPreviewFullscreen = false;
+                      }
+                    });
+                    if (!open) {
+                      setPreviewFilePreviewFullscreen(false);
+                    }
+                  },
+                  onFilePreviewFullscreenChanged: (fullscreen) {
+                    _setDesktopPreviewMeetTranscriptPreviewFullscreen(fullscreen, closeOverlay: responsiveOverlay);
+                  },
+                  filePreviewResizing: resizing,
+                  borderOnTop: responsiveOverlay,
+                  responsiveOverlay: responsiveOverlay,
+                  responsiveOverlayMobile: false,
+                  onResponsiveOverlayClose: _closeDesktopPreviewRoomPanelOverlay,
+                );
+              }
+
+              if (responsivePanel) {
+                if (!transcriptSidePaneAvailable && _desktopPreviewRoomPanelOverlayOpen) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      _closeDesktopPreviewRoomPanelOverlay();
+                    }
+                  });
+                } else if (_desktopPreviewRoomPanelOverlayOpen) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      _desktopPreviewRoomPanelOverlayController.show();
+                    }
+                  });
+                }
+
+                return OverlayPortal(
+                  controller: _desktopPreviewRoomPanelOverlayController,
+                  overlayChildBuilder: (context) => Positioned.fill(
+                    child: transcriptSidePaneAvailable ? buildTranscriptPanel(responsiveOverlay: true) : const SizedBox.shrink(),
+                  ),
+                  child: mainPanel,
+                );
+              }
+
+              if (_desktopPreviewRoomPanelOverlayOpen ||
+                  !transcriptSidePaneAvailable && _desktopPreviewRoomPanelOverlayController.isShowing) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    if (_desktopPreviewRoomPanelOverlayController.isShowing) {
+                      _desktopPreviewRoomPanelOverlayController.hide();
+                    }
+                    setState(() => _desktopPreviewRoomPanelOverlayOpen = false);
+                  }
+                });
+              }
+
+              return PbRoomPanelMount(
+                activeTab: PbRoomPanelTab.files,
+                filePreviewOpen: transcriptPreviewOpen,
+                filePreviewFullscreen: transcriptPreviewFullscreen,
+                roomPanelCollapsed: roomPanelCollapsed,
+                panelWidth: _desktopPreviewRoomPanelWidth,
+                onPanelWidthChanged: _setDesktopPreviewRoomPanelWidth,
+                threadPanel: mainPanel,
+                roomPanelBuilder: (context, resizing) =>
+                    transcriptSidePaneAvailable ? buildTranscriptPanel(resizing: resizing) : const SizedBox.shrink(),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildMeeting(
     BuildContext context,
     String? agentName,
     List<Widget> actions, {
     bool embedMobileChrome = true,
     bool showDesktopSidetrayToggle = true,
+    bool desktopPreviewRoomPanelContentAvailable = false,
   }) {
     final theme = ShadTheme.of(context);
     final cs = theme.colorScheme;
 
     final isMobile = _usesMobileRoomLayout(context);
     final meetingIsActive = _isMeetingSessionActive(context);
+
+    if (!isMobile && powerboardsUsesDesktopUiPreview(context)) {
+      return _buildDesktopPreviewMeeting(context, agentName, roomPanelContentAvailable: desktopPreviewRoomPanelContentAvailable);
+    }
 
     return ColoredBox(
       color: isMobile ? cs.card : cs.background,
@@ -4195,7 +4498,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required bool isAdaptiveWebapp,
   }) {
     if (controller.inMeeting) {
-      return _buildMeeting(context, null, const [], showDesktopSidetrayToggle: false);
+      return _buildMeeting(
+        context,
+        null,
+        const [],
+        showDesktopSidetrayToggle: false,
+        desktopPreviewRoomPanelContentAvailable: _hasVisibleAgents(supported),
+      );
     }
 
     if (canViewStorageAllowed && controller.isFilesShown) {
