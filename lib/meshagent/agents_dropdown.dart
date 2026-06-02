@@ -6,7 +6,6 @@ import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:powerboards/theme/theme.dart';
-import 'package:responsive_framework/responsive_framework.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
@@ -229,7 +228,7 @@ class AgentsDropdown extends StatelessWidget {
       builder: (context) {
         final size = MediaQuery.sizeOf(context);
         final isLandscapePhone = _isLandscapePhoneViewport(context);
-        final isMobileAdaptive = ResponsiveBreakpoints.of(context).isMobile || isLandscapePhone;
+        final isMobileAdaptive = powerboardsUsesNativeMobileAdaptiveLayout(context);
         final centerMenuInViewport = isMobileAdaptive && !isLandscapePhone;
         final developmentAgents = _developmentAgents();
         final selectedRouteId = selectedAgentRouteId ?? (selectedService == null ? null : _serviceId(selectedService!));

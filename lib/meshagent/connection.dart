@@ -7,6 +7,7 @@ import 'package:powerboards/meshagent/project.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
+import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -19,6 +20,7 @@ import 'package:powerboards/meshagent/room_not_found.dart';
 import 'package:powerboards/oauth/oauth.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
@@ -82,7 +84,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   }
 
   Widget _backHeader() {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = powerboardsUsesNativeMobileAdaptiveLayout(context);
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
 
     if (isMobile) {
@@ -111,7 +113,7 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   }
 
   Widget _roomSafeAreaShell(Widget child) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = powerboardsUsesNativeMobileAdaptiveLayout(context);
 
     return ColoredBox(
       color: isMobile ? Colors.transparent : shadCard,
@@ -159,9 +161,13 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   }
 
   Widget _withReservedRoomHeader(Widget child) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+    final isMobile = powerboardsUsesNativeMobileAdaptiveLayout(context);
     final isSmallDisplay = ResponsiveBreakpoints.of(context).smallerOrEqualTo("chromebook");
     final navController = isMobile ? Controller.maybeOfType<NavController>(context) : null;
+    if (powerboardsUsesDesktopUiPreview(context)) {
+      return _roomSafeAreaShell(child);
+    }
+
     final content = Column(
       children: [
         SizedBox(

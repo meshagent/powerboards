@@ -5811,6 +5811,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   return _buildRoomInitializationError(context, title: "Unable to load room services", error: services.state.error);
                 }
 
+                final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
                 final actions = _emptyRoomHeaderActions(isMobile: isMobile);
                 final cs = ShadTheme.of(context).colorScheme;
                 if (isMobile) {
@@ -5822,6 +5823,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     backgroundColor: cs.card,
                     scrollIdentity: "room-loading",
                     body: _buildRoomLoading(context, title: "Loading room services"),
+                  );
+                }
+
+                if (useDesktopUiPreview) {
+                  return SafeArea(
+                    child: ColoredBox(
+                      color: cs.card,
+                      child: _buildRoomLoading(context, title: "Loading room services"),
+                    ),
                   );
                 }
 
