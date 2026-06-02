@@ -12,6 +12,7 @@ class PbThreadHeader extends StatelessWidget {
     this.agentName = 'Assistant',
     this.selectedThreadTitle,
     this.roomPanelExpanded = true,
+    this.blankRoom = false,
     this.onTitlePressed,
     this.onRoomPanelToggle,
     this.onOpenAllAgentsAndThreads,
@@ -21,6 +22,7 @@ class PbThreadHeader extends StatelessWidget {
   final String agentName;
   final String? selectedThreadTitle;
   final bool roomPanelExpanded;
+  final bool blankRoom;
   final VoidCallback? onTitlePressed;
   final VoidCallback? onRoomPanelToggle;
   final VoidCallback? onOpenAllAgentsAndThreads;
@@ -30,6 +32,14 @@ class PbThreadHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (blankRoom) {
+      return Container(
+        constraints: const BoxConstraints(minHeight: 76),
+        padding: const EdgeInsets.fromLTRB(30, 19, 28, 19),
+        child: const Row(children: [Expanded(child: _BlankRoomTitle())]),
+      );
+    }
+
     final threadTitleButton = _ThreadTitleButton(title: _selectedThreadTitle, onPressed: _titleAction);
 
     return Container(
@@ -70,6 +80,21 @@ class PbThreadHeader extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _BlankRoomTitle extends StatelessWidget {
+  const _BlankRoomTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text('Welcome', maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: PowerboardsTypography.h1),
       ),
     );
   }

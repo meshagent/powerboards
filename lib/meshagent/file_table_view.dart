@@ -2076,7 +2076,14 @@ class _FileManagerViewState extends State<FileManagerView> {
           builder: (context, constraints) {
             final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_v1FilePreviewFullscreen;
             final responsiveMode = responsivePanel ? PbFilesResponsiveMode.overlay : PbFilesResponsiveMode.docked;
-            final roomPanelCollapsed = _effectiveV1FilesRoomPanelCollapsed;
+            final roomHasInstalledAgent = widget.services?.state.isReady == true && widget.services!.state.value!.isNotEmpty;
+            final sidePaneAvailable =
+                _v1PreviewFile != null ||
+                recentlyOpenedFiles.isNotEmpty ||
+                items.isNotEmpty ||
+                currentFolder.isNotEmpty ||
+                roomHasInstalledAgent;
+            final roomPanelCollapsed = !sidePaneAvailable || _effectiveV1FilesRoomPanelCollapsed;
             final roomPanelExpanded = responsivePanel ? false : !roomPanelCollapsed;
             final mainPanel = Stack(
               children: [
@@ -2091,6 +2098,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   hasActiveFilter: _v1FilterController.text.trim().isNotEmpty,
                   roomPanelExpanded: roomPanelExpanded,
                   responsiveMode: responsiveMode,
+                  showRoomPanelControls: sidePaneAvailable,
                   previewFileId: _v1PreviewFile?.id,
                   keyboardPreviewFileId: null,
                   keyboardPreviewDirection: 0,
@@ -2108,6 +2116,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onUpload: () => unawaited(_addFiles(currentFolder)),
                   onFilesDropped: (_) {},
                   onOpenRecentFiles: () {
+                    if (!sidePaneAvailable) {
+                      return;
+                    }
+
                     if (responsivePanel) {
                       setState(() => _v1FilesRoomPanelOverlayOpen = true);
                       return;
@@ -2116,6 +2128,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                     _setV1FilesRoomPanelCollapsed(false);
                   },
                   onRoomPanelToggle: () {
+                    if (!sidePaneAvailable) {
+                      return;
+                    }
+
                     if (responsivePanel) {
                       setState(() => _v1FilesRoomPanelOverlayOpen = true);
                       return;
@@ -2168,7 +2184,13 @@ class _FileManagerViewState extends State<FileManagerView> {
             }
 
             if (responsivePanel) {
-              if (_v1FilesRoomPanelOverlayOpen) {
+              if (!sidePaneAvailable && _v1FilesRoomPanelOverlayOpen) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _closeV1FilesRoomPanelOverlay();
+                  }
+                });
+              } else if (_v1FilesRoomPanelOverlayOpen) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (mounted) {
                     _v1FilesRoomPanelOverlayController.show();
@@ -2179,13 +2201,15 @@ class _FileManagerViewState extends State<FileManagerView> {
               return OverlayPortal(
                 controller: _v1FilesRoomPanelOverlayController,
                 overlayChildBuilder: (context) => Positioned.fill(
-                  child: sidePaneBuilder(context, false).asOverlayFrame(mobile: false, onClose: _closeV1FilesRoomPanelOverlay),
+                  child: sidePaneAvailable
+                      ? sidePaneBuilder(context, false).asOverlayFrame(mobile: false, onClose: _closeV1FilesRoomPanelOverlay)
+                      : const SizedBox.shrink(),
                 ),
                 child: ColoredBox(color: PbColors.surfacePanelWash, child: mainPanel),
               );
             }
 
-            if (_v1FilesRoomPanelOverlayOpen) {
+            if (_v1FilesRoomPanelOverlayOpen || !sidePaneAvailable && _v1FilesRoomPanelOverlayController.isShowing) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) {
                   if (_v1FilesRoomPanelOverlayController.isShowing) {

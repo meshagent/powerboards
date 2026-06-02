@@ -58,7 +58,6 @@ class PbFilesSidePane extends StatelessWidget {
         showInlineBorder: !responsiveOverlay,
         hideFullscreenToggle: responsiveOverlayMobile,
         onAskAgent: onAskAgent == null ? null : () => onAskAgent!(preview),
-        onShare: onShare == null ? null : () => onShare!(preview),
         onDownload: onDownload == null ? null : () => onDownload!(preview),
         onToggleFullscreen: onToggleFullscreen,
         onClose: onClosePreview,
@@ -86,7 +85,15 @@ class PbFilesSidePane extends StatelessWidget {
           const PbRoomPanelDescription('Your file session history appears here.'),
           const SizedBox(height: 20),
           PbSidepaneFileList(
-            files: [for (final file in files) PbSidepaneFileListItem(data: file.toAttachmentData(), onPressed: () => onPreviewFile(file))],
+            files: [
+              for (final file in files)
+                PbSidepaneFileListItem(
+                  data: file.toAttachmentData(),
+                  onPressed: () => onPreviewFile(file),
+                  onAskAgent: onAskAgent == null ? null : () => onAskAgent!(file),
+                  onDownload: onDownload == null ? null : () => onDownload!(file),
+                ),
+            ],
             emptyState: _emptyRecentFiles,
           ),
         ],

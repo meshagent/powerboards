@@ -278,7 +278,13 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
                     onThreadDelete: widget.onThreadDelete,
                     onCreateThread: widget.onCreateThread,
                   )
-                : _FilesPanel(attachments: widget.attachments ?? _attachments, onPreviewFile: _openFilePreview),
+                : _FilesPanel(
+                    attachments: widget.attachments ?? _attachments,
+                    onPreviewFile: _openFilePreview,
+                    onAskFileAgent: widget.onAskFileAgent,
+                    onShareFile: widget.onShareFile,
+                    onDownloadFile: widget.onDownloadFile,
+                  ),
           ),
         ],
       ),
@@ -1532,10 +1538,13 @@ class _PbThreadChipState extends State<PbThreadChip> {
 }
 
 class _FilesPanel extends StatelessWidget {
-  const _FilesPanel({required this.attachments, required this.onPreviewFile});
+  const _FilesPanel({required this.attachments, required this.onPreviewFile, this.onAskFileAgent, this.onShareFile, this.onDownloadFile});
 
   final List<PbAttachmentListItemData> attachments;
   final ValueChanged<PbAttachmentListItemData> onPreviewFile;
+  final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
+  final ValueChanged<PbAttachmentListItemData>? onShareFile;
+  final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
 
   @override
   Widget build(BuildContext context) {
@@ -1544,23 +1553,38 @@ class _FilesPanel extends StatelessWidget {
       children: [
         const _RoomPanelDescription('Browse attachments by selected agent.'),
         const SizedBox(height: 20),
-        _AttachmentList(attachments: attachments, onPreviewFile: onPreviewFile),
+        _AttachmentList(
+          attachments: attachments,
+          onPreviewFile: onPreviewFile,
+          onAskFileAgent: onAskFileAgent,
+          onShareFile: onShareFile,
+          onDownloadFile: onDownloadFile,
+        ),
       ],
     );
   }
 }
 
 class _AttachmentList extends StatelessWidget {
-  const _AttachmentList({required this.attachments, required this.onPreviewFile});
+  const _AttachmentList({
+    required this.attachments,
+    required this.onPreviewFile,
+    this.onAskFileAgent,
+    this.onShareFile,
+    this.onDownloadFile,
+  });
 
   static const _emptyAttachment = PbAttachmentListItemData(
-    title: 'No files attached',
-    subtitle: 'Files from this agent will appear here.',
+    title: 'No files here yet',
+    subtitle: 'Files attached will show up here.',
     fileType: PbAttachmentFileType.generic,
   );
 
   final List<PbAttachmentListItemData> attachments;
   final ValueChanged<PbAttachmentListItemData> onPreviewFile;
+  final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
+  final ValueChanged<PbAttachmentListItemData>? onShareFile;
+  final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
 
   @override
   Widget build(BuildContext context) {
@@ -1577,7 +1601,16 @@ class _AttachmentList extends StatelessWidget {
       itemCount: attachments.length,
       gap: 10,
       topPadding: _sidepaneListTopHoverClearance,
-      itemBuilder: (context, index) => PbAttachmentCard(data: attachments[index], onPressed: () => onPreviewFile(attachments[index])),
+      itemBuilder: (context, index) {
+        final attachment = attachments[index];
+        return PbAttachmentCard(
+          data: attachment,
+          onPressed: () => onPreviewFile(attachment),
+          onAskAgent: onAskFileAgent == null ? null : () => onAskFileAgent!(attachment),
+          onShare: onShareFile == null ? null : () => onShareFile!(attachment),
+          onDownload: onDownloadFile == null ? null : () => onDownloadFile!(attachment),
+        );
+      },
     );
   }
 }
@@ -1635,10 +1668,21 @@ class _SidepaneScrollViewport extends StatelessWidget {
 }
 
 class PbAttachmentCard extends StatefulWidget {
-  const PbAttachmentCard({super.key, required this.data, this.onPressed, this.emptyState = false});
+  const PbAttachmentCard({
+    super.key,
+    required this.data,
+    this.onPressed,
+    this.onAskAgent,
+    this.onShare,
+    this.onDownload,
+    this.emptyState = false,
+  });
 
   final PbAttachmentListItemData data;
   final VoidCallback? onPressed;
+  final VoidCallback? onAskAgent;
+  final VoidCallback? onShare;
+  final VoidCallback? onDownload;
   final bool emptyState;
 
   @override
@@ -1768,7 +1812,12 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                           ignoring: !showAction,
                           child: PbSidepaneItemMenu(
                             onOpenChanged: (open) => setState(() => _menuOpen = open),
-                            panelBuilder: (closeMenu) => PbFileItemMenu(onOpen: widget.onPressed, onDismiss: closeMenu),
+                            panelBuilder: (closeMenu) => PbFileItemMenu(
+                              onOpen: widget.onPressed,
+                              onAskAgent: widget.onAskAgent,
+                              onDownload: widget.onDownload,
+                              onDismiss: closeMenu,
+                            ),
                           ),
                         ),
                       ),
@@ -1853,7 +1902,7 @@ class PbFilePreviewPane extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 7),
-                    _FilePreviewToolbar(state: toolbarState, onAskAgent: onAskAgent, onShare: onShare, onDownload: onDownload),
+                    _FilePreviewToolbar(state: toolbarState, onAskAgent: onAskAgent, onDownload: onDownload),
                     if (!hideFullscreenToggle)
                       _GhostIcon(assetName: fullscreen ? 'minimize-2' : 'maximize-2', size: 40, onPressed: onToggleFullscreen),
                     _GhostIcon(assetName: 'x', size: 40, onPressed: onClose),
@@ -1899,11 +1948,10 @@ class PbFilePreviewPane extends StatelessWidget {
   }
 }
 
-enum _FilePreviewToolbarStateId { full, downloadIcon, downloadMenu, shareIcon, shareMenu, allMenu }
+enum _FilePreviewToolbarStateId { full, downloadIcon, downloadMenu, allMenu }
 
 enum _FilePreviewAction {
   askAgent('Ask agent', 'message-square-plus'),
-  share('Share', 'share'),
   download('Download', 'arrow-down-to-line');
 
   const _FilePreviewAction(this.label, this.iconAssetName);
@@ -1934,24 +1982,14 @@ class _FilePreviewToolbarState {
     iconOnly: {},
     inMenu: {_FilePreviewAction.download},
   );
-  static const shareIcon = _FilePreviewToolbarState(
-    id: _FilePreviewToolbarStateId.shareIcon,
-    iconOnly: {_FilePreviewAction.share},
-    inMenu: {_FilePreviewAction.download},
-  );
-  static const shareMenu = _FilePreviewToolbarState(
-    id: _FilePreviewToolbarStateId.shareMenu,
-    iconOnly: {},
-    inMenu: {_FilePreviewAction.download, _FilePreviewAction.share},
-  );
   static const allMenu = _FilePreviewToolbarState(
     id: _FilePreviewToolbarStateId.allMenu,
     iconOnly: {},
-    inMenu: {_FilePreviewAction.download, _FilePreviewAction.share, _FilePreviewAction.askAgent},
+    inMenu: {_FilePreviewAction.download, _FilePreviewAction.askAgent},
   );
 
-  static const _displayStates = [full, downloadIcon, downloadMenu, shareIcon, shareMenu, allMenu];
-  static const _stableStates = [full, downloadMenu, shareMenu, allMenu];
+  static const _displayStates = [full, downloadIcon, downloadMenu, allMenu];
+  static const _stableStates = [full, downloadMenu, allMenu];
 
   final _FilePreviewToolbarStateId id;
   final Set<_FilePreviewAction> iconOnly;
@@ -2002,17 +2040,15 @@ class _FilePreviewToolbarState {
 }
 
 class _FilePreviewToolbar extends StatelessWidget {
-  const _FilePreviewToolbar({required this.state, this.onAskAgent, this.onShare, this.onDownload});
+  const _FilePreviewToolbar({required this.state, this.onAskAgent, this.onDownload});
 
   final _FilePreviewToolbarState state;
   final VoidCallback? onAskAgent;
-  final VoidCallback? onShare;
   final VoidCallback? onDownload;
 
   VoidCallback? _handlerFor(_FilePreviewAction action) {
     return switch (action) {
       _FilePreviewAction.askAgent => onAskAgent,
-      _FilePreviewAction.share => onShare,
       _FilePreviewAction.download => onDownload,
     };
   }
@@ -2042,10 +2078,9 @@ class _FilePreviewToolbar extends StatelessWidget {
               size: 40,
               panelBuilder: (closeMenu) => PbFilePreviewPaneOptionsMenu(
                 showAskAgent: state.isInMenu(_FilePreviewAction.askAgent),
-                showShare: state.isInMenu(_FilePreviewAction.share),
+                showShare: false,
                 showDownload: state.isInMenu(_FilePreviewAction.download),
                 onAskAgent: onAskAgent,
-                onShare: onShare,
                 onDownload: onDownload,
                 onDismiss: closeMenu,
               ),
@@ -2240,7 +2275,6 @@ class PbFileItemMenu extends StatelessWidget {
           singleLine: true,
           onPressed: () => _runMenuAction(onAskAgent, onDismiss),
         ),
-        PbMenuOption(title: 'Share', leadingIconAssetName: 'share', singleLine: true, onPressed: () => _runMenuAction(onShare, onDismiss)),
         PbMenuOption(
           title: 'Download',
           leadingIconAssetName: 'arrow-down-to-line',
@@ -2256,7 +2290,7 @@ class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
   const PbFilePreviewPaneOptionsMenu({
     super.key,
     this.showAskAgent = true,
-    this.showShare = true,
+    this.showShare = false,
     this.showDownload = true,
     this.onAskAgent,
     this.onShare,

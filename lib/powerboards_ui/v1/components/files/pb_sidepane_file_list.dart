@@ -12,10 +12,13 @@ const double _sidepaneScrollTopPadding = 8;
 const double _sidepaneScrollBottomPadding = 24;
 
 class PbSidepaneFileListItem {
-  const PbSidepaneFileListItem({required this.data, this.onPressed});
+  const PbSidepaneFileListItem({required this.data, this.onPressed, this.onAskAgent, this.onShare, this.onDownload});
 
   final PbAttachmentListItemData data;
   final VoidCallback? onPressed;
+  final VoidCallback? onAskAgent;
+  final VoidCallback? onShare;
+  final VoidCallback? onDownload;
 }
 
 class PbSidepaneFileEmptyStateData {
@@ -67,7 +70,13 @@ class PbSidepaneFileList extends StatelessWidget {
       expand: expand,
       itemBuilder: (context, index) {
         final file = files[index];
-        return PbAttachmentCard(data: file.data, onPressed: file.onPressed);
+        return PbAttachmentCard(
+          data: file.data,
+          onPressed: file.onPressed,
+          onAskAgent: file.onAskAgent,
+          onShare: file.onShare,
+          onDownload: file.onDownload,
+        );
       },
     );
   }
@@ -165,6 +174,9 @@ class PbAttachmentCard extends StatefulWidget {
     super.key,
     required this.data,
     this.onPressed,
+    this.onAskAgent,
+    this.onShare,
+    this.onDownload,
     this.emptyState = false,
     this.emptyIconAssetName = 'file',
     this.emptyIconColor = PbColors.textSubtle,
@@ -172,6 +184,9 @@ class PbAttachmentCard extends StatefulWidget {
 
   final PbAttachmentListItemData data;
   final VoidCallback? onPressed;
+  final VoidCallback? onAskAgent;
+  final VoidCallback? onShare;
+  final VoidCallback? onDownload;
   final bool emptyState;
   final String emptyIconAssetName;
   final Color emptyIconColor;
@@ -303,7 +318,12 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                           ignoring: !showAction,
                           child: PbSidepaneItemMenu(
                             onOpenChanged: (open) => setState(() => _menuOpen = open),
-                            panelBuilder: (closeMenu) => PbFileItemMenu(onOpen: widget.onPressed, onDismiss: closeMenu),
+                            panelBuilder: (closeMenu) => PbFileItemMenu(
+                              onOpen: widget.onPressed,
+                              onAskAgent: widget.onAskAgent,
+                              onDownload: widget.onDownload,
+                              onDismiss: closeMenu,
+                            ),
                           ),
                         ),
                       ),

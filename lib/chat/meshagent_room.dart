@@ -63,6 +63,8 @@ import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_header.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_empty_state.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
 import 'package:powerboards/settings/selected_room.dart';
@@ -1020,6 +1022,40 @@ Widget _buildPaneHeaderIconButton({
 
 Color _mobileRoomSurfaceColor(BuildContext context) {
   return ShadTheme.of(context).colorScheme.card;
+}
+
+class _BlankDesktopPreviewRoomWorkspace extends StatelessWidget {
+  const _BlankDesktopPreviewRoomWorkspace({this.onInstallAgent});
+
+  final VoidCallback? onInstallAgent;
+
+  @override
+  Widget build(BuildContext context) {
+    const sourceTopFactor = 0.334;
+    const sourceThreadHeaderHeight = 76.0;
+
+    return ColoredBox(
+      color: const Color(0x73FFFFFF),
+      child: Column(
+        children: [
+          const PbThreadHeader(blankRoom: true),
+          Expanded(
+            child: PbEmptyState(
+              iconAssetName: 'messages-square',
+              title: 'Start with an agent',
+              subtitle: 'Add an agent to help keep conversations, files, and follow-ups moving.',
+              topFactor: sourceTopFactor,
+              topOffset: -sourceThreadHeaderHeight * (1 - sourceTopFactor),
+              actionTopGap: 30,
+              action: onInstallAgent == null
+                  ? null
+                  : PbButton(label: 'Install an Agent', variant: PbButtonVariant.primary, height: 42, onPressed: onInstallAgent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _MobileRoomCreateActionRow extends StatelessWidget {
@@ -4120,24 +4156,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     return _buildRoomLoading(context, title: "Loading room permissions");
                   }
 
-                  return PaneEmptyState(
-                    title: "Welcome to your room",
-                    description: canInstallAgent ? "Install an agent in this room to get started" : null,
-                    action: !canInstallAgent
+                  return _BlankDesktopPreviewRoomWorkspace(
+                    onInstallAgent: !canInstallAgent
                         ? null
-                        : ShadButton(
-                            onPressed: () async {
-                              await showManageAgentsSurface(
+                        : () {
+                            unawaited(
+                              showManageAgentsSurface(
                                 context: context,
                                 room: widget.room,
                                 projectId: widget.projectId,
                                 onServiceChanged: () {
                                   services.refresh();
                                 },
-                              );
-                            },
-                            child: const Text("Install an Agent"),
-                          ),
+                              ),
+                            );
+                          },
                   );
                 },
               );

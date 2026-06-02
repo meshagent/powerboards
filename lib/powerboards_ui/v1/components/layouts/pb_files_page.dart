@@ -14,6 +14,8 @@ import 'pb_room_panel_mount.dart';
 
 enum _FilesSortDirection { asc, desc }
 
+const _recentlyOpenedFilesLimit = 7;
+
 class PbFilesPage extends StatefulWidget {
   const PbFilesPage({
     super.key,
@@ -28,6 +30,8 @@ class PbFilesPage extends StatefulWidget {
     required this.filePreviewFullscreen,
     required this.onFilePreviewFullscreenChanged,
     this.onLinkedThreadPressed,
+    this.blankRoom = false,
+    this.newRoom = false,
   });
 
   final bool roomPanelCollapsed;
@@ -41,6 +45,8 @@ class PbFilesPage extends StatefulWidget {
   final bool filePreviewFullscreen;
   final ValueChanged<bool> onFilePreviewFullscreenChanged;
   final PbFilesLinkedThreadHandler? onLinkedThreadPressed;
+  final bool blankRoom;
+  final bool newRoom;
 
   @override
   State<PbFilesPage> createState() => _PbFilesPageState();
@@ -53,14 +59,15 @@ class _PbFilesPageState extends State<PbFilesPage> {
 
   final List<PbFilesItemData> _items = [..._initialFiles];
   final Set<String> _selectedIds = {};
+  final List<String> _recentlyOpenedFileIds = [];
 
   PbFilesSortKey _sortKey = PbFilesSortKey.updated;
   _FilesSortDirection _sortDirection = _FilesSortDirection.desc;
   String _currentPath = '';
   bool _roomPanelOverlayOpen = false;
-  late bool _filePreviewOpen = widget.initialPreviewOpen;
+  late bool _filePreviewOpen = widget.blankRoom || widget.newRoom ? false : widget.initialPreviewOpen;
   bool _collapseRoomPanelAfterPreviewClose = false;
-  late PbFilesItemData? _previewFile = widget.initialPreviewFile ?? _initialFiles.first;
+  late PbFilesItemData? _previewFile = widget.blankRoom || widget.newRoom ? null : (widget.initialPreviewFile ?? _initialFiles.first);
   String? _keyboardPreviewFileId;
   int _keyboardPreviewDirection = 0;
   bool _filesKeyboardBrowseArmed = false;
@@ -73,10 +80,28 @@ class _PbFilesPageState extends State<PbFilesPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant PbFilesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.blankRoom || widget.newRoom) {
+      _filePreviewOpen = false;
+      _previewFile = null;
+    }
+  }
+
   String get _filterQuery => _filterController.text.trim().toLowerCase();
 
   List<PbFilesItemData> get _visibleItems {
     final rows = _items.where((item) {
+      if (widget.blankRoom) {
+        return false;
+      }
+
+      if (widget.newRoom) {
+        return _currentPath.isEmpty && item.parentPath.isEmpty && item.title == 'Design references';
+      }
+
       if (item.parentPath != _currentPath) {
         return false;
       }
@@ -93,10 +118,27 @@ class _PbFilesPageState extends State<PbFilesPage> {
     return rows;
   }
 
-  List<PbFilesItemData> get _recentFiles {
-    final files = _items.where((item) => item.kind == PbFilesItemKind.file).toList()
-      ..sort((left, right) => right.updatedSort.compareTo(left.updatedSort));
-    return files.take(8).toList();
+  List<PbFilesItemData> get _recentlyOpenedFiles {
+    if (widget.blankRoom || widget.newRoom) {
+      return const [];
+    }
+
+    final itemsById = {for (final item in _items) item.id: item};
+    final files = <PbFilesItemData>[];
+
+    for (final id in _recentlyOpenedFileIds) {
+      final item = itemsById[id];
+      if (item == null || !item.canPreview) {
+        continue;
+      }
+
+      files.add(item);
+      if (files.length == _recentlyOpenedFilesLimit) {
+        break;
+      }
+    }
+
+    return files;
   }
 
   int _compareFiles(PbFilesItemData left, PbFilesItemData right) {
@@ -188,6 +230,19 @@ class _PbFilesPageState extends State<PbFilesPage> {
     });
   }
 
+  void _recordOpenedFile(PbFilesItemData item) {
+    if (!item.canPreview) {
+      return;
+    }
+
+    _recentlyOpenedFileIds.remove(item.id);
+    _recentlyOpenedFileIds.insert(0, item.id);
+
+    if (_recentlyOpenedFileIds.length > _recentlyOpenedFilesLimit) {
+      _recentlyOpenedFileIds.removeRange(_recentlyOpenedFilesLimit, _recentlyOpenedFileIds.length);
+    }
+  }
+
   void _openItem(PbFilesItemData item, {required bool responsivePanel, required bool mobilePanel}) {
     _filesKeyboardFocusNode.requestFocus();
 
@@ -215,6 +270,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
       _previewFile = item;
       _filePreviewOpen = true;
       _collapseRoomPanelAfterPreviewClose = collapseRoomPanelAfterClose;
+      _recordOpenedFile(item);
       if (responsivePanel && !mobilePanel) {
         _roomPanelOverlayOpen = true;
       }
@@ -237,6 +293,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
       _previewFile = item;
       _filePreviewOpen = true;
       _collapseRoomPanelAfterPreviewClose = false;
+      _recordOpenedFile(item);
     });
     widget.onPreviewFileChanged(item);
     widget.onPreviewOpenChanged(true);
@@ -331,6 +388,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
       _filesKeyboardBrowseArmed = true;
       _filePreviewOpen = true;
       _collapseRoomPanelAfterPreviewClose = collapseRoomPanelAfterClose;
+      _recordOpenedFile(item);
       if (responsivePanel && !mobilePanel) {
         _roomPanelOverlayOpen = true;
       }
@@ -492,7 +550,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
         );
         PbFilesSidePane sidePaneBuilder(BuildContext context, bool resizing) {
           return PbFilesSidePane(
-            files: _recentFiles,
+            files: _recentlyOpenedFiles,
             previewFile: _filePreviewOpen ? _previewFile : null,
             fullscreen: widget.filePreviewFullscreen,
             resizing: resizing,
