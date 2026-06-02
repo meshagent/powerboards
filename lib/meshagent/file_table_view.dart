@@ -243,6 +243,13 @@ class _FilePathKey {
   static bool isFolderKey(String key) => key.endsWith('/');
 }
 
+class _PendingDeleteOperation {
+  const _PendingDeleteOperation({required this.handle, required this.displayUntil});
+
+  final PendingStorageDeleteHandle handle;
+  final DateTime displayUntil;
+}
+
 class FileManagerViewController {
   Future<void> Function()? _createFolderInCurrentLocation;
   void Function()? _createTextFileInCurrentLocation;
@@ -358,6 +365,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   final ValueNotifier<bool> _v1FilesDropTargetActive = ValueNotifier(false);
   PbFilesItemData? _v1PreviewFile;
   List<PbFilesItemData> _v1RecentlyOpenedFiles = const <PbFilesItemData>[];
+  final Map<String, PbFilesItemData> _v1FileStateRowsById = <String, PbFilesItemData>{};
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
 
@@ -389,6 +397,92 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   bool _isDeletePending(String path, bool isFolder) {
     return PendingStorageDeletes.contains(scope: _deleteScope, path: path, isFolder: isFolder);
+  }
+
+  bool _usesDesktopV1FilesBrowser() {
+    return mounted && !_usesAdaptiveMobileLayout(context) && powerboardsUsesDesktopUiPreview(context);
+  }
+
+  bool _v1DeleteCoversPath({required String deletePath, required bool isFolder, required String candidatePath}) {
+    final normalizedDeletePath = PendingStorageDeletes.normalizePath(deletePath);
+    final normalizedCandidatePath = PendingStorageDeletes.normalizePath(candidatePath);
+    if (normalizedDeletePath == normalizedCandidatePath) {
+      return true;
+    }
+
+    return isFolder && normalizedDeletePath.isNotEmpty && normalizedCandidatePath.startsWith('$normalizedDeletePath/');
+  }
+
+  bool _v1StateRowMatchesPath(PbFilesItemData item, String path, {required bool isFolder}) {
+    final normalizedPath = PendingStorageDeletes.normalizePath(path);
+    return item.id == _FilePathKey.keyForPath(path, isFolder) || item.id.startsWith('upload-error:$normalizedPath:');
+  }
+
+  void _prepareV1PendingDeleteFeedback(Iterable<String> keys) {
+    if (!_usesDesktopV1FilesBrowser()) {
+      return;
+    }
+
+    final targets = [for (final key in keys) (path: _FilePathKey.pathFromKey(key), isFolder: _FilePathKey.isFolderKey(key))];
+    if (targets.isEmpty) {
+      return;
+    }
+
+    final closesPreviewFile =
+        _v1PreviewFile != null &&
+        targets.any(
+          (target) =>
+              _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _v1PathForItem(_v1PreviewFile!)),
+        );
+    final closesOpenedFile =
+        _openedFile != null &&
+        targets.any((target) => _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _openedFile!));
+    final nextRecentlyOpenedFiles = [
+      for (final item in _v1RecentlyOpenedFiles)
+        if (!targets.any(
+          (target) => _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _v1PathForItem(item)),
+        ))
+          item,
+    ];
+    final recentFilesChanged = nextRecentlyOpenedFiles.length != _v1RecentlyOpenedFiles.length;
+    final stateRowKeys = keys.toSet();
+    final stateRowsChanged = stateRowKeys.any(_v1FileStateRowsById.containsKey);
+
+    if (closesPreviewFile || closesOpenedFile || recentFilesChanged || stateRowsChanged) {
+      setState(() {
+        if (stateRowsChanged) {
+          _v1FileStateRowsById.removeWhere((key, _) => stateRowKeys.contains(key));
+        }
+
+        if (recentFilesChanged) {
+          _v1RecentlyOpenedFiles = nextRecentlyOpenedFiles;
+        }
+
+        if (closesPreviewFile || closesOpenedFile) {
+          _v1PreviewFile = null;
+          _v1FilePreviewFullscreen = false;
+          _v1FilesRoomPanelOverlayOpen = false;
+          setPreviewFilePreviewFullscreen(false);
+        }
+      });
+    }
+
+    if (closesOpenedFile) {
+      _closeFile();
+    }
+  }
+
+  Future<void> _waitForV1PendingDeleteDisplay(DateTime displayUntil) async {
+    final shouldHoldForFeedback = _usesDesktopV1FilesBrowser();
+    if (!shouldHoldForFeedback) {
+      return;
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    final remaining = displayUntil.difference(DateTime.now());
+    if (remaining > Duration.zero) {
+      await Future<void>.delayed(remaining);
+    }
   }
 
   late final storageEntries = Resource<List<StorageEntry>>(() => _getChildren(_folderSig.value), source: _folderSig);
@@ -610,6 +704,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     final idx = next.indexWhere((e) => e.name == name);
+    _v1FileStateRowsById.removeWhere((_, item) => _v1StateRowMatchesPath(item, path, isFolder: false));
     if (idx == -1) {
       next.add(StorageEntry(name: name, isFolder: false, size: null, createdAt: now, updatedAt: now));
       unawaited(_refreshCurrentFolder());
@@ -631,6 +726,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final name = path.split('/').where((s) => s.isNotEmpty).last;
     final next = List<StorageEntry>.of(ready.value);
     next.removeWhere((e) => e.name == name);
+    _v1FileStateRowsById.removeWhere((_, item) => _v1StateRowMatchesPath(item, path, isFolder: false));
     final previewFile = _v1PreviewFile;
     if (previewFile != null && _v1PathForItem(previewFile) == path) {
       _v1PreviewFile = null;
@@ -966,17 +1062,120 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  PbFilesItemData _v1ProcessingDeleteItem(PendingStorageDeleteEntry pendingDelete) {
+    final path = pendingDelete.path;
+    final fallbackName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+    final displayName = pendingDelete.isFolder ? fallbackName : _displayNameForPath(path);
+    final title = displayName.isEmpty ? 'Deleting item' : 'Deleting $displayName';
+
+    return _v1StateRow(
+      id: _FilePathKey.keyForPath(path, pendingDelete.isFolder),
+      title: title,
+      path: path,
+      isFolder: pendingDelete.isFolder,
+      updatedLabel: 'Deleting',
+      updatedSort: pendingDelete.startedAt.millisecondsSinceEpoch + pendingDelete.sequence,
+      kind: PbFilesItemKind.processing,
+    );
+  }
+
+  PbFilesItemData _v1StateRow({
+    required String id,
+    required String title,
+    required String path,
+    required bool isFolder,
+    required String updatedLabel,
+    required int updatedSort,
+    required PbFilesItemKind kind,
+  }) {
+    return PbFilesItemData.fromFileName(
+      id: id,
+      title: title,
+      type: '',
+      thread: '',
+      creator: '',
+      creatorInitials: '',
+      updatedLabel: updatedLabel,
+      updatedSort: updatedSort,
+      parentPath: parentPath(path),
+      folderPath: isFolder ? path : '',
+      fileType: isFolder ? PbAttachmentFileType.folder : PbAttachmentFileType.generic,
+      kind: kind,
+    );
+  }
+
+  PbFilesItemData _v1DeleteErrorRow({required String path, required bool isFolder}) {
+    final fallbackName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+    final displayName = isFolder ? fallbackName : _displayNameForPath(path);
+    final title = displayName.isEmpty ? 'Delete failed' : 'Failed to delete $displayName';
+
+    return _v1StateRow(
+      id: _FilePathKey.keyForPath(path, isFolder),
+      title: title,
+      path: path,
+      isFolder: isFolder,
+      updatedLabel: 'Failed',
+      updatedSort: DateTime.now().millisecondsSinceEpoch,
+      kind: PbFilesItemKind.processingError,
+    );
+  }
+
+  PbFilesItemData _v1UploadErrorRow(String path) {
+    final displayName = _displayNameForPath(path);
+    final title = displayName.isEmpty ? 'Upload failed' : 'Failed upload $displayName';
+
+    return _v1StateRow(
+      id: 'upload-error:${PendingStorageDeletes.normalizePath(path)}:${DateTime.now().microsecondsSinceEpoch}',
+      title: title,
+      path: path,
+      isFolder: false,
+      updatedLabel: 'Failed',
+      updatedSort: DateTime.now().millisecondsSinceEpoch,
+      kind: PbFilesItemKind.processingError,
+    );
+  }
+
   List<PbFilesItemData> _v1VisibleItems(List<StorageEntry> entries) {
     final query = _v1FilterController.text.trim().toLowerCase();
+    final pendingDeleteItemsForFolder = PendingStorageDeletes.entriesFor(
+      _deleteScope,
+    ).where((pendingDelete) => parentPath(pendingDelete.path) == _folderSig.value).map(_v1ProcessingDeleteItem).toList();
+    final pendingDeleteItems = pendingDeleteItemsForFolder.where((item) => query.isEmpty || item.filterText.contains(query)).toList();
+    final stateRowsForFolder = _v1FileStateRowsById.values.where((item) => item.parentPath == _folderSig.value).toList();
+    final stateRows = stateRowsForFolder.where((item) => query.isEmpty || item.filterText.contains(query)).toList();
+    final stateRowIds = {for (final item in stateRowsForFolder) item.id};
     final items = entries
         .where((entry) => !widget.hideSystem || !entry.name.startsWith('.'))
         .where((entry) => !_isDeletePending(_FilePathKey.pathForEntry(_folderSig.value, entry), entry.isFolder))
+        .where((entry) => !stateRowIds.contains(_FilePathKey.keyForEntry(_folderSig.value, entry)))
         .map(_v1ItemForEntry)
         .where((item) => query.isEmpty || item.filterText.contains(query))
         .toList();
 
+    items.addAll(pendingDeleteItems);
+    items.addAll(stateRows);
     items.sort(_compareV1Files);
     return items;
+  }
+
+  void _setV1FileStateRow(PbFilesItemData item) {
+    setState(() => _v1FileStateRowsById[item.id] = item);
+  }
+
+  void _removeV1FileStateRow(PbFilesItemData item) {
+    if (!_v1FileStateRowsById.containsKey(item.id)) {
+      return;
+    }
+
+    setState(() => _v1FileStateRowsById.remove(item.id));
+  }
+
+  bool _v1ItemIsSelectable(PbFilesItemData item) {
+    return item.kind == PbFilesItemKind.file || item.kind == PbFilesItemKind.folder;
+  }
+
+  Iterable<PbFilesItemData> _v1SelectableItems(Iterable<PbFilesItemData> items) {
+    return items.where(_v1ItemIsSelectable);
   }
 
   List<PbFilesItemData> get _v1RecentlyOpenedFilesForSidePane {
@@ -1097,11 +1296,16 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     final key = _FilePathKey.keyForPath(openedFile, false);
-    return items.firstWhereOrNull((item) => item.id == key) ?? _v1ItemForPath(openedFile);
+    final item = items.firstWhereOrNull((item) => item.id == key);
+    if (item != null) {
+      return item.canPreview ? item : null;
+    }
+
+    return _v1ItemForPath(openedFile);
   }
 
   void _toggleV1VisibleSelection(List<PbFilesItemData> items) {
-    final visibleIds = items.map((item) => item.id).toSet();
+    final visibleIds = _v1SelectableItems(items).map((item) => item.id).toSet();
     final selected = _visibleSelected.value;
     final allSelected = visibleIds.isNotEmpty && visibleIds.every(selected.contains);
 
@@ -1365,6 +1569,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final name = path.split('/').where((s) => s.isNotEmpty).last;
     final next = List<StorageEntry>.of(ready.value);
     next.removeWhere((e) => e.name == name && e.isFolder == isFolder);
+    _v1FileStateRowsById.removeWhere((_, item) => _v1StateRowMatchesPath(item, path, isFolder: isFolder));
     _toggleSelected(_FilePathKey.keyForPath(path, isFolder), false);
 
     _setEntries(next);
@@ -1496,15 +1701,23 @@ class _FileManagerViewState extends State<FileManagerView> {
     uploadNotifications.addUpload(upload, totalBytes);
 
     unawaited(
-      upload.done.then((_) async {
-        if (!mounted) {
-          return;
-        }
+      upload.done
+          .then((_) async {
+            if (!mounted) {
+              return;
+            }
 
-        if (parentPath(path) == _folderSig.value) {
-          await _refreshCurrentFolder();
-        }
-      }),
+            if (parentPath(path) == _folderSig.value) {
+              await _refreshCurrentFolder();
+            }
+          })
+          .catchError((Object error) {
+            if (!mounted || !_usesDesktopV1FilesBrowser()) {
+              return;
+            }
+
+            _setV1FileStateRow(_v1UploadErrorRow(path));
+          }),
     );
   }
 
@@ -1525,25 +1738,61 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
   }
 
-  Future<void> _deleteFile(String path) async {
+  Future<void> _deleteFile(
+    String path, {
+    PendingStorageDeleteHandle? pendingDelete,
+    DateTime? pendingDeleteDisplayUntil,
+    bool prepareV1Feedback = true,
+  }) async {
     _toggleSelected(_FilePathKey.keyForPath(path, false), false);
-    final pendingDelete = PendingStorageDeletes.begin(scope: _deleteScope, path: path, isFolder: false);
+    final displayUntil = pendingDeleteDisplayUntil ?? DateTime.now().add(_v1DeleteProcessingStep);
+    final deleteHandle = pendingDelete ?? PendingStorageDeletes.begin(scope: _deleteScope, path: path, isFolder: false);
+    if (prepareV1Feedback) {
+      _prepareV1PendingDeleteFeedback([_FilePathKey.keyForPath(path, false)]);
+    }
+
     try {
-      await widget.client.storage.delete(path);
-      _onFileDeleted(path);
+      await Future.wait<void>([
+        widget.client.storage.delete(path).then((_) => _onFileDeleted(path)),
+        _waitForV1PendingDeleteDisplay(displayUntil),
+      ]);
+    } catch (_) {
+      deleteHandle.complete();
+      if (mounted && _usesDesktopV1FilesBrowser()) {
+        _setV1FileStateRow(_v1DeleteErrorRow(path: path, isFolder: false));
+      }
+      rethrow;
     } finally {
-      pendingDelete.complete();
+      deleteHandle.complete();
     }
   }
 
-  Future<void> _deleteFolder(String folderPath) async {
+  Future<void> _deleteFolder(
+    String folderPath, {
+    PendingStorageDeleteHandle? pendingDelete,
+    DateTime? pendingDeleteDisplayUntil,
+    bool prepareV1Feedback = true,
+  }) async {
     _toggleSelected(_FilePathKey.keyForPath(folderPath, true), false);
-    final pendingDelete = PendingStorageDeletes.begin(scope: _deleteScope, path: folderPath, isFolder: true);
+    final displayUntil = pendingDeleteDisplayUntil ?? DateTime.now().add(_v1DeleteProcessingStep);
+    final deleteHandle = pendingDelete ?? PendingStorageDeletes.begin(scope: _deleteScope, path: folderPath, isFolder: true);
+    if (prepareV1Feedback) {
+      _prepareV1PendingDeleteFeedback([_FilePathKey.keyForPath(folderPath, true)]);
+    }
+
     try {
-      await widget.client.storage.delete(folderPath, recursive: true);
-      _removePath(folderPath, isFolder: true);
+      await Future.wait<void>([
+        widget.client.storage.delete(folderPath, recursive: true).then((_) => _removePath(folderPath, isFolder: true)),
+        _waitForV1PendingDeleteDisplay(displayUntil),
+      ]);
+    } catch (_) {
+      deleteHandle.complete();
+      if (mounted && _usesDesktopV1FilesBrowser()) {
+        _setV1FileStateRow(_v1DeleteErrorRow(path: folderPath, isFolder: true));
+      }
+      rethrow;
     } finally {
-      pendingDelete.complete();
+      deleteHandle.complete();
     }
   }
 
@@ -1946,11 +2195,14 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     int success = 0;
     final failures = <String>[];
-    final toDelete = selected.toList();
-
-    if (isMobile) {
-      _clearMobileSelectionMode();
-    }
+    final toDelete = _usesDesktopV1FilesBrowser()
+        ? [
+            for (final item in _v1VisibleItems(storageEntries.state.value ?? const <StorageEntry>[]))
+              if (selected.contains(item.id) && _v1ItemIsSelectable(item)) item.id,
+          ]
+        : selected.toList();
+    final pendingDeletes = <String, _PendingDeleteOperation>{};
+    final batchStartedAt = DateTime.now();
 
     for (final key in toDelete) {
       final isFolder = _FilePathKey.isFolderKey(key);
@@ -1959,11 +2211,44 @@ class _FileManagerViewState extends State<FileManagerView> {
         continue;
       }
 
+      pendingDeletes[key] = _PendingDeleteOperation(
+        handle: PendingStorageDeletes.begin(scope: _deleteScope, path: path, isFolder: isFolder),
+        displayUntil: batchStartedAt.add(Duration(milliseconds: _v1DeleteProcessingStep.inMilliseconds * (pendingDeletes.length + 1))),
+      );
+    }
+
+    _prepareV1PendingDeleteFeedback(pendingDeletes.keys);
+
+    if (isMobile) {
+      _clearMobileSelectionMode();
+    } else {
+      _clearSelected();
+    }
+
+    for (final key in toDelete) {
+      final pendingDeleteOperation = pendingDeletes[key];
+      if (pendingDeleteOperation == null) {
+        continue;
+      }
+
+      final isFolder = _FilePathKey.isFolderKey(key);
+      final path = _FilePathKey.pathFromKey(key);
+
       try {
         if (isFolder) {
-          await _deleteFolder(path);
+          await _deleteFolder(
+            path,
+            pendingDelete: pendingDeleteOperation.handle,
+            pendingDeleteDisplayUntil: pendingDeleteOperation.displayUntil,
+            prepareV1Feedback: false,
+          );
         } else {
-          await _deleteFile(path);
+          await _deleteFile(
+            path,
+            pendingDelete: pendingDeleteOperation.handle,
+            pendingDeleteDisplayUntil: pendingDeleteOperation.displayUntil,
+            prepareV1Feedback: false,
+          );
         }
         success++;
       } catch (e) {
@@ -2290,7 +2575,14 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onBreadcrumbPressed: (path) => _openEntry(path, true),
                   onSortChanged: _setV1Sort,
                   onFilterChanged: (_) => setState(() {}),
-                  onToggleSelection: (id) => _toggleSelected(id, !selected.contains(id)),
+                  onToggleSelection: (id) {
+                    final item = items.firstWhereOrNull((item) => item.id == id);
+                    if (item == null || !_v1ItemIsSelectable(item)) {
+                      return;
+                    }
+
+                    _toggleSelected(id, !selected.contains(id));
+                  },
                   onToggleVisibleSelection: () => _toggleV1VisibleSelection(items),
                   onClearSelection: _clearSelected,
                   onDeleteSelection: _confirmAndDeleteSelected,
@@ -2331,7 +2623,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     _openV1Preview(item, openOverlay: responsivePanel);
                   },
                   onBrowseFolder: (item) => _openEntry(item.folderPath, true),
-                  onRemoveProcessingRow: (_) {},
+                  onRemoveProcessingRow: _removeV1FileStateRow,
                   onLinkedThreadPressed: _openV1LinkedThread,
                   onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item)),
                   onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
@@ -3508,14 +3800,17 @@ class _FileManagerViewState extends State<FileManagerView> {
               final useDesktopV1FilesBrowser = !isAdaptiveMobile && powerboardsUsesDesktopUiPreview(context);
               if (useDesktopV1FilesBrowser) {
                 return SizedBox.expand(
-                  child: storageEntries.state.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (e, st) => Center(child: Text("Error loading files: $e")),
-                    ready: (entries) => _buildDesktopV1FilesBrowser(
-                      context,
-                      entries: entries,
-                      selected: selected,
-                      isRefreshing: storageEntries.state.isRefreshing,
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: PendingStorageDeletes.listenableFor(_deleteScope),
+                    builder: (context, _, _) => storageEntries.state.when(
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (e, st) => Center(child: Text("Error loading files: $e")),
+                      ready: (entries) => _buildDesktopV1FilesBrowser(
+                        context,
+                        entries: entries,
+                        selected: selected,
+                        isRefreshing: storageEntries.state.isRefreshing,
+                      ),
                     ),
                   ),
                 );

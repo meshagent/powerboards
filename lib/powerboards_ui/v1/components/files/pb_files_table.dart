@@ -95,10 +95,15 @@ class _FilesTableState extends State<PbFilesTable> {
   String? _hoveredRowId;
   String? _menuOpenRowId;
 
+  bool _isSelectableRow(PbFilesItemData item) {
+    return item.kind == PbFilesItemKind.file || item.kind == PbFilesItemKind.folder;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final allSelected = widget.items.isNotEmpty && widget.items.every((item) => widget.selectedIds.contains(item.id));
-    final partiallySelected = !allSelected && widget.items.any((item) => widget.selectedIds.contains(item.id));
+    final selectableItems = widget.items.where(_isSelectableRow).toList(growable: false);
+    final allSelected = selectableItems.isNotEmpty && selectableItems.every((item) => widget.selectedIds.contains(item.id));
+    final partiallySelected = !allSelected && selectableItems.any((item) => widget.selectedIds.contains(item.id));
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -135,9 +140,16 @@ class _FilesTableState extends State<PbFilesTable> {
                         itemCount: widget.items.length,
                         itemBuilder: (context, index) {
                           final item = widget.items[index];
-                          final selected = widget.selectedIds.contains(item.id);
-                          final previousSelected = index > 0 && widget.selectedIds.contains(widget.items[index - 1].id);
-                          final nextSelected = index < widget.items.length - 1 && widget.selectedIds.contains(widget.items[index + 1].id);
+                          final selectable = _isSelectableRow(item);
+                          final selected = selectable && widget.selectedIds.contains(item.id);
+                          final previousSelected =
+                              index > 0 &&
+                              _isSelectableRow(widget.items[index - 1]) &&
+                              widget.selectedIds.contains(widget.items[index - 1].id);
+                          final nextSelected =
+                              index < widget.items.length - 1 &&
+                              _isSelectableRow(widget.items[index + 1]) &&
+                              widget.selectedIds.contains(widget.items[index + 1].id);
                           final nextStateful = index < widget.items.length - 1 && _isStatefulRow(widget.items[index + 1]);
 
                           return Padding(
@@ -155,7 +167,7 @@ class _FilesTableState extends State<PbFilesTable> {
                               beforeStateRow: nextStateful,
                               last: index == widget.items.length - 1,
                               onPressed: () => widget.onItemPressed(item),
-                              onToggleSelection: () => widget.onToggleSelection(item.id),
+                              onToggleSelection: selectable ? () => widget.onToggleSelection(item.id) : () {},
                               onBrowseFolder: () => widget.onBrowseFolder(item),
                               onRemoveProcessingRow: () => widget.onRemoveProcessingRow(item),
                               onLinkedThreadPressed: (thread) => widget.onLinkedThreadPressed(item, thread),
