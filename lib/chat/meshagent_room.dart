@@ -38,6 +38,7 @@ import 'package:powerboards/meshagent/agents_dropdown.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
+import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
@@ -60,6 +61,7 @@ import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_header.dart';
@@ -920,6 +922,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
           subtitle: displayThreadName.isEmpty ? metadata.displayType : '${metadata.displayType} / $displayThreadName',
           fileType: metadata.fileType,
           path: filePath,
+          previewState: powerboardsV1PreviewStateForPath(filePath),
         ),
       );
     }
@@ -5182,6 +5185,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       subtitle: displayThreadName.isEmpty ? metadata.displayType : '${metadata.displayType} / $displayThreadName',
       fileType: metadata.fileType,
       path: normalizedPath,
+      previewState: powerboardsV1PreviewStateForPath(normalizedPath),
     );
   }
 
@@ -5257,7 +5261,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return Center(child: Text(file.title, style: powerboardsSectionTitleStyle()));
     }
 
-    return fileViewer(widget.room, path) ?? DocumentPane(path: path, room: widget.room);
+    return fileViewer(widget.room, path) ??
+        DocumentPane(
+          path: path,
+          room: widget.room,
+          noPreviewBuilder: (context, _) => Center(
+            child: PbFilePreviewStateCard(file: file, state: PbAttachmentPreviewState.unavailable),
+          ),
+        );
   }
 
   String? _chatAgentNameForService(ServiceSpec service) {

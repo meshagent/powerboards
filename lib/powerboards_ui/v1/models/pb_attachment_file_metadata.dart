@@ -29,6 +29,8 @@ enum PbAttachmentFileType {
   thread,
 }
 
+enum PbAttachmentPreviewState { none, unavailable, unsupported }
+
 class PbResolvedAttachmentMetadata {
   const PbResolvedAttachmentMetadata({required this.displayTitle, required this.displayType, required this.fileType});
 
@@ -58,8 +60,8 @@ class PbResolvedAttachmentMetadata {
   String get iconAssetName => fileType.iconAssetName;
   Color get iconColor => fileType.iconColor;
 
-  PbAttachmentListItemData toListItemData({String? path}) {
-    return PbAttachmentListItemData(title: displayTitle, subtitle: displayType, fileType: fileType, path: path);
+  PbAttachmentListItemData toListItemData({String? path, PbAttachmentPreviewState previewState = PbAttachmentPreviewState.none}) {
+    return PbAttachmentListItemData(title: displayTitle, subtitle: displayType, fileType: fileType, path: path, previewState: previewState);
   }
 }
 
@@ -335,7 +337,13 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
 }
 
 class PbAttachmentListItemData {
-  const PbAttachmentListItemData({required this.title, required this.subtitle, required this.fileType, this.path});
+  const PbAttachmentListItemData({
+    required this.title,
+    required this.subtitle,
+    required this.fileType,
+    this.path,
+    this.previewState = PbAttachmentPreviewState.none,
+  });
 
   factory PbAttachmentListItemData.fromFileName({
     required String title,
@@ -343,19 +351,21 @@ class PbAttachmentListItemData {
     String? path,
     PbAttachmentFileType? fileType,
     String? fileTypeKey,
+    PbAttachmentPreviewState previewState = PbAttachmentPreviewState.none,
   }) {
     return PbResolvedAttachmentMetadata.resolve(
       title: title,
       descriptor: subtitle,
       explicitFileType: fileType,
       explicitFileTypeKey: fileTypeKey,
-    ).toListItemData(path: path);
+    ).toListItemData(path: path, previewState: previewState);
   }
 
   final String title;
   final String subtitle;
   final PbAttachmentFileType fileType;
   final String? path;
+  final PbAttachmentPreviewState previewState;
 
   PbAttachmentCategory get category => fileType.category;
 

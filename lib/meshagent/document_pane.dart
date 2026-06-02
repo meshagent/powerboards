@@ -33,6 +33,7 @@ class DocumentPane extends StatefulWidget {
     this.readOnlyTextViewer = false,
     this.codePreviewController,
     this.showCodeToolbar = true,
+    this.noPreviewBuilder,
   });
 
   final String path;
@@ -41,6 +42,7 @@ class DocumentPane extends StatefulWidget {
   final bool readOnlyTextViewer;
   final CodePreviewController? codePreviewController;
   final bool showCodeToolbar;
+  final Widget Function(BuildContext context, String? subtitle)? noPreviewBuilder;
 
   @override
   State createState() => _DocumentPane();
@@ -171,6 +173,11 @@ class _DocumentPane extends State<DocumentPane> {
   }
 
   Widget _noPreview({String? subtitle}) {
+    final customBuilder = widget.noPreviewBuilder;
+    if (customBuilder != null) {
+      return customBuilder(context, subtitle);
+    }
+
     final isMobile = MediaQuery.sizeOf(context).width < 600;
 
     return PaneEmptyState(

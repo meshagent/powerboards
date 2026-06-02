@@ -8,6 +8,7 @@ import '../../models/pb_agent_display.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
+import '../files/pb_file_preview_state_card.dart';
 import '../menus/pb_menu_anchor.dart';
 import '../menus/pb_menu_card.dart';
 import '../menus/pb_menu_list.dart';
@@ -304,7 +305,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
       onDownload: widget.onDownloadFile == null ? null : () => widget.onDownloadFile!(_previewFile),
       onToggleFullscreen: () => _setFilePreviewFullscreen(!_filePreviewFullscreen),
       onClose: _closeFilePreview,
-      child: widget.filePreviewBuilder?.call(_previewFile),
+      child: _previewFile.previewState == PbAttachmentPreviewState.none ? widget.filePreviewBuilder?.call(_previewFile) : null,
     );
   }
 
@@ -1863,8 +1864,15 @@ class PbFilePreviewPane extends StatelessWidget {
   final VoidCallback? onToggleFullscreen;
   final VoidCallback? onClose;
 
+  static const _stateTopFactor = 0.334;
+  static const _stateAlignment = Alignment(0, (_stateTopFactor * 2) - 1);
+  static const _fullscreenStateAlignment = Alignment.center;
+
   @override
   Widget build(BuildContext context) {
+    final previewState = file.previewState;
+    final hasPreviewState = previewState != PbAttachmentPreviewState.none;
+
     return Container(
       padding: fullscreen ? EdgeInsets.zero : const EdgeInsets.fromLTRB(22, 18, 22, 24),
       decoration: BoxDecoration(
@@ -1920,26 +1928,31 @@ class PbFilePreviewPane extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(fullscreen ? 0 : 14),
                 border: fullscreen ? null : Border.all(color: PbColors.borderSoft),
-                gradient: fullscreen
+                gradient: fullscreen || hasPreviewState
                     ? null
                     : const LinearGradient(
                         colors: [Color(0xFAFFFFFF), PbColors.surfacePanel],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
-                color: fullscreen ? PbColors.surfacePanelWash : null,
+                color: fullscreen || hasPreviewState ? PbColors.surfacePanelWash : null,
                 boxShadow: fullscreen
                     ? null
                     : const [BoxShadow(color: Color.fromRGBO(255, 255, 255, 0.5), blurRadius: 0, offset: Offset(0, 1))],
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(fullscreen ? 0 : 10),
-                child:
-                    child ??
-                    Center(
-                      child: PbSvgIcon(assetName: file.iconAssetName, size: 48, color: file.iconColor),
+              child: hasPreviewState
+                  ? Align(
+                      alignment: fullscreen ? _fullscreenStateAlignment : _stateAlignment,
+                      child: PbFilePreviewStateCard(file: file, state: previewState),
+                    )
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(fullscreen ? 0 : 10),
+                      child:
+                          child ??
+                          Center(
+                            child: PbSvgIcon(assetName: file.iconAssetName, size: 48, color: file.iconColor),
+                          ),
                     ),
-              ),
             ),
           ),
         ],

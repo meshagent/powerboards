@@ -38,6 +38,7 @@ class PbFilesItemData {
     this.folderPath = '',
     required this.fileType,
     this.kind = PbFilesItemKind.file,
+    this.previewState = PbAttachmentPreviewState.none,
   });
 
   factory PbFilesItemData.fromFileName({
@@ -57,6 +58,7 @@ class PbFilesItemData {
     PbAttachmentFileType? fileType,
     String? fileTypeKey,
     PbFilesItemKind kind = PbFilesItemKind.file,
+    PbAttachmentPreviewState previewState = PbAttachmentPreviewState.none,
   }) {
     final resolved = PbResolvedAttachmentMetadata.resolve(
       title: title,
@@ -81,6 +83,7 @@ class PbFilesItemData {
       folderPath: folderPath,
       fileType: resolved.fileType,
       kind: kind,
+      previewState: previewState,
     );
   }
 
@@ -99,6 +102,7 @@ class PbFilesItemData {
   final String folderPath;
   final PbAttachmentFileType fileType;
   final PbFilesItemKind kind;
+  final PbAttachmentPreviewState previewState;
 
   bool get canPreview => kind == PbFilesItemKind.file;
 
@@ -165,6 +169,6 @@ class PbFilesItemData {
   }
 
   PbAttachmentListItemData toAttachmentData() {
-    return PbAttachmentListItemData(title: title, subtitle: type.isEmpty ? 'File' : type, fileType: fileType);
+    return PbAttachmentListItemData(title: title, subtitle: type.isEmpty ? 'File' : type, fileType: fileType, previewState: previewState);
   }
 }

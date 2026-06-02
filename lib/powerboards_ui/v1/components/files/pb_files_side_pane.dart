@@ -61,7 +61,7 @@ class PbFilesSidePane extends StatelessWidget {
         onDownload: onDownload == null ? null : () => onDownload!(preview),
         onToggleFullscreen: onToggleFullscreen,
         onClose: onClosePreview,
-        child: previewBuilder?.call(preview),
+        child: preview.previewState == PbAttachmentPreviewState.none ? previewBuilder?.call(preview) : null,
       );
     }
 

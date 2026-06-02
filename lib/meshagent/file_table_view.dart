@@ -31,9 +31,11 @@ import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
+import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_side_pane.dart';
@@ -925,6 +927,28 @@ class _FileManagerViewState extends State<FileManagerView> {
       updatedSort: updatedSort,
       parentPath: folder,
       fileTypeKey: powerboardsV1FileTypeKeyForPath(fullPath),
+      previewState: powerboardsV1PreviewStateForPath(fullPath),
+    );
+  }
+
+  PbFilesItemData _v1ItemForPath(String fullPath) {
+    final linkedThreads = _linkedThreadNamesForPath(fullPath);
+    final creator = _creatorNameForPath(fullPath);
+
+    return PbFilesItemData.fromFileName(
+      id: _FilePathKey.keyForPath(fullPath, false),
+      title: _displayNameForPath(fullPath),
+      thread: linkedThreads.firstOrNull ?? '',
+      linkedThreads: linkedThreads,
+      sizeLabel: '-',
+      sizeSort: 0,
+      creator: creator,
+      creatorInitials: _creatorInitialsForName(creator),
+      updatedLabel: '',
+      updatedSort: 0,
+      parentPath: parentPath(fullPath),
+      fileTypeKey: powerboardsV1FileTypeKeyForPath(fullPath),
+      previewState: powerboardsV1PreviewStateForPath(fullPath),
     );
   }
 
@@ -1009,12 +1033,18 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _closeV1Preview() {
+    final clearOpenedFileRoute = _openedFile != null && !_usesAdaptiveMobileLayout(context) && powerboardsUsesDesktopUiPreview(context);
+
     setState(() {
       _v1PreviewFile = null;
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelOverlayOpen = false;
     });
     setPreviewFilePreviewFullscreen(false);
+
+    if (clearOpenedFileRoute) {
+      _closeFile();
+    }
   }
 
   void _setV1PreviewFullscreen(bool fullscreen) {
@@ -1022,7 +1052,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       _v1FilePreviewFullscreen = fullscreen;
       if (fullscreen) {
         _v1FilesRoomPanelOverlayOpen = false;
-      } else if (_v1PreviewFile != null) {
+      } else if (_v1PreviewFile != null || _openedFile != null) {
         _v1FilesRoomPanelOverlayOpen = true;
       }
     });
@@ -1036,7 +1066,24 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Widget _buildV1PreviewContent(PbFilesItemData item) {
     final path = _v1PathForItem(item);
-    return fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client);
+    return fileViewer(widget.client, path) ??
+        DocumentPane(
+          path: path,
+          room: widget.client,
+          noPreviewBuilder: (context, _) => Center(
+            child: PbFilePreviewStateCard(file: item.toAttachmentData(), state: PbAttachmentPreviewState.unavailable),
+          ),
+        );
+  }
+
+  PbFilesItemData? _v1PreviewFileFromRoute(List<PbFilesItemData> items) {
+    final openedFile = _openedFile;
+    if (openedFile == null) {
+      return null;
+    }
+
+    final key = _FilePathKey.keyForPath(openedFile, false);
+    return items.firstWhereOrNull((item) => item.id == key) ?? _v1ItemForPath(openedFile);
   }
 
   void _toggleV1VisibleSelection(List<PbFilesItemData> items) {
@@ -2145,6 +2192,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     required bool isRefreshing,
   }) {
     final items = _v1VisibleItems(entries);
+    final routePreviewFile = _v1PreviewFileFromRoute(items);
+    final previewFile = _v1PreviewFile ?? routePreviewFile;
     final recentlyOpenedFiles = _v1RecentlyOpenedFilesForSidePane;
     final currentFolder = _folderSig.value;
 
@@ -2165,12 +2214,12 @@ class _FileManagerViewState extends State<FileManagerView> {
             final responsiveMode = responsivePanel ? PbFilesResponsiveMode.overlay : PbFilesResponsiveMode.docked;
             final roomHasInstalledAgent = widget.services?.state.isReady == true && widget.services!.state.value!.isNotEmpty;
             final sidePaneAvailable =
-                _v1PreviewFile != null ||
+                previewFile != null ||
                 recentlyOpenedFiles.isNotEmpty ||
                 items.isNotEmpty ||
                 currentFolder.isNotEmpty ||
                 roomHasInstalledAgent;
-            final roomPanelCollapsed = !sidePaneAvailable || _effectiveV1FilesRoomPanelCollapsed;
+            final roomPanelCollapsed = !sidePaneAvailable || (routePreviewFile == null && _effectiveV1FilesRoomPanelCollapsed);
             final roomPanelExpanded = responsivePanel ? false : !roomPanelCollapsed;
             final mainPanel = Stack(
               children: [
@@ -2186,7 +2235,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   roomPanelExpanded: roomPanelExpanded,
                   responsiveMode: responsiveMode,
                   showRoomPanelControls: sidePaneAvailable,
-                  previewFileId: _v1PreviewFile?.id,
+                  previewFileId: previewFile?.id,
                   keyboardPreviewFileId: null,
                   keyboardPreviewDirection: 0,
                   enableDropTarget: false,
@@ -2253,7 +2302,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             PbFilesSidePane sidePaneBuilder(BuildContext context, bool resizing) {
               return PbFilesSidePane(
                 files: recentlyOpenedFiles,
-                previewFile: _v1PreviewFile,
+                previewFile: previewFile,
                 fullscreen: _v1FilePreviewFullscreen,
                 resizing: resizing,
                 borderOnTop: responsivePanel,
@@ -2309,7 +2358,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               color: PbColors.surfacePanelWash,
               child: PbRoomPanelMount(
                 activeTab: PbRoomPanelTab.files,
-                filePreviewOpen: _v1PreviewFile != null,
+                filePreviewOpen: previewFile != null,
                 filePreviewFullscreen: _v1FilePreviewFullscreen,
                 roomPanelCollapsed: roomPanelCollapsed,
                 panelWidth: widget.v1RoomPanelWidth,
@@ -3400,7 +3449,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               final selected = _visibleSelected.value;
               final isAdaptiveMobile = widget.mobileShellOwnsHeader && _usesAdaptiveMobileLayout(context);
               final hasOpenedFile = _openedFile != null;
-              final useDesktopV1FilesBrowser = !hasOpenedFile && !isAdaptiveMobile && powerboardsUsesDesktopUiPreview(context);
+              final useDesktopV1FilesBrowser = !isAdaptiveMobile && powerboardsUsesDesktopUiPreview(context);
               if (useDesktopV1FilesBrowser) {
                 return SizedBox.expand(
                   child: storageEntries.state.when(
