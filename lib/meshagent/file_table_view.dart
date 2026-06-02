@@ -37,6 +37,7 @@ import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_side_pane.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_files_page.dart';
@@ -351,6 +352,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   bool _v1FilesRoomPanelCollapsed = false;
   bool _v1FilesRoomPanelOverlayOpen = false;
   bool _v1FilePreviewFullscreen = false;
+  final ValueNotifier<bool> _v1FilesDropTargetActive = ValueNotifier(false);
   PbFilesItemData? _v1PreviewFile;
   List<PbFilesItemData> _v1RecentlyOpenedFiles = const <PbFilesItemData>[];
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
@@ -372,6 +374,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     setState(() => _v1FilesRoomPanelCollapsed = collapsed);
+  }
+
+  void _setV1FilesDropTargetActive(bool active) {
+    if (_isDisposing || _v1FilesDropTargetActive.value == active) {
+      return;
+    }
+
+    _v1FilesDropTargetActive.value = active;
   }
 
   bool _isDeletePending(String path, bool isFolder) {
@@ -448,6 +458,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     uploadNotifications.dispose();
     _v1FilterController.dispose();
+    _v1FilesDropTargetActive.dispose();
     _collapsedBreadcrumbMenuController.dispose();
     popoverController.dispose();
     _codePreviewController.dispose();
@@ -2221,6 +2232,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                 roomHasInstalledAgent;
             final roomPanelCollapsed = !sidePaneAvailable || (routePreviewFile == null && _effectiveV1FilesRoomPanelCollapsed);
             final roomPanelExpanded = responsivePanel ? false : !roomPanelCollapsed;
+            final dropTargetPadding = responsiveMode == PbFilesResponsiveMode.overlay
+                ? const PbFilesPanelPadding(left: 20, right: 20)
+                : const PbFilesPanelPadding(left: 30, right: 28);
             final mainPanel = Stack(
               children: [
                 PbFilesMainPanel(
@@ -2296,6 +2310,12 @@ class _FileManagerViewState extends State<FileManagerView> {
                     top: 28,
                     child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                   ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: _v1FilesDropTargetActive,
+                  builder: (context, active, child) => Positioned.fill(
+                    child: PbFilesDropTargetOverlayLayer(active: active, top: 142, padding: dropTargetPadding),
+                  ),
+                ),
               ],
             );
 
@@ -3431,6 +3451,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
+    final isAdaptiveMobile = widget.mobileShellOwnsHeader && _usesAdaptiveMobileLayout(context);
 
     return CallbackShortcuts(
       bindings: {
@@ -3444,10 +3465,11 @@ class _FileManagerViewState extends State<FileManagerView> {
         autofocus: true,
         child: FileDropArea(
           onFileDrop: _onFileDrop,
+          onDraggingChanged: _setV1FilesDropTargetActive,
+          overlayBuilder: !isAdaptiveMobile && powerboardsUsesDesktopUiPreview(context) ? (_, _) => const SizedBox.shrink() : null,
           child: SignalBuilder(
             builder: (context, _) {
               final selected = _visibleSelected.value;
-              final isAdaptiveMobile = widget.mobileShellOwnsHeader && _usesAdaptiveMobileLayout(context);
               final hasOpenedFile = _openedFile != null;
               final useDesktopV1FilesBrowser = !isAdaptiveMobile && powerboardsUsesDesktopUiPreview(context);
               if (useDesktopV1FilesBrowser) {
