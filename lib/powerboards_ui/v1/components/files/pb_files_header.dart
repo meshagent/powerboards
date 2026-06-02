@@ -227,6 +227,8 @@ class _FilesBreadcrumb extends StatefulWidget {
 
 class _FilesBreadcrumbState extends State<_FilesBreadcrumb> {
   static const _layoutSlack = 2.0;
+  static const _overflowButtonWidth = 40.0;
+  static const _overflowButtonHeight = 28.0;
 
   bool _overflowOpen = false;
 
@@ -248,6 +250,8 @@ class _FilesBreadcrumbState extends State<_FilesBreadcrumb> {
           children: [
             if (layout.hidden.isNotEmpty) ...[
               _FilesBreadcrumbOverflowButton(
+                width: _overflowButtonWidth,
+                height: _overflowButtonHeight,
                 crumbs: layout.hidden,
                 open: _overflowOpen,
                 onOpenChanged: (open) => setState(() => _overflowOpen = open),
@@ -296,7 +300,7 @@ class _FilesBreadcrumbState extends State<_FilesBreadcrumb> {
     required List<_FilesCrumb> hiddenAncestors,
   }) {
     final separatorWidth = (visibleAncestors.length + (hiddenAncestors.isEmpty ? 0 : 1)) * 34;
-    final overflowWidth = hiddenAncestors.isEmpty ? 0.0 : 28.0;
+    final overflowWidth = hiddenAncestors.isEmpty ? 0.0 : _overflowButtonWidth;
     final visibleWidth = visibleAncestors.fold<double>(0, (width, crumb) => width + _measureBreadcrumbLabel(context, crumb.label));
 
     return overflowWidth + separatorWidth + visibleWidth + _measureBreadcrumbLabel(context, current.label);
@@ -321,8 +325,17 @@ class _FilesBreadcrumbLayout {
 }
 
 class _FilesBreadcrumbOverflowButton extends StatelessWidget {
-  const _FilesBreadcrumbOverflowButton({required this.crumbs, required this.open, required this.onOpenChanged, required this.onPressed});
+  const _FilesBreadcrumbOverflowButton({
+    required this.width,
+    required this.height,
+    required this.crumbs,
+    required this.open,
+    required this.onOpenChanged,
+    required this.onPressed,
+  });
 
+  final double width;
+  final double height;
   final List<_FilesCrumb> crumbs;
   final bool open;
   final ValueChanged<bool> onOpenChanged;
@@ -330,16 +343,16 @@ class _FilesBreadcrumbOverflowButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = _menuWidthForLabels(context, crumbs.map((crumb) => crumb.label), min: 220, max: 420);
+    final menuWidth = _menuWidthForLabels(context, crumbs.map((crumb) => crumb.label), min: 220, max: 420);
 
     return PbMenuAnchor(
       placement: PbMenuAnchorPlacement.bottomLeft,
       gap: 6,
-      triggerHeight: 28,
+      triggerHeight: height,
       onDismiss: () => onOpenChanged(false),
       panel: open
           ? PbMenuCard(
-              width: width,
+              width: menuWidth,
               child: PbMenuList(
                 children: [
                   for (final crumb in crumbs.reversed)
@@ -358,11 +371,18 @@ class _FilesBreadcrumbOverflowButton extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => onOpenChanged(!open),
-          child: const SizedBox(
-            width: 28,
-            height: 28,
-            child: Center(
-              child: PbSvgIcon(assetName: 'ellipsis', size: 18, color: PbColors.textMuted),
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: open ? PbColors.surfaceAccentSoft : PbColors.surfacePanel,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: open ? PbColors.borderStateSelected : PbColors.borderSoft),
+              ),
+              child: const Center(
+                child: PbSvgIcon(assetName: 'ellipsis', size: 18, color: PbColors.textMuted),
+              ),
             ),
           ),
         ),
