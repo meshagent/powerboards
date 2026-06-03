@@ -15,6 +15,7 @@ import 'pb_room_panel_mount.dart';
 enum _FilesSortDirection { asc, desc }
 
 const _recentlyOpenedFilesLimit = 7;
+const _saveProcessingStep = Duration(milliseconds: 850);
 
 class PbFilesPage extends StatefulWidget {
   const PbFilesPage({
@@ -59,6 +60,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
 
   final List<PbFilesItemData> _items = [..._initialFiles];
   final Set<String> _selectedIds = {};
+  final Set<String> _savingFileIds = {};
   final List<String> _recentlyOpenedFileIds = [];
 
   PbFilesSortKey _sortKey = PbFilesSortKey.updated;
@@ -512,6 +514,37 @@ class _PbFilesPageState extends State<PbFilesPage> {
     widget.onLinkedThreadPressed?.call(item, thread);
   }
 
+  Future<void> _savePreviewFile() async {
+    final file = _previewFile;
+    if (file == null || !file.canPreview) {
+      await Future<void>.delayed(_saveProcessingStep);
+      return;
+    }
+
+    setState(() => _savingFileIds.add(file.id));
+    await Future<void>.delayed(_saveProcessingStep);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _savingFileIds.remove(file.id);
+
+      final itemIndex = _items.indexWhere((candidate) => candidate.id == file.id && candidate.kind == PbFilesItemKind.file);
+      if (itemIndex == -1) {
+        return;
+      }
+
+      final updatedItem = _items[itemIndex].copyWith(updatedLabel: 'Now', updatedSort: DateTime.now().millisecondsSinceEpoch);
+      _items[itemIndex] = updatedItem;
+
+      if (_previewFile?.id == file.id) {
+        _previewFile = updatedItem;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.filePreviewFullscreen && _filePreviewOpen) {
@@ -519,6 +552,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
         file: (_previewFile ?? _initialFiles.first).toAttachmentData(),
         fullscreen: true,
         showInlineBorder: false,
+        onSaveRequested: _savePreviewFile,
         onToggleFullscreen: () => _setFullscreen(false),
         onClose: _handlePreviewClose,
       );
@@ -551,6 +585,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
           previewFileId: _filePreviewOpen ? _previewFile?.id : null,
           keyboardPreviewFileId: _keyboardPreviewFileId,
           keyboardPreviewDirection: _keyboardPreviewDirection,
+          savingIds: _savingFileIds,
           onBreadcrumbPressed: (path) => _setCurrentPath(path, keepPreview: true),
           onSortChanged: _setSort,
           onFilterChanged: (_) => setState(() {}),
@@ -588,6 +623,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
             onPreviewFile: _openPreviewFromSidepane,
             onToggleFullscreen: () => _setFullscreen(true),
             onClosePreview: _handlePreviewClose,
+            onSaveRequested: (_) => _savePreviewFile(),
           );
         }
 
@@ -668,6 +704,7 @@ class PbFilesMainPanel extends StatelessWidget {
     required this.previewFileId,
     required this.keyboardPreviewFileId,
     required this.keyboardPreviewDirection,
+    required this.savingIds,
     required this.onBreadcrumbPressed,
     required this.onSortChanged,
     required this.onFilterChanged,
@@ -709,6 +746,7 @@ class PbFilesMainPanel extends StatelessWidget {
   final String? previewFileId;
   final String? keyboardPreviewFileId;
   final int keyboardPreviewDirection;
+  final Set<String> savingIds;
   final ValueChanged<String> onBreadcrumbPressed;
   final ValueChanged<PbFilesSortKey> onSortChanged;
   final ValueChanged<String> onFilterChanged;
@@ -784,6 +822,7 @@ class PbFilesMainPanel extends StatelessWidget {
               previewFileId: previewFileId,
               keyboardPreviewFileId: keyboardPreviewFileId,
               keyboardPreviewDirection: keyboardPreviewDirection,
+              savingIds: savingIds,
               hasActiveFilter: hasActiveFilter,
               onSortChanged: onSortChanged,
               onToggleSelection: onToggleSelection,
@@ -812,6 +851,144 @@ class PbFilesMainPanel extends StatelessWidget {
 }
 
 final _initialFiles = List<PbFilesItemData>.unmodifiable([
+  PbFilesItemData.fromFileName(
+    id: 'debug-no-preview-available',
+    title: 'No preview available.pdf',
+    thread: 'Preview debugging',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291335,
+    parentPath: '',
+    previewState: PbAttachmentPreviewState.unavailable,
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'debug-file-preview-not-supported',
+    title: 'File preview not supported.zip',
+    thread: 'Preview debugging',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291330,
+    parentPath: '',
+    previewState: PbAttachmentPreviewState.unsupported,
+  ),
+  PbFilesItemData(
+    id: 'preview-samples',
+    title: 'Preview samples',
+    type: 'Folder',
+    thread: '',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291340,
+    parentPath: '',
+    folderPath: 'preview-samples',
+    fileType: PbAttachmentFileType.folder,
+    kind: PbFilesItemKind.folder,
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-editable-text',
+    title: 'Sample editable document.txt',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291325,
+    parentPath: 'preview-samples',
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-code',
+    title: 'Preview mode rules.dart',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291320,
+    parentPath: 'preview-samples',
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-json-code',
+    title: 'Preview config.json',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291318,
+    parentPath: 'preview-samples',
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-shell-code',
+    title: 'Preview task.sh',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291316,
+    parentPath: 'preview-samples',
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-image',
+    title: 'Sample image preview.png',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291315,
+    parentPath: 'preview-samples',
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-video',
+    title: 'Sample video preview.mov',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291310,
+    parentPath: 'preview-samples',
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-pdf',
+    title: 'Sample PDF preview.pdf',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291305,
+    parentPath: 'preview-samples',
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-presentation',
+    title: 'Sample presentation.gslides',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291300,
+    parentPath: 'preview-samples',
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-transcript',
+    title: 'Sample transcript',
+    type: 'Transcript',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291255,
+    parentPath: 'preview-samples',
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'preview-sample-thread',
+    title: 'Sample thread.thread',
+    type: 'Thread',
+    thread: 'Preview samples',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291250,
+    parentPath: 'preview-samples',
+  ),
   PbFilesItemData.fromFileName(
     id: 'launch-brief-gdoc',
     title: 'Launch brief.gdoc',

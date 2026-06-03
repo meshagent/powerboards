@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
@@ -15,14 +16,19 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/document.dart';
 import 'package:meshagent/room_server_client.dart';
+import 'package:meshagent_flutter/document_connection_scope.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/conversation_descriptor.dart' as ma;
 import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
+import 'package:meshagent_flutter_shadcn/file_preview/image.dart';
+import 'package:meshagent_flutter_shadcn/file_preview/pdf.dart';
+import 'package:meshagent_flutter_shadcn/file_preview/video.dart';
 import 'package:meshagent_flutter_shadcn/storage/pending_storage_deletes.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
+import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
@@ -65,6 +71,7 @@ import 'package:powerboards/ui/text_validators.dart';
 import 'file_upload.dart';
 
 const Set<String> editExtensions = {"md"};
+const Set<String> _v1EditableTextExtensions = {'txt', 'text', 'md', 'markdown', 'mdown', 'mkdn', 'rst', 'log', 'csv', 'tsv'};
 const String placeholderFileName = ".placeholder";
 const double filePaneTableHeaderHeight = 48;
 
@@ -83,7 +90,12 @@ String _displayFileName(String fileName) {
 const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
 const int _v1RecentlyOpenedFilesLimit = 7;
 const Duration _v1DeleteProcessingStep = Duration(milliseconds: 650);
+const Duration _v1SaveProcessingStep = Duration(milliseconds: 850);
 const Offset _uploadProgressPopoverOffset = Offset(20, -20);
+const String _v1PreviewSamplesFolderPath = 'preview-samples';
+const String _v1PreviewSamplesThread = 'Preview samples';
+const String _v1PreviewSamplesCreator = 'Jesse Park';
+const String _v1PreviewSamplesCreatorInitials = 'JP';
 
 const Map<String, String> _powerboardsV1FileTypeKeysByExtension = {
   'thread': 'thread',
@@ -103,6 +115,426 @@ String? powerboardsV1FileTypeKeyForPath(String path) {
   }
 
   return _powerboardsV1FileTypeKeysByExtension[extension];
+}
+
+class _V1TranscriptDocumentPreview extends StatelessWidget {
+  const _V1TranscriptDocumentPreview({required this.room, required this.path, required this.fullscreen});
+
+  final RoomClient room;
+  final String path;
+  final bool fullscreen;
+
+  @override
+  Widget build(BuildContext context) {
+    return DocumentConnectionScope(
+      room: room,
+      path: path,
+      builder: (context, document, error) {
+        if (document == null) {
+          if (error != null) {
+            return _v1PreviewStatus('Unable to load transcript.');
+          }
+
+          return _v1PreviewStatus(null);
+        }
+
+        return ChangeNotifierBuilder(
+          source: document,
+          builder: (context) {
+            final segments = document.root.getElementsByTagName('segment');
+            return PbTranscriptPreviewContent(data: _v1TranscriptDataFromSegments(context, segments), fullscreen: fullscreen);
+          },
+        );
+      },
+    );
+  }
+}
+
+class _V1TextTranscriptPreview extends StatefulWidget {
+  const _V1TextTranscriptPreview({required this.room, required this.path, required this.title, required this.fullscreen});
+
+  final RoomClient room;
+  final String path;
+  final String title;
+  final bool fullscreen;
+
+  @override
+  State<_V1TextTranscriptPreview> createState() => _V1TextTranscriptPreviewState();
+}
+
+class _V1TextTranscriptPreviewState extends State<_V1TextTranscriptPreview> {
+  late Future<String> _textFuture = _loadText();
+
+  @override
+  void didUpdateWidget(covariant _V1TextTranscriptPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.room != widget.room || oldWidget.path != widget.path) {
+      _textFuture = _loadText();
+    }
+  }
+
+  Future<String> _loadText() async {
+    final content = await widget.room.storage.download(widget.path);
+    return utf8.decode(content.data, allowMalformed: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _textFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _v1PreviewStatus('Unable to load transcript.');
+        }
+
+        final text = snapshot.data;
+        if (text == null) {
+          return _v1PreviewStatus(null);
+        }
+
+        return PbTranscriptPreviewContent(
+          data: _v1TranscriptDataFromText(context, text, title: widget.title),
+          fullscreen: widget.fullscreen,
+        );
+      },
+    );
+  }
+}
+
+Widget _v1PreviewStatus(String? message) {
+  if (message == null) {
+    return const ColoredBox(
+      color: PbColors.surfacePanel,
+      child: Center(child: CircularProgressIndicator(color: PbColors.textSubtle)),
+    );
+  }
+
+  return ColoredBox(
+    color: PbColors.surfacePanel,
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: PbColors.alert),
+        ),
+      ),
+    ),
+  );
+}
+
+class _V1TranscriptMeta {
+  const _V1TranscriptMeta({required this.startTime, required this.endTime, required this.participants});
+
+  final DateTime? startTime;
+  final DateTime? endTime;
+  final List<PbTranscriptPreviewParticipant> participants;
+
+  Duration? get duration {
+    final start = startTime;
+    final end = endTime;
+    if (start == null || end == null) {
+      return null;
+    }
+
+    return end.difference(start);
+  }
+}
+
+PbTranscriptPreviewData _v1TranscriptDataFromSegments(BuildContext context, List<MeshElement> segments) {
+  final meta = _v1TranscriptMetaFromSegments(segments);
+  final turns = <PbTranscriptPreviewTurn>[];
+
+  for (final segment in segments) {
+    final text = _v1AttributeString(segment, 'text')?.trim();
+    if (text == null || text.isEmpty) {
+      continue;
+    }
+
+    final participant = _v1TranscriptParticipantForSegment(segment);
+    final segmentTime = _v1TryParseSegmentTime(segment);
+    final elapsed = segmentTime != null && meta.startTime != null ? segmentTime.difference(meta.startTime!) : Duration.zero;
+
+    turns.add(
+      PbTranscriptPreviewTurn(timestamp: _v1FormatTranscriptTimecode(elapsed), speaker: participant?.label ?? 'Speaker', text: text),
+    );
+  }
+
+  return PbTranscriptPreviewData(
+    dateLabel: _v1FormatTranscriptHeaderDate(context, meta.startTime) ?? 'Transcript',
+    detailLabel: _v1FormatTranscriptDetail(context, meta),
+    participants: meta.participants,
+    turns: turns,
+  );
+}
+
+_V1TranscriptMeta _v1TranscriptMetaFromSegments(List<MeshElement> segments) {
+  DateTime? first;
+  DateTime? last;
+  final participantsByLabel = <String, PbTranscriptPreviewParticipant>{};
+
+  for (final segment in segments) {
+    final parsed = _v1TryParseSegmentTime(segment);
+    if (parsed != null) {
+      first ??= parsed;
+      last = parsed;
+    }
+
+    final participant = _v1TranscriptParticipantForSegment(segment);
+    if (participant != null) {
+      participantsByLabel.putIfAbsent(participant.label, () => participant);
+    }
+  }
+
+  return _V1TranscriptMeta(startTime: first, endTime: last, participants: participantsByLabel.values.toList(growable: false));
+}
+
+DateTime? _v1TryParseSegmentTime(MeshElement segment) {
+  final value = _v1AttributeString(segment, 'time');
+  if (value == null || value.trim().isEmpty) {
+    return null;
+  }
+
+  return DateTime.tryParse(value);
+}
+
+PbTranscriptPreviewParticipant? _v1TranscriptParticipantForSegment(MeshElement segment) {
+  final label = _v1AttributeString(segment, 'participant_name')?.trim();
+  if (label == null || label.isEmpty) {
+    return null;
+  }
+
+  final role = _v1AttributeString(segment, 'participant_role')?.trim().toLowerCase();
+  return _v1TranscriptParticipant(label: label, role: role);
+}
+
+String? _v1AttributeString(MeshElement element, String name) {
+  final value = element.getAttribute(name);
+  return value is String ? value : null;
+}
+
+PbTranscriptPreviewData _v1TranscriptDataFromText(BuildContext context, String text, {required String title}) {
+  final cues = _v1ParseCaptionCues(text);
+  final participantsByLabel = <String, PbTranscriptPreviewParticipant>{};
+  final turns = <PbTranscriptPreviewTurn>[];
+
+  Duration? lastCueStart;
+  for (final cue in cues) {
+    final speaker = cue.speaker ?? 'Transcript';
+    participantsByLabel.putIfAbsent(speaker, () => _v1TranscriptParticipant(label: speaker));
+    lastCueStart = cue.start ?? lastCueStart;
+    turns.add(
+      PbTranscriptPreviewTurn(timestamp: _v1FormatTranscriptTimecode(cue.start ?? Duration.zero), speaker: speaker, text: cue.text),
+    );
+  }
+
+  final duration = lastCueStart == null ? null : lastCueStart + const Duration(seconds: 1);
+  final detailParts = <String>['Transcript'];
+  final durationLabel = _v1FormatTranscriptDuration(duration);
+  if (durationLabel != null) {
+    detailParts.add(durationLabel);
+  }
+
+  return PbTranscriptPreviewData(
+    dateLabel: title.trim().isEmpty ? 'Transcript' : title.trim(),
+    detailLabel: detailParts.join('   '),
+    participants: participantsByLabel.values.toList(growable: false),
+    turns: turns,
+  );
+}
+
+class _V1CaptionCue {
+  const _V1CaptionCue({required this.start, required this.speaker, required this.text});
+
+  final Duration? start;
+  final String? speaker;
+  final String text;
+}
+
+List<_V1CaptionCue> _v1ParseCaptionCues(String text) {
+  final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  final blocks = normalized.split(RegExp(r'\n\s*\n'));
+  final cues = <_V1CaptionCue>[];
+
+  for (final block in blocks) {
+    final lines = block
+        .split('\n')
+        .map((line) => line.trimRight())
+        .where((line) => line.trim().isNotEmpty && line.trim() != 'WEBVTT')
+        .toList(growable: false);
+    final timeLineIndex = lines.indexWhere((line) => line.contains('-->'));
+    if (timeLineIndex < 0 || timeLineIndex == lines.length - 1) {
+      continue;
+    }
+
+    final start = _v1ParseCueTimestamp(lines[timeLineIndex].split('-->').first.trim());
+    final rawCueText = lines.skip(timeLineIndex + 1).join('\n').trim();
+    final cueText = rawCueText.replaceAll(RegExp(r'<[^>]+>'), '').trim();
+    if (cueText.isEmpty) {
+      continue;
+    }
+
+    final parsed = _v1ExtractCaptionSpeaker(cueText);
+    cues.add(_V1CaptionCue(start: start, speaker: parsed.$1, text: parsed.$2));
+  }
+
+  if (cues.isNotEmpty) {
+    return cues;
+  }
+
+  final fallbackText = normalized.trim();
+  return fallbackText.isEmpty
+      ? const <_V1CaptionCue>[]
+      : <_V1CaptionCue>[_V1CaptionCue(start: Duration.zero, speaker: null, text: fallbackText)];
+}
+
+Duration? _v1ParseCueTimestamp(String value) {
+  final timestamp = value.split(RegExp(r'\s+')).first.replaceAll(',', '.');
+  final parts = timestamp.split(':');
+  if (parts.length < 2 || parts.length > 3) {
+    return null;
+  }
+
+  final hours = parts.length == 3 ? int.tryParse(parts[0]) : 0;
+  final minutes = int.tryParse(parts[parts.length - 2]);
+  final seconds = double.tryParse(parts.last);
+  if (hours == null || minutes == null || seconds == null) {
+    return null;
+  }
+
+  return Duration(hours: hours, minutes: minutes, milliseconds: (seconds * 1000).round());
+}
+
+(String?, String) _v1ExtractCaptionSpeaker(String cueText) {
+  final lines = cueText.split('\n');
+  if (lines.isEmpty) {
+    return (null, cueText);
+  }
+
+  final match = RegExp(r'^([^:\n]{1,80}):\s*(.*)$').firstMatch(lines.first.trim());
+  if (match == null) {
+    return (null, cueText);
+  }
+
+  final speaker = match.group(1)?.trim();
+  final firstText = match.group(2)?.trim();
+  final remainingLines = <String>[if (firstText != null && firstText.isNotEmpty) firstText, ...lines.skip(1)];
+  final text = remainingLines.join('\n').trim();
+  return (speaker == null || speaker.isEmpty ? null : speaker, text.isEmpty ? cueText : text);
+}
+
+PbTranscriptPreviewParticipant _v1TranscriptParticipant({required String label, String? role}) {
+  final normalizedRole = role?.trim().toLowerCase();
+  final normalizedLabel = label.trim().toLowerCase();
+  final isAgentLike =
+      normalizedRole == 'agent' ||
+      normalizedRole == 'assistant' ||
+      normalizedLabel.contains('assistant') ||
+      normalizedLabel.contains('agent');
+
+  return PbTranscriptPreviewParticipant(label: label, initials: _v1TranscriptInitials(label), isAgentLike: isAgentLike);
+}
+
+String _v1TranscriptInitials(String value) {
+  final normalized = value.trim();
+  if (normalized.isEmpty) {
+    return 'U';
+  }
+
+  final base = normalized.contains('@') ? normalized.split('@').first : normalized;
+  final parts = base.split(RegExp(r'[-._ ]+')).where((part) => part.isNotEmpty).toList(growable: false);
+  if (parts.length >= 2) {
+    return '${_v1SingleInitial(parts[0])}${_v1SingleInitial(parts[1])}';
+  }
+  if (parts.length == 1) {
+    return _v1SingleInitial(parts.first);
+  }
+
+  return 'U';
+}
+
+String _v1SingleInitial(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return 'U';
+  }
+
+  return String.fromCharCode(trimmed.runes.first).toUpperCase();
+}
+
+String _v1FormatTranscriptTimecode(Duration elapsed) {
+  final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+
+  return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}';
+}
+
+String? _v1FormatTranscriptHeaderDate(BuildContext context, DateTime? startTime) {
+  if (startTime == null) {
+    return null;
+  }
+
+  final local = startTime.toLocal();
+  final month = MaterialLocalizations.of(context).formatMonthYear(local).split(' ').first;
+  return '$month ${local.day}, ${local.year}';
+}
+
+String _v1FormatTranscriptDetail(BuildContext context, _V1TranscriptMeta meta) {
+  final detailParts = <String>['Transcript'];
+  final time = _v1FormatTranscriptHeaderTime(context, meta.startTime);
+  final duration = _v1FormatTranscriptDuration(meta.duration);
+
+  if (time != null && duration != null) {
+    detailParts.add('$time - $duration');
+  } else if (time != null) {
+    detailParts.add(time);
+  } else if (duration != null) {
+    detailParts.add(duration);
+  }
+
+  return detailParts.join('   ');
+}
+
+String? _v1FormatTranscriptHeaderTime(BuildContext context, DateTime? startTime) {
+  if (startTime == null) {
+    return null;
+  }
+
+  final local = startTime.toLocal();
+  final formatted = MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(local), alwaysUse24HourFormat: false);
+  return formatted.replaceAll(' AM', 'a').replaceAll(' PM', 'p');
+}
+
+String? _v1FormatTranscriptDuration(Duration? duration) {
+  if (duration == null) {
+    return null;
+  }
+
+  final totalSeconds = duration.inSeconds < 0 ? 0 : duration.inSeconds;
+  if (totalSeconds < 60) {
+    return totalSeconds == 1 ? '1 sec' : '$totalSeconds secs';
+  }
+
+  final totalMinutes = duration.inMinutes;
+  if (totalMinutes < 60) {
+    return totalMinutes == 1 ? '1 min' : '$totalMinutes mins';
+  }
+
+  final hours = totalMinutes ~/ 60;
+  final minutes = totalMinutes % 60;
+  if (minutes == 0) {
+    return hours == 1 ? '1 hr' : '$hours hrs';
+  }
+
+  final hoursLabel = hours == 1 ? '1 hr' : '$hours hrs';
+  final minutesLabel = minutes == 1 ? '1 min' : '$minutes mins';
+  return '$hoursLabel $minutesLabel';
 }
 
 String _formatFileSizeBytes(int bytes) {
@@ -374,7 +806,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   final ValueNotifier<bool> _v1FilesDropTargetActive = ValueNotifier(false);
   PbFilesItemData? _v1PreviewFile;
   List<PbFilesItemData> _v1RecentlyOpenedFiles = const <PbFilesItemData>[];
+  final Set<String> _v1SavingFileIds = <String>{};
   final Map<String, PbFilesItemData> _v1FileStateRowsById = <String, PbFilesItemData>{};
+  final Map<String, Future<String>> _v1DownloadUrlFuturesByPath = <String, Future<String>>{};
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
 
@@ -1077,6 +1511,115 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  bool _v1IsPreviewSamplePath(String path) {
+    return path == _v1PreviewSamplesFolderPath || path.startsWith('$_v1PreviewSamplesFolderPath/');
+  }
+
+  bool _v1IsPreviewSampleItem(PbFilesItemData item) {
+    return _v1IsPreviewSamplePath(_FilePathKey.pathFromKey(item.id));
+  }
+
+  PbFilesItemData _v1PreviewDebugFile({
+    required String id,
+    required String title,
+    required int updatedSort,
+    required PbAttachmentPreviewState previewState,
+  }) {
+    return PbFilesItemData.fromFileName(
+      id: id,
+      title: title,
+      thread: 'Preview debugging',
+      creator: _v1PreviewSamplesCreator,
+      creatorInitials: _v1PreviewSamplesCreatorInitials,
+      updatedLabel: 'Now',
+      updatedSort: updatedSort,
+      parentPath: '',
+      previewState: previewState,
+    );
+  }
+
+  PbFilesItemData _v1PreviewSampleFile({required String path, required String title, required int updatedSort, String type = ''}) {
+    return PbFilesItemData.fromFileName(
+      id: _FilePathKey.keyForPath(path, false),
+      title: title,
+      type: type,
+      thread: _v1PreviewSamplesThread,
+      creator: _v1PreviewSamplesCreator,
+      creatorInitials: _v1PreviewSamplesCreatorInitials,
+      updatedLabel: 'Now',
+      updatedSort: updatedSort,
+      parentPath: _v1PreviewSamplesFolderPath,
+    );
+  }
+
+  List<PbFilesItemData> _v1PreviewSampleItemsForFolder(String folderPath) {
+    if (folderPath.isEmpty) {
+      return [
+        _v1PreviewDebugFile(
+          id: 'debug-no-preview-available',
+          title: 'No preview available.pdf',
+          updatedSort: 202605291335,
+          previewState: PbAttachmentPreviewState.unavailable,
+        ),
+        _v1PreviewDebugFile(
+          id: 'debug-file-preview-not-supported',
+          title: 'File preview not supported.zip',
+          updatedSort: 202605291330,
+          previewState: PbAttachmentPreviewState.unsupported,
+        ),
+        const PbFilesItemData(
+          id: 'preview-samples/',
+          title: _v1PreviewSamplesThread,
+          type: 'Folder',
+          thread: '',
+          creator: _v1PreviewSamplesCreator,
+          creatorInitials: _v1PreviewSamplesCreatorInitials,
+          updatedLabel: 'Now',
+          updatedSort: 202605291340,
+          parentPath: '',
+          folderPath: _v1PreviewSamplesFolderPath,
+          fileType: PbAttachmentFileType.folder,
+          kind: PbFilesItemKind.folder,
+        ),
+      ];
+    }
+
+    if (folderPath != _v1PreviewSamplesFolderPath) {
+      return const [];
+    }
+
+    return [
+      _v1PreviewSampleFile(
+        path: 'preview-samples/Sample editable document.txt',
+        title: 'Sample editable document.txt',
+        updatedSort: 202605291325,
+      ),
+      _v1PreviewSampleFile(path: 'preview-samples/Preview mode rules.dart', title: 'Preview mode rules.dart', updatedSort: 202605291320),
+      _v1PreviewSampleFile(path: 'preview-samples/Preview config.json', title: 'Preview config.json', updatedSort: 202605291318),
+      _v1PreviewSampleFile(path: 'preview-samples/Preview task.sh', title: 'Preview task.sh', updatedSort: 202605291316),
+      _v1PreviewSampleFile(path: 'preview-samples/Sample image preview.png', title: 'Sample image preview.png', updatedSort: 202605291315),
+      _v1PreviewSampleFile(path: 'preview-samples/Sample video preview.mov', title: 'Sample video preview.mov', updatedSort: 202605291310),
+      _v1PreviewSampleFile(path: 'preview-samples/Sample PDF preview.pdf', title: 'Sample PDF preview.pdf', updatedSort: 202605291305),
+      _v1PreviewSampleFile(
+        path: 'preview-samples/Sample presentation.gslides',
+        title: 'Sample presentation.gslides',
+        updatedSort: 202605291300,
+      ),
+      _v1PreviewSampleFile(
+        path: 'preview-samples/Sample transcript',
+        title: 'Sample transcript',
+        type: 'Transcript',
+        updatedSort: 202605291255,
+      ),
+      _v1PreviewSampleFile(
+        path: 'preview-samples/Sample thread.thread',
+        title: 'Sample thread.thread',
+        type: 'Thread',
+        updatedSort: 202605291250,
+      ),
+    ];
+  }
+
   PbFilesItemData _v1ProcessingDeleteItem(PendingStorageDeleteEntry pendingDelete) {
     final path = pendingDelete.path;
     final fallbackName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
@@ -1165,7 +1708,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   bool _v1FilterEnabled(List<StorageEntry> entries) {
-    return entries.any(_v1EntryCanEnableFilter);
+    return entries.any(_v1EntryCanEnableFilter) || _v1PreviewSampleItemsForFolder(_folderSig.value).isNotEmpty;
   }
 
   void _clearV1FilterIfUnavailable(bool filterEnabled) {
@@ -1199,7 +1742,12 @@ class _FileManagerViewState extends State<FileManagerView> {
         .map(_v1ItemForEntry)
         .where((item) => query.isEmpty || item.filterText.contains(query))
         .toList();
+    final itemIds = {for (final item in items) item.id};
+    final previewSamples = _v1PreviewSampleItemsForFolder(
+      _folderSig.value,
+    ).where((item) => !itemIds.contains(item.id)).where((item) => query.isEmpty || item.filterText.contains(query)).toList();
 
+    items.addAll(previewSamples);
     items.addAll(pendingDeleteItems);
     items.addAll(stateRows);
     items.sort(_compareV1Files);
@@ -1440,16 +1988,230 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  Widget _buildV1PreviewContent(PbFilesItemData item) {
+  String _v1ExtensionForPath(String path) {
+    return p.extension(path).replaceFirst('.', '').toLowerCase();
+  }
+
+  bool _v1IsEditableTextPreview(PbFilesItemData item, String path) {
+    if (path.startsWith('dataset://')) {
+      return false;
+    }
+
+    final extension = _v1ExtensionForPath(path);
+    if (_v1EditableTextExtensions.contains(extension)) {
+      return true;
+    }
+
+    final kind = classifyFile(path);
+    if (kind == FileKind.markdown || kind == FileKind.code || kind == FileKind.tsv) {
+      return true;
+    }
+
+    return switch (item.fileType) {
+      PbAttachmentFileType.codeGeneric ||
+      PbAttachmentFileType.script ||
+      PbAttachmentFileType.code ||
+      PbAttachmentFileType.key ||
+      PbAttachmentFileType.settings => true,
+      _ => false,
+    };
+  }
+
+  bool _v1IsNativeDocumentPath(String path) {
+    return const {'thread', 'widget', 'document', 'gallery', 'presentation', 'form'}.contains(_v1ExtensionForPath(path));
+  }
+
+  Future<String> _loadV1PreviewText(String path) async {
+    final content = await widget.client.storage.download(path);
+    return utf8.decode(content.data, allowMalformed: true);
+  }
+
+  Future<void> _saveV1PreviewText(PbFilesItemData item, String path, String text) async {
+    if (!item.canPreview) {
+      await Future<void>.delayed(_v1SaveProcessingStep);
+      return;
+    }
+
+    setState(() => _v1SavingFileIds.add(item.id));
+
+    try {
+      final bytes = Uint8List.fromList(utf8.encode(text));
+      await widget.client.storage.uploadStream(path, Stream<Uint8List>.value(bytes), overwrite: true, size: bytes.length);
+
+      if (!mounted) {
+        return;
+      }
+
+      _finishV1PreviewSave(item);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _v1SavingFileIds.remove(item.id));
+      }
+      rethrow;
+    }
+  }
+
+  Future<String> _v1DownloadUrlForPath(String path) {
+    return _v1DownloadUrlFuturesByPath.putIfAbsent(path, () => widget.client.storage.downloadUrl(path));
+  }
+
+  Widget _v1StorageUrlPreview(String path, Widget Function(Uri url) builder) {
+    return FutureBuilder<String>(
+      future: _v1DownloadUrlForPath(path),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Unable to load file preview: ${snapshot.error}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: PbColors.alert),
+              ),
+            ),
+          );
+        }
+
+        final url = snapshot.data;
+        if (url == null) {
+          return const Center(child: CircularProgressIndicator(color: PbColors.textSubtle));
+        }
+
+        return builder(Uri.parse(url));
+      },
+    );
+  }
+
+  Widget _v1DocumentPaneContent(PbFilesItemData item, String path) {
+    return DocumentPane(
+      path: path,
+      room: widget.client,
+      noPreviewBuilder: (context, _) => Center(
+        child: PbFilePreviewStateCard(file: item.toAttachmentData(), state: PbAttachmentPreviewState.unavailable),
+      ),
+    );
+  }
+
+  Widget? _buildV1PreviewContentChild(PbFilesItemData item, String path) {
+    final kind = classifyFile(path);
+
+    if (kind == FileKind.thread) {
+      return fileViewer(widget.client, path);
+    }
+
+    if (_v1IsNativeDocumentPath(path)) {
+      return _v1DocumentPaneContent(item, path);
+    }
+
+    switch (item.fileType) {
+      case PbAttachmentFileType.image:
+        return _v1StorageUrlPreview(path, (url) => ImagePreview(url: url, fit: BoxFit.contain));
+      case PbAttachmentFileType.video:
+      case PbAttachmentFileType.mediaGeneric:
+        return _v1StorageUrlPreview(path, (url) => VideoPreview(url: url, fit: BoxFit.contain));
+      case PbAttachmentFileType.sound:
+      case PbAttachmentFileType.music:
+        return _v1StorageUrlPreview(path, (url) => AudioPreview(url: url));
+      case PbAttachmentFileType.pdf:
+        return PdfPreview(room: widget.client, path: path);
+      case PbAttachmentFileType.transcript:
+      case PbAttachmentFileType.thread:
+      case PbAttachmentFileType.presentation:
+        return null;
+      case PbAttachmentFileType.generic:
+      case PbAttachmentFileType.folder:
+      case PbAttachmentFileType.archive:
+      case PbAttachmentFileType.type:
+      case PbAttachmentFileType.widget:
+      case PbAttachmentFileType.businessGeneric:
+      case PbAttachmentFileType.spreadsheet:
+      case PbAttachmentFileType.document:
+      case PbAttachmentFileType.codeGeneric:
+      case PbAttachmentFileType.script:
+      case PbAttachmentFileType.code:
+      case PbAttachmentFileType.key:
+      case PbAttachmentFileType.settings:
+        break;
+    }
+
+    switch (kind) {
+      case FileKind.image:
+        return _v1StorageUrlPreview(path, (url) => ImagePreview(url: url, fit: BoxFit.contain));
+      case FileKind.video:
+        return _v1StorageUrlPreview(path, (url) => VideoPreview(url: url, fit: BoxFit.contain));
+      case FileKind.audio:
+        return _v1StorageUrlPreview(path, (url) => AudioPreview(url: url));
+      case FileKind.pdf:
+        return PdfPreview(room: widget.client, path: path);
+      case FileKind.thread:
+        return fileViewer(widget.client, path);
+      case FileKind.markdown:
+      case FileKind.code:
+      case FileKind.tsv:
+        return null;
+      case FileKind.custom:
+      case FileKind.parquet:
+      case FileKind.office:
+      case FileKind.lance:
+      case FileKind.unknown:
+        break;
+    }
+
+    return null;
+  }
+
+  PbFilePreviewSource _buildV1PreviewSource(PbFilesItemData item) {
+    if (_v1IsPreviewSampleItem(item)) {
+      return const PbFilePreviewSource();
+    }
+
     final path = _v1PathForItem(item);
-    return fileViewer(widget.client, path) ??
-        DocumentPane(
-          path: path,
-          room: widget.client,
-          noPreviewBuilder: (context, _) => Center(
-            child: PbFilePreviewStateCard(file: item.toAttachmentData(), state: PbAttachmentPreviewState.unavailable),
-          ),
-        );
+    final extension = _v1ExtensionForPath(path);
+    if (item.fileType == PbAttachmentFileType.transcript || extension == 'transcript' || extension == 'srt' || extension == 'vtt') {
+      return PbFilePreviewSource(
+        childBuilder: (fullscreen) => extension == 'transcript'
+            ? _V1TranscriptDocumentPreview(room: widget.client, path: path, fullscreen: fullscreen)
+            : _V1TextTranscriptPreview(room: widget.client, path: path, title: item.title, fullscreen: fullscreen),
+      );
+    }
+
+    if (_v1IsEditableTextPreview(item, path)) {
+      return PbFilePreviewSource(loadText: () => _loadV1PreviewText(path), saveText: (text) => _saveV1PreviewText(item, path, text));
+    }
+
+    return PbFilePreviewSource(child: _buildV1PreviewContentChild(item, path));
+  }
+
+  void _finishV1PreviewSave(PbFilesItemData item) {
+    setState(() {
+      _v1SavingFileIds.remove(item.id);
+
+      final updatedItem = item.copyWith(updatedLabel: 'Now', updatedSort: DateTime.now().millisecondsSinceEpoch);
+      if (_v1PreviewFile?.id == item.id) {
+        _v1PreviewFile = updatedItem;
+      }
+      _v1RecentlyOpenedFiles = [
+        updatedItem,
+        for (final recent in _v1RecentlyOpenedFiles)
+          if (recent.id != item.id) recent,
+      ];
+    });
+  }
+
+  Future<void> _saveV1PreviewFile(PbFilesItemData item) async {
+    if (!item.canPreview) {
+      await Future<void>.delayed(_v1SaveProcessingStep);
+      return;
+    }
+
+    setState(() => _v1SavingFileIds.add(item.id));
+    await Future<void>.delayed(_v1SaveProcessingStep);
+
+    if (!mounted) {
+      return;
+    }
+
+    _finishV1PreviewSave(item);
   }
 
   PbFilesItemData? _v1PreviewFileFromRoute(List<PbFilesItemData> items) {
@@ -1856,6 +2618,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _nextFile() => _cycleFile(1);
 
   Future<List<StorageEntry>> _getChildren(String folderPath) async {
+    if (folderPath == _v1PreviewSamplesFolderPath) {
+      return const <StorageEntry>[];
+    }
+
     return widget.client.storage.list(folderPath);
   }
 
@@ -2758,6 +3524,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   previewFileId: previewFile?.id,
                   keyboardPreviewFileId: _v1KeyboardPreviewFileId,
                   keyboardPreviewDirection: _v1KeyboardPreviewDirection,
+                  savingIds: _v1SavingFileIds,
                   enableDropTarget: false,
                   onBreadcrumbPressed: (path) => _openEntry(path, true),
                   onSortChanged: _setV1Sort,
@@ -2864,9 +3631,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                   restoreOverlayOnClose: responsivePanel,
                   armKeyboardBrowse: false,
                 ),
-                previewBuilder: _buildV1PreviewContent,
+                previewSourceBuilder: _buildV1PreviewSource,
                 onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item)),
                 onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
+                onSaveRequested: _saveV1PreviewFile,
                 onToggleFullscreen: () => _setV1PreviewFullscreen(!_v1FilePreviewFullscreen),
                 onClosePreview: _closeV1Preview,
               );
@@ -2931,6 +3699,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   String _v1FolderLabelForPath(String path) {
     if (path.isEmpty) {
       return 'Files';
+    }
+
+    if (path == _v1PreviewSamplesFolderPath) {
+      return _v1PreviewSamplesThread;
     }
 
     return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;

@@ -104,6 +104,44 @@ class PbFilesItemData {
   final PbFilesItemKind kind;
   final PbAttachmentPreviewState previewState;
 
+  PbFilesItemData copyWith({
+    String? id,
+    String? title,
+    String? type,
+    String? sizeLabel,
+    int? sizeSort,
+    String? thread,
+    List<String>? linkedThreads,
+    String? creator,
+    String? creatorInitials,
+    String? updatedLabel,
+    int? updatedSort,
+    String? parentPath,
+    String? folderPath,
+    PbAttachmentFileType? fileType,
+    PbFilesItemKind? kind,
+    PbAttachmentPreviewState? previewState,
+  }) {
+    return PbFilesItemData(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      type: type ?? this.type,
+      sizeLabel: sizeLabel ?? this.sizeLabel,
+      sizeSort: sizeSort ?? this.sizeSort,
+      thread: thread ?? this.thread,
+      linkedThreads: linkedThreads ?? this.linkedThreads,
+      creator: creator ?? this.creator,
+      creatorInitials: creatorInitials ?? this.creatorInitials,
+      updatedLabel: updatedLabel ?? this.updatedLabel,
+      updatedSort: updatedSort ?? this.updatedSort,
+      parentPath: parentPath ?? this.parentPath,
+      folderPath: folderPath ?? this.folderPath,
+      fileType: fileType ?? this.fileType,
+      kind: kind ?? this.kind,
+      previewState: previewState ?? this.previewState,
+    );
+  }
+
   bool get canPreview => kind == PbFilesItemKind.file;
 
   List<String> get linkedThreadTargets {

@@ -358,10 +358,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       }
 
       final seen = <String>{};
-      final paths = [
-        for (final path in widget.composerAttachmentPaths)
-          if (path.trim().isNotEmpty && seen.add(path.trim())) path.trim(),
-      ];
+      final paths = <String>[];
+      for (final path in widget.composerAttachmentPaths) {
+        final normalizedPath = normalizePowerboardsAttachmentPath(path);
+        if (normalizedPath.isNotEmpty && seen.add(normalizedPath)) {
+          paths.add(normalizedPath);
+        }
+      }
       if (paths.isEmpty) {
         return;
       }

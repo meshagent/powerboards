@@ -26,7 +26,6 @@ import 'package:meshagent_flutter_shadcn/secrets/keychain_dialog.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
-import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
 import 'package:powerboards/chat/hangup_button.dart';
@@ -35,7 +34,6 @@ import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
-import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
@@ -51,6 +49,7 @@ import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:powerboards/meshagent/tool_connection_scope.dart';
 import 'package:powerboards/meshagent/tools/ui_toolkit.dart';
+import 'package:powerboards/meshagent/v1_file_preview_source.dart';
 import 'package:powerboards/meshagent/wait_for_agent_participant_builder.dart';
 import 'package:powerboards/nav/leave_meeting.dart';
 import 'package:powerboards/nav/nav.dart';
@@ -61,7 +60,6 @@ import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
-import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
@@ -813,6 +811,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
 
       final messages = entry.value.root.getChildren().whereType<MeshElement>().firstWhereOrNull((node) => node.tagName == 'messages');
       final messageElements = messages?.getChildren().whereType<MeshElement>() ?? const Iterable<MeshElement>.empty();
+      final seenAttachments = <String>{};
 
       for (final message in messageElements) {
         for (final attachment in message.getChildren().whereType<MeshElement>()) {
@@ -827,6 +826,9 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
 
           final filePath = normalizePowerboardsAttachmentPath(rawPath);
           if (filePath.isEmpty) {
+            continue;
+          }
+          if (!seenAttachments.add('$filePath\n${entry.key}')) {
             continue;
           }
 
@@ -929,21 +931,27 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     final attachments = <PbAttachmentListItemData>[];
 
     void addAttachment({required String filePath, required String threadPath, required String threadName}) {
-      final key = '$threadPath\n$filePath';
+      final normalizedFilePath = normalizePowerboardsAttachmentPath(filePath);
+      final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+      if (normalizedFilePath.isEmpty || normalizedThreadPath.isEmpty) {
+        return;
+      }
+
+      final key = normalizedFilePath;
       if (!seenAttachments.add(key)) {
         return;
       }
 
-      final title = _attachmentTitle(filePath);
+      final title = _attachmentTitle(normalizedFilePath);
       final metadata = PbResolvedAttachmentMetadata.resolve(title: title);
-      final displayThreadName = threadName.trim().isNotEmpty ? threadName.trim() : defaultThreadDisplayNameFromPath(threadPath);
+      final displayThreadName = threadName.trim().isNotEmpty ? threadName.trim() : defaultThreadDisplayNameFromPath(normalizedThreadPath);
       attachments.add(
         PbAttachmentListItemData(
           title: metadata.displayTitle,
           subtitle: displayThreadName.isEmpty ? metadata.displayType : '${metadata.displayType} / $displayThreadName',
           fileType: metadata.fileType,
-          path: filePath,
-          previewState: powerboardsV1PreviewStateForPath(filePath),
+          path: normalizedFilePath,
+          previewState: powerboardsV1PreviewStateForPath(normalizedFilePath),
         ),
       );
     }
@@ -4130,7 +4138,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   initialPreviewFile: transcriptPreviewFile,
                   initialFilePreviewOpen: transcriptPreviewOpen,
                   openFilePreviewAsFullscreen: responsiveOverlay || transcriptPreviewFullscreen,
-                  filePreviewBuilder: _buildAttachmentPreviewContent,
+                  filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
+                  filePreviewSourceBuilder: _buildAttachmentPreviewSource,
                   onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file)),
                   onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
                   onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
@@ -4769,6 +4778,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   attachments: attachments,
                   initialPreviewFile: _desktopPreviewFilePreviewFile,
                   initialFilePreviewOpen: _desktopPreviewFilePreviewOpen,
+                  openFilePreviewAsFullscreen: responsiveOverlay || _desktopPreviewFilePreviewFullscreen,
                   onFilePreviewSelected: (file) {
                     setState(() => _desktopPreviewFilePreviewFile = file);
                   },
@@ -4787,7 +4797,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   onFilePreviewFullscreenChanged: (fullscreen) {
                     _setDesktopPreviewFilePreviewFullscreen(fullscreen, closeOverlay: responsiveOverlay);
                   },
-                  filePreviewBuilder: _buildAttachmentPreviewContent,
+                  filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
+                  filePreviewSourceBuilder: _buildAttachmentPreviewSource,
                   onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey)),
                   onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
                   onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
@@ -5662,20 +5673,22 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return path;
   }
 
-  Widget _buildAttachmentPreviewContent(PbAttachmentListItemData file) {
+  Widget _buildAttachmentPreviewFallbackContent(PbAttachmentListItemData file) {
     final path = _previewAttachmentPath(file);
     if (path == null) {
       return Center(child: Text(file.title, style: powerboardsSectionTitleStyle()));
     }
 
-    return fileViewer(widget.room, path) ??
-        DocumentPane(
-          path: path,
-          room: widget.room,
-          noPreviewBuilder: (context, _) => Center(
-            child: PbFilePreviewStateCard(file: file, state: PbAttachmentPreviewState.unavailable),
-          ),
-        );
+    return Center(child: Text(file.title, style: powerboardsSectionTitleStyle()));
+  }
+
+  PbFilePreviewSource? _buildAttachmentPreviewSource(PbAttachmentListItemData file) {
+    final path = _previewAttachmentPath(file);
+    if (path == null) {
+      return null;
+    }
+
+    return powerboardsV1PreviewSourceForAttachment(room: widget.room, file: file, path: path);
   }
 
   String? _chatAgentNameForService(ServiceSpec service) {

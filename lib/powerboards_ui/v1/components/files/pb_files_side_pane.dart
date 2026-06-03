@@ -18,9 +18,11 @@ class PbFilesSidePane extends StatelessWidget {
     required this.responsiveOverlayMobile,
     required this.onPreviewFile,
     this.previewBuilder,
+    this.previewSourceBuilder,
     this.onAskAgent,
     this.onShare,
     this.onDownload,
+    this.onSaveRequested,
     required this.onToggleFullscreen,
     required this.onClosePreview,
   });
@@ -39,10 +41,12 @@ class PbFilesSidePane extends StatelessWidget {
   final bool responsiveOverlay;
   final bool responsiveOverlayMobile;
   final ValueChanged<PbFilesItemData> onPreviewFile;
-  final Widget Function(PbFilesItemData file)? previewBuilder;
+  final Widget? Function(PbFilesItemData file)? previewBuilder;
+  final PbFilePreviewSource? Function(PbFilesItemData file)? previewSourceBuilder;
   final ValueChanged<PbFilesItemData>? onAskAgent;
   final ValueChanged<PbFilesItemData>? onShare;
   final ValueChanged<PbFilesItemData>? onDownload;
+  final Future<void> Function(PbFilesItemData file)? onSaveRequested;
   final VoidCallback onToggleFullscreen;
   final VoidCallback onClosePreview;
 
@@ -50,6 +54,8 @@ class PbFilesSidePane extends StatelessWidget {
   Widget build(BuildContext context) {
     final preview = previewFile;
     if (preview != null) {
+      final previewSource = preview.previewState == PbAttachmentPreviewState.none ? previewSourceBuilder?.call(preview) : null;
+      final previewContentChild = previewSource?.buildChild(fullscreen);
       return PbFilePreviewPane(
         file: preview.toAttachmentData(),
         fullscreen: fullscreen,
@@ -58,9 +64,14 @@ class PbFilesSidePane extends StatelessWidget {
         showInlineBorder: !responsiveOverlay,
         hideFullscreenToggle: responsiveOverlayMobile,
         onAskAgent: onAskAgent == null ? null : () => onAskAgent!(preview),
+        onShare: onShare == null ? null : () => onShare!(preview),
         onDownload: onDownload == null ? null : () => onDownload!(preview),
         onToggleFullscreen: onToggleFullscreen,
         onClose: onClosePreview,
+        onSaveRequested: onSaveRequested == null ? null : () => onSaveRequested!(preview),
+        previewContentChild: previewContentChild,
+        loadText: previewSource?.loadText,
+        onSaveTextRequested: previewSource?.saveText,
         child: preview.previewState == PbAttachmentPreviewState.none ? previewBuilder?.call(preview) : null,
       );
     }
@@ -91,6 +102,7 @@ class PbFilesSidePane extends StatelessWidget {
                   data: file.toAttachmentData(),
                   onPressed: () => onPreviewFile(file),
                   onAskAgent: onAskAgent == null ? null : () => onAskAgent!(file),
+                  onShare: onShare == null ? null : () => onShare!(file),
                   onDownload: onDownload == null ? null : () => onDownload!(file),
                 ),
             ],

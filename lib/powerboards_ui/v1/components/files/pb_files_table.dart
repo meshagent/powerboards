@@ -11,6 +11,7 @@ import '../menus/pb_menu_list.dart';
 import '../menus/pb_menu_option.dart';
 import '../menus/pb_sidepane_item_menu.dart';
 import '../primitives/pb_empty_state.dart';
+import '../primitives/pb_spinning_icon.dart';
 import '../primitives/pb_svg_icon.dart';
 import 'pb_file_menus.dart';
 import 'pb_files_data.dart';
@@ -50,6 +51,7 @@ class PbFilesTable extends StatefulWidget {
     required this.previewFileId,
     required this.keyboardPreviewFileId,
     required this.keyboardPreviewDirection,
+    this.savingIds = const {},
     required this.hasActiveFilter,
     required this.onSortChanged,
     required this.onToggleSelection,
@@ -73,6 +75,7 @@ class PbFilesTable extends StatefulWidget {
   final String? previewFileId;
   final String? keyboardPreviewFileId;
   final int keyboardPreviewDirection;
+  final Set<String> savingIds;
   final bool hasActiveFilter;
   final ValueChanged<PbFilesSortKey> onSortChanged;
   final ValueChanged<String> onToggleSelection;
@@ -180,6 +183,7 @@ class _FilesTableState extends State<PbFilesTable> {
                               active: item.id == widget.previewFileId,
                               keyboardFocused: item.id == widget.keyboardPreviewFileId,
                               keyboardPreviewDirection: widget.keyboardPreviewDirection,
+                              saving: widget.savingIds.contains(item.id),
                               hoverSuppressed: _suppressHoverUntilPointerMove,
                               previousSelected: previousSelected,
                               nextSelected: nextSelected,
@@ -679,6 +683,7 @@ class _PbFilesTableRow extends StatefulWidget {
     required this.active,
     required this.keyboardFocused,
     required this.keyboardPreviewDirection,
+    required this.saving,
     required this.hoverSuppressed,
     required this.previousSelected,
     required this.nextSelected,
@@ -706,6 +711,7 @@ class _PbFilesTableRow extends StatefulWidget {
   final bool active;
   final bool keyboardFocused;
   final int keyboardPreviewDirection;
+  final bool saving;
   final bool hoverSuppressed;
   final bool previousSelected;
   final bool nextSelected;
@@ -975,17 +981,21 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
         ? widget.item.kind == PbFilesItemKind.processingError
               ? 'triangle-alert'
               : 'loader-circle'
+        : widget.saving
+        ? 'loader-circle'
         : widget.item.iconAssetName;
     final iconColor = widget.item.kind == PbFilesItemKind.processingError
         ? PbColors.customAlert
+        : widget.saving
+        ? PbColors.textMuted
         : _processing
         ? PbColors.textMuted
         : widget.item.iconColor;
 
     return Row(
       children: [
-        _processing && widget.item.kind == PbFilesItemKind.processing
-            ? _SpinningIcon(assetName: iconName, color: iconColor)
+        (_processing && widget.item.kind == PbFilesItemKind.processing) || widget.saving
+            ? PbSpinningIcon(assetName: iconName, size: 26, color: iconColor)
             : PbSvgIcon(assetName: iconName, size: 26, color: iconColor),
         const SizedBox(width: 12),
         Expanded(
@@ -1256,40 +1266,6 @@ class _FilesCheckPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _FilesCheckPainter oldDelegate) {
     return oldDelegate.mixed != mixed;
-  }
-}
-
-class _SpinningIcon extends StatefulWidget {
-  const _SpinningIcon({required this.assetName, required this.color});
-
-  final String assetName;
-  final Color color;
-
-  @override
-  State<_SpinningIcon> createState() => _SpinningIconState();
-}
-
-class _SpinningIconState extends State<_SpinningIcon> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return RotationTransition(
-      turns: _controller,
-      child: PbSvgIcon(assetName: widget.assetName, size: 26, color: widget.color),
-    );
   }
 }
 

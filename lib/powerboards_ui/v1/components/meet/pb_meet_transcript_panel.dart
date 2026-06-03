@@ -22,6 +22,7 @@ class PbMeetTranscriptPanel extends StatefulWidget {
     this.initialPreviewFile,
     this.initialFilePreviewOpen = false,
     this.filePreviewBuilder,
+    this.filePreviewSourceBuilder,
     this.onAskFileAgent,
     this.onShareFile,
     this.onDownloadFile,
@@ -41,6 +42,7 @@ class PbMeetTranscriptPanel extends StatefulWidget {
   final PbAttachmentListItemData? initialPreviewFile;
   final bool initialFilePreviewOpen;
   final Widget Function(PbAttachmentListItemData file)? filePreviewBuilder;
+  final PbFilePreviewSource? Function(PbAttachmentListItemData file)? filePreviewSourceBuilder;
   final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
   final ValueChanged<PbAttachmentListItemData>? onShareFile;
   final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
@@ -152,6 +154,10 @@ class _PbMeetTranscriptPanelState extends State<PbMeetTranscriptPanel> {
 
   Widget _buildPreviewPane({required bool showInlineBorder}) {
     final previewFullscreen = _filePreviewFullscreen || widget.openFilePreviewAsFullscreen;
+    final previewSource = _previewFile.previewState == PbAttachmentPreviewState.none
+        ? widget.filePreviewSourceBuilder?.call(_previewFile)
+        : null;
+    final previewContentChild = previewSource?.buildChild(previewFullscreen);
 
     return PbFilePreviewPane(
       file: _previewFile,
@@ -165,7 +171,12 @@ class _PbMeetTranscriptPanelState extends State<PbMeetTranscriptPanel> {
       onDownload: widget.onDownloadFile == null ? null : () => widget.onDownloadFile!(_previewFile),
       onToggleFullscreen: () => _setFilePreviewFullscreen(!_filePreviewFullscreen),
       onClose: _closeFilePreview,
-      child: widget.filePreviewBuilder?.call(_previewFile),
+      previewContentChild: previewContentChild,
+      loadText: previewSource?.loadText,
+      onSaveTextRequested: previewSource?.saveText,
+      child: previewSource == null && _previewFile.previewState == PbAttachmentPreviewState.none
+          ? widget.filePreviewBuilder?.call(_previewFile)
+          : null,
     );
   }
 
