@@ -3,6 +3,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 const double _saveFlowDialogBodyHorizontalInset = 24.0;
@@ -93,9 +94,7 @@ void _showThreadStorageSaveToast(BuildContext context, {required Widget title, W
     return;
   }
 
-  final toast = destructive
-      ? ShadToast.destructive(title: title, description: description)
-      : ShadToast(title: title, description: description);
+  final toast = powerboardsWidgetToast(title: title, description: description, destructive: destructive);
   toaster.show(toast);
 }
 

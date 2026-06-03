@@ -15,6 +15,7 @@ import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:powerboards/ui/powerboards_mobile_action_pills.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
@@ -973,7 +974,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       if (!mounted) {
         return;
       }
-      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to rename thread: $e")));
+      ShadToaster.of(context).show(powerboardsToast(title: "Unable to rename thread", description: "$e", destructive: true));
     }
   }
 
@@ -1002,7 +1003,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       if (!mounted) {
         return;
       }
-      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to delete thread: $e")));
+      ShadToaster.of(context).show(powerboardsToast(title: "Unable to delete thread", description: "$e", destructive: true));
     }
   }
 

@@ -19,6 +19,7 @@ import 'package:powerboards/theme/theme.dart';
 
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/ui/powerboards_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 
 class ConnectionInfo {
   String provider = "livekit";
@@ -804,7 +805,7 @@ class _CameraToggleState extends State<CameraToggle> {
         _model?.pendingLocalMedia.setCameraPending(false);
       }
       _model?.pendingLocalMedia.setCameraUnavailable(true);
-      toaster?.show(ShadToast.destructive(description: Text(_describeCameraToggleError(error))));
+      toaster?.show(powerboardsToast(title: 'Device settings', description: _describeCameraToggleError(error), destructive: true));
     } finally {
       if (mounted) {
         setState(() {
@@ -976,7 +977,7 @@ class _MicToggleState extends State<MicToggle> {
         _model?.pendingLocalMedia.setMicrophonePending(false);
       }
       _model?.pendingLocalMedia.setMicrophoneUnavailable(true);
-      toaster?.show(ShadToast.destructive(description: Text(_describeMicrophoneToggleError(error))));
+      toaster?.show(powerboardsToast(title: 'Device settings', description: _describeMicrophoneToggleError(error), destructive: true));
     } finally {
       if (mounted) {
         setState(() {
@@ -1411,7 +1412,7 @@ class _ShareScreenState extends State<ShareScreen> {
       await local.setScreenShareEnabled(!on);
     } catch (error) {
       if (!mounted) return;
-      toaster?.show(ShadToast.destructive(description: Text(_describeScreenShareError(error))));
+      toaster?.show(powerboardsToast(title: 'Device settings', description: _describeScreenShareError(error), destructive: true));
       debugPrint('Unable to toggle screen sharing $error');
     }
 

@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
@@ -2289,9 +2290,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (projectId == null || projectId.isEmpty) {
       if (mounted) {
         ShadToaster.of(context).show(
-          const ShadToast.destructive(
-            title: Text("No chat agent available"),
-            description: Text("Install a chat agent before asking about files."),
+          powerboardsToast(
+            title: "No chat agent available",
+            description: "Install a chat agent before asking about files.",
+            destructive: true,
           ),
         );
       }
@@ -2345,7 +2347,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         return;
       }
 
-      ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to start chat"), description: Text("$error")));
+      ShadToaster.of(context).show(powerboardsToast(title: "Unable to start chat", description: "$error", destructive: true));
     }
   }
 
@@ -2653,7 +2655,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         return;
       }
 
-      ShadToaster.of(context).show(ShadToast.destructive(title: const Text('Unable to share file'), description: Text('$error')));
+      ShadToaster.of(context).show(powerboardsToast(title: 'Unable to share file', description: '$error', destructive: true));
     }
   }
 
@@ -2844,11 +2846,11 @@ class _FileManagerViewState extends State<FileManagerView> {
         }
 
         toaster.show(
-          ShadToast.destructive(
-            title: const Text("Rename failed"),
-            description: Text(
-              "${isFolder ? 'Folder' : 'File'} `${_renameConflictDisplayName(resolvedNextName, isFolder: isFolder)}` already exists in this location.",
-            ),
+          powerboardsToast(
+            title: "Rename failed",
+            description:
+                "${isFolder ? 'Folder' : 'File'} `${_renameConflictDisplayName(resolvedNextName, isFolder: isFolder)}` already exists in this location.",
+            destructive: true,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -2866,7 +2868,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
 
       toaster.show(
-        ShadToast.destructive(title: const Text("Rename failed"), description: Text("$error"), duration: const Duration(seconds: 6)),
+        powerboardsToast(title: "Rename failed", description: "$error", destructive: true, duration: const Duration(seconds: 6)),
       );
     }
   }
@@ -2901,9 +2903,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final zipFileName = "$folderName.zip";
 
-    toaster.show(
-      ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 5)),
-    );
+    toaster.show(powerboardsToast(title: "Compressing folder", description: "Creating $zipFileName", duration: const Duration(seconds: 5)));
 
     String? containerId;
 
@@ -2924,18 +2924,15 @@ class _FileManagerViewState extends State<FileManagerView> {
 
       if (returnCode == 0) {
         toaster.show(
-          ShadToast(
-            title: const Text("Compression complete"),
-            description: Text("Created $zipFileName"),
-            duration: const Duration(seconds: 5),
-          ),
+          powerboardsToast(title: "Compression complete", description: "Created $zipFileName", duration: const Duration(seconds: 5)),
         );
         _refreshCurrentFolder();
       } else {
         toaster.show(
-          ShadToast.destructive(
-            title: const Text("Compression failed"),
-            description: Text("Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)"),
+          powerboardsToast(
+            title: "Compression failed",
+            description: "Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)",
+            destructive: true,
             duration: const Duration(seconds: 8),
           ),
         );
@@ -3056,9 +3053,10 @@ class _FileManagerViewState extends State<FileManagerView> {
         }
 
         ShadToaster.of(context).show(
-          ShadToast.destructive(
-            title: Text("Unable to delete ${isFolder ? 'folder' : 'file'}"),
-            description: Text("$error"),
+          powerboardsToast(
+            title: "Unable to delete ${isFolder ? 'folder' : 'file'}",
+            description: "$error",
+            destructive: true,
             duration: const Duration(seconds: 6),
           ),
         );
@@ -3181,10 +3179,17 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (failures.isEmpty) {
-      toaster.show(ShadToast(description: Text("Deleted $success item${success == 1 ? '' : 's'}"), duration: const Duration(seconds: 4)));
+      toaster.show(
+        powerboardsToast(title: "Deleted", description: "$success item${success == 1 ? '' : 's'}", duration: const Duration(seconds: 4)),
+      );
     } else {
       toaster.show(
-        ShadToast.destructive(description: Text("Deleted $success, failed ${failures.length}"), duration: const Duration(seconds: 6)),
+        powerboardsToast(
+          title: "Delete failed",
+          description: "Deleted $success item${success == 1 ? '' : 's'}. Failed ${failures.length} item${failures.length == 1 ? '' : 's'}.",
+          destructive: true,
+          duration: const Duration(seconds: 6),
+        ),
       );
     }
   }
@@ -3216,17 +3221,21 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     if (downloaded > 0 && skippedFolders == 0) {
       toaster.show(
-        ShadToast(description: Text("Downloading $downloaded file${downloaded == 1 ? '' : 's'}"), duration: const Duration(seconds: 4)),
+        powerboardsToast(
+          title: "Downloading",
+          description: "$downloaded file${downloaded == 1 ? '' : 's'}",
+          duration: const Duration(seconds: 4),
+        ),
       );
       return;
     }
 
     if (downloaded > 0) {
       toaster.show(
-        ShadToast(
-          description: Text(
-            "Downloading $downloaded file${downloaded == 1 ? '' : 's'}. Skipped $skippedFolders folder${skippedFolders == 1 ? '' : 's'}.",
-          ),
+        powerboardsToast(
+          title: "Downloading",
+          description:
+              "Downloading $downloaded file${downloaded == 1 ? '' : 's'}. Skipped $skippedFolders folder${skippedFolders == 1 ? '' : 's'}.",
           duration: const Duration(seconds: 5),
         ),
       );
@@ -3234,7 +3243,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     toaster.show(
-      ShadToast(description: const Text("Folders can’t be downloaded from multi-select yet."), duration: const Duration(seconds: 4)),
+      powerboardsToast(
+        title: "Download unavailable",
+        description: "Folders can’t be downloaded from multi-select yet.",
+        duration: const Duration(seconds: 4),
+      ),
     );
   }
 
@@ -3746,7 +3759,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           return;
         }
 
-        ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to start chat"), description: Text("$error")));
+        ShadToaster.of(context).show(powerboardsToast(title: "Unable to start chat", description: "$error", destructive: true));
       }
     }
 

@@ -10,6 +10,7 @@ import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/shell/shell_agent.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -2847,7 +2848,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final toaster = ShadToaster.of(context);
     final sessionId = widget.room.sessionId;
     if (sessionId == null || sessionId.isEmpty) {
-      toaster.show(ShadToast.destructive(description: const Text("Unable to shut down room: session id is not available yet.")));
+      toaster.show(powerboardsToast(title: "Unable to shut down room", description: "Session id is not available yet.", destructive: true));
       return;
     }
 
@@ -2863,7 +2864,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     try {
-      toaster.show(const ShadToast(title: Text("Room shutdown requested")));
+      toaster.show(powerboardsToast(title: "Room shutdown", description: "Requested."));
       widget.room.dispose();
       await getMeshagentClient().terminate(projectId: widget.projectId, sessionId: sessionId);
     } catch (error) {
@@ -2871,7 +2872,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         return;
       }
 
-      toaster.show(ShadToast.destructive(description: Text("Unable to shut down room: $error")));
+      toaster.show(powerboardsToast(title: "Unable to shut down room", description: "$error", destructive: true));
     }
   }
 
@@ -4616,7 +4617,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       if (!mounted) {
         return;
       }
-      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to rename thread: $error")));
+      ShadToaster.of(context).show(powerboardsToast(title: "Unable to rename thread", description: "$error", destructive: true));
     }
   }
 
@@ -4648,7 +4649,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       if (!mounted) {
         return;
       }
-      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to delete thread: $error")));
+      ShadToaster.of(context).show(powerboardsToast(title: "Unable to delete thread", description: "$error", destructive: true));
     }
   }
 
@@ -6021,7 +6022,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         return;
       }
 
-      ShadToaster.of(context).show(ShadToast.destructive(title: const Text('Unable to share file'), description: Text('$error')));
+      ShadToaster.of(context).show(powerboardsToast(title: 'Unable to share file', description: '$error', destructive: true));
     }
   }
 

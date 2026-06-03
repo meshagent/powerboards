@@ -26,6 +26,7 @@ import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 
 const _railGap = 16.0;
 const _compactControlWidth = 48.0;
@@ -400,7 +401,9 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
   }
 
   void _showTranscriptionToast(String message) {
-    ShadToaster.maybeOf(context)?.show(ShadToast(description: Text(message), duration: const Duration(seconds: 3)));
+    ShadToaster.maybeOf(
+      context,
+    )?.show(powerboardsToast(title: 'Transcription', description: message, duration: const Duration(seconds: 3)));
   }
 
   String _transcriptionButtonLabel({required bool transcribing, required bool shortLabel}) {

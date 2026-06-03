@@ -12,6 +12,7 @@ import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_menu_row.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
@@ -575,7 +576,9 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
       if (!mounted) {
         return;
       }
-      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeDeviceSwitchError(label, error))));
+      ShadToaster.maybeOf(
+        context,
+      )?.show(powerboardsToast(title: 'Device settings', description: _describeDeviceSwitchError(label, error), destructive: true));
       debugPrint('Unable to switch device ${device.deviceId}: $error');
     }
   }
@@ -939,7 +942,9 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
       if (!mounted) {
         return;
       }
-      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeDeviceSwitchError(widget.label, error))));
+      ShadToaster.maybeOf(
+        context,
+      )?.show(powerboardsToast(title: 'Device settings', description: _describeDeviceSwitchError(widget.label, error), destructive: true));
       debugPrint('Unable to switch device ${device.deviceId}: $error');
     }
   }
@@ -1360,7 +1365,9 @@ class _V1MeetDeviceRowState extends State<_V1MeetDeviceRow> {
       if (!mounted) {
         return;
       }
-      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeDeviceSwitchError(widget.label, error))));
+      ShadToaster.maybeOf(
+        context,
+      )?.show(powerboardsToast(title: 'Device settings', description: _describeDeviceSwitchError(widget.label, error), destructive: true));
       debugPrint('Unable to switch device ${device.deviceId}: $error');
     }
   }

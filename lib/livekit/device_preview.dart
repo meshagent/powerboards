@@ -16,6 +16,7 @@ import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 
 import 'room.dart';
 
@@ -122,15 +123,15 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
   }
 
   void _showUnavailableCameraToast() {
-    ShadToaster.maybeOf(
-      context,
-    )?.show(ShadToast.destructive(description: const Text('Camera is unavailable. Check your device settings.')));
+    ShadToaster.maybeOf(context)?.show(
+      powerboardsToast(title: 'Device settings', description: 'Camera is unavailable. Check your device settings.', destructive: true),
+    );
   }
 
   void _showUnavailableMicrophoneToast() {
-    ShadToaster.maybeOf(
-      context,
-    )?.show(ShadToast.destructive(description: const Text('Microphone is unavailable. Check your device settings.')));
+    ShadToaster.maybeOf(context)?.show(
+      powerboardsToast(title: 'Device settings', description: 'Microphone is unavailable. Check your device settings.', destructive: true),
+    );
   }
 
   @override
@@ -277,7 +278,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             _audioUnavailable = true;
           });
           if (showErrors) {
-            ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeAudioToggleError(error))));
+            ShadToaster.maybeOf(
+              context,
+            )?.show(powerboardsToast(title: 'Device settings', description: _describeAudioToggleError(error), destructive: true));
           }
         }
         if (!_isExpectedMediaAccessError(error)) {
@@ -318,7 +321,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
             _videoUnavailable = true;
           });
           if (showErrors) {
-            ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeVideoToggleError(error))));
+            ShadToaster.maybeOf(
+              context,
+            )?.show(powerboardsToast(title: 'Device settings', description: _describeVideoToggleError(error), destructive: true));
           }
         }
         if (!_isExpectedMediaAccessError(error)) {
