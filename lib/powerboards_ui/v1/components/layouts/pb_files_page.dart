@@ -121,12 +121,8 @@ class _PbFilesPageState extends State<PbFilesPage> {
 
   List<PbFilesItemData> get _visibleItems {
     final rows = _items.where((item) {
-      if (widget.blankRoom) {
+      if (widget.blankRoom || widget.newRoom) {
         return false;
-      }
-
-      if (widget.newRoom) {
-        return _currentPath.isEmpty && item.parentPath.isEmpty && item.title == 'Design references';
       }
 
       if (item.parentPath != _currentPath) {

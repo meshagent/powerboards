@@ -2606,7 +2606,13 @@ class _EditableDocumentPreviewState extends State<_EditableDocumentPreview> {
                             maxLines: null,
                             onChanged: widget.onEdited,
                             style: PowerboardsTypography.p,
-                            decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.zero, isCollapsed: true),
+                            decoration: InputDecoration(
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                              hintText: 'Type here',
+                              hintStyle: PowerboardsTypography.p.copyWith(color: PbColors.textMuted),
+                              isCollapsed: true,
+                            ),
                           ),
                         ),
                       ],
@@ -2925,9 +2931,11 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
                                         maxLines: null,
                                         onChanged: _handleChanged,
                                         style: codeStyle,
-                                        decoration: const InputDecoration(
+                                        decoration: InputDecoration(
                                           border: InputBorder.none,
                                           contentPadding: EdgeInsets.zero,
+                                          hintText: 'Type here',
+                                          hintStyle: codeStyle.copyWith(color: _CodeTokenTone.comment.color),
                                           isCollapsed: true,
                                         ),
                                       ),

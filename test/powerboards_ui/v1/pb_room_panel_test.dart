@@ -2,11 +2,60 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
+import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_sidepane_item_menu.dart' as sidepane_menu;
 import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_transcript_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
+
+class _NoopProtocolChannel extends ProtocolChannel {
+  @override
+  void dispose() {}
+
+  @override
+  Future<void> sendData(Uint8List data) async {}
+
+  @override
+  void start(void Function(Uint8List data) onDataReceived, {void Function()? onDone, void Function(Object? error)? onError}) {}
+}
+
+class _FakeChatClient extends agent_sessions.BaseChatClient {
+  @override
+  Future<void> sendAgentMessage(agent_sessions.AgentMessage message, {Uint8List? attachment, bool ignoreOffline = false}) async {}
+}
+
+class _FakeThreadStorageRepository extends agent_sessions.ThreadStorageRepository {
+  _FakeThreadStorageRepository(this._entries);
+
+  List<agent_sessions.ThreadListEntry> _entries;
+
+  void replaceEntries(List<agent_sessions.ThreadListEntry> entries) {
+    _entries = entries;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> open() async {}
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  List<agent_sessions.ThreadListEntry> entries() => List<agent_sessions.ThreadListEntry>.of(_entries);
+
+  @override
+  Future<void> addOrUpdateThread(agent_sessions.ThreadListEntry entry) async {}
+
+  @override
+  Future<void> deleteThread(String threadPath) async {}
+
+  @override
+  Future<void> renameThread(String threadPath, String name) async {}
+}
 
 void main() {
   Widget buildHarness({
@@ -49,6 +98,66 @@ void main() {
   Finder agentCardById(String id) {
     return find.byWidgetPredicate((widget) => widget is PbAgentCard && widget.data.id == id);
   }
+
+  testWidgets('desktop preview threads panel updates when watched storage changes', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final storage = _FakeThreadStorageRepository([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/greeting',
+        name: 'Greeting Chat2',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              height: 720,
+              child: PowerboardsDesktopPreviewThreadListHarness(
+                client: room,
+                threadListPath: 'dataset://agents/assistant/threads',
+                chatClientFactory: (_, _) => _FakeChatClient(),
+                threadStorageFactory: (_) => storage,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Agents'), findsOneWidget);
+    expect(find.text('Browse threads by selected agent.'), findsOneWidget);
+    expect(find.text('Threads'), findsOneWidget);
+    expect(find.text('Greeting Chat2'), findsOneWidget);
+    expect(find.text('Realtime Thread'), findsNothing);
+
+    storage.replaceEntries([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/realtime',
+        name: 'Realtime Thread',
+        createdAt: '2026-05-28T23:10:00.000Z',
+        modifiedAt: '2026-05-28T23:10:00.000Z',
+      ),
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/greeting',
+        name: 'Greeting Chat2',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+    ]);
+    await tester.pump();
+
+    expect(find.text('Realtime Thread'), findsOneWidget);
+    expect(find.text('Greeting Chat2'), findsOneWidget);
+  });
 
   testWidgets('agent list uses ids so duplicate titles stay independently selectable', (tester) async {
     final agents = const [
@@ -428,6 +537,30 @@ void main() {
     expect(savedText, '# Draft\n\nEdited note');
   });
 
+  testWidgets('blank editable document preview shows type here placeholder', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'new-note.txt'),
+              fullscreen: false,
+              loadText: () async => '',
+              onSaveTextRequested: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.decoration?.hintText, 'Type here');
+    expect(find.text('Type here'), findsOneWidget);
+  });
+
   testWidgets('room panel file preview source owns editable real content instead of legacy child', (tester) async {
     String? savedText;
     final file = PbAttachmentListItemData.fromFileName(title: 'notes.csv', path: 'docs/notes.csv');
@@ -512,6 +645,31 @@ void main() {
     expect(savedText, 'final mode = "code";  ');
   });
 
+  testWidgets('blank editable code preview shows type here placeholder', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'new-script.dart'),
+              fullscreen: false,
+              loadText: () async => '',
+              onSaveTextRequested: (_) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.decoration?.hintText, 'Type here');
+    expect(find.text('Type here'), findsOneWidget);
+  });
+
   testWidgets('code preview scrollbars span the file preview frame', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -564,6 +722,59 @@ void main() {
     expect(find.text('Ask agent'), findsOneWidget);
     expect(find.text('Download'), findsOneWidget);
     expect(find.text('Share'), findsNothing);
+  });
+
+  testWidgets('responsive ask agent closes file preview and returns to threads panel', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'brief.pdf', path: 'docs/brief.pdf');
+    var selectedTab = PbRoomPanelTab.files;
+    var previewOpen = true;
+    PbAttachmentListItemData? askedFile;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setHarnessState) {
+              return SizedBox(
+                width: 560,
+                height: 560,
+                child: PbRoomPanel(
+                  responsiveOverlay: true,
+                  selectedTab: selectedTab,
+                  initialPreviewFile: file,
+                  initialFilePreviewOpen: previewOpen,
+                  attachments: [file],
+                  agents: const [PbAgentListItemData(id: 'assistant', title: 'Assistant', status: 'Available', icon: 'bot')],
+                  selectedAgentId: 'assistant',
+                  threads: const ['New Thread...'],
+                  selectedThreadTitle: null,
+                  onThreadSelected: (_) {},
+                  onCreateThread: () {},
+                  onAskFileAgent: (file) {
+                    askedFile = file;
+                    setHarnessState(() {
+                      selectedTab = PbRoomPanelTab.agents;
+                      previewOpen = false;
+                    });
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('file-preview-content-frame')), findsOneWidget);
+
+    await tester.tap(find.text('Ask agent'));
+    await tester.pumpAndSettle();
+
+    expect(askedFile, file);
+    expect(find.byKey(const ValueKey('file-preview-content-frame')), findsNothing);
+    expect(find.text('Browse threads by selected agent.'), findsOneWidget);
+    expect(find.text('Browse attachments by selected agent.'), findsNothing);
   });
 
   testWidgets('thread preview unavailable state does not expose an inert composer', (tester) async {
@@ -860,5 +1071,67 @@ void main() {
     expect(find.text('Legacy transcript pane'), findsNothing);
     expect(find.text('Source transcript content.'), findsOneWidget);
     expect(find.text("Hi, I'm checking to see if the transcription works. I turned it on. Can you hear me?"), findsNothing);
+  });
+
+  testWidgets('meet transcript panel describes recent meetings without a hard time limit', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(width: 560, height: 560, child: PbMeetTranscriptPanel(transcripts: [])),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Browse transcripts from recent meetings.'), findsOneWidget);
+    expect(find.text('Browse transcripts from the last seven days.'), findsNothing);
+  });
+
+  testWidgets('meet transcript row menu exposes ask agent and download actions', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'daily.transcript', path: 'transcripts/daily.transcript');
+    PbAttachmentListItemData? askedFile;
+    PbAttachmentListItemData? downloadedFile;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbMeetTranscriptPanel(
+              transcripts: [file],
+              onAskFileAgent: (file) => askedFile = file,
+              onDownloadFile: (file) => downloadedFile = file,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer();
+    await mouse.moveTo(tester.getCenter(find.text('daily')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(sidepane_menu.PbSidepaneItemMenu));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open'), findsOneWidget);
+    expect(find.text('Ask agent'), findsOneWidget);
+    expect(find.text('Download'), findsOneWidget);
+
+    await tester.tap(find.text('Ask agent'));
+    await tester.pumpAndSettle();
+    expect(askedFile, file);
+
+    await mouse.moveTo(tester.getCenter(find.text('daily')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(sidepane_menu.PbSidepaneItemMenu));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Download'));
+    await tester.pumpAndSettle();
+    expect(downloadedFile, file);
   });
 }

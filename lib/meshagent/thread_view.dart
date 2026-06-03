@@ -65,6 +65,14 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
   }
 }
 
+String? _agentThreadListPath(String? path) {
+  final normalized = path?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    return null;
+  }
+  return "agent://threads";
+}
+
 class MeshagentThreadView extends StatefulWidget {
   const MeshagentThreadView({
     super.key,
@@ -82,6 +90,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.initialMessageText,
     this.initialMessageAttachments,
     this.agentName,
+    this.chatClient,
     this.selectedThreadPath,
     this.selectedThreadDisplayName,
     this.onSelectedThreadPathChanged,
@@ -98,12 +107,14 @@ class MeshagentThreadView extends StatefulWidget {
     this.composerAttachmentPaths = const [],
     this.onComposerAttachmentSeedApplied,
     this.onComposerAttachmentOpen,
+    this.onComposerAttachmentRemoved,
     this.onThreadAttachmentOpen,
     this.fileDropOverlayBuilder,
   });
 
   final String projectId;
   final String? agentName;
+  final agent_sessions.BaseChatClient? chatClient;
   final ChatThreadDisplayMode threadDisplayMode;
   final String? threadListPath;
   final int newThreadResetVersion;
@@ -131,6 +142,7 @@ class MeshagentThreadView extends StatefulWidget {
   final List<String> composerAttachmentPaths;
   final VoidCallback? onComposerAttachmentSeedApplied;
   final ValueChanged<String>? onComposerAttachmentOpen;
+  final ValueChanged<String>? onComposerAttachmentRemoved;
   final ValueChanged<String>? onThreadAttachmentOpen;
   final FileDropOverlayBuilder? fileDropOverlayBuilder;
 
@@ -535,12 +547,14 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     final chatBotView = ChatBotView(
       room: widget.client,
+      chatClient: widget.chatClient,
       agentName: widget.agentName,
       threadDisplayMode: widget.threadDisplayMode,
       threadListPath: widget.threadListPath,
       documentPath: widget.documentPath,
       controller: _chatController,
       onAttachmentOpen: _openComposerAttachment,
+      onAttachmentRemoved: (attachment) => widget.onComposerAttachmentRemoved?.call(attachment.path),
       selectedThreadPath: widget.selectedThreadPath,
       selectedThreadDisplayName: widget.selectedThreadDisplayName,
       onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
@@ -754,16 +768,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   StreamSubscription<RoomEvent>? _roomSubscription;
 
   String? _normalizedThreadListPath(String? path) {
-    if (path == null) {
-      return null;
-    }
-
-    final trimmed = path.trim();
-    if (trimmed.isEmpty) {
-      return null;
-    }
-
-    return trimmed;
+    return _agentThreadListPath(path);
   }
 
   DateTime _parseThreadDate(String value) {

@@ -1527,6 +1527,45 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     );
   }
 
+  bool _shouldShowLegacyDesktopBalanceBannerAccountButton(BuildContext context) {
+    final useMobileNav = ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
+    final useDesktopUiPreview = powerboardsUiModeSignal.value == PowerboardsUiMode.v1 && !useMobileNav;
+
+    return !useMobileNav && !useDesktopUiPreview;
+  }
+
+  Widget _legacyDesktopBalanceBannerContent(BuildContext context, {required Widget child}) {
+    if (!_shouldShowLegacyDesktopBalanceBannerAccountButton(context)) {
+      return Center(child: child);
+    }
+
+    return SizedBox(
+      width: double.infinity,
+      height: desktopPaneHeaderCompactButtonWidth,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: desktopPaneHeaderCompactButtonWidth + 16),
+              child: child,
+            ),
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: UserAvatarMenuButton(
+              projectId: widget.projectId,
+              projects: projects,
+              boundaryContext: context,
+              avatarSize: desktopPaneHeaderCompactButtonWidth,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget outOfCreditBanner(BuildContext context, ProjectRole? userRole) {
     final theme = ShadTheme.of(context);
     final tt = theme.textTheme;
@@ -1544,22 +1583,25 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       child: Center(
         child: isMobile
             ? _buildMobileBalanceBannerText(context, outOfCredit: true, userRole: userRole)
-            : Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: "Out of Credit - ",
-                      style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
-                    ),
+            : _legacyDesktopBalanceBannerContent(
+                context,
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: "Out of Credit - ",
+                        style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
+                      ),
 
-                    if (userRole == ProjectRole.admin)
-                      TextSpan(text: "Add more credits to re-enable rooms.")
-                    else
-                      TextSpan(text: "Contact your project admin to add more credits."),
-                  ],
+                      if (userRole == ProjectRole.admin)
+                        TextSpan(text: "Add more credits to re-enable rooms.")
+                      else
+                        TextSpan(text: "Contact your project admin to add more credits."),
+                    ],
+                  ),
+                  style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
+                  textAlign: TextAlign.center,
                 ),
-                style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
-                textAlign: TextAlign.center,
               ),
       ),
     );
@@ -1578,26 +1620,29 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       child: Center(
         child: isMobile
             ? _buildMobileBalanceBannerText(context, outOfCredit: false, userRole: null)
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 16,
-                children: [
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: "Low Balance - ",
-                          style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
-                        ),
+            : _legacyDesktopBalanceBannerContent(
+                context,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 16,
+                  children: [
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: "Low Balance - ",
+                            style: tt.small.copyWith(fontWeight: FontWeight.bold, color: cs.destructiveForeground),
+                          ),
 
-                        TextSpan(text: "Add more credits to avoid service interruption."),
-                      ],
+                          TextSpan(text: "Add more credits to avoid service interruption."),
+                        ],
+                      ),
+                      style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
+                      textAlign: TextAlign.center,
                     ),
-                    style: tt.small.copyWith(color: cs.destructiveForeground, height: 1.5),
-                    textAlign: TextAlign.center,
-                  ),
-                  ShadButton(key: const Key('add-credits-button'), onPressed: onAddCredits, child: const Text("Add Credits")),
-                ],
+                    ShadButton(key: const Key('add-credits-button'), onPressed: onAddCredits, child: const Text("Add Credits")),
+                  ],
+                ),
               ),
       ),
     );

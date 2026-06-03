@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:http/http.dart';
@@ -305,7 +305,11 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
   }
 
   Future<void> _rebindDocument() async {
-    final nextThreadListPath = widget.threadListPath.trim();
+    final nextThreadListPath = _agentThreadListPath(widget.threadListPath);
+    if (nextThreadListPath == null) {
+      _emitResolved();
+      return;
+    }
     final nextAgentName = widget.agentName?.trim();
     if (_openedThreadListPath == nextThreadListPath && _openedAgentName == nextAgentName && _storage != null) {
       _emitResolved();
@@ -320,7 +324,7 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
       storage.addListener(_onThreadListChanged);
       await chatClient.start();
       await storage.open();
-      if (!mounted || widget.threadListPath.trim() != nextThreadListPath) {
+      if (!mounted || _agentThreadListPath(widget.threadListPath) != nextThreadListPath) {
         storage.removeListener(_onThreadListChanged);
         await storage.close();
         await chatClient.stop();
@@ -370,6 +374,13 @@ class _MobileSelectedThreadLabelResolverState extends State<_MobileSelectedThrea
   Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
+@visibleForTesting
+typedef PowerboardsDesktopPreviewChatClientFactory = agent_sessions.BaseChatClient Function(RoomClient client, String? agentName);
+
+@visibleForTesting
+typedef PowerboardsDesktopPreviewThreadStorageFactory =
+    agent_sessions.ThreadStorageRepository Function(agent_sessions.BaseChatClient chatClient);
+
 class _DesktopPreviewThreadEntry {
   const _DesktopPreviewThreadEntry({
     required this.storage,
@@ -379,7 +390,7 @@ class _DesktopPreviewThreadEntry {
     required this.modifiedAt,
   });
 
-  final agent_sessions.AgentThreadStorageRepository storage;
+  final agent_sessions.ThreadStorageRepository storage;
   final String path;
   final String name;
   final String createdAt;
@@ -400,30 +411,45 @@ class _DesktopPreviewMeetPaneData {
   final bool roomHasStoredFiles;
 }
 
+String? _agentThreadListPath(String? path) {
+  final normalized = path?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    return null;
+  }
+  return "agent://threads";
+}
+
 class _DesktopPreviewThreadList extends StatefulWidget {
-  const _DesktopPreviewThreadList({required this.client, required this.agentName, required this.threadListPath, required this.builder});
+  const _DesktopPreviewThreadList({
+    required this.client,
+    required this.agentName,
+    required this.threadListPath,
+    required this.builder,
+    this.chatClientFactory,
+    this.threadStorageFactory,
+    this.disposeChatClient = true,
+  });
 
   final RoomClient client;
   final String? agentName;
   final String? threadListPath;
   final Widget Function(BuildContext context, List<_DesktopPreviewThreadEntry> threads) builder;
+  final PowerboardsDesktopPreviewChatClientFactory? chatClientFactory;
+  final PowerboardsDesktopPreviewThreadStorageFactory? threadStorageFactory;
+  final bool disposeChatClient;
 
   @override
   State<_DesktopPreviewThreadList> createState() => _DesktopPreviewThreadListState();
 }
 
 class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
-  agent_sessions.MessagingChatClient? _chatClient;
-  agent_sessions.AgentThreadStorageRepository? _storage;
+  agent_sessions.BaseChatClient? _chatClient;
+  agent_sessions.ThreadStorageRepository? _storage;
   String? _openedThreadListPath;
   String? _openedAgentName;
 
   String? _normalizedThreadListPath() {
-    final path = widget.threadListPath?.trim();
-    if (path == null || path.isEmpty) {
-      return null;
-    }
-    return path;
+    return _agentThreadListPath(widget.threadListPath);
   }
 
   DateTime _parseThreadDate(String value) {
@@ -489,7 +515,9 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
     _openedAgentName = null;
 
     await storage?.close();
-    await chatClient?.stop();
+    if (widget.disposeChatClient) {
+      await chatClient?.stop();
+    }
   }
 
   Future<void> _rebindDocument() async {
@@ -509,15 +537,19 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
     }
 
     try {
-      final chatClient = agent_sessions.MessagingChatClient(room: widget.client, agentName: nextAgentName);
-      final storage = agent_sessions.AgentThreadStorageRepository(chatClient: chatClient);
+      final chatClient =
+          widget.chatClientFactory?.call(widget.client, nextAgentName) ??
+          agent_sessions.MessagingChatClient(room: widget.client, agentName: nextAgentName);
+      final storage = widget.threadStorageFactory?.call(chatClient) ?? agent_sessions.AgentThreadStorageRepository(chatClient: chatClient);
       storage.addListener(_onThreadListChanged);
       await chatClient.start();
       await storage.open();
       if (!mounted || _normalizedThreadListPath() != nextThreadListPath) {
         storage.removeListener(_onThreadListChanged);
         await storage.close();
-        await chatClient.stop();
+        if (widget.disposeChatClient) {
+          await chatClient.stop();
+        }
         return;
       }
 
@@ -994,6 +1026,52 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   @override
   Widget build(BuildContext context) {
     return widget.builder(context, _attachments());
+  }
+}
+
+@visibleForTesting
+class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
+  const PowerboardsDesktopPreviewThreadListHarness({
+    super.key,
+    required this.client,
+    required this.threadListPath,
+    this.chatClientFactory,
+    this.threadStorageFactory,
+    this.disposeChatClient,
+    this.agentName = 'assistant',
+  });
+
+  final RoomClient client;
+  final String? threadListPath;
+  final String? agentName;
+  final PowerboardsDesktopPreviewChatClientFactory? chatClientFactory;
+  final PowerboardsDesktopPreviewThreadStorageFactory? threadStorageFactory;
+  final bool? disposeChatClient;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DesktopPreviewThreadList(
+      client: client,
+      agentName: agentName,
+      threadListPath: threadListPath,
+      chatClientFactory: chatClientFactory,
+      threadStorageFactory: threadStorageFactory,
+      disposeChatClient: disposeChatClient ?? chatClientFactory == null,
+      builder: (context, threads) {
+        final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
+        return PbRoomPanel(
+          agents: const [PbAgentListItemData(id: 'assistant', title: 'Assistant', status: 'Available', icon: 'bot', selected: true)],
+          selectedAgentId: 'assistant',
+          selectedAgentTitle: 'Assistant',
+          showFilesTab: false,
+          threads: [for (final thread in threads) thread.name],
+          threadItems: threadItems,
+          selectedThreadTitle: null,
+          onThreadSelected: (_) {},
+          onCreateThread: () {},
+        );
+      },
+    );
   }
 }
 
@@ -1748,6 +1826,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final Map<String, List<String>> _composerAttachmentPathsByAgentKey = <String, List<String>>{};
   final Map<String, int> _composerAttachmentSeedVersionByAgentKey = <String, int>{};
   final Map<String, PowerboardsFileAttachmentLink> _localThreadAttachmentLinksByKey = <String, PowerboardsFileAttachmentLink>{};
+  final Map<String, agent_sessions.MessagingChatClient> _agentChatClients = <String, agent_sessions.MessagingChatClient>{};
   static const Duration _roomResourceTimeout = Duration(seconds: 30);
 
   final MeshagentRoomController controller = MeshagentRoomController();
@@ -1817,6 +1896,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (oldWidget.projectId != widget.projectId || oldWidget.room.roomName != widget.room.roomName) {
       _resolvedRoomDisplayName = null;
       unawaited(_loadRoomDisplayName());
+    }
+    if (oldWidget.room != widget.room) {
+      for (final chatClient in _agentChatClients.values) {
+        unawaited(chatClient.stop());
+      }
+      _agentChatClients.clear();
     }
   }
 
@@ -1896,7 +1981,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final services = (await widget.room.services.list().timeout(
       _roomResourceTimeout,
       onTimeout: () => throw TimeoutException("Timed out while loading room services."),
-    )).where((x) => x.agents.isNotEmpty).toList();
+    )).where(hasAgentMetadata).toList();
     services.sort(_compareServices);
     return services;
   });
@@ -1909,6 +1994,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (previewFilePreviewFullscreenListenable.value) {
       setPreviewFilePreviewFullscreen(false);
     }
+    for (final chatClient in _agentChatClients.values) {
+      unawaited(chatClient.stop());
+    }
+    _agentChatClients.clear();
     _meetingSplitViewController.dispose();
     _roomStatusSubscription?.cancel();
     _roomStatusSubscription = null;
@@ -1923,6 +2012,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   String _serviceSortKey(ServiceSpec s) => s.agents.firstOrNull?.name ?? s.metadata.name;
   int _compareServices(ServiceSpec a, ServiceSpec b) => _serviceSortKey(a).compareTo(_serviceSortKey(b));
+
+  agent_sessions.BaseChatClient? _agentChatClientFor(String? agentName) {
+    final normalized = agentName?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    return _agentChatClients.putIfAbsent(normalized, () {
+      final chatClient = agent_sessions.MessagingChatClient(room: widget.room, agentName: normalized);
+      unawaited(chatClient.start());
+      return chatClient;
+    });
+  }
 
   String _serviceId(ServiceSpec s) => s.metadata.annotations["meshagent.service.id"] ?? "";
   String _serviceType(ServiceSpec s) => s.agents.firstOrNull?.annotations["meshagent.agent.type"] ?? "[Unspecified]";
@@ -3566,10 +3667,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             bottom: 24,
           )
         : null;
+    final agentChatClient = _agentChatClientFor(agentName);
     final chatView = Padding(
       padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
       child: MeshagentThreadView(
         agentName: agentName,
+        chatClient: agentChatClient,
         threadDisplayMode: threadDisplayMode,
         threadListPath: resolvedThreadListPath,
         newThreadResetVersion: _newThreadResetVersion,
@@ -3605,6 +3708,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         onComposerAttachmentSeedApplied: agentKey == null ? null : () => _clearComposerAttachmentSeed(agentKey),
         onComposerAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel)
+            : null,
+        onComposerAttachmentRemoved: !isMobile && powerboardsUsesDesktopUiPreview(context)
+            ? _closeDesktopPreviewAttachmentPreviewIfRemoved
             : null,
         onThreadAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel)
@@ -3885,7 +3991,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 v1RoomPanelWidth: usesDesktopUiPreview ? _desktopPreviewRoomPanelWidth : null,
                 onV1RoomPanelWidthChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelWidth : null,
                 onV1FilePromptRequested: usesDesktopUiPreview
-                    ? (action, filePath) => _handleDesktopPreviewFilePromptRequested(context, action: action, filePath: filePath)
+                    ? (action, filePath, {showThreadAfterPrompt = false}) => _handleDesktopPreviewFilePromptRequested(
+                        context,
+                        action: action,
+                        filePath: filePath,
+                        showThreadAfterPrompt: showThreadAfterPrompt,
+                      )
                     : null,
               ),
             ),
@@ -4140,7 +4251,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   openFilePreviewAsFullscreen: responsiveOverlay || transcriptPreviewFullscreen,
                   filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
                   filePreviewSourceBuilder: _buildAttachmentPreviewSource,
-                  onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file)),
+                  onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, showThreadAfterPrompt: responsiveOverlay)),
                   onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
                   onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
                   onFilePreviewSelected: (file) {
@@ -4438,7 +4549,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   List<PbAgentListItemData> _desktopPreviewAgentItems(List<ServiceSpec> supported, _ResolvedAgentSelection selected) {
-    final services = supported.where((service) => _serviceType(service) != 'MeetingTranscriber').toList();
+    final services = supported.where((service) => hasAgentMetadata(service) && _serviceType(service) != 'MeetingTranscriber').toList();
     services.sort((a, b) => a.metadata.name.toLowerCase().compareTo(b.metadata.name.toLowerCase()));
     final developmentParticipants = _developmentParticipants(supported);
     return [
@@ -4614,6 +4725,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       client: widget.room,
       agentName: chatContext?.agentName,
       threadListPath: threadListPath,
+      chatClientFactory: (_, agentName) =>
+          _agentChatClientFor(agentName) ?? agent_sessions.MessagingChatClient(room: widget.room, agentName: agentName),
+      disposeChatClient: false,
       builder: (context, threads) {
         final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads);
         final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
@@ -4799,7 +4913,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   },
                   filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
                   filePreviewSourceBuilder: _buildAttachmentPreviewSource,
-                  onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey)),
+                  onAskFileAgent: (file) => unawaited(
+                    _startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey, showThreadAfterPrompt: responsiveOverlay),
+                  ),
                   onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
                   onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
                   filePreviewResizing: resizing,
@@ -5625,11 +5741,33 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     setPreviewFilePreviewFullscreen(false);
   }
 
+  void _closeDesktopPreviewAttachmentPreviewIfRemoved(String filePath) {
+    if (!_desktopPreviewFilePreviewOpen) {
+      return;
+    }
+
+    final normalizedRemovedPath = normalizePowerboardsAttachmentPath(filePath);
+    final normalizedPreviewPath = normalizePowerboardsAttachmentPath(_desktopPreviewFilePreviewFile?.path ?? '');
+    if (normalizedRemovedPath.isEmpty || normalizedRemovedPath != normalizedPreviewPath) {
+      return;
+    }
+
+    _desktopPreviewRoomPanelOverlayController.hide();
+    setState(() {
+      _desktopPreviewFilePreviewFile = null;
+      _desktopPreviewFilePreviewOpen = false;
+      _desktopPreviewFilePreviewFullscreen = false;
+      _desktopPreviewRoomPanelOverlayOpen = false;
+    });
+    setPreviewFilePreviewFullscreen(false);
+  }
+
   Future<void> _handleDesktopPreviewFilePromptRequested(
     BuildContext context, {
     required ChatFilePromptAction action,
     required String filePath,
     String? preferredAgentKey,
+    bool showThreadAfterPrompt = false,
   }) async {
     if (!mounted || !context.mounted) {
       return;
@@ -5638,6 +5776,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final agentKey = _agentRouteIdForFilePromptAction(action) ?? preferredAgentKey;
     if (agentKey == null) {
       await showManageAgents();
+      return;
+    }
+
+    if (showThreadAfterPrompt) {
+      _openDesktopPreviewThreadComposerWithAttachment(context, agentKey: agentKey, filePath: filePath);
       return;
     }
 
@@ -5663,6 +5806,44 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
     _showDesktopPreviewChatPane(context, agentKey: agentKey);
+  }
+
+  void _openDesktopPreviewThreadComposerWithAttachment(BuildContext context, {required String agentKey, required String filePath}) {
+    final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
+    if (normalizedPath.isEmpty) {
+      return;
+    }
+
+    _desktopPreviewRoomPanelOverlayController.hide();
+    setState(() {
+      _selectedThreadPathByAgentKey.remove(agentKey);
+      _selectedThreadLabelByAgentKey.remove(agentKey);
+      _newThreadResetVersion++;
+      _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
+      _desktopPreviewRoomPanelOverlayOpen = false;
+      _desktopPreviewFilePreviewFile = null;
+      _desktopPreviewFilePreviewOpen = false;
+      _desktopPreviewFilePreviewFullscreen = false;
+      _desktopPreviewMeetTranscriptPreviewFile = null;
+      _desktopPreviewMeetTranscriptPreviewOpen = false;
+      _desktopPreviewMeetTranscriptPreviewFullscreen = false;
+      _desktopPreviewRestoreTranscriptOverlayOnPreviewClose = false;
+    });
+    if (_roomNameForSelectionPersistence case final roomName?) {
+      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
+    }
+    setPreviewFilePreviewFullscreen(false);
+
+    if (!mounted || !context.mounted) {
+      return;
+    }
+    _showDesktopPreviewChatPane(context, agentKey: agentKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _setComposerAttachmentSeed(agentKey, [normalizedPath]);
+    });
   }
 
   String? _previewAttachmentPath(PbAttachmentListItemData file) {
@@ -5761,7 +5942,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return fallback == null ? const <ChatFilePromptAction>[] : [fallback];
   }
 
-  Future<void> _startDefaultAttachmentFilePrompt(PbAttachmentListItemData file, {String? agentKey}) async {
+  Future<void> _startDefaultAttachmentFilePrompt(
+    PbAttachmentListItemData file, {
+    String? agentKey,
+    bool showThreadAfterPrompt = false,
+  }) async {
     final path = _previewAttachmentPath(file);
     if (path == null) {
       return;
@@ -5773,7 +5958,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    await _handleDesktopPreviewFilePromptRequested(context, action: action, filePath: path, preferredAgentKey: agentKey);
+    await _handleDesktopPreviewFilePromptRequested(
+      context,
+      action: action,
+      filePath: path,
+      preferredAgentKey: agentKey,
+      showThreadAfterPrompt: showThreadAfterPrompt,
+    );
   }
 
   Future<void> _downloadAttachmentFile(PbAttachmentListItemData file) async {

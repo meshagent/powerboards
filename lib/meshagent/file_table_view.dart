@@ -92,10 +92,6 @@ const int _v1RecentlyOpenedFilesLimit = 7;
 const Duration _v1DeleteProcessingStep = Duration(milliseconds: 650);
 const Duration _v1SaveProcessingStep = Duration(milliseconds: 850);
 const Offset _uploadProgressPopoverOffset = Offset(20, -20);
-const String _v1PreviewSamplesFolderPath = 'preview-samples';
-const String _v1PreviewSamplesThread = 'Preview samples';
-const String _v1PreviewSamplesCreator = 'Jesse Park';
-const String _v1PreviewSamplesCreatorInitials = 'JP';
 
 const Map<String, String> _powerboardsV1FileTypeKeysByExtension = {
   'thread': 'thread',
@@ -587,6 +583,65 @@ List<PbFilesItemData> powerboardsV1RecordRecentlyOpenedFile(
   return next.take(limit).toList(growable: false);
 }
 
+final Map<String, List<PbFilesItemData>> _v1RecentlyOpenedFilesBySession = <String, List<PbFilesItemData>>{};
+
+String _v1RecentlyOpenedFilesSessionKey({required String? projectId, required String? roomName}) {
+  return '${projectId?.trim() ?? ''}\u{1f}${roomName?.trim() ?? ''}';
+}
+
+List<PbFilesItemData> _sanitizeV1RecentlyOpenedFiles(List<PbFilesItemData> files) {
+  final seen = <String>{};
+  return [
+    for (final file in files)
+      if (file.canPreview && seen.add(file.id)) file,
+  ].take(_v1RecentlyOpenedFilesLimit).toList(growable: false);
+}
+
+@visibleForTesting
+List<PbFilesItemData> powerboardsV1RecentlyOpenedFilesForSession({required String? projectId, required String? roomName}) {
+  final key = _v1RecentlyOpenedFilesSessionKey(projectId: projectId, roomName: roomName);
+  return List<PbFilesItemData>.of(_v1RecentlyOpenedFilesBySession[key] ?? const <PbFilesItemData>[]);
+}
+
+@visibleForTesting
+void powerboardsV1SaveRecentlyOpenedFilesForSession({
+  required String? projectId,
+  required String? roomName,
+  required List<PbFilesItemData> files,
+}) {
+  final key = _v1RecentlyOpenedFilesSessionKey(projectId: projectId, roomName: roomName);
+  final sanitized = _sanitizeV1RecentlyOpenedFiles(files);
+  if (sanitized.isEmpty) {
+    _v1RecentlyOpenedFilesBySession.remove(key);
+    return;
+  }
+  _v1RecentlyOpenedFilesBySession[key] = List<PbFilesItemData>.unmodifiable(sanitized);
+}
+
+@visibleForTesting
+void powerboardsV1ClearRecentlyOpenedFileSessionCache() {
+  _v1RecentlyOpenedFilesBySession.clear();
+}
+
+@visibleForTesting
+bool powerboardsV1FileItemIsSelectable(PbFilesItemData item) {
+  return item.kind == PbFilesItemKind.file || item.kind == PbFilesItemKind.folder;
+}
+
+@visibleForTesting
+Set<String> powerboardsV1SelectedVisibleItemIds(Set<String> selectedIds, Iterable<PbFilesItemData> visibleItems) {
+  final visibleIds = {for (final item in visibleItems) item.id};
+  return selectedIds.where(visibleIds.contains).toSet();
+}
+
+@visibleForTesting
+List<PbFilesItemData> powerboardsV1ItemsExcludingReplacementRows(Iterable<PbFilesItemData> items, Set<String> replacementRowIds) {
+  return [
+    for (final item in items)
+      if (!replacementRowIds.contains(item.id)) item,
+  ];
+}
+
 String _relocatePathForMove(String currentPath, String sourcePath, String destinationPath) {
   if (currentPath == sourcePath) {
     return destinationPath;
@@ -747,7 +802,7 @@ class FileManagerView extends StatefulWidget {
   final ValueChanged<bool>? onV1RoomPanelCollapsedChanged;
   final double? v1RoomPanelWidth;
   final ValueChanged<double>? onV1RoomPanelWidthChanged;
-  final FutureOr<void> Function(ChatFilePromptAction action, String filePath)? onV1FilePromptRequested;
+  final FutureOr<void> Function(ChatFilePromptAction action, String filePath, {bool showThreadAfterPrompt})? onV1FilePromptRequested;
 
   const FileManagerView({
     super.key,
@@ -907,7 +962,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         }
 
         if (recentFilesChanged) {
-          _v1RecentlyOpenedFiles = nextRecentlyOpenedFiles;
+          _replaceV1RecentlyOpenedFiles(nextRecentlyOpenedFiles);
         }
 
         if (closesPreviewFile || closesOpenedFile) {
@@ -976,6 +1031,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   @override
   void initState() {
     super.initState();
+    _restoreV1RecentlyOpenedFilesFromSession();
     roomSub = widget.client.listen(_onRoomEvent);
     _bindController(widget.controller);
     unawaited(_rebindThreadIndexDocument());
@@ -994,6 +1050,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (oldWidget.controller != widget.controller) {
       _unbindController(oldWidget.controller);
       _bindController(widget.controller);
+    }
+    if (oldWidget.projectId != widget.projectId || oldWidget.client.roomName != widget.client.roomName) {
+      _restoreV1RecentlyOpenedFilesFromSession();
     }
   }
 
@@ -1027,6 +1086,16 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     widget.client.localParticipant?.setAttribute("current_file", null);
     super.dispose();
+  }
+
+  void _restoreV1RecentlyOpenedFilesFromSession() {
+    _v1RecentlyOpenedFiles = powerboardsV1RecentlyOpenedFilesForSession(projectId: widget.projectId, roomName: widget.client.roomName);
+  }
+
+  void _replaceV1RecentlyOpenedFiles(List<PbFilesItemData> files) {
+    final sanitized = _sanitizeV1RecentlyOpenedFiles(files);
+    _v1RecentlyOpenedFiles = sanitized;
+    powerboardsV1SaveRecentlyOpenedFilesForSession(projectId: widget.projectId, roomName: widget.client.roomName, files: sanitized);
   }
 
   void _bindController(FileManagerViewController? controller) {
@@ -1106,14 +1175,12 @@ class _FileManagerViewState extends State<FileManagerView> {
         unawaited(_refreshFileAttachmentLinks());
       }
       _onFileDeleted(event.path);
-      _removeV1RecentlyOpenedPath(event.path);
       return;
     }
 
     if (event is FileMovedEvent) {
       _moveFileCreatorState(event.sourcePath, event.destinationPath);
       _onFileMoved(event.sourcePath, event.destinationPath);
-      _removeV1RecentlyOpenedPath(event.sourcePath);
     }
   }
 
@@ -1132,10 +1199,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     setState(() {
-      _v1RecentlyOpenedFiles = [
+      _replaceV1RecentlyOpenedFiles([
         for (final item in _v1RecentlyOpenedFiles)
           if (item.id != key) item,
-      ];
+      ]);
     });
   }
 
@@ -1194,6 +1261,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
     _toggleSelected(_FilePathKey.keyForPath(path, false), false);
     _optimisticEmptyTextFiles.remove(path);
+    _removeV1RecentlyOpenedPath(path);
 
     _setEntries(next);
   }
@@ -1267,6 +1335,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onFileMoved(String sourcePath, String destinationPath) {
+    _removeV1RecentlyOpenedPath(sourcePath);
     _moveSelectedPaths(sourcePath, destinationPath);
     _moveOptimisticPaths(sourcePath, destinationPath);
     _moveThreadDisplayNameState(sourcePath, destinationPath);
@@ -1520,115 +1589,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  bool _v1IsPreviewSamplePath(String path) {
-    return path == _v1PreviewSamplesFolderPath || path.startsWith('$_v1PreviewSamplesFolderPath/');
-  }
-
-  bool _v1IsPreviewSampleItem(PbFilesItemData item) {
-    return _v1IsPreviewSamplePath(_FilePathKey.pathFromKey(item.id));
-  }
-
-  PbFilesItemData _v1PreviewDebugFile({
-    required String id,
-    required String title,
-    required int updatedSort,
-    required PbAttachmentPreviewState previewState,
-  }) {
-    return PbFilesItemData.fromFileName(
-      id: id,
-      title: title,
-      thread: 'Preview debugging',
-      creator: _v1PreviewSamplesCreator,
-      creatorInitials: _v1PreviewSamplesCreatorInitials,
-      updatedLabel: 'Now',
-      updatedSort: updatedSort,
-      parentPath: '',
-      previewState: previewState,
-    );
-  }
-
-  PbFilesItemData _v1PreviewSampleFile({required String path, required String title, required int updatedSort, String type = ''}) {
-    return PbFilesItemData.fromFileName(
-      id: _FilePathKey.keyForPath(path, false),
-      title: title,
-      type: type,
-      thread: _v1PreviewSamplesThread,
-      creator: _v1PreviewSamplesCreator,
-      creatorInitials: _v1PreviewSamplesCreatorInitials,
-      updatedLabel: 'Now',
-      updatedSort: updatedSort,
-      parentPath: _v1PreviewSamplesFolderPath,
-    );
-  }
-
-  List<PbFilesItemData> _v1PreviewSampleItemsForFolder(String folderPath) {
-    if (folderPath.isEmpty) {
-      return [
-        _v1PreviewDebugFile(
-          id: 'debug-no-preview-available',
-          title: 'No preview available.pdf',
-          updatedSort: 202605291335,
-          previewState: PbAttachmentPreviewState.unavailable,
-        ),
-        _v1PreviewDebugFile(
-          id: 'debug-file-preview-not-supported',
-          title: 'File preview not supported.zip',
-          updatedSort: 202605291330,
-          previewState: PbAttachmentPreviewState.unsupported,
-        ),
-        const PbFilesItemData(
-          id: 'preview-samples/',
-          title: _v1PreviewSamplesThread,
-          type: 'Folder',
-          thread: '',
-          creator: _v1PreviewSamplesCreator,
-          creatorInitials: _v1PreviewSamplesCreatorInitials,
-          updatedLabel: 'Now',
-          updatedSort: 202605291340,
-          parentPath: '',
-          folderPath: _v1PreviewSamplesFolderPath,
-          fileType: PbAttachmentFileType.folder,
-          kind: PbFilesItemKind.folder,
-        ),
-      ];
-    }
-
-    if (folderPath != _v1PreviewSamplesFolderPath) {
-      return const [];
-    }
-
-    return [
-      _v1PreviewSampleFile(
-        path: 'preview-samples/Sample editable document.txt',
-        title: 'Sample editable document.txt',
-        updatedSort: 202605291325,
-      ),
-      _v1PreviewSampleFile(path: 'preview-samples/Preview mode rules.dart', title: 'Preview mode rules.dart', updatedSort: 202605291320),
-      _v1PreviewSampleFile(path: 'preview-samples/Preview config.json', title: 'Preview config.json', updatedSort: 202605291318),
-      _v1PreviewSampleFile(path: 'preview-samples/Preview task.sh', title: 'Preview task.sh', updatedSort: 202605291316),
-      _v1PreviewSampleFile(path: 'preview-samples/Sample image preview.png', title: 'Sample image preview.png', updatedSort: 202605291315),
-      _v1PreviewSampleFile(path: 'preview-samples/Sample video preview.mov', title: 'Sample video preview.mov', updatedSort: 202605291310),
-      _v1PreviewSampleFile(path: 'preview-samples/Sample PDF preview.pdf', title: 'Sample PDF preview.pdf', updatedSort: 202605291305),
-      _v1PreviewSampleFile(
-        path: 'preview-samples/Sample presentation.gslides',
-        title: 'Sample presentation.gslides',
-        updatedSort: 202605291300,
-      ),
-      _v1PreviewSampleFile(
-        path: 'preview-samples/Sample transcript',
-        title: 'Sample transcript',
-        type: 'Transcript',
-        updatedSort: 202605291255,
-      ),
-      _v1PreviewSampleFile(
-        path: 'preview-samples/Sample thread.thread',
-        title: 'Sample thread.thread',
-        type: 'Thread',
-        updatedSort: 202605291250,
-      ),
-    ];
-  }
-
   PbFilesItemData _v1ProcessingDeleteItem(PendingStorageDeleteEntry pendingDelete) {
     final path = pendingDelete.path;
     final fallbackName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
@@ -1717,7 +1677,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   bool _v1FilterEnabled(List<StorageEntry> entries) {
-    return entries.any(_v1EntryCanEnableFilter) || _v1PreviewSampleItemsForFolder(_folderSig.value).isNotEmpty;
+    return entries.any(_v1EntryCanEnableFilter);
   }
 
   void _clearV1FilterIfUnavailable(bool filterEnabled) {
@@ -1743,20 +1703,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     final pendingDeleteItems = pendingDeleteItemsForFolder.where((item) => query.isEmpty || item.filterText.contains(query)).toList();
     final stateRowsForFolder = _v1FileStateRowsById.values.where((item) => item.parentPath == _folderSig.value).toList();
     final stateRows = stateRowsForFolder.where((item) => query.isEmpty || item.filterText.contains(query)).toList();
-    final stateRowIds = {for (final item in stateRowsForFolder) item.id};
+    final replacementRowIds = {for (final item in pendingDeleteItemsForFolder) item.id, for (final item in stateRowsForFolder) item.id};
     final items = entries
         .where((entry) => !widget.hideSystem || !entry.name.startsWith('.'))
         .where((entry) => !_isDeletePending(_FilePathKey.pathForEntry(_folderSig.value, entry), entry.isFolder))
-        .where((entry) => !stateRowIds.contains(_FilePathKey.keyForEntry(_folderSig.value, entry)))
+        .where((entry) => !replacementRowIds.contains(_FilePathKey.keyForEntry(_folderSig.value, entry)))
         .map(_v1ItemForEntry)
         .where((item) => query.isEmpty || item.filterText.contains(query))
         .toList();
-    final itemIds = {for (final item in items) item.id};
-    final previewSamples = _v1PreviewSampleItemsForFolder(
-      _folderSig.value,
-    ).where((item) => !itemIds.contains(item.id)).where((item) => query.isEmpty || item.filterText.contains(query)).toList();
-
-    items.addAll(previewSamples);
     items.addAll(pendingDeleteItems);
     items.addAll(stateRows);
     items.sort(_compareV1Files);
@@ -1776,7 +1730,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   bool _v1ItemIsSelectable(PbFilesItemData item) {
-    return item.kind == PbFilesItemKind.file || item.kind == PbFilesItemKind.folder;
+    return powerboardsV1FileItemIsSelectable(item);
   }
 
   Iterable<PbFilesItemData> _v1SelectableItems(Iterable<PbFilesItemData> items) {
@@ -1791,7 +1745,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _recordV1RecentlyOpenedFile(PbFilesItemData item) {
-    _v1RecentlyOpenedFiles = powerboardsV1RecordRecentlyOpenedFile(_v1RecentlyOpenedFiles, item);
+    _replaceV1RecentlyOpenedFiles(powerboardsV1RecordRecentlyOpenedFile(_v1RecentlyOpenedFiles, item));
   }
 
   int _compareV1Files(PbFilesItemData left, PbFilesItemData right) {
@@ -1906,6 +1860,18 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (clearOpenedFileRoute) {
       _closeFile();
     }
+  }
+
+  void _closeV1FilePromptHandoffSurface() {
+    _v1FilesRoomPanelOverlayController.hide();
+    setState(() {
+      _v1PreviewFile = null;
+      _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelOverlayOpen = false;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      _clearV1KeyboardPreviewNavigationState();
+    });
+    setPreviewFilePreviewFullscreen(false);
   }
 
   void _revealV1PreviewPanelForKeyboard({required bool openOverlay}) {
@@ -2116,7 +2082,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         return _v1StorageUrlPreview(item, path, (url) => ImagePreview(url: url, fit: BoxFit.contain));
       case PbAttachmentFileType.video:
       case PbAttachmentFileType.mediaGeneric:
-        return _v1StorageUrlPreview(item, path, (url) => VideoPreview(url: url, fit: BoxFit.contain));
+        return _v1StorageUrlPreview(item, path, powerboardsV1VideoPreview);
       case PbAttachmentFileType.sound:
       case PbAttachmentFileType.music:
         return _v1StorageUrlPreview(item, path, (url) => AudioPreview(url: url));
@@ -2146,7 +2112,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       case FileKind.image:
         return _v1StorageUrlPreview(item, path, (url) => ImagePreview(url: url, fit: BoxFit.contain));
       case FileKind.video:
-        return _v1StorageUrlPreview(item, path, (url) => VideoPreview(url: url, fit: BoxFit.contain));
+        return _v1StorageUrlPreview(item, path, powerboardsV1VideoPreview);
       case FileKind.audio:
         return _v1StorageUrlPreview(item, path, (url) => AudioPreview(url: url));
       case FileKind.pdf:
@@ -2168,10 +2134,6 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   PbFilePreviewSource _buildV1PreviewSource(PbFilesItemData item) {
-    if (_v1IsPreviewSampleItem(item)) {
-      return const PbFilePreviewSource();
-    }
-
     final path = _v1PathForItem(item);
     final extension = _v1ExtensionForPath(path);
     final kind = classifyFile(path);
@@ -2210,11 +2172,11 @@ class _FileManagerViewState extends State<FileManagerView> {
       if (_v1PreviewFile?.id == item.id) {
         _v1PreviewFile = updatedItem;
       }
-      _v1RecentlyOpenedFiles = [
+      _replaceV1RecentlyOpenedFiles([
         updatedItem,
         for (final recent in _v1RecentlyOpenedFiles)
           if (recent.id != item.id) recent,
-      ];
+      ]);
     });
   }
 
@@ -2253,7 +2215,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     _clearV1KeyboardPreviewNavigation();
 
     final visibleIds = _v1SelectableItems(items).map((item) => item.id).toSet();
-    final selected = _visibleSelected.value;
+    final selected = powerboardsV1SelectedVisibleItemIds(_selectedSig.value, items);
     final allSelected = visibleIds.isNotEmpty && visibleIds.every(selected.contains);
 
     _mutateSelected((next) {
@@ -2345,7 +2307,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     widget.services?.refresh();
   }
 
-  Future<void> _startDefaultFilePrompt(String fullPath, {PbFilesItemData? recentlyOpenedItem}) async {
+  Future<void> _startDefaultFilePrompt(String fullPath, {PbFilesItemData? recentlyOpenedItem, bool showThreadAfterPrompt = false}) async {
     final action = _filePromptActionsForPath(fullPath, isFolder: false).firstOrNull;
     if (action == null) {
       await _openManageAgentsForFilePrompt();
@@ -2354,12 +2316,15 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final callback = widget.onV1FilePromptRequested;
     if (callback != null) {
+      if (showThreadAfterPrompt) {
+        _closeV1FilePromptHandoffSurface();
+      }
       if (recentlyOpenedItem != null && recentlyOpenedItem.canPreview) {
         setState(() {
           _recordV1RecentlyOpenedFile(recentlyOpenedItem);
         });
       }
-      await callback(action, fullPath);
+      await callback(action, fullPath, showThreadAfterPrompt: showThreadAfterPrompt);
       return;
     }
 
@@ -2638,10 +2603,6 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _nextFile() => _cycleFile(1);
 
   Future<List<StorageEntry>> _getChildren(String folderPath) async {
-    if (folderPath == _v1PreviewSamplesFolderPath) {
-      return const <StorageEntry>[];
-    }
-
     return widget.client.storage.list(folderPath);
   }
 
@@ -3105,7 +3066,11 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _confirmAndDeleteSelected() async {
-    final selected = _visibleSelected.value;
+    final useDesktopV1FilesBrowser = _usesDesktopV1FilesBrowser();
+    final v1Items = useDesktopV1FilesBrowser
+        ? _v1VisibleItems(storageEntries.state.value ?? const <StorageEntry>[])
+        : const <PbFilesItemData>[];
+    final selected = useDesktopV1FilesBrowser ? powerboardsV1SelectedVisibleItemIds(_selectedSig.value, v1Items) : _visibleSelected.value;
     if (selected.isEmpty) return;
 
     final toaster = ShadToaster.of(context);
@@ -3148,12 +3113,13 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     int success = 0;
     final failures = <String>[];
-    final toDelete = _usesDesktopV1FilesBrowser()
+    final v1SelectedItems = useDesktopV1FilesBrowser
         ? [
-            for (final item in _v1VisibleItems(storageEntries.state.value ?? const <StorageEntry>[]))
-              if (selected.contains(item.id) && _v1ItemIsSelectable(item)) item.id,
+            for (final item in v1Items)
+              if (selected.contains(item.id) && _v1ItemIsSelectable(item)) item,
           ]
-        : selected.toList();
+        : const <PbFilesItemData>[];
+    final toDelete = useDesktopV1FilesBrowser ? [for (final item in v1SelectedItems) item.id] : selected.toList();
     final pendingDeletes = <String, _PendingDeleteOperation>{};
     final batchStartedAt = DateTime.now();
 
@@ -3219,7 +3185,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _downloadSelected() async {
-    final selected = _visibleSelected.value;
+    final useDesktopV1FilesBrowser = _usesDesktopV1FilesBrowser();
+    final selected = useDesktopV1FilesBrowser
+        ? powerboardsV1SelectedVisibleItemIds(_selectedSig.value, _v1VisibleItems(storageEntries.state.value ?? const <StorageEntry>[]))
+        : _visibleSelected.value;
     if (selected.isEmpty) return;
 
     final toaster = ShadToaster.of(context);
@@ -3466,13 +3435,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Widget _buildDesktopV1FilesBrowser(
-    BuildContext context, {
-    required List<StorageEntry> entries,
-    required Set<String> selected,
-    required bool isRefreshing,
-  }) {
+  Widget _buildDesktopV1FilesBrowser(BuildContext context, {required List<StorageEntry> entries, required bool isRefreshing}) {
     final items = _v1VisibleItems(entries);
+    final selected = powerboardsV1SelectedVisibleItemIds(_selectedSig.value, items);
     final routePreviewFile = _v1PreviewFileFromRoute(items);
     final previewFile = _v1PreviewFile ?? routePreviewFile;
     final recentlyOpenedFiles = _v1RecentlyOpenedFilesForSidePane;
@@ -3603,7 +3568,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onBrowseFolder: (item) => _openEntry(item.folderPath, true),
                   onRemoveProcessingRow: _removeV1FileStateRow,
                   onLinkedThreadPressed: _openV1LinkedThread,
-                  onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item)),
+                  onAskAgent: (item) => unawaited(
+                    _startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item, showThreadAfterPrompt: usesStackedRoomPanel),
+                  ),
                   onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
                   onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
                   onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
@@ -3652,7 +3619,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                   armKeyboardBrowse: false,
                 ),
                 previewSourceBuilder: _buildV1PreviewSource,
-                onAskAgent: (item) => unawaited(_startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item)),
+                onAskAgent: (item) => unawaited(
+                  _startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item, showThreadAfterPrompt: usesStackedRoomPanel),
+                ),
                 onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
                 onSaveRequested: _saveV1PreviewFile,
                 onToggleFullscreen: () => _setV1PreviewFullscreen(!_v1FilePreviewFullscreen),
@@ -3719,10 +3688,6 @@ class _FileManagerViewState extends State<FileManagerView> {
   String _v1FolderLabelForPath(String path) {
     if (path.isEmpty) {
       return 'Files';
-    }
-
-    if (path == _v1PreviewSamplesFolderPath) {
-      return _v1PreviewSamplesThread;
     }
 
     return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
@@ -4806,12 +4771,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                     builder: (context, _, _) => storageEntries.state.when(
                       loading: () => const Center(child: CircularProgressIndicator()),
                       error: (e, st) => Center(child: Text("Error loading files: $e")),
-                      ready: (entries) => _buildDesktopV1FilesBrowser(
-                        context,
-                        entries: entries,
-                        selected: selected,
-                        isRefreshing: storageEntries.state.isRefreshing,
-                      ),
+                      ready: (entries) =>
+                          _buildDesktopV1FilesBrowser(context, entries: entries, isRefreshing: storageEntries.state.isRefreshing),
                     ),
                   ),
                 );

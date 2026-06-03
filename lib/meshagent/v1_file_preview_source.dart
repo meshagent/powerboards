@@ -49,6 +49,8 @@ typedef PowerboardsV1PreviewTextSaver = Future<void> Function(String path, Strin
 typedef PowerboardsV1PreviewDownloadUrl = Future<String> Function(String path);
 typedef PowerboardsV1UnavailablePreviewBuilder = Widget Function(BuildContext context, PbAttachmentListItemData file, String? subtitle);
 
+VideoPreview powerboardsV1VideoPreview(Uri url) => VideoPreview(url: url, fit: BoxFit.contain, allowNativeFullscreen: false);
+
 @visibleForTesting
 String? powerboardsV1FileTypeKeyForStoragePath(String path) {
   final extension = powerboardsV1ExtensionForPath(path);
@@ -181,13 +183,7 @@ Widget? powerboardsV1PreviewContentChild({
       );
     case PbAttachmentFileType.video:
     case PbAttachmentFileType.mediaGeneric:
-      return _V1StorageUrlPreview(
-        room: room,
-        path: path,
-        file: file,
-        downloadUrl: downloadUrl,
-        builder: (url) => VideoPreview(url: url, fit: BoxFit.contain),
-      );
+      return _V1StorageUrlPreview(room: room, path: path, file: file, downloadUrl: downloadUrl, builder: powerboardsV1VideoPreview);
     case PbAttachmentFileType.sound:
     case PbAttachmentFileType.music:
       return _V1StorageUrlPreview(
@@ -229,13 +225,7 @@ Widget? powerboardsV1PreviewContentChild({
         builder: (url) => ImagePreview(url: url, fit: BoxFit.contain),
       );
     case FileKind.video:
-      return _V1StorageUrlPreview(
-        room: room,
-        path: path,
-        file: file,
-        downloadUrl: downloadUrl,
-        builder: (url) => VideoPreview(url: url, fit: BoxFit.contain),
-      );
+      return _V1StorageUrlPreview(room: room, path: path, file: file, downloadUrl: downloadUrl, builder: powerboardsV1VideoPreview);
     case FileKind.audio:
       return _V1StorageUrlPreview(
         room: room,

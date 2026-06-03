@@ -144,9 +144,15 @@ class _PbMeetTranscriptPanelState extends State<PbMeetTranscriptPanel> {
         children: [
           const PbStaticRoomTabs(label: 'Recent transcripts'),
           const SizedBox(height: 16),
-          const PbRoomPanelDescription('Browse transcripts from the last seven days.'),
+          const PbRoomPanelDescription('Browse transcripts from recent meetings.'),
           const SizedBox(height: 20),
-          PbMeetTranscriptList(transcripts: _effectiveTranscripts, onPreviewFile: _openFilePreview),
+          PbMeetTranscriptList(
+            transcripts: _effectiveTranscripts,
+            onPreviewFile: _openFilePreview,
+            onAskFileAgent: widget.onAskFileAgent,
+            onShareFile: widget.onShareFile,
+            onDownloadFile: widget.onDownloadFile,
+          ),
         ],
       ),
     );
@@ -213,7 +219,14 @@ class _PbMeetTranscriptPanelState extends State<PbMeetTranscriptPanel> {
 }
 
 class PbMeetTranscriptList extends StatelessWidget {
-  const PbMeetTranscriptList({super.key, required this.transcripts, required this.onPreviewFile});
+  const PbMeetTranscriptList({
+    super.key,
+    required this.transcripts,
+    required this.onPreviewFile,
+    this.onAskFileAgent,
+    this.onShareFile,
+    this.onDownloadFile,
+  });
 
   static const _emptyTranscript = PbSidepaneFileEmptyStateData(
     title: 'No transcripts yet',
@@ -223,11 +236,23 @@ class PbMeetTranscriptList extends StatelessWidget {
 
   final List<PbAttachmentListItemData> transcripts;
   final ValueChanged<PbAttachmentListItemData> onPreviewFile;
+  final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
+  final ValueChanged<PbAttachmentListItemData>? onShareFile;
+  final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
 
   @override
   Widget build(BuildContext context) {
     return PbSidepaneFileList(
-      files: [for (final transcript in transcripts) PbSidepaneFileListItem(data: transcript, onPressed: () => onPreviewFile(transcript))],
+      files: [
+        for (final transcript in transcripts)
+          PbSidepaneFileListItem(
+            data: transcript,
+            onPressed: () => onPreviewFile(transcript),
+            onAskAgent: onAskFileAgent == null ? null : () => onAskFileAgent!(transcript),
+            onShare: onShareFile == null ? null : () => onShareFile!(transcript),
+            onDownload: onDownloadFile == null ? null : () => onDownloadFile!(transcript),
+          ),
+      ],
       emptyState: _emptyTranscript,
     );
   }
