@@ -512,6 +512,34 @@ void main() {
     expect(savedText, 'final mode = "code";  ');
   });
 
+  testWidgets('code preview scrollbars span the file preview frame', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'wide.dart'),
+              fullscreen: false,
+              loadText: () async => 'final value = "${'wide' * 80}";',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final frame = tester.getRect(find.byKey(const ValueKey('file-preview-content-frame')));
+    final horizontalScrollbar = tester.getRect(find.byKey(const ValueKey('code-preview-horizontal-scrollbar')));
+    final verticalScrollbar = tester.getRect(find.byKey(const ValueKey('code-preview-vertical-scrollbar')));
+
+    expect((horizontalScrollbar.left - frame.left).abs(), lessThanOrEqualTo(1));
+    expect((horizontalScrollbar.right - frame.right).abs(), lessThanOrEqualTo(1));
+    expect((verticalScrollbar.top - frame.top).abs(), lessThanOrEqualTo(1));
+    expect((verticalScrollbar.bottom - frame.bottom).abs(), lessThanOrEqualTo(1));
+  });
+
   testWidgets('file preview hides share action for this scoped release', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -561,6 +589,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No preview available'), findsOneWidget);
+    expect(find.text('Unable to load thread'), findsNothing);
+    expect(find.text('Type a message…'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('thread preview fallback uses v1 comment rows without a composer', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'Sample Thread', fileType: PbAttachmentFileType.thread),
+              fullscreen: false,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('thread-preview-surface')), findsOneWidget);
+    expect(find.byKey(const ValueKey('thread-preview-user-message-row')), findsNWidgets(2));
+    expect(find.byKey(const ValueKey('thread-preview-assistant-message-row')), findsOneWidget);
+    expect(find.text('Agent'), findsOneWidget);
     expect(find.text('Unable to load thread'), findsNothing);
     expect(find.text('Type a message…'), findsNothing);
     expect(find.byType(TextField), findsNothing);
@@ -648,6 +702,26 @@ void main() {
     expect((frameCenter.dy - cardCenter.dy).abs(), lessThan(1));
   });
 
+  testWidgets('file preview state card supports contextual empty labels', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: PbFilePreviewStateCard(
+              file: PbAttachmentListItemData.fromFileName(title: 'New Chat', fileType: PbAttachmentFileType.thread),
+              state: PbAttachmentPreviewState.unavailable,
+              label: 'No messages yet',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No messages yet'), findsOneWidget);
+    expect(find.text('No preview available'), findsNothing);
+  });
+
   testWidgets('unavailable image previews do not render image zoom controls', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -674,7 +748,7 @@ void main() {
     expect(find.byKey(const ValueKey('image-preview-surface')), findsNothing);
   });
 
-  testWidgets('paged preview child fills the v1 frame without extra shell padding', (tester) async {
+  testWidgets('pdf preview child sits flush inside the v1 frame', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -692,11 +766,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final frameTopLeft = tester.getTopLeft(find.byKey(const ValueKey('file-preview-content-frame')));
-    final childTopLeft = tester.getTopLeft(find.byKey(const ValueKey('pdf-child')));
+    final frame = tester.getRect(find.byKey(const ValueKey('file-preview-content-frame')));
+    final child = tester.getRect(find.byKey(const ValueKey('pdf-child')));
 
-    expect((childTopLeft.dx - frameTopLeft.dx).abs(), lessThanOrEqualTo(1));
-    expect((childTopLeft.dy - frameTopLeft.dy).abs(), lessThanOrEqualTo(1));
+    expect((child.left - frame.left).abs(), lessThanOrEqualTo(1));
+    expect((child.top - frame.top).abs(), lessThanOrEqualTo(1));
+    expect((frame.right - child.right).abs(), lessThanOrEqualTo(1));
+    expect((frame.bottom - child.bottom).abs(), lessThanOrEqualTo(1));
   });
 
   testWidgets('transcript preview child renders real transcript content through v1 typography surface', (tester) async {
@@ -727,6 +803,30 @@ void main() {
     expect(find.text('June 2, 2026'), findsOneWidget);
     expect(find.text('Real transcript text.'), findsOneWidget);
     expect(find.text("Hi, I'm checking to see if the transcription works. I turned it on. Can you hear me?"), findsNothing);
+  });
+
+  testWidgets('empty transcript preview uses the shared preview state card', (tester) async {
+    const data = PbTranscriptPreviewData(dateLabel: 'June 2, 2026', detailLabel: 'Transcript', participants: [], turns: []);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'empty.transcript'),
+              fullscreen: false,
+              previewContentChild: const PbTranscriptPreviewContent(data: data, fullscreen: false),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PbFilePreviewStateCard), findsOneWidget);
+    expect(find.text('No transcript available'), findsOneWidget);
   });
 
   testWidgets('meet transcript panel uses source transcript content instead of fallback child', (tester) async {

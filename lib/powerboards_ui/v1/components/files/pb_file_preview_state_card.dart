@@ -6,12 +6,18 @@ import '../../theme/pb_typography.dart';
 import '../primitives/pb_svg_icon.dart';
 
 class PbFilePreviewStateCard extends StatelessWidget {
-  const PbFilePreviewStateCard({super.key, required this.file, required this.state});
+  const PbFilePreviewStateCard({super.key, required this.file, required this.state, this.label});
 
   final PbAttachmentListItemData file;
   final PbAttachmentPreviewState state;
+  final String? label;
 
   String get _label {
+    final customLabel = label;
+    if (customLabel != null) {
+      return customLabel;
+    }
+
     return switch (state) {
       PbAttachmentPreviewState.unavailable => 'No preview available',
       PbAttachmentPreviewState.unsupported => 'File preview not supported',

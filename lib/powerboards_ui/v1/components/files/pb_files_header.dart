@@ -266,7 +266,9 @@ class _FilesBreadcrumbState extends State<_FilesBreadcrumb> {
               _FilesBreadcrumbButton(crumb: crumb, current: false, onPressed: widget.onPressed),
               const _FilesBreadcrumbSeparator(),
             ],
-            _FilesBreadcrumbButton(crumb: current, current: true, onPressed: widget.onPressed),
+            Flexible(
+              child: _FilesBreadcrumbButton(crumb: current, current: true, onPressed: widget.onPressed),
+            ),
           ],
         );
       },

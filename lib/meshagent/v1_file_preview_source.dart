@@ -7,11 +7,11 @@ import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter/document_connection_scope.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/image.dart';
-import 'package:meshagent_flutter_shadcn/file_preview/pdf.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/video.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 import 'package:path/path.dart' as p;
+import 'package:pdfrx/pdfrx.dart';
 
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
@@ -118,8 +118,15 @@ PbFilePreviewSource powerboardsV1PreviewSourceForAttachment({
   if (file.fileType == PbAttachmentFileType.transcript || extension == 'transcript' || extension == 'srt' || extension == 'vtt') {
     return PbFilePreviewSource(
       childBuilder: (fullscreen) => extension == 'transcript'
-          ? _V1TranscriptDocumentPreview(room: room, path: path, fullscreen: fullscreen)
-          : _V1TextTranscriptPreview(room: room, path: path, title: file.title, fullscreen: fullscreen, loadText: effectiveLoadText),
+          ? _V1TranscriptDocumentPreview(room: room, path: path, file: file, fullscreen: fullscreen)
+          : _V1TextTranscriptPreview(
+              room: room,
+              path: path,
+              file: file,
+              title: file.title,
+              fullscreen: fullscreen,
+              loadText: effectiveLoadText,
+            ),
     );
   }
 
@@ -149,12 +156,13 @@ Widget? powerboardsV1PreviewContentChild({
     return _v1DocumentPaneContent(room: room, file: file, path: path, unavailablePreviewBuilder: unavailablePreviewBuilder);
   }
 
-  if (powerboardsV1ExtensionForPath(path) == 'thread') {
+  final extension = powerboardsV1ExtensionForPath(path);
+  final kind = classifyFile(path);
+  if (file.fileType == PbAttachmentFileType.thread || extension == 'thread' || kind == FileKind.thread) {
     return _V1ThreadDocumentPreview(room: room, path: path, file: file);
   }
 
-  final kind = classifyFile(path);
-  if (kind == FileKind.thread || kind == FileKind.custom) {
+  if (kind == FileKind.custom) {
     return fileViewer(room, path);
   }
 
@@ -167,6 +175,7 @@ Widget? powerboardsV1PreviewContentChild({
       return _V1StorageUrlPreview(
         room: room,
         path: path,
+        file: file,
         downloadUrl: downloadUrl,
         builder: (url) => ImagePreview(url: url, fit: BoxFit.contain),
       );
@@ -175,6 +184,7 @@ Widget? powerboardsV1PreviewContentChild({
       return _V1StorageUrlPreview(
         room: room,
         path: path,
+        file: file,
         downloadUrl: downloadUrl,
         builder: (url) => VideoPreview(url: url, fit: BoxFit.contain),
       );
@@ -183,11 +193,12 @@ Widget? powerboardsV1PreviewContentChild({
       return _V1StorageUrlPreview(
         room: room,
         path: path,
+        file: file,
         downloadUrl: downloadUrl,
         builder: (url) => AudioPreview(url: url),
       );
     case PbAttachmentFileType.pdf:
-      return PdfPreview(room: room, path: path);
+      return PowerboardsV1PdfPreview(room: room, path: path, file: file);
     case PbAttachmentFileType.transcript:
     case PbAttachmentFileType.thread:
     case PbAttachmentFileType.presentation:
@@ -213,6 +224,7 @@ Widget? powerboardsV1PreviewContentChild({
       return _V1StorageUrlPreview(
         room: room,
         path: path,
+        file: file,
         downloadUrl: downloadUrl,
         builder: (url) => ImagePreview(url: url, fit: BoxFit.contain),
       );
@@ -220,6 +232,7 @@ Widget? powerboardsV1PreviewContentChild({
       return _V1StorageUrlPreview(
         room: room,
         path: path,
+        file: file,
         downloadUrl: downloadUrl,
         builder: (url) => VideoPreview(url: url, fit: BoxFit.contain),
       );
@@ -227,14 +240,15 @@ Widget? powerboardsV1PreviewContentChild({
       return _V1StorageUrlPreview(
         room: room,
         path: path,
+        file: file,
         downloadUrl: downloadUrl,
         builder: (url) => AudioPreview(url: url),
       );
     case FileKind.pdf:
-      return PdfPreview(room: room, path: path);
-    case FileKind.thread:
+      return PowerboardsV1PdfPreview(room: room, path: path, file: file);
     case FileKind.custom:
       return fileViewer(room, path);
+    case FileKind.thread:
     case FileKind.markdown:
     case FileKind.code:
     case FileKind.tsv:
@@ -266,6 +280,66 @@ Widget _v1UnavailablePreview(BuildContext context, PbAttachmentListItemData file
   return Center(
     child: PbFilePreviewStateCard(file: file, state: PbAttachmentPreviewState.unavailable),
   );
+}
+
+class PowerboardsV1PdfPreview extends StatefulWidget {
+  const PowerboardsV1PdfPreview({super.key, required this.room, required this.path, required this.file, this.pageNumber = 1});
+
+  final RoomClient room;
+  final String path;
+  final PbAttachmentListItemData file;
+  final int pageNumber;
+
+  @override
+  State<PowerboardsV1PdfPreview> createState() => _PowerboardsV1PdfPreviewState();
+}
+
+class _PowerboardsV1PdfPreviewState extends State<PowerboardsV1PdfPreview> {
+  static const _viewerBackground = Color(0xFFA4A4A4);
+  static const _pageMargin = 34.0;
+
+  late Future<Uint8List> _pdfData = _loadPdfData();
+
+  @override
+  void didUpdateWidget(covariant PowerboardsV1PdfPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.room != widget.room || oldWidget.path != widget.path) {
+      _pdfData = _loadPdfData();
+    }
+  }
+
+  Future<Uint8List> _loadPdfData() async {
+    final content = await widget.room.storage.download(widget.path);
+    return Uint8List.fromList(content.data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _pdfData,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _v1UnavailablePreview(context, widget.file, null);
+        }
+
+        final data = snapshot.data;
+        if (data == null) {
+          return _v1PreviewLoadingStatus();
+        }
+
+        return PdfViewer.data(
+          data,
+          sourceName: widget.path,
+          initialPageNumber: widget.pageNumber,
+          params: PdfViewerParams(
+            margin: _pageMargin,
+            backgroundColor: _viewerBackground,
+            pageDropShadow: const BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.38), blurRadius: 7, offset: Offset(0, 2)),
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _V1ThreadDocumentPreview extends StatefulWidget {
@@ -305,28 +379,37 @@ class _V1ThreadDocumentPreviewState extends State<_V1ThreadDocumentPreview> {
 
         return ChangeNotifierBuilder(
           source: document,
-          builder: (context) => _V1ThreadPreviewContent(messages: _v1ThreadPreviewMessages(document), scrollController: _scrollController),
+          builder: (context) =>
+              _V1ThreadPreviewContent(file: widget.file, messages: _v1ThreadPreviewMessages(document), scrollController: _scrollController),
         );
       },
     );
   }
 }
 
-class _V1ThreadPreviewContent extends StatelessWidget {
-  const _V1ThreadPreviewContent({required this.messages, required this.scrollController});
+class _V1ThreadPreviewContent extends StatefulWidget {
+  const _V1ThreadPreviewContent({required this.file, required this.messages, required this.scrollController});
 
+  final PbAttachmentListItemData file;
   final List<_V1ThreadPreviewMessage> messages;
   final ScrollController scrollController;
 
   @override
+  State<_V1ThreadPreviewContent> createState() => _V1ThreadPreviewContentState();
+}
+
+class _V1ThreadPreviewContentState extends State<_V1ThreadPreviewContent> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    if (messages.isEmpty) {
-      return const ColoredBox(
+    if (widget.messages.isEmpty) {
+      return ColoredBox(
         color: PbColors.surfacePanel,
         child: Center(
           child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text('No messages yet', textAlign: TextAlign.center, style: PowerboardsTypography.h3),
+            padding: const EdgeInsets.all(24),
+            child: PbFilePreviewStateCard(file: widget.file, state: PbAttachmentPreviewState.unavailable, label: 'No messages yet'),
           ),
         ),
       );
@@ -341,22 +424,32 @@ class _V1ThreadPreviewContent extends StatelessWidget {
           final sidePadding = width < 760 ? 20.0 : 30.0;
           final messageGap = width < 760 ? 12.0 : 16.0;
 
-          return Scrollbar(
-            controller: scrollController,
-            child: SingleChildScrollView(
-              controller: scrollController,
-              padding: EdgeInsets.fromLTRB(sidePadding, 6, sidePadding - 2, 8),
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: stackMaxWidth),
-                  child: SelectionArea(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var index = 0; index < messages.length; index++)
-                          _V1ThreadPreviewMessageRow(message: messages[index], gap: messageGap, isLast: index == messages.length - 1),
-                      ],
+          return MouseRegion(
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: Scrollbar(
+              controller: widget.scrollController,
+              thumbVisibility: _hovered,
+              interactive: true,
+              child: SingleChildScrollView(
+                controller: widget.scrollController,
+                padding: EdgeInsets.fromLTRB(sidePadding, 6, sidePadding - 2, 8),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: stackMaxWidth),
+                    child: SelectionArea(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var index = 0; index < widget.messages.length; index++)
+                            _V1ThreadPreviewMessageRow(
+                              message: widget.messages[index],
+                              gap: messageGap,
+                              isLast: index == widget.messages.length - 1,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -873,10 +966,11 @@ String _v1ThreadPreviewInitials(String value) {
 }
 
 class _V1StorageUrlPreview extends StatefulWidget {
-  const _V1StorageUrlPreview({required this.room, required this.path, required this.builder, this.downloadUrl});
+  const _V1StorageUrlPreview({required this.room, required this.path, required this.file, required this.builder, this.downloadUrl});
 
   final RoomClient room;
   final String path;
+  final PbAttachmentListItemData file;
   final Widget Function(Uri url) builder;
   final PowerboardsV1PreviewDownloadUrl? downloadUrl;
 
@@ -905,16 +999,7 @@ class _V1StorageUrlPreviewState extends State<_V1StorageUrlPreview> {
       future: _urlFuture,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                'Unable to load file preview: ${snapshot.error}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: PbColors.alert),
-              ),
-            ),
-          );
+          return _v1UnavailablePreview(context, widget.file, null);
         }
 
         final url = snapshot.data;
@@ -929,10 +1014,11 @@ class _V1StorageUrlPreviewState extends State<_V1StorageUrlPreview> {
 }
 
 class _V1TranscriptDocumentPreview extends StatelessWidget {
-  const _V1TranscriptDocumentPreview({required this.room, required this.path, required this.fullscreen});
+  const _V1TranscriptDocumentPreview({required this.room, required this.path, required this.file, required this.fullscreen});
 
   final RoomClient room;
   final String path;
+  final PbAttachmentListItemData file;
   final bool fullscreen;
 
   @override
@@ -943,17 +1029,21 @@ class _V1TranscriptDocumentPreview extends StatelessWidget {
       builder: (context, document, error) {
         if (document == null) {
           if (error != null) {
-            return _v1PreviewStatus('Unable to load transcript.');
+            return _v1UnavailablePreview(context, file, null);
           }
 
-          return _v1PreviewStatus(null);
+          return _v1PreviewLoadingStatus();
         }
 
         return ChangeNotifierBuilder(
           source: document,
           builder: (context) {
             final segments = document.root.getElementsByTagName('segment');
-            return PbTranscriptPreviewContent(data: _v1TranscriptDataFromSegments(context, segments), fullscreen: fullscreen);
+            return PbTranscriptPreviewContent(
+              data: _v1TranscriptDataFromSegments(context, segments),
+              fullscreen: fullscreen,
+              emptyStateFile: file,
+            );
           },
         );
       },
@@ -965,6 +1055,7 @@ class _V1TextTranscriptPreview extends StatefulWidget {
   const _V1TextTranscriptPreview({
     required this.room,
     required this.path,
+    required this.file,
     required this.title,
     required this.fullscreen,
     required this.loadText,
@@ -972,6 +1063,7 @@ class _V1TextTranscriptPreview extends StatefulWidget {
 
   final RoomClient room;
   final String path;
+  final PbAttachmentListItemData file;
   final String title;
   final bool fullscreen;
   final PowerboardsV1PreviewTextLoader loadText;
@@ -1002,43 +1094,28 @@ class _V1TextTranscriptPreviewState extends State<_V1TextTranscriptPreview> {
       future: _textFuture,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return _v1PreviewStatus('Unable to load transcript.');
+          return _v1UnavailablePreview(context, widget.file, null);
         }
 
         final text = snapshot.data;
         if (text == null) {
-          return _v1PreviewStatus(null);
+          return _v1PreviewLoadingStatus();
         }
 
         return PbTranscriptPreviewContent(
           data: _v1TranscriptDataFromText(context, text, title: widget.title),
           fullscreen: widget.fullscreen,
+          emptyStateFile: widget.file,
         );
       },
     );
   }
 }
 
-Widget _v1PreviewStatus(String? message) {
-  if (message == null) {
-    return const ColoredBox(
-      color: PbColors.surfacePanel,
-      child: Center(child: CircularProgressIndicator(color: PbColors.textSubtle)),
-    );
-  }
-
-  return ColoredBox(
+Widget _v1PreviewLoadingStatus() {
+  return const ColoredBox(
     color: PbColors.surfacePanel,
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: PbColors.alert),
-        ),
-      ),
-    ),
+    child: Center(child: CircularProgressIndicator(color: PbColors.textSubtle)),
   );
 }
 

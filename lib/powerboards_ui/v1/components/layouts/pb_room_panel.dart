@@ -1893,11 +1893,13 @@ enum _FilePreviewContentMode {
 
   bool get usesEdgeToEdgeSurface {
     return switch (this) {
+      _FilePreviewContentMode.editableDocument ||
       _FilePreviewContentMode.code ||
       _FilePreviewContentMode.image ||
       _FilePreviewContentMode.video ||
-      _FilePreviewContentMode.pagedDocument => true,
-      _ => false,
+      _FilePreviewContentMode.pagedDocument ||
+      _FilePreviewContentMode.transcript ||
+      _FilePreviewContentMode.thread => true,
     };
   }
 }
@@ -2267,6 +2269,47 @@ class _EditorScrollBehavior extends MaterialScrollBehavior {
 
 const _editorScrollBehavior = _EditorScrollBehavior();
 
+class _FlushVerticalScrollView extends StatefulWidget {
+  const _FlushVerticalScrollView({required this.child, this.padding, this.scrollbarKey});
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final Key? scrollbarKey;
+
+  @override
+  State<_FlushVerticalScrollView> createState() => _FlushVerticalScrollViewState();
+}
+
+class _FlushVerticalScrollViewState extends State<_FlushVerticalScrollView> {
+  final ScrollController _scrollController = ScrollController();
+  bool _hovered = false;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: ScrollConfiguration(
+        behavior: _editorScrollBehavior,
+        child: Scrollbar(
+          key: widget.scrollbarKey,
+          controller: _scrollController,
+          thumbVisibility: _hovered,
+          interactive: true,
+          notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
+          child: SingleChildScrollView(controller: _scrollController, padding: widget.padding, child: widget.child),
+        ),
+      ),
+    );
+  }
+}
+
 bool _isEditorTabEvent(KeyEvent event) {
   return event.logicalKey == LogicalKeyboardKey.tab && (event is KeyDownEvent || event is KeyRepeatEvent);
 }
@@ -2396,6 +2439,7 @@ class _EditableDocumentPreviewState extends State<_EditableDocumentPreview> {
   final FocusNode _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   bool _loading = false;
+  bool _hovered = false;
   Object? _loadError;
   int _loadGeneration = 0;
 
@@ -2519,12 +2563,16 @@ class _EditableDocumentPreviewState extends State<_EditableDocumentPreview> {
 
     return MouseRegion(
       cursor: SystemMouseCursors.text,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       child: Container(
         color: PbColors.surfacePanel,
         child: ScrollConfiguration(
           behavior: _editorScrollBehavior,
           child: Scrollbar(
             controller: _scrollController,
+            thumbVisibility: _hovered,
+            interactive: true,
             notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
             child: SingleChildScrollView(
               controller: _scrollController,
@@ -2690,6 +2738,7 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
   bool _loading = false;
+  bool _hovered = false;
   Object? _loadError;
   int _loadGeneration = 0;
 
@@ -2792,6 +2841,8 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
 
     return MouseRegion(
       cursor: SystemMouseCursors.text,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
       child: Container(
         key: _codePreviewSurfaceKey,
         color: PbColors.customCodeSurface,
@@ -2816,71 +2867,75 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
                   return ScrollConfiguration(
                     behavior: _editorScrollBehavior,
                     child: Scrollbar(
-                      controller: _verticalController,
-                      notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
-                      child: SingleChildScrollView(
+                      key: const ValueKey('code-preview-horizontal-scrollbar'),
+                      controller: _horizontalController,
+                      thumbVisibility: _hovered,
+                      interactive: true,
+                      notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
+                      child: Scrollbar(
+                        key: const ValueKey('code-preview-vertical-scrollbar'),
                         controller: _verticalController,
-                        child: Padding(
-                          padding: padding,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: _codeGutterWidth,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    for (var index = 0; index < _lineCount; index++)
-                                      SizedBox(
-                                        height: lineHeight,
-                                        child: Text(
-                                          '${index + 1}',
-                                          textAlign: TextAlign.right,
-                                          style: codeStyle.copyWith(color: _CodeTokenTone.comment.color),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: _codeGutterGap),
-                              Expanded(
-                                child: Scrollbar(
-                                  controller: _horizontalController,
-                                  notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
-                                  child: SingleChildScrollView(
-                                    controller: _horizontalController,
-                                    scrollDirection: Axis.horizontal,
-                                    child: TextSelectionTheme(
-                                      key: const ValueKey('code-editor-selection-theme'),
-                                      data: const TextSelectionThemeData(
-                                        cursorColor: PbColors.textInverse,
-                                        selectionColor: _codeEditorSelectionColor,
-                                        selectionHandleColor: Color(0xFF5EA2FF),
-                                      ),
-                                      child: SizedBox(
-                                        width: codeWidth,
-                                        child: TextField(
-                                          controller: _controller,
-                                          focusNode: _focusNode,
-                                          cursorColor: PbColors.textInverse,
-                                          enableInteractiveSelection: true,
-                                          keyboardType: TextInputType.multiline,
-                                          minLines: _lineCount,
-                                          maxLines: null,
-                                          onChanged: _handleChanged,
-                                          style: codeStyle,
-                                          decoration: const InputDecoration(
-                                            border: InputBorder.none,
-                                            contentPadding: EdgeInsets.zero,
-                                            isCollapsed: true,
+                        thumbVisibility: _hovered,
+                        interactive: true,
+                        notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
+                        child: SingleChildScrollView(
+                          controller: _verticalController,
+                          child: SingleChildScrollView(
+                            controller: _horizontalController,
+                            scrollDirection: Axis.horizontal,
+                            child: Padding(
+                              padding: padding,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizedBox(
+                                    width: _codeGutterWidth,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                                      children: [
+                                        for (var index = 0; index < _lineCount; index++)
+                                          SizedBox(
+                                            height: lineHeight,
+                                            child: Text(
+                                              '${index + 1}',
+                                              textAlign: TextAlign.right,
+                                              style: codeStyle.copyWith(color: _CodeTokenTone.comment.color),
+                                            ),
                                           ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: _codeGutterGap),
+                                  TextSelectionTheme(
+                                    key: const ValueKey('code-editor-selection-theme'),
+                                    data: const TextSelectionThemeData(
+                                      cursorColor: PbColors.textInverse,
+                                      selectionColor: _codeEditorSelectionColor,
+                                      selectionHandleColor: Color(0xFF5EA2FF),
+                                    ),
+                                    child: SizedBox(
+                                      width: codeWidth,
+                                      child: TextField(
+                                        controller: _controller,
+                                        focusNode: _focusNode,
+                                        cursorColor: PbColors.textInverse,
+                                        enableInteractiveSelection: true,
+                                        keyboardType: TextInputType.multiline,
+                                        minLines: _lineCount,
+                                        maxLines: null,
+                                        onChanged: _handleChanged,
+                                        style: codeStyle,
+                                        decoration: const InputDecoration(
+                                          border: InputBorder.none,
+                                          contentPadding: EdgeInsets.zero,
+                                          isCollapsed: true,
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
@@ -3524,6 +3579,9 @@ class _VideoFilePreview extends StatelessWidget {
 class _PagedFilePreview extends StatelessWidget {
   const _PagedFilePreview({required this.fullscreen, required this.file, this.child});
 
+  static const _surfaceColor = Color(0xFFEFF4FB);
+  static const _fallbackSurfaceColor = Color(0xFFF2F4F8);
+
   final bool fullscreen;
   final PbAttachmentListItemData file;
   final Widget? child;
@@ -3532,15 +3590,13 @@ class _PagedFilePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final previewChild = child;
     if (previewChild != null) {
-      return Container(
-        color: const Color(0xFFEFF4FB),
-        child: ClipRect(child: previewChild),
-      );
+      return _PagedPreviewSurface(fullscreen: fullscreen, flush: file.fileType == PbAttachmentFileType.pdf, child: previewChild);
     }
 
     return Container(
-      color: const Color(0xFFF2F4F8),
-      child: SingleChildScrollView(
+      color: _fallbackSurfaceColor,
+      child: _FlushVerticalScrollView(
+        scrollbarKey: const ValueKey('paged-preview-vertical-scrollbar'),
         child: Align(
           alignment: Alignment.topCenter,
           child: Padding(
@@ -3562,6 +3618,35 @@ class _PagedFilePreview extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PagedPreviewSurface extends StatelessWidget {
+  const _PagedPreviewSurface({required this.fullscreen, required this.flush, required this.child});
+
+  final bool fullscreen;
+  final bool flush;
+  final Widget child;
+
+  EdgeInsets get _inset => fullscreen || flush ? EdgeInsets.zero : const EdgeInsets.fromLTRB(16, 14, 16, 18);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('paged-preview-surface'),
+      color: _PagedFilePreview._surfaceColor,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            left: _inset.left,
+            top: _inset.top,
+            right: _inset.right,
+            bottom: _inset.bottom,
+            child: ClipRRect(borderRadius: BorderRadius.circular(fullscreen ? 0 : 9), child: child),
+          ),
+        ],
       ),
     );
   }
@@ -3634,7 +3719,6 @@ class _ThreadFilePreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final padding = fullscreen ? const EdgeInsets.fromLTRB(56, 42, 56, 64) : const EdgeInsets.fromLTRB(30, 28, 30, 42);
     final previewChild = child;
 
     if (previewChild != null) {
@@ -3644,91 +3728,64 @@ class _ThreadFilePreview extends StatelessWidget {
     return Container(
       key: const ValueKey('thread-preview-surface'),
       color: PbColors.surfacePanel,
-      child: SingleChildScrollView(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: fullscreen ? 760 : 640),
-            child: Padding(
-              padding: padding,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _ThreadPreviewHeading(file: file),
-                  const SizedBox(height: 28),
-                  const _ThreadPreviewMessage(
-                    initials: 'JP',
-                    speaker: 'Jesse Park',
-                    meta: '10:24 AM',
-                    text: 'Can we make the file preview rules explicit enough that a thread saved as a file still feels like Powerboards?',
-                    tone: _ThreadPreviewMessageTone.user,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.hasBoundedWidth ? constraints.maxWidth : 1000.0;
+          final stackMaxWidth = width > 1400 ? width * 0.8 : width;
+          final sidePadding = width < 760 ? 20.0 : 30.0;
+          final messageGap = width < 760 ? 12.0 : 16.0;
+
+          return _FlushVerticalScrollView(
+            scrollbarKey: const ValueKey('thread-preview-vertical-scrollbar'),
+            padding: EdgeInsets.fromLTRB(sidePadding, 6, sidePadding - 2, 8),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: stackMaxWidth),
+                child: SelectionArea(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _ThreadPreviewMessage(
+                        initials: 'JP',
+                        speaker: 'Jesse Park',
+                        meta: '10:24 AM',
+                        text:
+                            'Can we make the file preview rules explicit enough that a thread saved as a file still feels like Powerboards?',
+                        tone: _ThreadPreviewMessageTone.user,
+                        gap: messageGap,
+                      ),
+                      _ThreadPreviewMessage(
+                        speaker: 'Assistant',
+                        meta: '10:25 AM',
+                        text:
+                            'Yes. Thread files should use the preview typography layer, preview surfaces, and the same code-display treatment as code files.',
+                        tone: _ThreadPreviewMessageTone.assistant,
+                        gap: messageGap,
+                      ),
+                      _ThreadPreviewMessage(
+                        initials: 'JP',
+                        speaker: 'Jesse Park',
+                        meta: '10:27 AM',
+                        text: 'Let us include a tiny code example so the preview proves the mixed-content rule.',
+                        code:
+                            'final preview = ThreadFilePreview(\n'
+                            '  typography: PowerboardsTypography.p,\n'
+                            '  codeStyle: PowerboardsTypography.customCodeDisplay,\n'
+                            '  usesTokenColors: true,\n'
+                            ');',
+                        tone: _ThreadPreviewMessageTone.user,
+                        gap: messageGap,
+                        isLast: true,
+                      ),
+                    ],
                   ),
-                  const _ThreadPreviewMessage(
-                    speaker: 'Assistant',
-                    meta: '10:25 AM',
-                    text:
-                        'Yes. Thread files should use the preview typography layer, preview surfaces, and the same code-display treatment as code files.',
-                    tone: _ThreadPreviewMessageTone.assistant,
-                  ),
-                  const _ThreadPreviewMessage(
-                    initials: 'JP',
-                    speaker: 'Jesse Park',
-                    meta: '10:27 AM',
-                    text: 'Let us include a tiny code example so the preview proves the mixed-content rule.',
-                    code:
-                        'final preview = ThreadFilePreview(\n'
-                        '  typography: PowerboardsTypography.p,\n'
-                        '  codeStyle: PowerboardsTypography.customCodeDisplay,\n'
-                        '  usesTokenColors: true,\n'
-                        ');',
-                    tone: _ThreadPreviewMessageTone.user,
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
-    );
-  }
-}
-
-class _ThreadPreviewHeading extends StatelessWidget {
-  const _ThreadPreviewHeading({required this.file});
-
-  final PbAttachmentListItemData file;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 42,
-          height: 42,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: PbColors.surfacePanelSoft,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: PbColors.borderSoft),
-          ),
-          child: PbSvgIcon(assetName: file.iconAssetName, size: 24, color: file.iconColor),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(file.title, style: PowerboardsTypography.h1),
-              const SizedBox(height: 8),
-              Text(
-                '${file.subtitle} preview - tokenized thread content',
-                style: PowerboardsTypography.meta.copyWith(color: PbColors.textMuted),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -3743,6 +3800,8 @@ class _ThreadPreviewMessage extends StatelessWidget {
     required this.tone,
     this.initials,
     this.code,
+    this.gap = 16,
+    this.isLast = false,
   });
 
   final String speaker;
@@ -3751,51 +3810,87 @@ class _ThreadPreviewMessage extends StatelessWidget {
   final _ThreadPreviewMessageTone tone;
   final String? initials;
   final String? code;
+  final double gap;
+  final bool isLast;
 
   bool get _assistant => tone == _ThreadPreviewMessageTone.assistant;
 
   @override
   Widget build(BuildContext context) {
-    final surface = _assistant ? PbColors.surfacePanelSoft : PbColors.surfaceStateSelected;
-    final border = _assistant ? PbColors.borderFaint : PbColors.borderSoft;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _ThreadPreviewAvatar(assistant: _assistant, initials: initials ?? 'AI'),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Container(
-              key: ValueKey(_assistant ? 'thread-preview-assistant-message' : 'thread-preview-user-message'),
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              decoration: BoxDecoration(
-                color: surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: border),
-              ),
+    return DecoratedBox(
+      key: ValueKey(_assistant ? 'thread-preview-assistant-message-row' : 'thread-preview-user-message-row'),
+      decoration: BoxDecoration(
+        border: isLast ? null : const Border(bottom: BorderSide(color: PbColors.borderFaint)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 22, bottom: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ThreadPreviewAvatar(assistant: _assistant, initials: initials ?? 'AI'),
+            SizedBox(width: gap),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(speaker, style: PowerboardsTypography.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(meta, style: PowerboardsTypography.small.copyWith(color: PbColors.textMuted)),
-                    ],
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Wrap(
+                            spacing: 12,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                speaker,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: PowerboardsTypography.smallStrong.copyWith(color: PbColors.textPrimary),
+                              ),
+                              if (_assistant) const _ThreadPreviewRolePill(label: 'Agent'),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Text(
+                          meta,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: PowerboardsTypography.small.copyWith(color: PbColors.textMuted),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
                   Text(text, style: PowerboardsTypography.p),
                   if (code != null) ...[const SizedBox(height: 14), _ThreadPreviewCodeBlock(code: code!)],
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _ThreadPreviewRolePill extends StatelessWidget {
+  const _ThreadPreviewRolePill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: PbColors.customBadgeBg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: PbColors.customBadgeBorder),
+      ),
+      child: Text(label, style: PowerboardsTypography.badge.copyWith(color: PbColors.customBadgeText)),
     );
   }
 }
@@ -3809,9 +3904,23 @@ class _ThreadPreviewAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (assistant) {
-      return const _TranscriptAssistantAvatar(size: 30);
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          gradient: const LinearGradient(
+            colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          border: Border.all(color: PbColors.borderSoft),
+        ),
+        alignment: Alignment.center,
+        child: Text(initials, style: PowerboardsTypography.customAvatarInitials.copyWith(color: PbColors.customBrandInk)),
+      );
     }
-    return PbAvatar(initials: initials, size: 30);
+    return PbAvatar(initials: initials, size: 40, textStyle: PowerboardsTypography.customAvatarInitials);
   }
 }
 
@@ -3863,10 +3972,11 @@ class PbTranscriptPreviewTurn {
 }
 
 class PbTranscriptPreviewContent extends StatelessWidget {
-  const PbTranscriptPreviewContent({super.key, required this.data, required this.fullscreen});
+  const PbTranscriptPreviewContent({super.key, required this.data, required this.fullscreen, this.emptyStateFile});
 
   final PbTranscriptPreviewData data;
   final bool fullscreen;
+  final PbAttachmentListItemData? emptyStateFile;
 
   @override
   Widget build(BuildContext context) {
@@ -3874,7 +3984,11 @@ class PbTranscriptPreviewContent extends StatelessWidget {
       return Container(
         color: PbColors.surfacePanel,
         alignment: Alignment.center,
-        child: Text('No transcript available', style: PowerboardsTypography.h4.copyWith(color: PbColors.textMuted)),
+        child: PbFilePreviewStateCard(
+          file: emptyStateFile ?? PbAttachmentListItemData.fromFileName(title: 'transcript.transcript'),
+          state: PbAttachmentPreviewState.unavailable,
+          label: 'No transcript available',
+        ),
       );
     }
 
@@ -3883,7 +3997,8 @@ class PbTranscriptPreviewContent extends StatelessWidget {
     return Container(
       color: PbColors.surfacePanel,
       child: SelectionArea(
-        child: SingleChildScrollView(
+        child: _FlushVerticalScrollView(
+          scrollbarKey: const ValueKey('transcript-preview-vertical-scrollbar'),
           child: Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
@@ -3949,7 +4064,8 @@ class _TranscriptFilePreview extends StatelessWidget {
 
     return Container(
       color: PbColors.surfacePanel,
-      child: SingleChildScrollView(
+      child: _FlushVerticalScrollView(
+        scrollbarKey: const ValueKey('transcript-preview-fallback-vertical-scrollbar'),
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
