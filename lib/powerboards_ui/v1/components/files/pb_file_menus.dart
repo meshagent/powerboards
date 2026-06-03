@@ -112,7 +112,7 @@ class PbFilesRowMenu extends StatelessWidget {
             ),
           if (onDownload != null)
             PbMenuOption(
-              title: 'Download',
+              title: 'Download as zip',
               leadingIconAssetName: 'arrow-down-to-line',
               singleLine: true,
               onPressed: () => _runMenuAction(onDownload, onDismiss),

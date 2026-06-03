@@ -76,6 +76,25 @@ void main() {
     expect(powerboardsV1FileItemIsSelectable(_file('error', kind: PbFilesItemKind.processingError)), isFalse);
   });
 
+  test('folder download archive command quotes paths and excludes placeholders', () {
+    final command = powerboardsDownloadArchiveCommand(
+      archiveFileName: 'Team Updates download.zip',
+      itemNames: ['test 1', "Dinesh's notes.md"],
+    );
+
+    expect(command, "/usr/bin/zip -r 'Team Updates download.zip' 'test 1' 'Dinesh'\\''s notes.md' -x '*/.placeholder' '.placeholder'");
+  });
+
+  test('folder download archive filename is timestamped and filesystem-safe', () {
+    final fileName = powerboardsDownloadArchiveFileName(
+      baseName: 'Team: Updates',
+      itemCount: 2,
+      createdAt: DateTime(2026, 6, 3, 14, 41, 5),
+    );
+
+    expect(fileName, 'Team- Updates-2-items-20260603-144105.zip');
+  });
+
   test('v1 visible selected ids retain visible file and folder rows', () {
     final realFile = _file('docs/readme.md');
     final realFolder = _file('docs/archive/', kind: PbFilesItemKind.folder);

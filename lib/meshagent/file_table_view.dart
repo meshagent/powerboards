@@ -92,6 +92,7 @@ const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
 const int _v1RecentlyOpenedFilesLimit = 7;
 const Duration _v1DeleteProcessingStep = Duration(milliseconds: 650);
 const Duration _v1SaveProcessingStep = Duration(milliseconds: 850);
+const Duration _downloadArchiveCleanupDelay = Duration(minutes: 5);
 const Offset _uploadProgressPopoverOffset = Offset(20, -20);
 
 const Map<String, String> _powerboardsV1FileTypeKeysByExtension = {
@@ -559,6 +560,47 @@ String _formatFileSizeBytes(int bytes) {
   return '${value.toStringAsFixed(decimals)} ${_fileSizeUnits[unitIndex]}';
 }
 
+String _shellQuote(String value) {
+  if (value.isEmpty) {
+    return "''";
+  }
+
+  return "'${value.replaceAll("'", r"'\''")}'";
+}
+
+@visibleForTesting
+String powerboardsDownloadArchiveCommand({required String archiveFileName, required Iterable<String> itemNames}) {
+  final items = itemNames.toList(growable: false);
+  assert(items.isNotEmpty, 'Archive downloads need at least one item.');
+  final quotedItems = items.map(_shellQuote).join(' ');
+  return "/usr/bin/zip -r ${_shellQuote(archiveFileName)} $quotedItems "
+      "-x ${_shellQuote('*/$placeholderFileName')} ${_shellQuote(placeholderFileName)}";
+}
+
+String _archiveTimestamp(DateTime createdAt) {
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+
+  return '${createdAt.year}'
+      '${twoDigits(createdAt.month)}'
+      '${twoDigits(createdAt.day)}-'
+      '${twoDigits(createdAt.hour)}'
+      '${twoDigits(createdAt.minute)}'
+      '${twoDigits(createdAt.second)}';
+}
+
+String _archiveSafeStem(String value) {
+  final withoutReserved = value.trim().replaceAll(RegExp(r'[\\/:*?"<>|]+'), '-');
+  final normalizedWhitespace = withoutReserved.replaceAll(RegExp(r'\s+'), ' ').trim();
+  return normalizedWhitespace.isEmpty ? 'download' : normalizedWhitespace;
+}
+
+@visibleForTesting
+String powerboardsDownloadArchiveFileName({required String baseName, required int itemCount, required DateTime createdAt}) {
+  final stem = _archiveSafeStem(baseName);
+  final countSuffix = itemCount > 1 ? '-$itemCount-items' : '';
+  return '$stem$countSuffix-${_archiveTimestamp(createdAt)}.zip';
+}
+
 enum FileSortField { name, modified }
 
 enum _FileAction { open, download, share, upload, compressFolder, rename, delete }
@@ -749,6 +791,13 @@ class _PendingDeleteOperation {
 
   final PendingStorageDeleteHandle handle;
   final DateTime displayUntil;
+}
+
+class _DownloadArchiveItem {
+  const _DownloadArchiveItem({required this.path, required this.isFolder});
+
+  final String path;
+  final bool isFolder;
 }
 
 class FileManagerViewController {
@@ -2642,9 +2691,157 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Future<void> _downloadFile(String path) async {
+  Future<void> _downloadFile(String path, {bool throwOnLaunchFailure = false}) async {
     final url = await widget.client.storage.downloadUrl(path, download: true);
-    launchUrl(Uri.parse(url));
+    final launched = await launchUrl(Uri.parse(url));
+    if (!launched && throwOnLaunchFailure) {
+      throw StateError('Unable to open download URL.');
+    }
+  }
+
+  void _showDownloadFailure(Object error) {
+    if (!mounted) {
+      return;
+    }
+
+    ShadToaster.of(
+      context,
+    ).show(powerboardsToast(title: 'Download failed', description: '$error', destructive: true, duration: const Duration(seconds: 6)));
+  }
+
+  Future<void> _downloadV1FileWithToast(String path) async {
+    final toaster = ShadToaster.of(context);
+    toaster.show(powerboardsToast(title: 'Downloading', description: _displayNameForPath(path), duration: const Duration(seconds: 4)));
+
+    try {
+      await _downloadFile(path, throwOnLaunchFailure: true);
+    } catch (error) {
+      _showDownloadFailure(error);
+    }
+  }
+
+  Future<void> _downloadV1FilesWithToast(List<String> paths) async {
+    if (paths.isEmpty) {
+      return;
+    }
+
+    final toaster = ShadToaster.of(context);
+    toaster.show(
+      powerboardsToast(
+        title: 'Downloading',
+        description: paths.length == 1 ? _displayNameForPath(paths.single) : '${paths.length} files',
+        duration: const Duration(seconds: 4),
+      ),
+    );
+
+    try {
+      for (final path in paths) {
+        await _downloadFile(path, throwOnLaunchFailure: true);
+      }
+    } catch (error) {
+      _showDownloadFailure(error);
+    }
+  }
+
+  Future<void> _downloadV1Item(PbFilesItemData item) async {
+    final path = _v1PathForItem(item);
+    if (_v1IsFolder(item)) {
+      await _downloadV1Archive([_DownloadArchiveItem(path: path, isFolder: true)]);
+      return;
+    }
+
+    await _downloadV1FileWithToast(path);
+  }
+
+  Future<void> _downloadV1Archive(List<_DownloadArchiveItem> items) async {
+    if (items.isEmpty) {
+      return;
+    }
+
+    final currentFolder = _folderSig.value;
+    final itemNames = [for (final item in items) p.basename(item.path)];
+    final archiveBaseName = items.length == 1 && items.single.isFolder
+        ? p.basename(items.single.path)
+        : _v1FolderLabelForPath(currentFolder);
+    final archiveFileName = powerboardsDownloadArchiveFileName(
+      baseName: archiveBaseName,
+      itemCount: items.length,
+      createdAt: DateTime.now(),
+    );
+    final archivePath = joinPaths(currentFolder, archiveFileName);
+    final toaster = ShadToaster.of(context);
+
+    toaster.show(
+      powerboardsToast(
+        title: 'Preparing download',
+        description: '${items.length} item${items.length == 1 ? '' : 's'} as zip',
+        duration: const Duration(seconds: 5),
+      ),
+    );
+
+    String? containerId;
+    try {
+      containerId = await widget.client.containers.run(
+        image: "docker.io/joshkeegan/zip:latest",
+        command: powerboardsDownloadArchiveCommand(archiveFileName: archiveFileName, itemNames: itemNames),
+        mountPath: "/data",
+        workingDir: "/data/$currentFolder",
+        private: true,
+      );
+
+      final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
+      if (!mounted) {
+        return;
+      }
+
+      if (returnCode != 0) {
+        toaster.show(
+          powerboardsToast(
+            title: 'Download failed',
+            description: 'Couldn’t prepare the zip archive. (Error code: $returnCode)',
+            destructive: true,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+        return;
+      }
+
+      await _downloadFile(archivePath, throwOnLaunchFailure: true);
+      if (!mounted) {
+        return;
+      }
+
+      toaster.show(powerboardsToast(title: 'Downloading', description: archiveFileName, duration: const Duration(seconds: 4)));
+      _scheduleDownloadArchiveCleanup(archivePath);
+    } catch (error) {
+      _showDownloadFailure(error);
+    } finally {
+      try {
+        if (containerId != null) {
+          await widget.client.containers.deleteContainer(containerId: containerId);
+        }
+      } catch (error) {
+        debugPrint("Failed to clean up download archive container: $error");
+      }
+    }
+  }
+
+  void _scheduleDownloadArchiveCleanup(String archivePath) {
+    final client = widget.client;
+    unawaited(
+      Future<void>.delayed(_downloadArchiveCleanupDelay, () async {
+        try {
+          await client.storage.delete(archivePath);
+          if (!mounted) {
+            return;
+          }
+
+          _removePath(archivePath, isFolder: false);
+        } catch (error) {
+          debugPrint("Failed to clean up download archive: $error");
+        }
+      }),
+    );
   }
 
   Future<void> _shareFile(String path) async {
@@ -2871,13 +3068,6 @@ class _FileManagerViewState extends State<FileManagerView> {
         powerboardsToast(title: "Rename failed", description: "$error", destructive: true, duration: const Duration(seconds: 6)),
       );
     }
-  }
-
-  String _shellQuote(String value) {
-    if (value.isEmpty) {
-      return "''";
-    }
-    return "'${value.replaceAll("'", r"'\''")}'";
   }
 
   Future<void> _refreshCurrentFolder() async {
@@ -3200,6 +3390,20 @@ class _FileManagerViewState extends State<FileManagerView> {
         ? powerboardsV1SelectedVisibleItemIds(_selectedSig.value, _v1VisibleItems(storageEntries.state.value ?? const <StorageEntry>[]))
         : _visibleSelected.value;
     if (selected.isEmpty) return;
+
+    if (useDesktopV1FilesBrowser) {
+      final items = [
+        for (final key in selected) _DownloadArchiveItem(path: _FilePathKey.pathFromKey(key), isFolder: _FilePathKey.isFolderKey(key)),
+      ];
+
+      if (items.any((item) => item.isFolder)) {
+        await _downloadV1Archive(items);
+        return;
+      }
+
+      await _downloadV1FilesWithToast([for (final item in items) item.path]);
+      return;
+    }
 
     final toaster = ShadToaster.of(context);
     var downloaded = 0;
@@ -3589,7 +3793,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onAskAgent: (item) => unawaited(
                     _startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item, showThreadAfterPrompt: usesStackedRoomPanel),
                   ),
-                  onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
+                  onDownload: (item) => unawaited(_downloadV1Item(item)),
                   onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
                   onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
                 ),
@@ -3640,7 +3844,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 onAskAgent: (item) => unawaited(
                   _startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item, showThreadAfterPrompt: usesStackedRoomPanel),
                 ),
-                onDownload: (item) => unawaited(_downloadFile(_v1PathForItem(item))),
+                onDownload: (item) => unawaited(_downloadV1FileWithToast(_v1PathForItem(item))),
                 onSaveRequested: _saveV1PreviewFile,
                 onToggleFullscreen: () => _setV1PreviewFullscreen(!_v1FilePreviewFullscreen),
                 onClosePreview: _closeV1Preview,

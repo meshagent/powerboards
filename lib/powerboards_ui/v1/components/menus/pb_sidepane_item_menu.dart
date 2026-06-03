@@ -8,10 +8,11 @@ import 'pb_menu_card.dart';
 typedef PbSidepaneMenuBuilder = Widget Function(VoidCallback closeMenu);
 
 class PbSidepaneItemMenu extends StatefulWidget {
-  const PbSidepaneItemMenu({super.key, required this.panelBuilder, this.size = 38, this.onOpenChanged});
+  const PbSidepaneItemMenu({super.key, required this.panelBuilder, this.size = 38, this.panelWidth = 204, this.onOpenChanged});
 
   final PbSidepaneMenuBuilder panelBuilder;
   final double size;
+  final double panelWidth;
   final ValueChanged<bool>? onOpenChanged;
 
   @override
@@ -46,7 +47,7 @@ class _PbSidepaneItemMenuState extends State<PbSidepaneItemMenu> {
       placement: PbMenuAnchorPlacement.bottomRight,
       gap: 2,
       onDismiss: _closeMenu,
-      panel: _open ? PbMenuCard(width: 204, child: widget.panelBuilder(_closeMenu)) : null,
+      panel: _open ? PbMenuCard(width: widget.panelWidth, child: widget.panelBuilder(_closeMenu)) : null,
       child: _SidepaneMenuGhostIcon(assetName: 'ellipsis', size: widget.size, selected: _open, onPressed: _toggleMenu),
     );
   }

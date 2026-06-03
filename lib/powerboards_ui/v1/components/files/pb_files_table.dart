@@ -837,6 +837,25 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
         : _pressed
         ? PbShadows.statePressedInset
         : null;
+    final menuLabels = switch (widget.item.kind) {
+      PbFilesItemKind.processing => ['Cancel process'],
+      PbFilesItemKind.processingError => ['Delete'],
+      PbFilesItemKind.folder => [
+        'Browse folder',
+        if (widget.onDownload != null) 'Download as zip',
+        if (widget.onRename != null) 'Rename',
+        if (widget.onDelete != null) 'Delete',
+      ],
+      PbFilesItemKind.file => [
+        'Open',
+        if (widget.onAskAgent != null) 'Ask agent',
+        if (widget.onShare != null) 'Share',
+        if (widget.onDownload != null) 'Download',
+        if (widget.onRename != null) 'Rename',
+        if (widget.onDelete != null) 'Delete',
+      ],
+    };
+    final rowMenuWidth = _menuWidthForLabels(context, menuLabels, min: 204, max: 280);
 
     return MouseRegion(
       cursor: _processing ? SystemMouseCursors.basic : SystemMouseCursors.click,
@@ -926,6 +945,7 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
                             ignoring: !menuVisible,
                             child: PbSidepaneItemMenu(
                               size: 32,
+                              panelWidth: rowMenuWidth,
                               onOpenChanged: (open) {
                                 setState(() => _menuOpen = open);
                                 widget.onMenuOpenChanged(open);
@@ -937,7 +957,9 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
                                 onRemoveProcessingRow: widget.onRemoveProcessingRow,
                                 onAskAgent: widget.item.kind == PbFilesItemKind.file ? widget.onAskAgent : null,
                                 onShare: widget.item.kind == PbFilesItemKind.file ? widget.onShare : null,
-                                onDownload: widget.item.kind == PbFilesItemKind.file ? widget.onDownload : null,
+                                onDownload: widget.item.kind == PbFilesItemKind.file || widget.item.kind == PbFilesItemKind.folder
+                                    ? widget.onDownload
+                                    : null,
                                 onRename: widget.onRename,
                                 onDelete: widget.onDelete,
                                 onDismiss: closeMenu,
