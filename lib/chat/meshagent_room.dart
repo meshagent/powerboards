@@ -1845,6 +1845,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   bool _desktopPreviewFilePreviewOpen = false;
   bool _desktopPreviewFilePreviewFullscreen = false;
   PbAttachmentListItemData? _desktopPreviewFilePreviewFile;
+  String? _desktopPreviewComposerAttachmentPreviewPath;
   bool _desktopPreviewMeetTranscriptPreviewOpen = false;
   bool _desktopPreviewMeetTranscriptPreviewFullscreen = false;
   bool _desktopPreviewRestoreTranscriptOverlayOnPreviewClose = false;
@@ -3707,7 +3708,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         composerAttachmentSeedVersion: composerAttachmentSeedVersion,
         onComposerAttachmentSeedApplied: agentKey == null ? null : () => _clearComposerAttachmentSeed(agentKey),
         onComposerAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
-            ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel)
+            ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel, fromComposerAttachment: true)
             : null,
         onComposerAttachmentRemoved: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? _closeDesktopPreviewAttachmentPreviewIfRemoved
@@ -4894,7 +4895,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   initialFilePreviewOpen: _desktopPreviewFilePreviewOpen,
                   openFilePreviewAsFullscreen: responsiveOverlay || _desktopPreviewFilePreviewFullscreen,
                   onFilePreviewSelected: (file) {
-                    setState(() => _desktopPreviewFilePreviewFile = file);
+                    setState(() {
+                      _desktopPreviewFilePreviewFile = file;
+                      _desktopPreviewComposerAttachmentPreviewPath = null;
+                    });
                   },
                   onFilePreviewOpenChanged: (open) {
                     setState(() {
@@ -4902,6 +4906,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       if (!open) {
                         _desktopPreviewFilePreviewFile = null;
                         _desktopPreviewFilePreviewFullscreen = false;
+                        _desktopPreviewComposerAttachmentPreviewPath = null;
                       }
                     });
                     if (!open) {
@@ -5723,7 +5728,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  void _openDesktopPreviewAttachment(String filePath, {required String threadName}) {
+  void _openDesktopPreviewAttachment(String filePath, {required String threadName, bool fromComposerAttachment = false}) {
     final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
     if (normalizedPath.isEmpty) {
       return;
@@ -5737,6 +5742,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewFilePreviewFile = previewFile;
       _desktopPreviewFilePreviewOpen = true;
       _desktopPreviewFilePreviewFullscreen = false;
+      _desktopPreviewComposerAttachmentPreviewPath = fromComposerAttachment ? normalizedPath : null;
     });
     setPreviewFilePreviewFullscreen(false);
   }
@@ -5747,19 +5753,42 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final normalizedRemovedPath = normalizePowerboardsAttachmentPath(filePath);
-    final normalizedPreviewPath = normalizePowerboardsAttachmentPath(_desktopPreviewFilePreviewFile?.path ?? '');
-    if (normalizedRemovedPath.isEmpty || normalizedRemovedPath != normalizedPreviewPath) {
+    if (!_desktopPreviewRemovedAttachmentMatchesPreview(normalizedRemovedPath)) {
       return;
     }
 
-    _desktopPreviewRoomPanelOverlayController.hide();
     setState(() {
       _desktopPreviewFilePreviewFile = null;
       _desktopPreviewFilePreviewOpen = false;
       _desktopPreviewFilePreviewFullscreen = false;
-      _desktopPreviewRoomPanelOverlayOpen = false;
+      _desktopPreviewComposerAttachmentPreviewPath = null;
     });
     setPreviewFilePreviewFullscreen(false);
+  }
+
+  bool _desktopPreviewRemovedAttachmentMatchesPreview(String normalizedRemovedPath) {
+    if (normalizedRemovedPath.isEmpty) {
+      return false;
+    }
+
+    final normalizedPreviewPath = normalizePowerboardsAttachmentPath(_desktopPreviewFilePreviewFile?.path ?? '');
+    if (normalizedRemovedPath == normalizedPreviewPath) {
+      return true;
+    }
+
+    final normalizedComposerPreviewPath = normalizePowerboardsAttachmentPath(_desktopPreviewComposerAttachmentPreviewPath ?? '');
+    if (normalizedComposerPreviewPath.isEmpty) {
+      return false;
+    }
+
+    if (normalizedRemovedPath == normalizedComposerPreviewPath) {
+      return true;
+    }
+
+    final removedFileName = normalizedRemovedPath.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? '';
+    final composerFileName = normalizedComposerPreviewPath.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? '';
+    final previewFileName = normalizedPreviewPath.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? '';
+    return removedFileName.isNotEmpty && (removedFileName == composerFileName || removedFileName == previewFileName);
   }
 
   Future<void> _handleDesktopPreviewFilePromptRequested(
@@ -5795,6 +5824,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewFilePreviewFile = previewFile;
       _desktopPreviewFilePreviewOpen = true;
       _desktopPreviewFilePreviewFullscreen = false;
+      _desktopPreviewComposerAttachmentPreviewPath = normalizePowerboardsAttachmentPath(filePath);
     });
     if (_roomNameForSelectionPersistence case final roomName?) {
       clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
@@ -5824,6 +5854,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewFilePreviewFile = null;
       _desktopPreviewFilePreviewOpen = false;
       _desktopPreviewFilePreviewFullscreen = false;
+      _desktopPreviewComposerAttachmentPreviewPath = null;
       _desktopPreviewMeetTranscriptPreviewFile = null;
       _desktopPreviewMeetTranscriptPreviewOpen = false;
       _desktopPreviewMeetTranscriptPreviewFullscreen = false;
