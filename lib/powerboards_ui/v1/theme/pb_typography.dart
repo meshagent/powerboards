@@ -4,6 +4,7 @@ import 'pb_colors.dart';
 
 abstract final class PowerboardsTypography {
   static const String fontFamily = 'Inter';
+  static const String codeFontFamily = 'DM Mono';
 
   static const TextStyle h1Large = TextStyle(
     fontFamily: fontFamily,
@@ -185,6 +186,15 @@ abstract final class PowerboardsTypography {
     fontWeight: FontWeight.w600,
     letterSpacing: 0,
     color: PbColors.textInverse,
+  );
+
+  static const TextStyle customCodeDisplay = TextStyle(
+    fontFamily: codeFontFamily,
+    fontSize: 15,
+    height: 22 / 15,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    color: PbColors.textBody,
   );
 
   static const TextStyle buttonPrimary = button;

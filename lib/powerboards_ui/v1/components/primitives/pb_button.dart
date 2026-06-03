@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
+import 'pb_spinning_icon.dart';
 import 'pb_svg_icon.dart';
 
 enum PbButtonVariant { primary, secondary }
@@ -19,6 +20,7 @@ class PbButton extends StatefulWidget {
     this.horizontalPadding = 18,
     this.iconSize = 18,
     this.iconGap = 10,
+    this.iconSpinning = false,
     this.contentOffset = Offset.zero,
     this.backgroundColor,
     this.pressedBackgroundColor,
@@ -37,6 +39,7 @@ class PbButton extends StatefulWidget {
   final double horizontalPadding;
   final double iconSize;
   final double iconGap;
+  final bool iconSpinning;
   final Offset contentOffset;
   final Color? backgroundColor;
   final Color? pressedBackgroundColor;
@@ -136,7 +139,13 @@ class _PbButtonState extends State<PbButton> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         if (widget.iconAssetName != null)
-                          PbSvgIcon(assetName: widget.iconAssetName!, size: widget.iconOnly ? 20 : widget.iconSize, color: textColor),
+                          widget.iconSpinning
+                              ? PbSpinningIcon(
+                                  assetName: widget.iconAssetName!,
+                                  size: widget.iconOnly ? 20 : widget.iconSize,
+                                  color: textColor,
+                                )
+                              : PbSvgIcon(assetName: widget.iconAssetName!, size: widget.iconOnly ? 20 : widget.iconSize, color: textColor),
                         if (!widget.iconOnly && widget.iconAssetName != null) SizedBox(width: widget.iconGap),
                         if (!widget.iconOnly) shouldFlexLabel ? Flexible(child: label) : label,
                       ],

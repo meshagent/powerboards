@@ -206,6 +206,10 @@ flutter:
           weight: 700
         - asset: lib/powerboards_ui/v1/assets/fonts/Inter-ExtraBold.ttf
           weight: 800
+    - family: DM Mono
+      fonts:
+        - asset: lib/powerboards_ui/v1/assets/fonts/DMMono-Regular.ttf
+          weight: 400
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages

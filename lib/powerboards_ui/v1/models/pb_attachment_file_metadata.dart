@@ -137,11 +137,11 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
       return PbAttachmentFileType.archive;
     }
 
-    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'heic'].contains(extension)) {
+    if (['png', 'jpg', 'jpeg', 'jfif', 'gif', 'webp', 'svg', 'svgz', 'heic', 'heif', 'tif', 'tiff', 'bmp'].contains(extension)) {
       return PbAttachmentFileType.image;
     }
 
-    if (['mov', 'mp4', 'webm', 'avi', 'mkv'].contains(extension)) {
+    if (['mov', 'mp4', 'm4v', 'webm', 'avi', 'mkv'].contains(extension)) {
       return PbAttachmentFileType.video;
     }
 
@@ -173,7 +173,45 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
       return PbAttachmentFileType.pdf;
     }
 
-    if (['json', 'yaml', 'yml', 'js', 'ts', 'tsx', 'jsx', 'dart', 'html', 'css', 'sh'].contains(extension)) {
+    if ([
+      'json',
+      'yaml',
+      'yml',
+      'js',
+      'mjs',
+      'cjs',
+      'ts',
+      'tsx',
+      'jsx',
+      'dart',
+      'html',
+      'css',
+      'scss',
+      'sass',
+      'less',
+      'sh',
+      'bash',
+      'zsh',
+      'py',
+      'rb',
+      'java',
+      'go',
+      'rs',
+      'c',
+      'cc',
+      'cpp',
+      'h',
+      'hpp',
+      'cs',
+      'php',
+      'swift',
+      'kt',
+      'kts',
+      'sql',
+      'xml',
+      'toml',
+      'ini',
+    ].contains(extension)) {
       return extension == 'sh' ? PbAttachmentFileType.script : PbAttachmentFileType.code;
     }
 
