@@ -325,6 +325,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
       previewContentChild: previewContentChild,
       loadText: previewSource?.loadText,
       onSaveTextRequested: previewSource?.saveText,
+      sourceKey: previewSource?.sourceKey,
       child: previewSource == null && _previewFile.previewState == PbAttachmentPreviewState.none
           ? widget.filePreviewBuilder?.call(_previewFile)
           : null,
@@ -1905,12 +1906,13 @@ enum _FilePreviewContentMode {
 }
 
 class PbFilePreviewSource {
-  const PbFilePreviewSource({this.child, this.childBuilder, this.loadText, this.saveText});
+  const PbFilePreviewSource({this.child, this.childBuilder, this.loadText, this.saveText, this.sourceKey});
 
   final Widget? child;
   final Widget Function(bool fullscreen)? childBuilder;
   final Future<String> Function()? loadText;
   final Future<void> Function(String text)? saveText;
+  final Object? sourceKey;
 
   Widget? buildChild(bool fullscreen) {
     return childBuilder?.call(fullscreen) ?? child;
@@ -1936,6 +1938,7 @@ class PbFilePreviewPane extends StatefulWidget {
     this.onClose,
     this.onSaveRequested,
     this.onSaveTextRequested,
+    this.sourceKey,
   });
 
   final PbAttachmentListItemData file;
@@ -1954,6 +1957,7 @@ class PbFilePreviewPane extends StatefulWidget {
   final VoidCallback? onClose;
   final Future<void> Function()? onSaveRequested;
   final Future<void> Function(String text)? onSaveTextRequested;
+  final Object? sourceKey;
 
   @override
   State<PbFilePreviewPane> createState() => _PbFilePreviewPaneState();
@@ -1972,8 +1976,10 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.file.title != widget.file.title ||
+        oldWidget.file.path != widget.file.path ||
         oldWidget.file.fileType != widget.file.fileType ||
-        oldWidget.file.previewState != widget.file.previewState) {
+        oldWidget.file.previewState != widget.file.previewState ||
+        oldWidget.sourceKey != widget.sourceKey) {
       _dirty = false;
       _saving = false;
       _editedText = null;
@@ -2138,6 +2144,8 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
                             fullscreen: fullscreen,
                             previewContentChild: widget.previewContentChild,
                             loadText: widget.loadText,
+                            sourceKey: widget.sourceKey,
+                            draftText: _editedText,
                             onEdited: _updateEditedText,
                           ),
                     ),
@@ -2209,6 +2217,8 @@ class _FilePreviewContent extends StatelessWidget {
     required this.onEdited,
     this.previewContentChild,
     this.loadText,
+    this.sourceKey,
+    this.draftText,
   });
 
   final PbAttachmentListItemData file;
@@ -2217,6 +2227,8 @@ class _FilePreviewContent extends StatelessWidget {
   final ValueChanged<String> onEdited;
   final Widget? previewContentChild;
   final Future<String> Function()? loadText;
+  final Object? sourceKey;
+  final String? draftText;
 
   @override
   Widget build(BuildContext context) {
@@ -2230,9 +2242,18 @@ class _FilePreviewContent extends StatelessWidget {
         file: file,
         fullscreen: fullscreen,
         loadText: loadText,
+        sourceKey: sourceKey,
+        draftText: draftText,
         onEdited: onEdited,
       ),
-      _FilePreviewContentMode.code => _CodeFilePreview(file: file, fullscreen: fullscreen, loadText: loadText, onEdited: onEdited),
+      _FilePreviewContentMode.code => _CodeFilePreview(
+        file: file,
+        fullscreen: fullscreen,
+        loadText: loadText,
+        sourceKey: sourceKey,
+        draftText: draftText,
+        onEdited: onEdited,
+      ),
       _FilePreviewContentMode.image => _ImageFilePreview(child: previewContentChild),
       _FilePreviewContentMode.video => _VideoFilePreview(child: previewContentChild),
       _FilePreviewContentMode.pagedDocument => _PagedFilePreview(fullscreen: fullscreen, file: file, child: previewContentChild),
@@ -2243,12 +2264,21 @@ class _FilePreviewContent extends StatelessWidget {
 }
 
 class _EditableDocumentPreview extends StatefulWidget {
-  const _EditableDocumentPreview({required this.file, required this.fullscreen, required this.onEdited, this.loadText});
+  const _EditableDocumentPreview({
+    required this.file,
+    required this.fullscreen,
+    required this.onEdited,
+    this.loadText,
+    this.sourceKey,
+    this.draftText,
+  });
 
   final PbAttachmentListItemData file;
   final bool fullscreen;
   final ValueChanged<String> onEdited;
   final Future<String> Function()? loadText;
+  final Object? sourceKey;
+  final String? draftText;
 
   @override
   State<_EditableDocumentPreview> createState() => _EditableDocumentPreviewState();
@@ -2312,6 +2342,37 @@ class _FlushVerticalScrollViewState extends State<_FlushVerticalScrollView> {
 
 bool _isEditorTabEvent(KeyEvent event) {
   return event.logicalKey == LogicalKeyboardKey.tab && (event is KeyDownEvent || event is KeyRepeatEvent);
+}
+
+bool _previewTextSourceChanged(PbAttachmentListItemData oldFile, PbAttachmentListItemData file, Object? oldSourceKey, Object? sourceKey) {
+  return oldSourceKey != sourceKey ||
+      oldFile.path != file.path ||
+      oldFile.title != file.title ||
+      oldFile.fileType != file.fileType ||
+      oldFile.previewState != file.previewState;
+}
+
+void _setEditorTextPreservingSelection(TextEditingController controller, String text) {
+  if (controller.text == text) {
+    return;
+  }
+
+  final selection = controller.selection;
+  final TextSelection nextSelection;
+  if (selection.isValid) {
+    int clampOffset(int offset) => offset.clamp(0, text.length).toInt();
+
+    nextSelection = TextSelection(
+      baseOffset: clampOffset(selection.baseOffset),
+      extentOffset: clampOffset(selection.extentOffset),
+      affinity: selection.affinity,
+      isDirectional: selection.isDirectional,
+    );
+  } else {
+    nextSelection = TextSelection.collapsed(offset: text.length);
+  }
+
+  controller.value = TextEditingValue(text: text, selection: nextSelection, composing: TextRange.empty);
 }
 
 int _lineStartForOffset(String text, int offset) {
@@ -2461,17 +2522,26 @@ class _EditableDocumentPreviewState extends State<_EditableDocumentPreview> {
     super.initState();
     _controller = TextEditingController();
     _focusNode.onKeyEvent = _handleKeyEvent;
-    _loadText();
+    final draftText = widget.draftText;
+    if (draftText == null) {
+      _loadText();
+    } else {
+      _controller.text = draftText;
+    }
   }
 
   @override
   void didUpdateWidget(covariant _EditableDocumentPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.file.title != widget.file.title ||
-        oldWidget.file.fileType != widget.file.fileType ||
-        oldWidget.loadText != widget.loadText) {
+    if (_previewTextSourceChanged(oldWidget.file, widget.file, oldWidget.sourceKey, widget.sourceKey)) {
       _loadText();
+      return;
+    }
+
+    final draftText = widget.draftText;
+    if (draftText != null && draftText != oldWidget.draftText) {
+      _setEditorTextPreservingSelection(_controller, draftText);
     }
   }
 
@@ -2483,7 +2553,7 @@ class _EditableDocumentPreviewState extends State<_EditableDocumentPreview> {
       setState(() {
         _loading = false;
         _loadError = null;
-        _controller.text = _documentTextFor(widget.file);
+        _setEditorTextPreservingSelection(_controller, _documentTextFor(widget.file));
       });
       return;
     }
@@ -2500,7 +2570,7 @@ class _EditableDocumentPreviewState extends State<_EditableDocumentPreview> {
       }
       setState(() {
         _loading = false;
-        _controller.text = text;
+        _setEditorTextPreservingSelection(_controller, text);
       });
     } catch (error) {
       if (!mounted || generation != _loadGeneration) {
@@ -2629,12 +2699,21 @@ class _EditableDocumentPreviewState extends State<_EditableDocumentPreview> {
 }
 
 class _CodeFilePreview extends StatefulWidget {
-  const _CodeFilePreview({required this.file, required this.fullscreen, required this.onEdited, this.loadText});
+  const _CodeFilePreview({
+    required this.file,
+    required this.fullscreen,
+    required this.onEdited,
+    this.loadText,
+    this.sourceKey,
+    this.draftText,
+  });
 
   final PbAttachmentListItemData file;
   final bool fullscreen;
   final ValueChanged<String> onEdited;
   final Future<String> Function()? loadText;
+  final Object? sourceKey;
+  final String? draftText;
 
   static const List<List<_CodeToken>> _dartLines = [
     [
@@ -2759,17 +2838,26 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
     super.initState();
     _controller = _CodeTextEditingController(text: '');
     _focusNode.onKeyEvent = _handleKeyEvent;
-    _loadText();
+    final draftText = widget.draftText;
+    if (draftText == null) {
+      _loadText();
+    } else {
+      _controller.text = draftText;
+    }
   }
 
   @override
   void didUpdateWidget(covariant _CodeFilePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.file.title != widget.file.title ||
-        oldWidget.file.fileType != widget.file.fileType ||
-        oldWidget.loadText != widget.loadText) {
+    if (_previewTextSourceChanged(oldWidget.file, widget.file, oldWidget.sourceKey, widget.sourceKey)) {
       _loadText();
+      return;
+    }
+
+    final draftText = widget.draftText;
+    if (draftText != null && draftText != oldWidget.draftText) {
+      _setEditorTextPreservingSelection(_controller, draftText);
     }
   }
 
@@ -2781,7 +2869,7 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
       setState(() {
         _loading = false;
         _loadError = null;
-        _controller.text = _CodeFilePreview._plainTextFor(widget.file.title);
+        _setEditorTextPreservingSelection(_controller, _CodeFilePreview._plainTextFor(widget.file.title));
       });
       return;
     }
@@ -2798,7 +2886,7 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
       }
       setState(() {
         _loading = false;
-        _controller.text = text;
+        _setEditorTextPreservingSelection(_controller, text);
       });
     } catch (error) {
       if (!mounted || generation != _loadGeneration) {

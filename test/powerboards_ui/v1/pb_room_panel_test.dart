@@ -561,6 +561,92 @@ void main() {
     expect(find.text('Type here'), findsOneWidget);
   });
 
+  testWidgets('editable document preview keeps draft when parent rebuilds with fresh loader', (tester) async {
+    late StateSetter rebuildParent;
+    var loadCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuildParent = setState;
+              return SizedBox(
+                width: 560,
+                height: 480,
+                child: PbFilePreviewPane(
+                  file: PbAttachmentListItemData.fromFileName(title: 'mobile-test.txt', path: 'docs/mobile-test.txt'),
+                  fullscreen: false,
+                  sourceKey: 'docs/mobile-test.txt',
+                  loadText: () async {
+                    loadCount += 1;
+                    return 'Loaded text $loadCount';
+                  },
+                  onSaveTextRequested: (_) async {},
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(loadCount, 1);
+    await tester.enterText(find.byType(TextField), 'Unsaved draft');
+    await tester.pump();
+
+    rebuildParent(() {});
+    await tester.pumpAndSettle();
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.controller?.text, 'Unsaved draft');
+    expect(loadCount, 1);
+  });
+
+  testWidgets('editable document preview keeps draft when fullscreen toggles', (tester) async {
+    late StateSetter rebuildParent;
+    var fullscreen = false;
+    var loadCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuildParent = setState;
+              return SizedBox(
+                width: 560,
+                height: 480,
+                child: PbFilePreviewPane(
+                  file: PbAttachmentListItemData.fromFileName(title: 'mobile-test.txt', path: 'docs/mobile-test.txt'),
+                  fullscreen: fullscreen,
+                  sourceKey: 'docs/mobile-test.txt',
+                  loadText: () async {
+                    loadCount += 1;
+                    return 'Loaded text $loadCount';
+                  },
+                  onSaveTextRequested: (_) async {},
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'Fullscreen draft');
+    await tester.pump();
+
+    rebuildParent(() => fullscreen = true);
+    await tester.pumpAndSettle();
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.controller?.text, 'Fullscreen draft');
+    expect(loadCount, 1);
+  });
+
   testWidgets('room panel file preview source owns editable real content instead of legacy child', (tester) async {
     String? savedText;
     final file = PbAttachmentListItemData.fromFileName(title: 'notes.csv', path: 'docs/notes.csv');
@@ -668,6 +754,49 @@ void main() {
     final textField = tester.widget<TextField>(find.byType(TextField));
     expect(textField.decoration?.hintText, 'Type here');
     expect(find.text('Type here'), findsOneWidget);
+  });
+
+  testWidgets('editable code preview keeps draft when fullscreen toggles', (tester) async {
+    late StateSetter rebuildParent;
+    var fullscreen = false;
+    var loadCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuildParent = setState;
+              return SizedBox(
+                width: 560,
+                height: 480,
+                child: PbFilePreviewPane(
+                  file: PbAttachmentListItemData.fromFileName(title: 'preview_rules.dart', path: 'docs/preview_rules.dart'),
+                  fullscreen: fullscreen,
+                  sourceKey: 'docs/preview_rules.dart',
+                  loadText: () async {
+                    loadCount += 1;
+                    return 'final mode = "loaded_$loadCount";';
+                  },
+                  onSaveTextRequested: (_) async {},
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(EditableText), 'final mode = "draft";');
+    await tester.pump();
+
+    rebuildParent(() => fullscreen = true);
+    await tester.pumpAndSettle();
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.controller?.text, 'final mode = "draft";');
+    expect(loadCount, 1);
   });
 
   testWidgets('code preview scrollbars span the file preview frame', (tester) async {

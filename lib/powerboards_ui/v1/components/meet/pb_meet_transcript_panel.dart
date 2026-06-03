@@ -180,6 +180,7 @@ class _PbMeetTranscriptPanelState extends State<PbMeetTranscriptPanel> {
       previewContentChild: previewContentChild,
       loadText: previewSource?.loadText,
       onSaveTextRequested: previewSource?.saveText,
+      sourceKey: previewSource?.sourceKey,
       child: previewSource == null && _previewFile.previewState == PbAttachmentPreviewState.none
           ? widget.filePreviewBuilder?.call(_previewFile)
           : null,

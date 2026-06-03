@@ -119,6 +119,7 @@ PbFilePreviewSource powerboardsV1PreviewSourceForAttachment({
 
   if (file.fileType == PbAttachmentFileType.transcript || extension == 'transcript' || extension == 'srt' || extension == 'vtt') {
     return PbFilePreviewSource(
+      sourceKey: path,
       childBuilder: (fullscreen) => extension == 'transcript'
           ? _V1TranscriptDocumentPreview(room: room, path: path, file: file, fullscreen: fullscreen)
           : _V1TextTranscriptPreview(
@@ -133,10 +134,11 @@ PbFilePreviewSource powerboardsV1PreviewSourceForAttachment({
   }
 
   if (powerboardsV1IsEditableTextPreview(fileType: file.fileType, path: path)) {
-    return PbFilePreviewSource(loadText: () => effectiveLoadText(path), saveText: (text) => effectiveSaveText(path, text));
+    return PbFilePreviewSource(sourceKey: path, loadText: () => effectiveLoadText(path), saveText: (text) => effectiveSaveText(path, text));
   }
 
   return PbFilePreviewSource(
+    sourceKey: path,
     child: powerboardsV1PreviewContentChild(
       room: room,
       file: file,

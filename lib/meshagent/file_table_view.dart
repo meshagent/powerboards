@@ -2151,6 +2151,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     if (item.fileType == PbAttachmentFileType.transcript || extension == 'transcript' || extension == 'srt' || extension == 'vtt') {
       final file = item.toAttachmentData();
       return PbFilePreviewSource(
+        sourceKey: path,
         childBuilder: (fullscreen) => extension == 'transcript'
             ? _V1TranscriptDocumentPreview(room: widget.client, path: path, file: file, fullscreen: fullscreen)
             : _V1TextTranscriptPreview(room: widget.client, path: path, file: file, title: item.title, fullscreen: fullscreen),
@@ -2158,10 +2159,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (_v1IsEditableTextPreview(item, path)) {
-      return PbFilePreviewSource(loadText: () => _loadV1PreviewText(path), saveText: (text) => _saveV1PreviewText(item, path, text));
+      return PbFilePreviewSource(
+        sourceKey: path,
+        loadText: () => _loadV1PreviewText(path),
+        saveText: (text) => _saveV1PreviewText(item, path, text),
+      );
     }
 
-    return PbFilePreviewSource(child: _buildV1PreviewContentChild(item, path));
+    return PbFilePreviewSource(sourceKey: path, child: _buildV1PreviewContentChild(item, path));
   }
 
   void _finishV1PreviewSave(PbFilesItemData item) {

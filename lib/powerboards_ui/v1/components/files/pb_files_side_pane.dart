@@ -72,6 +72,7 @@ class PbFilesSidePane extends StatelessWidget {
         previewContentChild: previewContentChild,
         loadText: previewSource?.loadText,
         onSaveTextRequested: previewSource?.saveText,
+        sourceKey: previewSource?.sourceKey,
         child: preview.previewState == PbAttachmentPreviewState.none ? previewBuilder?.call(preview) : null,
       );
     }
