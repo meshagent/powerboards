@@ -13,6 +13,7 @@ class CameraBox extends StatelessWidget {
     this.overlayAlignment = .topRight,
     this.showName = false,
     this.interactive = true,
+    this.borderRadius = 0,
   });
 
   final Widget camera;
@@ -21,6 +22,7 @@ class CameraBox extends StatelessWidget {
   final Alignment overlayAlignment;
   final bool showName;
   final bool interactive;
+  final double borderRadius;
 
   @override
   Widget build(BuildContext context) {
@@ -29,19 +31,22 @@ class CameraBox extends StatelessWidget {
       child: interactive ? InteractiveViewer2(minScale: 1, maxScale: 5, constrained: true, child: camera) : camera,
     );
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        content,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          content,
 
-        Align(
-          alignment: overlayAlignment,
-          child: Padding(
-            padding: const .all(5),
-            child: ParticipantOverlay(participant: participant, showName: showName, expandSource: expandSource),
+          Align(
+            alignment: overlayAlignment,
+            child: Padding(
+              padding: const .all(5),
+              child: ParticipantOverlay(participant: participant, showName: showName, expandSource: expandSource),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

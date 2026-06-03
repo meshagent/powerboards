@@ -12,6 +12,7 @@ class ParticipantTrack extends StatelessWidget {
     this.overlayAlignment = .topRight,
     this.showName = true,
     this.interactive = true,
+    this.borderRadius = 0,
   });
 
   final lk.Participant participant;
@@ -20,6 +21,7 @@ class ParticipantTrack extends StatelessWidget {
   final Alignment overlayAlignment;
   final bool showName;
   final bool interactive;
+  final double borderRadius;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +32,7 @@ class ParticipantTrack extends StatelessWidget {
       overlayAlignment: overlayAlignment,
       showName: showName,
       interactive: interactive,
+      borderRadius: borderRadius,
     );
   }
 }

@@ -46,6 +46,7 @@ class CameraStrip extends StatelessWidget {
                       fit: videoTrack.source == lk.TrackSource.screenShareVideo ? lk.VideoViewFit.contain : lk.VideoViewFit.cover,
                     ),
                     interactive: videoTrack.source != lk.TrackSource.screenShareVideo,
+                    borderRadius: borderRadius,
                   ),
                 );
               },
@@ -68,6 +69,7 @@ class CameraStrip extends StatelessWidget {
             participant: participant,
             expandSource: lk.TrackSource.camera,
             showName: hovered,
+            borderRadius: borderRadius,
             camera: Container(
               color: const Color(0xFF2A2A2A),
               alignment: Alignment.center,

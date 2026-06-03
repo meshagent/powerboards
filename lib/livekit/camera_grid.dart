@@ -127,22 +127,26 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
       spacing: 12.0,
       frameBuilder: (context, participant, publication, trackWidget, showName) {
         return LayoutBuilder(
-          builder: (context, tileConstraints) => ClipRRect(
-            borderRadius: BorderRadius.circular(_tileRadiusFor(tileConstraints)),
-            child: HoverBuilder(
-              cursor: SystemMouseCursors.basic,
-              builder: (hovered) {
-                final alwaysShowName = isMobile && _expandedController.isExpandedIdentity(participant.identity);
-                return ParticipantTrack(
-                  participant: participant,
-                  expandSource: publication?.source ?? TrackSource.camera,
-                  track: trackWidget,
-                  showName: (showName && hovered) || alwaysShowName,
-                  interactive: publication?.source != TrackSource.screenShareVideo,
-                );
-              },
-            ),
-          ),
+          builder: (context, tileConstraints) {
+            final tileRadius = _tileRadiusFor(tileConstraints);
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(tileRadius),
+              child: HoverBuilder(
+                cursor: SystemMouseCursors.basic,
+                builder: (hovered) {
+                  final alwaysShowName = isMobile && _expandedController.isExpandedIdentity(participant.identity);
+                  return ParticipantTrack(
+                    participant: participant,
+                    expandSource: publication?.source ?? TrackSource.camera,
+                    track: trackWidget,
+                    showName: (showName && hovered) || alwaysShowName,
+                    interactive: publication?.source != TrackSource.screenShareVideo,
+                    borderRadius: tileRadius,
+                  );
+                },
+              ),
+            );
+          },
         );
       },
     );
