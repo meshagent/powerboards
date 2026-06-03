@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
+import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_transcript_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 
 void main() {
   Widget buildHarness({
@@ -322,5 +326,439 @@ void main() {
 
     expect(committedWidth, isNull);
     expect(tester.getSize(find.byKey(roomPanelKey)).width, 560);
+  });
+
+  testWidgets('file preview uses supplied app viewer child before spec fallback content', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'preview_rules.dart');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: file,
+              fullscreen: false,
+              onToggleFullscreen: () {},
+              onClose: () {},
+              child: const Text('Live document pane'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Live document pane'), findsOneWidget);
+    expect(find.byKey(const ValueKey('code-preview-surface')), findsNothing);
+    expect(find.text('Save'), findsNothing);
+  });
+
+  testWidgets('file preview fallback renders type-specific code and image surfaces', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(file: PbAttachmentListItemData.fromFileName(title: 'preview_rules.dart'), fullscreen: false),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(file: PbAttachmentListItemData.fromFileName(title: 'launch-poster.png'), fullscreen: false),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('image-preview-viewport')), findsOneWidget);
+    expect(find.byKey(const ValueKey('image-preview-surface')), findsOneWidget);
+    expect(find.text('Fit'), findsOneWidget);
+  });
+
+  testWidgets('file preview loads editable source text and saves through v1 header action', (tester) async {
+    String? savedText;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'notes.md'),
+              fullscreen: false,
+              loadText: () async => '# Draft\n\nInitial note',
+              onSaveTextRequested: (text) async {
+                savedText = text;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.enableInteractiveSelection, isTrue);
+    final selectionTheme = tester.widget<TextSelectionTheme>(find.byKey(const ValueKey('editable-document-selection-theme')));
+    expect(selectionTheme.data.selectionColor, const Color(0x332563EB));
+
+    await tester.enterText(find.byType(TextField), '# Draft\n\nEdited note');
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(savedText, '# Draft\n\nEdited note');
+  });
+
+  testWidgets('room panel file preview source owns editable real content instead of legacy child', (tester) async {
+    String? savedText;
+    final file = PbAttachmentListItemData.fromFileName(title: 'notes.csv', path: 'docs/notes.csv');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              attachments: [file],
+              filePreviewBuilder: (_) => const Text('Legacy document pane'),
+              filePreviewSourceBuilder: (_) => PbFilePreviewSource(
+                loadText: () async => 'name,status\nLaunch,Ready',
+                saveText: (text) async {
+                  savedText = text;
+                },
+              ),
+              threads: const ['Planning'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Legacy document pane'), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'name,status\nLaunch,Shipped');
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(savedText, 'name,status\nLaunch,Shipped');
+  });
+
+  testWidgets('file preview loads editable source code into v1 code surface', (tester) async {
+    String? savedText;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'preview_rules.dart'),
+              fullscreen: false,
+              loadText: () async => 'final mode = "media";',
+              onSaveTextRequested: (text) async {
+                savedText = text;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.enableInteractiveSelection, isTrue);
+    final selectionTheme = tester.widget<TextSelectionTheme>(find.byKey(const ValueKey('code-editor-selection-theme')));
+    expect(selectionTheme.data.selectionColor, const Color(0x665EA2FF));
+
+    await tester.enterText(find.byType(EditableText), 'final mode = "code";');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(savedText, 'final mode = "code";  ');
+  });
+
+  testWidgets('file preview hides share action for this scoped release', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 920,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'brief.pdf'),
+              fullscreen: false,
+              previewContentChild: const SizedBox.expand(),
+              onAskAgent: () {},
+              onShare: () {},
+              onDownload: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ask agent'), findsOneWidget);
+    expect(find.text('Download'), findsOneWidget);
+    expect(find.text('Share'), findsNothing);
+  });
+
+  testWidgets('thread preview unavailable state does not expose an inert composer', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'Sample Thread', fileType: PbAttachmentFileType.thread);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: file,
+              fullscreen: false,
+              previewContentChild: Center(
+                child: PbFilePreviewStateCard(file: file, state: PbAttachmentPreviewState.unavailable),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No preview available'), findsOneWidget);
+    expect(find.text('Unable to load thread'), findsNothing);
+    expect(find.text('Type a message…'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  testWidgets('room panel forced fullscreen opens file preview edge to edge on first mount', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'sample-html-fragment.html', path: 'files/sample-html-fragment.html');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              openFilePreviewAsFullscreen: true,
+              attachments: [file],
+              filePreviewSourceBuilder: (_) => PbFilePreviewSource(loadText: () async => '<!doctype html>'),
+              threads: const ['Planning'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final previewFrame = tester.getRect(find.byKey(const ValueKey('file-preview-content-frame')));
+
+    expect(previewFrame.left, 0);
+    expect(previewFrame.width, 560);
+    expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
+  });
+
+  testWidgets('file preview uses real native document child instead of editable sample fallback', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'meshwidget.widget'),
+              fullscreen: false,
+              previewContentChild: const Center(child: Text('No preview available')),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No preview available'), findsOneWidget);
+    expect(find.text('Working draft'), findsNothing);
+    expect(find.text('Save'), findsNothing);
+  });
+
+  testWidgets('file preview unavailable and unsupported states stay centered in the preview frame', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'archive.zip', previewState: PbAttachmentPreviewState.unsupported),
+              fullscreen: false,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final frameCenter = tester.getCenter(find.byKey(const ValueKey('file-preview-content-frame')));
+    final cardCenter = tester.getCenter(find.byType(PbFilePreviewStateCard));
+
+    expect(find.text('File preview not supported'), findsOneWidget);
+    expect((frameCenter.dx - cardCenter.dx).abs(), lessThan(1));
+    expect((frameCenter.dy - cardCenter.dy).abs(), lessThan(1));
+  });
+
+  testWidgets('unavailable image previews do not render image zoom controls', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(
+                title: 'sample-image-preview.tiff',
+                previewState: PbAttachmentPreviewState.unavailable,
+              ),
+              fullscreen: false,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No preview available'), findsOneWidget);
+    expect(find.text('Fit'), findsNothing);
+    expect(find.byKey(const ValueKey('image-preview-viewport')), findsNothing);
+    expect(find.byKey(const ValueKey('image-preview-surface')), findsNothing);
+  });
+
+  testWidgets('paged preview child fills the v1 frame without extra shell padding', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'brief.pdf'),
+              fullscreen: false,
+              previewContentChild: const SizedBox.expand(key: ValueKey('pdf-child')),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final frameTopLeft = tester.getTopLeft(find.byKey(const ValueKey('file-preview-content-frame')));
+    final childTopLeft = tester.getTopLeft(find.byKey(const ValueKey('pdf-child')));
+
+    expect((childTopLeft.dx - frameTopLeft.dx).abs(), lessThanOrEqualTo(1));
+    expect((childTopLeft.dy - frameTopLeft.dy).abs(), lessThanOrEqualTo(1));
+  });
+
+  testWidgets('transcript preview child renders real transcript content through v1 typography surface', (tester) async {
+    const data = PbTranscriptPreviewData(
+      dateLabel: 'June 2, 2026',
+      detailLabel: 'Transcript   3:55p - 8 secs',
+      participants: [PbTranscriptPreviewParticipant(label: 'dinesh.daewar@timu.com', initials: 'DD')],
+      turns: [PbTranscriptPreviewTurn(timestamp: '00:00:00', speaker: 'dinesh.daewar@timu.com', text: 'Real transcript text.')],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: '2026-06-02.transcript'),
+              fullscreen: false,
+              previewContentChild: const PbTranscriptPreviewContent(data: data, fullscreen: false),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('June 2, 2026'), findsOneWidget);
+    expect(find.text('Real transcript text.'), findsOneWidget);
+    expect(find.text("Hi, I'm checking to see if the transcription works. I turned it on. Can you hear me?"), findsNothing);
+  });
+
+  testWidgets('meet transcript panel uses source transcript content instead of fallback child', (tester) async {
+    const data = PbTranscriptPreviewData(
+      dateLabel: 'June 2, 2026',
+      detailLabel: 'Transcript   1 min',
+      participants: [PbTranscriptPreviewParticipant(label: 'Jesse Park', initials: 'JP')],
+      turns: [PbTranscriptPreviewTurn(timestamp: '00:00:00', speaker: 'Jesse Park', text: 'Source transcript content.')],
+    );
+    final file = PbAttachmentListItemData.fromFileName(title: 'daily.transcript', path: 'transcripts/daily.transcript');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbMeetTranscriptPanel(
+              transcripts: [file],
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              filePreviewBuilder: (_) => const Text('Legacy transcript pane'),
+              filePreviewSourceBuilder: (_) => const PbFilePreviewSource(child: PbTranscriptPreviewContent(data: data, fullscreen: false)),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Legacy transcript pane'), findsNothing);
+    expect(find.text('Source transcript content.'), findsOneWidget);
+    expect(find.text("Hi, I'm checking to see if the transcription works. I turned it on. Can you hear me?"), findsNothing);
   });
 }

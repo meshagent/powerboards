@@ -33,6 +33,15 @@ void main() {
     expect(_resolved('June transcript', fileTypeKey: 'transcript').fileType, PbAttachmentFileType.transcript);
     expect(_resolved('Customer intake', fileTypeKey: 'widget').fileType, PbAttachmentFileType.widget);
   });
+
+  test('resolves broad v1 preview categories from normal file extensions', () {
+    expect(_resolved('photo.bmp').fileType, PbAttachmentFileType.image);
+    expect(_resolved('scan.tiff').fileType, PbAttachmentFileType.image);
+    expect(_resolved('clip.webm').fileType, PbAttachmentFileType.video);
+    expect(_resolved('config.toml').fileType, PbAttachmentFileType.code);
+    expect(_resolved('script.py').fileType, PbAttachmentFileType.code);
+    expect(_resolved('notes.md').fileType, PbAttachmentFileType.document);
+  });
 }
 
 PbResolvedAttachmentMetadata _resolved(String title, {String? fileTypeKey}) {
