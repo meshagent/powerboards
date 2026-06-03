@@ -1,7 +1,57 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshagent/meshagent.dart';
+import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
+import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
+
+class _NoopProtocolChannel extends ProtocolChannel {
+  @override
+  void dispose() {}
+
+  @override
+  Future<void> sendData(Uint8List data) async {}
+
+  @override
+  void start(void Function(Uint8List data) onDataReceived, {void Function()? onDone, void Function(Object? error)? onError}) {}
+}
+
+class _FakeChatClient extends agent_sessions.BaseChatClient {
+  @override
+  Future<void> sendAgentMessage(agent_sessions.AgentMessage message, {Uint8List? attachment, bool ignoreOffline = false}) async {}
+}
+
+class _FakeThreadStorageRepository extends agent_sessions.ThreadStorageRepository {
+  _FakeThreadStorageRepository(this._entries);
+
+  List<agent_sessions.ThreadListEntry> _entries;
+
+  void replaceEntries(List<agent_sessions.ThreadListEntry> entries) {
+    _entries = entries;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> open() async {}
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  List<agent_sessions.ThreadListEntry> entries() => List<agent_sessions.ThreadListEntry>.of(_entries);
+
+  @override
+  Future<void> addOrUpdateThread(agent_sessions.ThreadListEntry entry) async {}
+
+  @override
+  Future<void> deleteThread(String threadPath) async {}
+
+  @override
+  Future<void> renameThread(String threadPath, String name) async {}
+}
 
 void main() {
   Widget buildHarness({
@@ -44,6 +94,66 @@ void main() {
   Finder agentCardById(String id) {
     return find.byWidgetPredicate((widget) => widget is PbAgentCard && widget.data.id == id);
   }
+
+  testWidgets('desktop preview threads panel updates when watched storage changes', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final storage = _FakeThreadStorageRepository([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/greeting',
+        name: 'Greeting Chat2',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              height: 720,
+              child: PowerboardsDesktopPreviewThreadListHarness(
+                client: room,
+                threadListPath: 'dataset://agents/assistant/threads',
+                chatClientFactory: (_, _) => _FakeChatClient(),
+                threadStorageFactory: (_) => storage,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Agents'), findsOneWidget);
+    expect(find.text('Browse threads by selected agent.'), findsOneWidget);
+    expect(find.text('Threads'), findsOneWidget);
+    expect(find.text('Greeting Chat2'), findsOneWidget);
+    expect(find.text('Realtime Thread'), findsNothing);
+
+    storage.replaceEntries([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/realtime',
+        name: 'Realtime Thread',
+        createdAt: '2026-05-28T23:10:00.000Z',
+        modifiedAt: '2026-05-28T23:10:00.000Z',
+      ),
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/greeting',
+        name: 'Greeting Chat2',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+    ]);
+    await tester.pump();
+
+    expect(find.text('Realtime Thread'), findsOneWidget);
+    expect(find.text('Greeting Chat2'), findsOneWidget);
+  });
 
   testWidgets('agent list uses ids so duplicate titles stay independently selectable', (tester) async {
     final agents = const [

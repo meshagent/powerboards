@@ -41,32 +41,32 @@ PODS:
   - file_picker (0.0.1):
     - DKImagePickerController/PhotoGallery
     - Flutter
-  - Firebase/CoreOnly (12.13.0):
-    - FirebaseCore (~> 12.13.0)
-  - Firebase/Messaging (12.13.0):
+  - Firebase/CoreOnly (12.14.0):
+    - FirebaseCore (~> 12.14.0)
+  - Firebase/Messaging (12.14.0):
     - Firebase/CoreOnly
-    - FirebaseMessaging (~> 12.13.0)
-  - firebase_core (4.9.0):
-    - Firebase/CoreOnly (= 12.13.0)
+    - FirebaseMessaging (~> 12.14.0)
+  - firebase_core (4.10.0):
+    - Firebase/CoreOnly (= 12.14.0)
     - Flutter
   - firebase_messaging (16.2.2):
-    - Firebase/Messaging (= 12.13.0)
+    - Firebase/Messaging (= 12.14.0)
     - firebase_core
     - Flutter
-  - FirebaseCore (12.13.0):
-    - FirebaseCoreInternal (~> 12.13.0)
+  - FirebaseCore (12.14.0):
+    - FirebaseCoreInternal (~> 12.14.0)
     - GoogleUtilities/Environment (~> 8.1)
     - GoogleUtilities/Logger (~> 8.1)
-  - FirebaseCoreInternal (12.13.0):
+  - FirebaseCoreInternal (12.14.0):
     - "GoogleUtilities/NSData+zlib (~> 8.1)"
-  - FirebaseInstallations (12.13.0):
-    - FirebaseCore (~> 12.13.0)
+  - FirebaseInstallations (12.14.0):
+    - FirebaseCore (~> 12.14.0)
     - GoogleUtilities/Environment (~> 8.1)
     - GoogleUtilities/UserDefaults (~> 8.1)
     - PromisesObjC (~> 2.4)
-  - FirebaseMessaging (12.13.0):
-    - FirebaseCore (~> 12.13.0)
-    - FirebaseInstallations (~> 12.13.0)
+  - FirebaseMessaging (12.14.0):
+    - FirebaseCore (~> 12.14.0)
+    - FirebaseInstallations (~> 12.14.0)
     - GoogleDataTransport (~> 10.1)
     - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
     - GoogleUtilities/Environment (~> 8.1)
@@ -166,11 +166,11 @@ PODS:
   - SDWebImageWebPCoder (0.15.0):
     - libwebp (~> 1.0)
     - SDWebImage/Core (~> 5.17)
-  - Sentry/HybridSDK (8.58.2)
-  - sentry_flutter (9.20.0):
+  - Sentry/HybridSDK (8.58.3)
+  - sentry_flutter (9.21.0):
     - Flutter
     - FlutterMacOS
-    - Sentry/HybridSDK (= 8.58.2)
+    - Sentry/HybridSDK (= 8.58.3)
   - share_plus (0.0.1):
     - Flutter
   - shared_preferences_foundation (0.0.1):
@@ -311,13 +311,13 @@ SPEC CHECKSUMS:
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60
   file_picker: b159e0c068aef54932bb15dc9fd1571818edaf49
-  Firebase: 7d62445aeabdaea36f7d372f33052fed9a72514f
-  firebase_core: 8863b8f05ae77d045fbd3ce0b6e86a8ae12f443b
-  firebase_messaging: c0e27446616b16b45d4774ecceeb7d6520305779
-  FirebaseCore: 58905958aa00a061397a0fd759ae4b55bddb3576
-  FirebaseCoreInternal: 37bee58388fc6d183f0ab1b32d69ae44f2cf8aad
-  FirebaseInstallations: 134bde50e477628ded76070efdb12d515d53f948
-  FirebaseMessaging: 30564b85d2f81a96f9d312bd23acf8186ff092ae
+  Firebase: 7cc10425300768ec86292688af5cb228f0604bde
+  firebase_core: 059f6939d27b5644ea96ad8ad71a9a6e17db74f1
+  firebase_messaging: e37e2ba76c8fd8481b443ac0aa343549214040ba
+  FirebaseCore: 4939b340b9c598dc1f965d68f8fe57e630b65407
+  FirebaseCoreInternal: 090369a5fffd7423cf88006ab4d2ccc2173a8db9
+  FirebaseInstallations: 7cdc919e29dc54306edeffdbdc1eed1a40d7d1e7
+  FirebaseMessaging: 4803888ce3002188f24e19faa8d2326261538426
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_image_compress_common: ec1d45c362c9d30a3f6a0426c297f47c52007e3e
   flutter_js: 95929d4e146e8ceb1c8e1889d8c2065c5d840076
@@ -342,8 +342,8 @@ SPEC CHECKSUMS:
   record_ios: 26294aaa39e4bb7665b0fef78bdc23d723b432f2
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   SDWebImageWebPCoder: 0e06e365080397465cc73a7a9b472d8a3bd0f377
-  Sentry: de29b881e83bd91cf99a927f82f1fd86bfb39db2
-  sentry_flutter: aafdf112550e9550972852e71f44994bd4239254
+  Sentry: 108fdbb76299c4189af12246bf0308c09c278922
+  sentry_flutter: 980e0c8a15a07075f508f941653786ced138609b
   share_plus: 8b6f8b3447e494cca5317c8c3073de39b3600d1f
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6
   super_native_extensions: 4916b3c627a9c7fffdc48a23a9eca0b1ac228fa7

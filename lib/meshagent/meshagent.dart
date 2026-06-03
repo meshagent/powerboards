@@ -10,6 +10,8 @@ import "package:http/http.dart";
 import 'slug.dart';
 import "dart:convert";
 
+bool hasAgentMetadata(ServiceSpec service) => service.agents.isNotEmpty;
+
 bool isSupportedServiceType(ServiceSpec service) {
   final type = service.agents.firstOrNull?.annotations["meshagent.agent.type"];
   return type == "ChatBot" || type == "VoiceBot" || type == "MeetingTranscriber" || type == "Shell";
