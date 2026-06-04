@@ -20,10 +20,13 @@ import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 
 const _railGap = 16.0;
 const _compactControlWidth = 48.0;
@@ -34,6 +37,9 @@ const _mobileTranscriptionButtonMaxWidth = 260.0;
 const _mobileTranscriptionCompactThreshold = 110.0;
 const _mobileTranscriptionShortLabelThreshold = 148.0;
 const _desktopLobbyMaxWidth = 880.0;
+const _desktopV1MeetingTileRadius = PbRadii.large;
+const _desktopV1MeetingSmallTileRadius = PbRadii.large / 2;
+const _desktopV1MeetingSmallTileRadiusBreakpoint = 240.0;
 
 enum MeetingViewState { preview, joined }
 
@@ -130,51 +136,58 @@ class _MeetingViewState extends State<MeetingView> {
           return _voiceSessionMeetingBlockedState();
         }
 
+        final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
+        final devicePreview = DevicePreview(
+          desktopV1Style: usesDesktopUiPreview,
+          onJoin: ({required enableVideo, required enableAudio, required videoUnavailable, required audioUnavailable}) {
+            final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
+            final navController = Controller.ofType<NavController>(context);
+
+            if (videoChatConnection != null) {
+              videoChatConnection.setRoomFromDoc(
+                "",
+                widget.room,
+                "",
+                video: enableVideo,
+                audio: enableAudio,
+                videoUnavailable: videoUnavailable,
+                audioUnavailable: audioUnavailable,
+                agentID: null,
+              );
+            }
+
+            meetingViewController.enterMeeting();
+            navController.hideNav();
+          },
+          onCancel: widget.onCancel,
+        );
+
+        if (usesDesktopUiPreview) {
+          return devicePreview;
+        }
+
         return Align(
           alignment: Alignment.center,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: _desktopLobbyMaxWidth),
-            child: Padding(
-              padding: const .symmetric(horizontal: 20.0),
-              child: DevicePreview(
-                onJoin: ({required enableVideo, required enableAudio, required videoUnavailable, required audioUnavailable}) {
-                  final videoChatConnection = context.findAncestorStateOfType<VideoChatConnectionState>();
-                  final navController = Controller.ofType<NavController>(context);
-
-                  if (videoChatConnection != null) {
-                    videoChatConnection.setRoomFromDoc(
-                      "",
-                      widget.room,
-                      "",
-                      video: enableVideo,
-                      audio: enableAudio,
-                      videoUnavailable: videoUnavailable,
-                      audioUnavailable: audioUnavailable,
-                      agentID: null,
-                    );
-                  }
-
-                  meetingViewController.enterMeeting();
-                  navController.hideNav();
-                },
-                onCancel: widget.onCancel,
-              ),
-            ),
+            child: Padding(padding: const .symmetric(horizontal: 20.0), child: devicePreview),
           ),
         );
       } else if (meetingViewController.state == MeetingViewState.joined) {
         final room = VideoRoomModel.maybeOf(context)?.room;
         if (room == null) return const SizedBox.shrink();
+        final usesDesktopV1MeetingPadding = powerboardsUsesDesktopUiPreview(context);
 
         return Padding(
-          padding: const .all(20),
+          padding: usesDesktopV1MeetingPadding ? const .fromLTRB(20, 10, 20, 20) : const .all(20),
           child: VideoRoomParticipantsBuilder(
             room: room,
             builder: (context, participants) {
               return ControllerBuilder<ExpandParticipantController>(
                 controller: expandParticipantController,
                 builder: (context) {
-                  final isMobile = ResponsiveBreakpoints.of(context).isMobile;
+                  final usesDesktopV1MeetingStyle = powerboardsUsesDesktopUiPreview(context);
+                  final isMobile = !usesDesktopV1MeetingStyle && ResponsiveBreakpoints.of(context).isMobile;
                   final hasShare = participants.any(_participantHasActiveShare);
 
                   if (isMobile) {
@@ -182,10 +195,15 @@ class _MeetingViewState extends State<MeetingView> {
                   }
 
                   if (hasShare) {
-                    return _DesktopShareLayout(room: room, participants: participants);
+                    return _DesktopShareLayout(room: room, participants: participants, desktopV1Style: usesDesktopV1MeetingStyle);
                   }
 
-                  return ExpandableCameraGrid(participants: participants);
+                  return ExpandableCameraGrid(
+                    participants: participants,
+                    largeBorderRadius: usesDesktopV1MeetingStyle ? _desktopV1MeetingTileRadius : 8,
+                    smallBorderRadius: usesDesktopV1MeetingStyle ? _desktopV1MeetingSmallTileRadius : 8,
+                    smallBorderRadiusBreakpoint: usesDesktopV1MeetingStyle ? _desktopV1MeetingSmallTileRadiusBreakpoint : 0,
+                  );
                 },
               );
             },
@@ -209,10 +227,11 @@ class _MeetingViewState extends State<MeetingView> {
 }
 
 class _DesktopShareLayout extends StatelessWidget {
-  const _DesktopShareLayout({required this.room, required this.participants});
+  const _DesktopShareLayout({required this.room, required this.participants, this.desktopV1Style = false});
 
   final lk.Room room;
   final List<lk.Participant> participants;
+  final bool desktopV1Style;
 
   static const double _leftStripWidth = 250.0;
   static const double _topStripHeight = 100.0;
@@ -295,12 +314,24 @@ class _DesktopShareLayout extends StatelessWidget {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: ExpandableCameraGrid(participants: participants)),
+              Expanded(
+                child: ExpandableCameraGrid(
+                  participants: participants,
+                  largeBorderRadius: desktopV1Style ? _desktopV1MeetingTileRadius : 8,
+                  smallBorderRadius: desktopV1Style ? _desktopV1MeetingSmallTileRadius : 8,
+                  smallBorderRadiusBreakpoint: desktopV1Style ? _desktopV1MeetingSmallTileRadiusBreakpoint : 0,
+                ),
+              ),
               if (!expandController.hasExpanded) ...[
                 const SizedBox(width: _railGap),
                 SizedBox(
                   width: _leftStripWidth,
-                  child: CameraStrip(room: room, horizontal: false, participants: participants),
+                  child: CameraStrip(
+                    room: room,
+                    horizontal: false,
+                    participants: participants,
+                    borderRadius: desktopV1Style ? _desktopV1MeetingTileRadius : 8,
+                  ),
                 ),
               ],
             ],
@@ -313,11 +344,23 @@ class _DesktopShareLayout extends StatelessWidget {
             if (!expandController.hasExpanded) ...[
               SizedBox(
                 height: _topStripHeight,
-                child: CameraStrip(room: room, horizontal: true, participants: participants),
+                child: CameraStrip(
+                  room: room,
+                  horizontal: true,
+                  participants: participants,
+                  borderRadius: desktopV1Style ? _desktopV1MeetingTileRadius : 8,
+                ),
               ),
               const SizedBox(height: _railGap),
             ],
-            Expanded(child: ExpandableCameraGrid(participants: participants)),
+            Expanded(
+              child: ExpandableCameraGrid(
+                participants: participants,
+                largeBorderRadius: desktopV1Style ? _desktopV1MeetingTileRadius : 8,
+                smallBorderRadius: desktopV1Style ? _desktopV1MeetingSmallTileRadius : 8,
+                smallBorderRadiusBreakpoint: desktopV1Style ? _desktopV1MeetingSmallTileRadiusBreakpoint : 0,
+              ),
+            ),
           ],
         );
       },
@@ -326,11 +369,12 @@ class _DesktopShareLayout extends StatelessWidget {
 }
 
 class MeetingToolkits extends StatefulWidget {
-  const MeetingToolkits({super.key, required this.room, this.breakoutRoom = "", this.compact = false});
+  const MeetingToolkits({super.key, required this.room, this.breakoutRoom = "", this.compact = false, this.desktopV1Style = false});
 
   final RoomClient room;
   final String breakoutRoom;
   final bool compact;
+  final bool desktopV1Style;
 
   @override
   State createState() => _MeetingToolkitsState();
@@ -357,7 +401,9 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
   }
 
   void _showTranscriptionToast(String message) {
-    ShadToaster.maybeOf(context)?.show(ShadToast(description: Text(message), duration: const Duration(seconds: 3)));
+    ShadToaster.maybeOf(
+      context,
+    )?.show(powerboardsToast(title: 'Transcription', description: message, duration: const Duration(seconds: 3)));
   }
 
   String _transcriptionButtonLabel({required bool transcribing, required bool shortLabel}) {
@@ -386,6 +432,46 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
     }
   }
 
+  Widget _buildDesktopV1TranscriptionButton({
+    required ToolkitDescription? transcription,
+    required ToolDescription? startRecording,
+    required ToolDescription? stopRecording,
+    required bool transcribing,
+  }) {
+    final canToggle = transcription != null && ((transcribing && stopRecording != null) || (!transcribing && startRecording != null));
+    final tooltip = transcribing ? "Stop transcription" : "Start transcription";
+
+    return MeetV1ToolbarButton.secondary(
+      label: transcribing ? "Stop transcribing" : "Transcribe",
+      tooltip: canToggle ? tooltip : "Transcription unavailable",
+      iconAssetName: transcribing ? "captions-off" : "captions",
+      compact: widget.compact,
+      active: transcribing,
+      onPressed: !canToggle
+          ? null
+          : () async {
+              if (transcribing) {
+                await _invokeTranscriptionTool(
+                  transcription: transcription,
+                  toolName: stopRecording!.name,
+                  input: {"breakout_room": ""},
+                  successMessage: "Transcription stopped",
+                  showToast: widget.compact,
+                );
+                return;
+              }
+
+              await _invokeTranscriptionTool(
+                transcription: transcription,
+                toolName: startRecording!.name,
+                input: {"breakout_room": "", "path": "transcripts/meetings/${buildTranscriptFileName()}"},
+                successMessage: "Transcription started",
+                showToast: widget.compact,
+              );
+            },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -410,12 +496,20 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = ResponsiveBreakpoints.of(context).isMobile || _isLandscapePhoneViewport(context);
+    final isMobile = !widget.desktopV1Style && (ResponsiveBreakpoints.of(context).isMobile || _isLandscapePhoneViewport(context));
 
     return SignalBuilder(
       builder: (context, _) {
         if (!toolkits.state.isReady) {
-          return SizedBox();
+          return widget.desktopV1Style
+              ? MeetV1ToolbarButton.secondary(
+                  label: "Transcribe",
+                  tooltip: "Loading transcription",
+                  iconAssetName: "captions",
+                  compact: widget.compact,
+                  loading: true,
+                )
+              : SizedBox();
         }
         final transcription = toolkits.state.value!.firstWhereOrNull((x) => x.name == "transcription");
         final startRecording = transcription?.tools.firstWhereOrNull((x) => x.name == "start_transcription");
@@ -430,6 +524,15 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
         final useCompactPresentation = widget.compact || (isMobile && mobileButtonWidth <= _mobileTranscriptionCompactThreshold);
         final useShortLabel = isMobile && !useCompactPresentation && mobileButtonWidth <= _mobileTranscriptionShortLabelThreshold;
         final useCompressedPresentation = isMobile && (useCompactPresentation || useShortLabel);
+
+        if (widget.desktopV1Style) {
+          return _buildDesktopV1TranscriptionButton(
+            transcription: transcription,
+            startRecording: startRecording,
+            stopRecording: stopRecording,
+            transcribing: transcribing,
+          );
+        }
 
         return Wrap(
           spacing: 8,

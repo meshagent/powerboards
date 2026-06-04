@@ -8,6 +8,7 @@ import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_menu_row.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 lk.LocalTrackPublication<lk.LocalVideoTrack>? _voiceCameraPublication(lk.LocalParticipant? participant) {
@@ -288,7 +289,7 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
         widget.controller.pendingLocalMedia.setMicrophonePending(false);
       }
       widget.controller.pendingLocalMedia.setMicrophoneUnavailable(true);
-      toaster?.show(ShadToast.destructive(description: Text(_describeMicrophoneToggleError(error))));
+      toaster?.show(powerboardsToast(title: 'Device settings', description: _describeMicrophoneToggleError(error), destructive: true));
     } finally {
       if (mounted) {
         setState(() {
@@ -459,7 +460,7 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
         widget.controller.pendingLocalMedia.setCameraPending(false);
       }
       widget.controller.pendingLocalMedia.setCameraUnavailable(true);
-      toaster?.show(ShadToast.destructive(description: Text(_describeCameraToggleError(error))));
+      toaster?.show(powerboardsToast(title: 'Device settings', description: _describeCameraToggleError(error), destructive: true));
     } finally {
       if (mounted) {
         setState(() {

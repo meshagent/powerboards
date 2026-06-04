@@ -4,7 +4,7 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_heade
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 
 void main() {
-  Widget buildHarness({required bool threadMenuEnabled, String agentName = 'voice'}) {
+  Widget buildHarness({String agentName = 'voice', VoidCallback? onTitlePressed, VoidCallback? onOpenAllAgentsAndThreads}) {
     return MaterialApp(
       home: Scaffold(
         body: SizedBox(
@@ -12,9 +12,9 @@ void main() {
           child: PbThreadHeader(
             title: 'Audio session',
             agentName: agentName,
-            threads: const ['Planning'],
             selectedThreadTitle: 'Audio session',
-            threadMenuEnabled: threadMenuEnabled,
+            onTitlePressed: onTitlePressed,
+            onOpenAllAgentsAndThreads: onOpenAllAgentsAndThreads,
           ),
         ),
       ),
@@ -25,12 +25,15 @@ void main() {
     return find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'chevron-down');
   }
 
-  testWidgets('thread title hides chevron and menu when thread menu is disabled', (tester) async {
-    await tester.pumpWidget(buildHarness(threadMenuEnabled: false));
+  testWidgets('thread title opens agents and threads without thread menu chrome', (tester) async {
+    var openCount = 0;
+
+    await tester.pumpWidget(buildHarness(onOpenAllAgentsAndThreads: () => openCount++));
     await tester.pump();
 
     expect(find.text('Audio session'), findsOneWidget);
-    expect(find.text('with Voice'), findsOneWidget);
+    expect(find.text('Thread with'), findsOneWidget);
+    expect(find.text('Voice'), findsOneWidget);
     expect(find.text('Thread with Voice'), findsNothing);
     expect(chevronIcon(), findsNothing);
 
@@ -39,53 +42,27 @@ void main() {
 
     expect(find.text('Filter...'), findsNothing);
     expect(find.text('New Thread'), findsNothing);
+    expect(openCount, 1);
   });
 
-  testWidgets('thread title keeps chevron and menu when thread menu is enabled', (tester) async {
-    await tester.pumpWidget(buildHarness(threadMenuEnabled: true));
-    await tester.pump();
+  testWidgets('thread title falls back to title callback', (tester) async {
+    var titlePressCount = 0;
 
-    expect(find.text('Thread with Voice'), findsOneWidget);
-    expect(find.text('with Voice'), findsNothing);
-    expect(chevronIcon(), findsOneWidget);
+    await tester.pumpWidget(buildHarness(onTitlePressed: () => titlePressCount++));
+    await tester.pump();
 
     await tester.tap(find.text('Audio session'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Filter...'), findsOneWidget);
-    expect(find.text('New Thread'), findsOneWidget);
-  });
-
-  testWidgets('thread menu renders duplicate thread titles without duplicate keys', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 720,
-            child: PbThreadHeader(
-              title: 'Planning',
-              agentName: 'assistant',
-              threads: ['Planning', 'Planning'],
-              selectedThreadTitle: 'Planning',
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    await tester.tap(find.text('Planning'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Planning'), findsNWidgets(3));
-    expect(tester.takeException(), isNull);
+    expect(titlePressCount, 1);
   });
 
   testWidgets('thread meta capitalizes multi-word agent display names', (tester) async {
-    await tester.pumpWidget(buildHarness(threadMenuEnabled: true, agentName: 'research assistant'));
+    await tester.pumpWidget(buildHarness(agentName: 'research assistant'));
     await tester.pump();
 
-    expect(find.text('Thread with Research Assistant'), findsOneWidget);
-    expect(find.text('Thread with research assistant'), findsNothing);
+    expect(find.text('Thread with'), findsOneWidget);
+    expect(find.text('Research Assistant'), findsOneWidget);
+    expect(find.text('research assistant'), findsNothing);
   });
 }

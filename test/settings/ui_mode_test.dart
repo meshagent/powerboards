@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
@@ -22,36 +23,46 @@ void main() {
     });
 
     Future<bool> pumpPreviewFlagProbe(WidgetTester tester, {required Size size, required TargetPlatform platform}) async {
+      final previousPlatformOverride = debugDefaultTargetPlatformOverride;
       tester.view.devicePixelRatio = 1.0;
       tester.view.physicalSize = size;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
+      debugDefaultTargetPlatformOverride = platform;
 
       late bool usesDesktopUiPreview;
       powerboardsUiModeSignal.value = PowerboardsUiMode.v1;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(platform: platform),
-          home: powerboardsResponsiveBreakpoints(
-            child: Builder(
-              builder: (context) {
-                usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
-                return const SizedBox.shrink();
-              },
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(platform: platform),
+            home: powerboardsResponsiveBreakpoints(
+              child: Builder(
+                builder: (context) {
+                  usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
+                  return const SizedBox.shrink();
+                },
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      return usesDesktopUiPreview;
+        return usesDesktopUiPreview;
+      } finally {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        debugDefaultTargetPlatformOverride = previousPlatformOverride;
+      }
     }
 
-    testWidgets('stays off for narrow desktop/mobile-adaptive widths', (tester) async {
+    testWidgets('stays on for narrow desktop widths', (tester) async {
       final usesDesktopUiPreview = await pumpPreviewFlagProbe(tester, size: const Size(390, 844), platform: TargetPlatform.macOS);
+
+      expect(usesDesktopUiPreview, isTrue);
+    });
+
+    testWidgets('stays off for narrow native mobile widths', (tester) async {
+      final usesDesktopUiPreview = await pumpPreviewFlagProbe(tester, size: const Size(390, 844), platform: TargetPlatform.iOS);
 
       expect(usesDesktopUiPreview, isFalse);
     });

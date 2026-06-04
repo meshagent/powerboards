@@ -9,6 +9,7 @@ import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart' as dev;
 import 'package:powerboards/theme/theme.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 
 import 'package:powerboards/meshagent/meshagent.dart';
 
@@ -444,9 +445,10 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
         if (widget.manifest.agents.any((agent) => agent.annotations['meshagent.agent.schedule'] != null)) {
           if (mounted) {
             ShadToaster.of(context).show(
-              ShadToast(
-                title: Text('Unable to check for existing scheduled tasks'),
-                description: Text('you may not have permission to modify scheduled tasks'),
+              powerboardsToast(
+                title: 'Unable to check for existing scheduled tasks',
+                description: 'You may not have permission to modify scheduled tasks.',
+                destructive: true,
               ),
             );
           }
@@ -602,9 +604,10 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
         } catch (_) {
           if (mounted) {
             ShadToaster.of(context).show(
-              ShadToast(
-                title: Text('Unable to delete existing scheduled tasks'),
-                description: Text('you may not have permission to modify scheduled tasks'),
+              powerboardsToast(
+                title: 'Unable to delete existing scheduled tasks',
+                description: 'You may not have permission to modify scheduled tasks.',
+                destructive: true,
               ),
             );
           }

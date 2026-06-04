@@ -1,11 +1,18 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_menu_row.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
@@ -17,6 +24,24 @@ const String _defaultDeviceLabelPrefix = 'Default - ';
 const String _builtInDeviceLabelSuffix = ' (Built-in)';
 const String _disabledDeviceDescription = 'Check your device settings';
 const List<String> _builtInDeviceLabelPrefixes = ['macbook ', 'built-in ', 'internal '];
+const double _meetDeviceDialogOverlayBlur = 14;
+const double _meetDeviceDialogOverlayAlpha = 0.52;
+const double _meetDeviceDialogMaxWidth = 425;
+const double _meetDeviceDialogMaxHeight = 700;
+const double _meetDeviceDialogViewportVerticalInset = 120;
+const double _meetDeviceDialogOuterPadding = 24;
+const double _meetDeviceDialogInnerPadding = 30;
+const double _meetDeviceDialogRadius = 18;
+const double _meetDeviceListOuterGap = 36;
+const double _meetDeviceDoneButtonHeight = 40;
+const double _meetDeviceRowHeight = 68;
+const double _meetDeviceRowVerticalPadding = 11;
+const double _meetDeviceRowStartPadding = 21;
+const double _meetDeviceRowEndPadding = 12;
+const double _meetDeviceIconFrameSize = 28;
+const double _meetDeviceIconSize = 28;
+const double _meetDeviceIconGap = 23;
+const double _meetDeviceCopyGap = 4.5;
 
 bool _isDefaultAliasDevice(MediaDevice device) {
   return device.deviceId == 'default' || device.label.trim().startsWith(_defaultDeviceLabelPrefix);
@@ -128,6 +153,7 @@ class ChangeDeviceButton extends StatefulWidget {
     this.selectedAudioOutputDeviceId,
     this.cameraUnavailable = false,
     this.microphoneUnavailable = false,
+    this.desktopV1Style = false,
   });
 
   final String? kind;
@@ -142,6 +168,7 @@ class ChangeDeviceButton extends StatefulWidget {
   final String? Function()? selectedAudioOutputDeviceId;
   final bool cameraUnavailable;
   final bool microphoneUnavailable;
+  final bool desktopV1Style;
 
   @override
   ChangeDeviceButtonState createState() => ChangeDeviceButtonState();
@@ -306,6 +333,41 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
       return;
     }
 
+    if (widget.desktopV1Style && !powerboardsUsesNativeMobileDialogLayout(context)) {
+      await dismissBackgroundKeyboardBeforeAdaptiveSurface(context);
+      if (!mounted) {
+        return;
+      }
+
+      await showGeneralDialog<void>(
+        context: context,
+        barrierColor: Colors.transparent,
+        barrierDismissible: true,
+        barrierLabel: 'Device settings',
+        transitionDuration: const Duration(milliseconds: 160),
+        pageBuilder: (dialogContext, _, _) {
+          return _ChangeDeviceDialog(
+            boundaryContext: dialogContext,
+            kind: widget.kind,
+            preferences: _preferences,
+            initialDevices: List<MediaDevice>.of(_devices),
+            onChangeVideoInput: onChangeVideoInput,
+            onChangeAudioInput: onChangeAudioInput,
+            onChangeAudioOutput: onChangeAudioOutput,
+            selectedVideoInputDeviceId: widget.selectedVideoInputDeviceId,
+            selectedAudioInputDeviceId: widget.selectedAudioInputDeviceId,
+            selectedAudioOutputDeviceId: widget.selectedAudioOutputDeviceId,
+            cameraUnavailable: widget.cameraUnavailable,
+            microphoneUnavailable: widget.microphoneUnavailable,
+            syncUnavailableSelections: _syncUnavailableSelections,
+            dialogConstraints: _desktopDialogConstraints,
+            desktopV1Style: true,
+          );
+        },
+      );
+      return;
+    }
+
     await showPowerboardsFlowDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -324,6 +386,7 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
           microphoneUnavailable: widget.microphoneUnavailable,
           syncUnavailableSelections: _syncUnavailableSelections,
           dialogConstraints: _desktopDialogConstraints,
+          desktopV1Style: false,
         );
       },
     );
@@ -513,7 +576,9 @@ class ChangeDeviceButtonState extends State<ChangeDeviceButton> {
       if (!mounted) {
         return;
       }
-      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeDeviceSwitchError(label, error))));
+      ShadToaster.maybeOf(
+        context,
+      )?.show(powerboardsToast(title: 'Device settings', description: _describeDeviceSwitchError(label, error), destructive: true));
       debugPrint('Unable to switch device ${device.deviceId}: $error');
     }
   }
@@ -535,6 +600,7 @@ class _ChangeDeviceDialog extends StatefulWidget {
     this.selectedAudioOutputDeviceId,
     this.cameraUnavailable = false,
     this.microphoneUnavailable = false,
+    this.desktopV1Style = false,
   });
 
   final BuildContext boundaryContext;
@@ -551,6 +617,7 @@ class _ChangeDeviceDialog extends StatefulWidget {
   final String? Function()? selectedAudioOutputDeviceId;
   final bool cameraUnavailable;
   final bool microphoneUnavailable;
+  final bool desktopV1Style;
 
   @override
   State<_ChangeDeviceDialog> createState() => _ChangeDeviceDialogState();
@@ -610,6 +677,34 @@ class _ChangeDeviceDialogState extends State<_ChangeDeviceDialog> {
     final selectedVideoDevice = _selectedMenuDevice(videoInputs, videoInput);
     final selectedAudioInputDevice = _selectedMenuDevice(audioInputs, audioInput);
     final selectedAudioOutputDevice = _selectedMenuDevice(audioOutputs, audioOutput);
+
+    if (widget.desktopV1Style && !usesMobileDialogLayout) {
+      return _V1MeetDeviceSettingsDialog(
+        boundaryContext: widget.boundaryContext,
+        kind: widget.kind,
+        selectedVideoDevice: selectedVideoDevice,
+        selectedAudioInputDevice: selectedAudioInputDevice,
+        selectedAudioOutputDevice: selectedAudioOutputDevice,
+        visibleVideoInputs: visibleVideoInputs,
+        visibleAudioInputs: visibleAudioInputs,
+        visibleAudioOutputs: visibleAudioOutputs,
+        cameraUnavailable: widget.cameraUnavailable,
+        microphoneUnavailable: widget.microphoneUnavailable,
+        onChangeVideoInput: (device) async {
+          await widget.onChangeVideoInput(device);
+          setState(() {});
+        },
+        onChangeAudioInput: (device) async {
+          await widget.onChangeAudioInput(device);
+          setState(() {});
+        },
+        onChangeAudioOutput: (device) async {
+          await widget.onChangeAudioOutput(device);
+          setState(() {});
+        },
+        onClose: () => Navigator.of(context).pop(),
+      );
+    }
 
     Widget rowSeparator() => Divider(height: 1, color: ShadTheme.of(context).colorScheme.border);
 
@@ -847,7 +942,432 @@ class _DeviceSettingsRowState extends State<_DeviceSettingsRow> {
       if (!mounted) {
         return;
       }
-      ShadToaster.maybeOf(context)?.show(ShadToast.destructive(description: Text(_describeDeviceSwitchError(widget.label, error))));
+      ShadToaster.maybeOf(
+        context,
+      )?.show(powerboardsToast(title: 'Device settings', description: _describeDeviceSwitchError(widget.label, error), destructive: true));
+      debugPrint('Unable to switch device ${device.deviceId}: $error');
+    }
+  }
+}
+
+class _V1MeetDeviceSettingsDialog extends StatelessWidget {
+  const _V1MeetDeviceSettingsDialog({
+    required this.boundaryContext,
+    required this.kind,
+    required this.selectedVideoDevice,
+    required this.selectedAudioInputDevice,
+    required this.selectedAudioOutputDevice,
+    required this.visibleVideoInputs,
+    required this.visibleAudioInputs,
+    required this.visibleAudioOutputs,
+    required this.cameraUnavailable,
+    required this.microphoneUnavailable,
+    required this.onChangeVideoInput,
+    required this.onChangeAudioInput,
+    required this.onChangeAudioOutput,
+    required this.onClose,
+  });
+
+  final BuildContext boundaryContext;
+  final String? kind;
+  final MediaDevice? selectedVideoDevice;
+  final MediaDevice? selectedAudioInputDevice;
+  final MediaDevice? selectedAudioOutputDevice;
+  final List<MediaDevice> visibleVideoInputs;
+  final List<MediaDevice> visibleAudioInputs;
+  final List<MediaDevice> visibleAudioOutputs;
+  final bool cameraUnavailable;
+  final bool microphoneUnavailable;
+  final Future<void> Function(MediaDevice) onChangeVideoInput;
+  final Future<void> Function(MediaDevice) onChangeAudioInput;
+  final Future<void> Function(MediaDevice) onChangeAudioOutput;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final viewport = MediaQuery.sizeOf(context);
+    final dialogMaxHeight = math.min(_meetDeviceDialogMaxHeight, viewport.height - _meetDeviceDialogViewportVerticalInset);
+    final rows = <Widget>[
+      if (kind == null || kind == "camera")
+        _V1MeetDeviceRow(
+          boundaryContext: boundaryContext,
+          label: "Camera",
+          devices: visibleVideoInputs,
+          selectedDevice: selectedVideoDevice,
+          onChange: onChangeVideoInput,
+          iconAssetName: "video",
+          disabledIconAssetName: "video-off",
+          disabledLabel: "Camera disabled",
+          disabledDescription: _disabledDeviceDescription,
+          unavailable: cameraUnavailable,
+        ),
+      if (kind == null || kind == "mic")
+        _V1MeetDeviceRow(
+          boundaryContext: boundaryContext,
+          label: "Microphone",
+          devices: visibleAudioInputs,
+          selectedDevice: selectedAudioInputDevice,
+          onChange: onChangeAudioInput,
+          iconAssetName: "mic",
+          disabledIconAssetName: "mic-off",
+          disabledLabel: "Microphone disabled",
+          disabledDescription: _disabledDeviceDescription,
+          unavailable: microphoneUnavailable,
+        ),
+      if ((kIsWeb && kind == null) || kind == "mic")
+        _V1MeetDeviceRow(
+          boundaryContext: boundaryContext,
+          label: "Speakers",
+          devices: visibleAudioOutputs,
+          selectedDevice: selectedAudioOutputDevice,
+          onChange: onChangeAudioOutput,
+          iconAssetName: "volume-2",
+          disabledIconAssetName: "volume-off",
+          disabledLabel: "Speakers disabled",
+          disabledDescription: _disabledDeviceDescription,
+        ),
+    ];
+
+    return Material(
+      color: Colors.transparent,
+      child: SizedBox.expand(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onClose,
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: _meetDeviceDialogOverlayBlur, sigmaY: _meetDeviceDialogOverlayBlur),
+                  child: Container(color: PbColors.surfaceRailActive.withValues(alpha: _meetDeviceDialogOverlayAlpha)),
+                ),
+              ),
+            ),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(_meetDeviceDialogOuterPadding),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: _meetDeviceDialogMaxWidth, maxHeight: math.max(0.0, dialogMaxHeight)),
+                  child: Container(
+                    padding: const EdgeInsets.all(_meetDeviceDialogInnerPadding),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(_meetDeviceDialogRadius),
+                      border: Border.all(color: PbColors.borderSoft),
+                      gradient: const LinearGradient(
+                        colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                      boxShadow: const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 80, offset: Offset(0, 30))],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _V1MeetDeviceDialogHeader(onClose: onClose),
+                        const SizedBox(height: _meetDeviceListOuterGap),
+                        _V1MeetDeviceList(rows: rows),
+                        const SizedBox(height: _meetDeviceListOuterGap),
+                        SizedBox(
+                          width: double.infinity,
+                          child: PbButton(
+                            label: 'Done',
+                            variant: PbButtonVariant.primary,
+                            height: _meetDeviceDoneButtonHeight,
+                            backgroundColor: PbColors.meetCameraSurface,
+                            pressedBackgroundColor: PbColors.meetCameraSurface,
+                            borderColor: PbColors.meetCameraSurface,
+                            pressedBorderColor: PbColors.meetCameraSurface,
+                            foregroundColor: PbColors.textInverse,
+                            onPressed: onClose,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _V1MeetDeviceDialogHeader extends StatelessWidget {
+  const _V1MeetDeviceDialogHeader({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Device settings', style: PowerboardsTypography.h2),
+              const SizedBox(height: 8),
+              Text(
+                'Choose your camera, microphone, and speakers.',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: PowerboardsTypography.meta.copyWith(color: PbColors.textMuted),
+              ),
+            ],
+          ),
+        ),
+        Transform.translate(
+          offset: const Offset(6, -6),
+          child: _V1MeetDeviceDialogCloseButton(onPressed: onClose),
+        ),
+      ],
+    );
+  }
+}
+
+class _V1MeetDeviceDialogCloseButton extends StatefulWidget {
+  const _V1MeetDeviceDialogCloseButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_V1MeetDeviceDialogCloseButton> createState() => _V1MeetDeviceDialogCloseButtonState();
+}
+
+class _V1MeetDeviceDialogCloseButtonState extends State<_V1MeetDeviceDialogCloseButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onPressed,
+        child: SizedBox(
+          width: 38,
+          height: 38,
+          child: Center(
+            child: Opacity(
+              opacity: _hovered ? 1 : 0.3,
+              child: const PbSvgIcon(assetName: 'x', size: 18, color: PbColors.textMuted),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _V1MeetDeviceList extends StatelessWidget {
+  const _V1MeetDeviceList({required this.rows});
+
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (var index = 0; index < rows.length; index++) _V1MeetDeviceRowBoundary(last: index == rows.length - 1, child: rows[index]),
+      ],
+    );
+  }
+}
+
+class _V1MeetDeviceRowBoundary extends StatelessWidget {
+  const _V1MeetDeviceRowBoundary({required this.last, required this.child});
+
+  final bool last;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: last ? BorderSide.none : const BorderSide(color: PbColors.borderSoft)),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _V1MeetDeviceRow extends StatefulWidget {
+  const _V1MeetDeviceRow({
+    required this.boundaryContext,
+    required this.label,
+    required this.devices,
+    required this.selectedDevice,
+    required this.onChange,
+    required this.iconAssetName,
+    required this.disabledIconAssetName,
+    required this.disabledLabel,
+    required this.disabledDescription,
+    this.unavailable = false,
+  });
+
+  final BuildContext boundaryContext;
+  final String label;
+  final List<MediaDevice> devices;
+  final MediaDevice? selectedDevice;
+  final Future<void> Function(MediaDevice) onChange;
+  final String iconAssetName;
+  final String disabledIconAssetName;
+  final String disabledLabel;
+  final String disabledDescription;
+  final bool unavailable;
+
+  @override
+  State<_V1MeetDeviceRow> createState() => _V1MeetDeviceRowState();
+}
+
+class _V1MeetDeviceRowState extends State<_V1MeetDeviceRow> {
+  static const BoxConstraints _menuConstraints = BoxConstraints(minWidth: 260, maxWidth: 420);
+
+  final ShadContextMenuController _controller = ShadContextMenuController();
+  bool _hovered = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = widget.selectedDevice == null || widget.unavailable;
+    final hasOptions = !disabled && widget.devices.isNotEmpty;
+    final title = disabled ? widget.disabledLabel : widget.label;
+    final subtitle = disabled ? widget.disabledDescription : _deviceLabel(widget.selectedDevice, widget.label);
+    final iconAssetName = disabled ? widget.disabledIconAssetName : widget.iconAssetName;
+    final content = _buildRowContent(
+      disabled: disabled,
+      hasOptions: hasOptions,
+      title: title,
+      subtitle: subtitle,
+      iconAssetName: iconAssetName,
+    );
+
+    if (!hasOptions) {
+      return content;
+    }
+
+    return AdaptiveShadContextMenu(
+      controller: _controller,
+      boundaryContext: widget.boundaryContext,
+      constraints: _menuConstraints,
+      estimatedMenuWidth: _menuConstraints.maxWidth,
+      estimatedMenuHeight: widget.devices.length * 44 + 8,
+      horizontalPosition: ShadMenuHorizontalPosition.right,
+      items: [
+        for (final device in widget.devices)
+          ShadContextMenuItem(
+            height: 44,
+            onPressed: () => unawaited(_runDeviceChange(device)),
+            trailing: device.deviceId == widget.selectedDevice?.deviceId ? const Icon(LucideIcons.check, size: 18) : null,
+            child: Text(_deviceLabel(device, widget.label), overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      child: content,
+    );
+  }
+
+  Widget _buildRowContent({
+    required bool disabled,
+    required bool hasOptions,
+    required String title,
+    required String subtitle,
+    required String iconAssetName,
+  }) {
+    final color = disabled ? PbColors.meetControlUnavailable : PbColors.textPrimary;
+    final subtitleColor = disabled ? PbColors.meetControlUnavailable : PbColors.textMuted;
+
+    return Semantics(
+      button: true,
+      label: title,
+      child: MouseRegion(
+        cursor: hasOptions ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: hasOptions ? (_) => setState(() => _hovered = true) : null,
+        onExit: hasOptions
+            ? (_) => setState(() {
+                _hovered = false;
+              })
+            : null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: hasOptions
+              ? () {
+                  if (_controller.isOpen) {
+                    _controller.hide();
+                  } else {
+                    _controller.show();
+                  }
+                }
+              : null,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: _meetDeviceRowHeight),
+            padding: const EdgeInsets.fromLTRB(
+              _meetDeviceRowStartPadding,
+              _meetDeviceRowVerticalPadding,
+              _meetDeviceRowEndPadding,
+              _meetDeviceRowVerticalPadding,
+            ),
+            color: _hovered ? PbColors.surfaceStateSelected : Colors.transparent,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: _meetDeviceIconFrameSize,
+                  height: _meetDeviceIconFrameSize,
+                  child: Center(
+                    child: PbSvgIcon(assetName: iconAssetName, size: _meetDeviceIconSize, color: color),
+                  ),
+                ),
+                const SizedBox(width: _meetDeviceIconGap),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: PowerboardsTypography.button.copyWith(color: color),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: _meetDeviceCopyGap),
+                      Text(
+                        subtitle,
+                        style: PowerboardsTypography.textXSmall.copyWith(height: 1.35, fontWeight: FontWeight.w500, color: subtitleColor),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                if (hasOptions) ...[const SizedBox(width: 12), const Icon(LucideIcons.chevronsUpDown, size: 18, color: PbColors.textMuted)],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _runDeviceChange(MediaDevice device) async {
+    try {
+      await widget.onChange(device);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ShadToaster.maybeOf(
+        context,
+      )?.show(powerboardsToast(title: 'Device settings', description: _describeDeviceSwitchError(widget.label, error), destructive: true));
       debugPrint('Unable to switch device ${device.deviceId}: $error');
     }
   }

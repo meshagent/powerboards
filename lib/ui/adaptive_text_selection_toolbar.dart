@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatf
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 
@@ -369,6 +370,6 @@ Future<void> _handlePasteFile(BuildContext context, VoidCallback? fallbackPasteA
   if (!handled && context.mounted) {
     ShadToaster.of(
       context,
-    ).show(const ShadToast.destructive(title: Text('No file on clipboard'), description: Text('Copy a file first, then try again.')));
+    ).show(powerboardsToast(title: 'No file on clipboard', description: 'Copy a file first, then try again.', destructive: true));
   }
 }

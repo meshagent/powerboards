@@ -11,6 +11,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
   bool showKeychain = true;
   bool showConsoleToggle = false;
   bool showShutdown = false;
+  bool meetActive = false;
   String consoleLabel = 'Developer console';
 
   VoidCallback? onRenamePressed;
@@ -32,6 +33,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
     required bool showKeychain,
     required bool showConsoleToggle,
     required bool showShutdown,
+    required bool meetActive,
     required String consoleLabel,
     VoidCallback? onRenamePressed,
     VoidCallback? onPermissionsPressed,
@@ -59,6 +61,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
         this.showKeychain != showKeychain ||
         this.showConsoleToggle != showConsoleToggle ||
         this.showShutdown != showShutdown ||
+        this.meetActive != meetActive ||
         this.consoleLabel != consoleLabel;
 
     this.showDestinations = showDestinations;
@@ -70,6 +73,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
     this.showKeychain = showKeychain;
     this.showConsoleToggle = showConsoleToggle;
     this.showShutdown = showShutdown;
+    this.meetActive = meetActive;
     this.consoleLabel = consoleLabel;
 
     if (changed) {
@@ -78,7 +82,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
   }
 
   void _notifyListenersSafely() {
-    if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.persistentCallbacks) {
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
       notifyListeners();
       return;
     }
@@ -91,11 +95,17 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
       _notificationScheduled = false;
       notifyListeners();
     });
+    SchedulerBinding.instance.scheduleFrame();
   }
 }
 
 final ValueNotifier<PreviewRoomRailMenuBridge?> previewRoomRailMenuBridgeListenable = ValueNotifier<PreviewRoomRailMenuBridge?>(null);
+final ValueNotifier<bool> previewFilePreviewFullscreenListenable = ValueNotifier<bool>(false);
+typedef PreviewRoomDisplayNameOverrideCallback =
+    void Function({required String projectId, required String roomName, required String displayName});
+
 VoidCallback? _previewRoomListRefreshCallback;
+PreviewRoomDisplayNameOverrideCallback? _previewRoomDisplayNameOverrideCallback;
 
 void exposePreviewRoomRailMenuBridge(PreviewRoomRailMenuBridge? bridge) {
   if (identical(previewRoomRailMenuBridgeListenable.value, bridge)) {
@@ -105,10 +115,38 @@ void exposePreviewRoomRailMenuBridge(PreviewRoomRailMenuBridge? bridge) {
   previewRoomRailMenuBridgeListenable.value = bridge;
 }
 
+void setPreviewFilePreviewFullscreen(bool fullscreen) {
+  if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _setPreviewFilePreviewFullscreenNow(fullscreen);
+    });
+    SchedulerBinding.instance.scheduleFrame();
+    return;
+  }
+
+  _setPreviewFilePreviewFullscreenNow(fullscreen);
+}
+
+void _setPreviewFilePreviewFullscreenNow(bool fullscreen) {
+  if (previewFilePreviewFullscreenListenable.value == fullscreen) {
+    return;
+  }
+
+  previewFilePreviewFullscreenListenable.value = fullscreen;
+}
+
 void registerPreviewRoomListRefreshCallback(VoidCallback? callback) {
   _previewRoomListRefreshCallback = callback;
 }
 
+void registerPreviewRoomDisplayNameOverrideCallback(PreviewRoomDisplayNameOverrideCallback? callback) {
+  _previewRoomDisplayNameOverrideCallback = callback;
+}
+
 void refreshPreviewRoomList() {
   _previewRoomListRefreshCallback?.call();
+}
+
+void overridePreviewRoomDisplayName({required String projectId, required String roomName, required String displayName}) {
+  _previewRoomDisplayNameOverrideCallback?.call(projectId: projectId, roomName: roomName, displayName: displayName);
 }

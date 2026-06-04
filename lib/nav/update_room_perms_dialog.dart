@@ -8,6 +8,7 @@ import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
 import 'package:powerboards/ui/powerboards_mobile_field_suggestion_menu.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/meshagent.dart';
@@ -733,7 +734,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
     final message = plural
         ? 'Ask a project admin to add these users to the project before inviting them to this room.'
         : 'Ask a project admin to add this user to the project before inviting them to this room.';
-    toaster.show(ShadToast.destructive(description: Text(message)));
+    toaster.show(powerboardsToast(title: 'Invite blocked', description: message, destructive: true));
   }
 
   void _addEmailToSelection(String email, {required Map<String, User> projectUsersMap, required Map<String, GrantSummary> roomGrants}) {

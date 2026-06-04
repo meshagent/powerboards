@@ -17,6 +17,7 @@ class PbSwitcherField extends StatefulWidget {
 }
 
 class _PbSwitcherFieldState extends State<PbSwitcherField> {
+  static const _chevronSize = 18.0;
   static const _chevronDuration = Duration(milliseconds: 180);
   bool _hovered = false;
   bool _pressed = false;
@@ -91,7 +92,7 @@ class _PbSwitcherFieldState extends State<PbSwitcherField> {
                   turns: widget.selected ? -0.5 : 0,
                   duration: _chevronDuration,
                   curve: Curves.easeOutCubic,
-                  child: const PbSvgIcon(assetName: 'chevron-down', size: 20, color: PbColors.textPrimary),
+                  child: const PbSvgIcon(assetName: 'chevron-down', size: _chevronSize, color: PbColors.textPrimary),
                 ),
               ],
             ),

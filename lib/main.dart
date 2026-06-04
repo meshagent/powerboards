@@ -32,26 +32,13 @@ import 'ui/link_listener.dart';
 import 'ui/meeting_view.dart';
 import 'ui/powerboards_adaptive_input.dart';
 import 'ui/powerboards_shad_dialog.dart';
+import 'ui/powerboards_toast_theme.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
 import 'updates/powerboards_desktop_update_banner.dart';
 import 'settings/ui_mode.dart';
 
 final uiRoot = GlobalKey();
-
-bool _isMobileToastLayout(BuildContext context) {
-  final mediaQuery = MediaQuery.maybeOf(context);
-  final screenWidth = mediaQuery?.size.width ?? 1024.0;
-  return screenWidth < 600;
-}
-
-ShadToastTheme? _powerboardsToastThemeForContext(BuildContext context) {
-  if (!_isMobileToastLayout(context)) {
-    return null;
-  }
-
-  return const ShadToastTheme(alignment: Alignment.topCenter);
-}
 
 ShadDecoration? _powerboardsDecorationThemeForContext(BuildContext context) {
   if (!powerboardsUsesMobileFieldLabelStyle(context)) {
@@ -266,8 +253,8 @@ class MyApp extends StatelessWidget {
         secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         outlineBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
-        primaryToastTheme: _powerboardsToastThemeForContext(context),
-        destructiveToastTheme: _powerboardsToastThemeForContext(context),
+        primaryToastTheme: powerboardsToastThemeForContext(context),
+        destructiveToastTheme: powerboardsToastThemeForContext(context, destructive: true),
         selectTheme: ShadSelectTheme(
           decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
         ),
@@ -399,8 +386,8 @@ class _RootProvidersState extends State<_RootProviders> {
         secondaryBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         destructiveBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
         outlineBadgeTheme: const ShadBadgeTheme(padding: powerboardsBadgePadding),
-        primaryToastTheme: _powerboardsToastThemeForContext(context),
-        destructiveToastTheme: _powerboardsToastThemeForContext(context),
+        primaryToastTheme: powerboardsToastThemeForContext(context),
+        destructiveToastTheme: powerboardsToastThemeForContext(context, destructive: true),
         selectTheme: ShadSelectTheme(
           decoration: ShadDecoration(border: ShadBorder.all(color: shadBorder, width: 1)),
         ),

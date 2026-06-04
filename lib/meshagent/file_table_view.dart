@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
@@ -9,30 +10,53 @@ import 'package:path/path.dart' as p;
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 
 import 'package:meshagent/document.dart';
 import 'package:meshagent/room_server_client.dart';
+import 'package:meshagent_flutter/document_connection_scope.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/conversation_descriptor.dart' as ma;
 import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
+import 'package:meshagent_flutter_shadcn/file_preview/image.dart';
+import 'package:meshagent_flutter_shadcn/file_preview/video.dart';
 import 'package:meshagent_flutter_shadcn/storage/pending_storage_deletes.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
+import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
+import 'package:powerboards/meshagent/file_attachment_index.dart';
+import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
+import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
+import 'package:powerboards/meshagent/v1_file_preview_source.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_side_pane.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_upload_progress_popover.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_files_page.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
+import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
+import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
@@ -48,10 +72,15 @@ import 'package:powerboards/ui/text_validators.dart';
 import 'file_upload.dart';
 
 const Set<String> editExtensions = {"md"};
+const Set<String> _v1EditableTextExtensions = {'txt', 'text', 'md', 'markdown', 'mdown', 'mkdn', 'rst', 'log', 'csv', 'tsv'};
 const String placeholderFileName = ".placeholder";
 const double filePaneTableHeaderHeight = 48;
 
 bool _usesAdaptiveMobileLayout(BuildContext context) {
+  if (powerboardsUsesDesktopUiPreview(context)) {
+    return false;
+  }
+
   return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
 }
 
@@ -59,9 +88,602 @@ String _displayFileName(String fileName) {
   return formatTranscriptFileNameForDisplay(fileName);
 }
 
+const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
+const int _v1RecentlyOpenedFilesLimit = 7;
+const Duration _v1DeleteProcessingStep = Duration(milliseconds: 650);
+const Duration _v1SaveProcessingStep = Duration(milliseconds: 850);
+const Duration _downloadArchiveCleanupDelay = Duration(minutes: 5);
+const Offset _uploadProgressPopoverOffset = Offset(20, -20);
+
+const Map<String, String> _powerboardsV1FileTypeKeysByExtension = {
+  'thread': 'thread',
+  'transcript': 'transcript',
+  'widget': 'widget',
+  'document': 'document',
+  'presentation': 'presentation',
+  'gallery': 'image',
+  'form': 'document',
+};
+
+@visibleForTesting
+String? powerboardsV1FileTypeKeyForPath(String path) {
+  final extension = p.extension(path).replaceFirst('.', '').toLowerCase();
+  if (extension.isEmpty) {
+    return null;
+  }
+
+  return _powerboardsV1FileTypeKeysByExtension[extension];
+}
+
+class _V1TranscriptDocumentPreview extends StatelessWidget {
+  const _V1TranscriptDocumentPreview({required this.room, required this.path, required this.file, required this.fullscreen});
+
+  final RoomClient room;
+  final String path;
+  final PbAttachmentListItemData file;
+  final bool fullscreen;
+
+  @override
+  Widget build(BuildContext context) {
+    return DocumentConnectionScope(
+      room: room,
+      path: path,
+      builder: (context, document, error) {
+        if (document == null) {
+          if (error != null) {
+            return _v1PreviewStatus(file, 'No preview available');
+          }
+
+          return _v1PreviewStatus(file, null);
+        }
+
+        return ChangeNotifierBuilder(
+          source: document,
+          builder: (context) {
+            final segments = document.root.getElementsByTagName('segment');
+            return PbTranscriptPreviewContent(
+              data: _v1TranscriptDataFromSegments(context, segments),
+              fullscreen: fullscreen,
+              emptyStateFile: file,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _V1TextTranscriptPreview extends StatefulWidget {
+  const _V1TextTranscriptPreview({
+    required this.room,
+    required this.path,
+    required this.file,
+    required this.title,
+    required this.fullscreen,
+  });
+
+  final RoomClient room;
+  final String path;
+  final PbAttachmentListItemData file;
+  final String title;
+  final bool fullscreen;
+
+  @override
+  State<_V1TextTranscriptPreview> createState() => _V1TextTranscriptPreviewState();
+}
+
+class _V1TextTranscriptPreviewState extends State<_V1TextTranscriptPreview> {
+  late Future<String> _textFuture = _loadText();
+
+  @override
+  void didUpdateWidget(covariant _V1TextTranscriptPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.room != widget.room || oldWidget.path != widget.path) {
+      _textFuture = _loadText();
+    }
+  }
+
+  Future<String> _loadText() async {
+    final content = await widget.room.storage.download(widget.path);
+    return utf8.decode(content.data, allowMalformed: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _textFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _v1PreviewStatus(widget.file, 'No preview available');
+        }
+
+        final text = snapshot.data;
+        if (text == null) {
+          return _v1PreviewStatus(widget.file, null);
+        }
+
+        return PbTranscriptPreviewContent(
+          data: _v1TranscriptDataFromText(context, text, title: widget.title),
+          fullscreen: widget.fullscreen,
+          emptyStateFile: widget.file,
+        );
+      },
+    );
+  }
+}
+
+Widget _v1PreviewStatus(PbAttachmentListItemData file, String? message) {
+  if (message == null) {
+    return const ColoredBox(
+      color: PbColors.surfacePanel,
+      child: Center(child: CircularProgressIndicator(color: PbColors.textSubtle)),
+    );
+  }
+
+  return ColoredBox(
+    color: PbColors.surfacePanel,
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: PbFilePreviewStateCard(file: file, state: PbAttachmentPreviewState.unavailable, label: message),
+      ),
+    ),
+  );
+}
+
+class _V1TranscriptMeta {
+  const _V1TranscriptMeta({required this.startTime, required this.endTime, required this.participants});
+
+  final DateTime? startTime;
+  final DateTime? endTime;
+  final List<PbTranscriptPreviewParticipant> participants;
+
+  Duration? get duration {
+    final start = startTime;
+    final end = endTime;
+    if (start == null || end == null) {
+      return null;
+    }
+
+    return end.difference(start);
+  }
+}
+
+PbTranscriptPreviewData _v1TranscriptDataFromSegments(BuildContext context, List<MeshElement> segments) {
+  final meta = _v1TranscriptMetaFromSegments(segments);
+  final turns = <PbTranscriptPreviewTurn>[];
+
+  for (final segment in segments) {
+    final text = _v1AttributeString(segment, 'text')?.trim();
+    if (text == null || text.isEmpty) {
+      continue;
+    }
+
+    final participant = _v1TranscriptParticipantForSegment(segment);
+    final segmentTime = _v1TryParseSegmentTime(segment);
+    final elapsed = segmentTime != null && meta.startTime != null ? segmentTime.difference(meta.startTime!) : Duration.zero;
+
+    turns.add(
+      PbTranscriptPreviewTurn(timestamp: _v1FormatTranscriptTimecode(elapsed), speaker: participant?.label ?? 'Speaker', text: text),
+    );
+  }
+
+  return PbTranscriptPreviewData(
+    dateLabel: _v1FormatTranscriptHeaderDate(context, meta.startTime) ?? 'Transcript',
+    detailLabel: _v1FormatTranscriptDetail(context, meta),
+    participants: meta.participants,
+    turns: turns,
+  );
+}
+
+_V1TranscriptMeta _v1TranscriptMetaFromSegments(List<MeshElement> segments) {
+  DateTime? first;
+  DateTime? last;
+  final participantsByLabel = <String, PbTranscriptPreviewParticipant>{};
+
+  for (final segment in segments) {
+    final parsed = _v1TryParseSegmentTime(segment);
+    if (parsed != null) {
+      first ??= parsed;
+      last = parsed;
+    }
+
+    final participant = _v1TranscriptParticipantForSegment(segment);
+    if (participant != null) {
+      participantsByLabel.putIfAbsent(participant.label, () => participant);
+    }
+  }
+
+  return _V1TranscriptMeta(startTime: first, endTime: last, participants: participantsByLabel.values.toList(growable: false));
+}
+
+DateTime? _v1TryParseSegmentTime(MeshElement segment) {
+  final value = _v1AttributeString(segment, 'time');
+  if (value == null || value.trim().isEmpty) {
+    return null;
+  }
+
+  return DateTime.tryParse(value);
+}
+
+PbTranscriptPreviewParticipant? _v1TranscriptParticipantForSegment(MeshElement segment) {
+  final label = _v1AttributeString(segment, 'participant_name')?.trim();
+  if (label == null || label.isEmpty) {
+    return null;
+  }
+
+  final role = _v1AttributeString(segment, 'participant_role')?.trim().toLowerCase();
+  return _v1TranscriptParticipant(label: label, role: role);
+}
+
+String? _v1AttributeString(MeshElement element, String name) {
+  final value = element.getAttribute(name);
+  return value is String ? value : null;
+}
+
+PbTranscriptPreviewData _v1TranscriptDataFromText(BuildContext context, String text, {required String title}) {
+  final cues = _v1ParseCaptionCues(text);
+  final participantsByLabel = <String, PbTranscriptPreviewParticipant>{};
+  final turns = <PbTranscriptPreviewTurn>[];
+
+  Duration? lastCueStart;
+  for (final cue in cues) {
+    final speaker = cue.speaker ?? 'Transcript';
+    participantsByLabel.putIfAbsent(speaker, () => _v1TranscriptParticipant(label: speaker));
+    lastCueStart = cue.start ?? lastCueStart;
+    turns.add(
+      PbTranscriptPreviewTurn(timestamp: _v1FormatTranscriptTimecode(cue.start ?? Duration.zero), speaker: speaker, text: cue.text),
+    );
+  }
+
+  final duration = lastCueStart == null ? null : lastCueStart + const Duration(seconds: 1);
+  final detailParts = <String>['Transcript'];
+  final durationLabel = _v1FormatTranscriptDuration(duration);
+  if (durationLabel != null) {
+    detailParts.add(durationLabel);
+  }
+
+  return PbTranscriptPreviewData(
+    dateLabel: title.trim().isEmpty ? 'Transcript' : title.trim(),
+    detailLabel: detailParts.join('   '),
+    participants: participantsByLabel.values.toList(growable: false),
+    turns: turns,
+  );
+}
+
+class _V1CaptionCue {
+  const _V1CaptionCue({required this.start, required this.speaker, required this.text});
+
+  final Duration? start;
+  final String? speaker;
+  final String text;
+}
+
+List<_V1CaptionCue> _v1ParseCaptionCues(String text) {
+  final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  final blocks = normalized.split(RegExp(r'\n\s*\n'));
+  final cues = <_V1CaptionCue>[];
+
+  for (final block in blocks) {
+    final lines = block
+        .split('\n')
+        .map((line) => line.trimRight())
+        .where((line) => line.trim().isNotEmpty && line.trim() != 'WEBVTT')
+        .toList(growable: false);
+    final timeLineIndex = lines.indexWhere((line) => line.contains('-->'));
+    if (timeLineIndex < 0 || timeLineIndex == lines.length - 1) {
+      continue;
+    }
+
+    final start = _v1ParseCueTimestamp(lines[timeLineIndex].split('-->').first.trim());
+    final rawCueText = lines.skip(timeLineIndex + 1).join('\n').trim();
+    final cueText = rawCueText.replaceAll(RegExp(r'<[^>]+>'), '').trim();
+    if (cueText.isEmpty) {
+      continue;
+    }
+
+    final parsed = _v1ExtractCaptionSpeaker(cueText);
+    cues.add(_V1CaptionCue(start: start, speaker: parsed.$1, text: parsed.$2));
+  }
+
+  if (cues.isNotEmpty) {
+    return cues;
+  }
+
+  final fallbackText = normalized.trim();
+  return fallbackText.isEmpty
+      ? const <_V1CaptionCue>[]
+      : <_V1CaptionCue>[_V1CaptionCue(start: Duration.zero, speaker: null, text: fallbackText)];
+}
+
+Duration? _v1ParseCueTimestamp(String value) {
+  final timestamp = value.split(RegExp(r'\s+')).first.replaceAll(',', '.');
+  final parts = timestamp.split(':');
+  if (parts.length < 2 || parts.length > 3) {
+    return null;
+  }
+
+  final hours = parts.length == 3 ? int.tryParse(parts[0]) : 0;
+  final minutes = int.tryParse(parts[parts.length - 2]);
+  final seconds = double.tryParse(parts.last);
+  if (hours == null || minutes == null || seconds == null) {
+    return null;
+  }
+
+  return Duration(hours: hours, minutes: minutes, milliseconds: (seconds * 1000).round());
+}
+
+(String?, String) _v1ExtractCaptionSpeaker(String cueText) {
+  final lines = cueText.split('\n');
+  if (lines.isEmpty) {
+    return (null, cueText);
+  }
+
+  final match = RegExp(r'^([^:\n]{1,80}):\s*(.*)$').firstMatch(lines.first.trim());
+  if (match == null) {
+    return (null, cueText);
+  }
+
+  final speaker = match.group(1)?.trim();
+  final firstText = match.group(2)?.trim();
+  final remainingLines = <String>[if (firstText != null && firstText.isNotEmpty) firstText, ...lines.skip(1)];
+  final text = remainingLines.join('\n').trim();
+  return (speaker == null || speaker.isEmpty ? null : speaker, text.isEmpty ? cueText : text);
+}
+
+PbTranscriptPreviewParticipant _v1TranscriptParticipant({required String label, String? role}) {
+  final normalizedRole = role?.trim().toLowerCase();
+  final normalizedLabel = label.trim().toLowerCase();
+  final isAgentLike =
+      normalizedRole == 'agent' ||
+      normalizedRole == 'assistant' ||
+      normalizedLabel.contains('assistant') ||
+      normalizedLabel.contains('agent');
+
+  return PbTranscriptPreviewParticipant(label: label, initials: _v1TranscriptInitials(label), isAgentLike: isAgentLike);
+}
+
+String _v1TranscriptInitials(String value) {
+  final normalized = value.trim();
+  if (normalized.isEmpty) {
+    return 'U';
+  }
+
+  final base = normalized.contains('@') ? normalized.split('@').first : normalized;
+  final parts = base.split(RegExp(r'[-._ ]+')).where((part) => part.isNotEmpty).toList(growable: false);
+  if (parts.length >= 2) {
+    return '${_v1SingleInitial(parts[0])}${_v1SingleInitial(parts[1])}';
+  }
+  if (parts.length == 1) {
+    return _v1SingleInitial(parts.first);
+  }
+
+  return 'U';
+}
+
+String _v1SingleInitial(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return 'U';
+  }
+
+  return String.fromCharCode(trimmed.runes.first).toUpperCase();
+}
+
+String _v1FormatTranscriptTimecode(Duration elapsed) {
+  final totalSeconds = elapsed.inSeconds < 0 ? 0 : elapsed.inSeconds;
+  final hours = totalSeconds ~/ 3600;
+  final minutes = (totalSeconds % 3600) ~/ 60;
+  final seconds = totalSeconds % 60;
+
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+
+  return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}';
+}
+
+String? _v1FormatTranscriptHeaderDate(BuildContext context, DateTime? startTime) {
+  if (startTime == null) {
+    return null;
+  }
+
+  final local = startTime.toLocal();
+  final month = MaterialLocalizations.of(context).formatMonthYear(local).split(' ').first;
+  return '$month ${local.day}, ${local.year}';
+}
+
+String _v1FormatTranscriptDetail(BuildContext context, _V1TranscriptMeta meta) {
+  final detailParts = <String>['Transcript'];
+  final time = _v1FormatTranscriptHeaderTime(context, meta.startTime);
+  final duration = _v1FormatTranscriptDuration(meta.duration);
+
+  if (time != null && duration != null) {
+    detailParts.add('$time - $duration');
+  } else if (time != null) {
+    detailParts.add(time);
+  } else if (duration != null) {
+    detailParts.add(duration);
+  }
+
+  return detailParts.join('   ');
+}
+
+String? _v1FormatTranscriptHeaderTime(BuildContext context, DateTime? startTime) {
+  if (startTime == null) {
+    return null;
+  }
+
+  final local = startTime.toLocal();
+  final formatted = MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(local), alwaysUse24HourFormat: false);
+  return formatted.replaceAll(' AM', 'a').replaceAll(' PM', 'p');
+}
+
+String? _v1FormatTranscriptDuration(Duration? duration) {
+  if (duration == null) {
+    return null;
+  }
+
+  final totalSeconds = duration.inSeconds < 0 ? 0 : duration.inSeconds;
+  if (totalSeconds < 60) {
+    return totalSeconds == 1 ? '1 sec' : '$totalSeconds secs';
+  }
+
+  final totalMinutes = duration.inMinutes;
+  if (totalMinutes < 60) {
+    return totalMinutes == 1 ? '1 min' : '$totalMinutes mins';
+  }
+
+  final hours = totalMinutes ~/ 60;
+  final minutes = totalMinutes % 60;
+  if (minutes == 0) {
+    return hours == 1 ? '1 hr' : '$hours hrs';
+  }
+
+  final hoursLabel = hours == 1 ? '1 hr' : '$hours hrs';
+  final minutesLabel = minutes == 1 ? '1 min' : '$minutes mins';
+  return '$hoursLabel $minutesLabel';
+}
+
+String _formatFileSizeBytes(int bytes) {
+  if (bytes < 1024) {
+    return '$bytes B';
+  }
+
+  var value = bytes.toDouble();
+  var unitIndex = 0;
+  while (value >= 1024 && unitIndex < _fileSizeUnits.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  final decimals = value >= 10 || value == value.roundToDouble() ? 0 : 1;
+  return '${value.toStringAsFixed(decimals)} ${_fileSizeUnits[unitIndex]}';
+}
+
+String _shellQuote(String value) {
+  if (value.isEmpty) {
+    return "''";
+  }
+
+  return "'${value.replaceAll("'", r"'\''")}'";
+}
+
+@visibleForTesting
+String powerboardsDownloadArchiveCommand({required String archiveFileName, required Iterable<String> itemNames}) {
+  final items = itemNames.toList(growable: false);
+  assert(items.isNotEmpty, 'Archive downloads need at least one item.');
+  final quotedItems = items.map(_shellQuote).join(' ');
+  return "/usr/bin/zip -r ${_shellQuote(archiveFileName)} $quotedItems "
+      "-x ${_shellQuote('*/$placeholderFileName')} ${_shellQuote(placeholderFileName)}";
+}
+
+String _archiveTimestamp(DateTime createdAt) {
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+
+  return '${createdAt.year}'
+      '${twoDigits(createdAt.month)}'
+      '${twoDigits(createdAt.day)}-'
+      '${twoDigits(createdAt.hour)}'
+      '${twoDigits(createdAt.minute)}'
+      '${twoDigits(createdAt.second)}';
+}
+
+String _archiveSafeStem(String value) {
+  final withoutReserved = value.trim().replaceAll(RegExp(r'[\\/:*?"<>|]+'), '-');
+  final normalizedWhitespace = withoutReserved.replaceAll(RegExp(r'\s+'), ' ').trim();
+  return normalizedWhitespace.isEmpty ? 'download' : normalizedWhitespace;
+}
+
+@visibleForTesting
+String powerboardsDownloadArchiveFileName({required String baseName, required int itemCount, required DateTime createdAt}) {
+  final stem = _archiveSafeStem(baseName);
+  final countSuffix = itemCount > 1 ? '-$itemCount-items' : '';
+  return '$stem$countSuffix-${_archiveTimestamp(createdAt)}.zip';
+}
+
 enum FileSortField { name, modified }
 
 enum _FileAction { open, download, share, upload, compressFolder, rename, delete }
+
+@visibleForTesting
+List<PbFilesItemData> powerboardsV1RecordRecentlyOpenedFile(
+  List<PbFilesItemData> current,
+  PbFilesItemData item, {
+  int limit = _v1RecentlyOpenedFilesLimit,
+}) {
+  final next = <PbFilesItemData>[];
+  if (item.canPreview) {
+    next.add(item);
+  }
+
+  for (final opened in current) {
+    if (!opened.canPreview || opened.id == item.id) {
+      continue;
+    }
+    next.add(opened);
+  }
+
+  return next.take(limit).toList(growable: false);
+}
+
+final Map<String, List<PbFilesItemData>> _v1RecentlyOpenedFilesBySession = <String, List<PbFilesItemData>>{};
+
+String _v1RecentlyOpenedFilesSessionKey({required String? projectId, required String? roomName}) {
+  return '${projectId?.trim() ?? ''}\u{1f}${roomName?.trim() ?? ''}';
+}
+
+List<PbFilesItemData> _sanitizeV1RecentlyOpenedFiles(List<PbFilesItemData> files) {
+  final seen = <String>{};
+  return [
+    for (final file in files)
+      if (file.canPreview && seen.add(file.id)) file,
+  ].take(_v1RecentlyOpenedFilesLimit).toList(growable: false);
+}
+
+@visibleForTesting
+List<PbFilesItemData> powerboardsV1RecentlyOpenedFilesForSession({required String? projectId, required String? roomName}) {
+  final key = _v1RecentlyOpenedFilesSessionKey(projectId: projectId, roomName: roomName);
+  return List<PbFilesItemData>.of(_v1RecentlyOpenedFilesBySession[key] ?? const <PbFilesItemData>[]);
+}
+
+@visibleForTesting
+void powerboardsV1SaveRecentlyOpenedFilesForSession({
+  required String? projectId,
+  required String? roomName,
+  required List<PbFilesItemData> files,
+}) {
+  final key = _v1RecentlyOpenedFilesSessionKey(projectId: projectId, roomName: roomName);
+  final sanitized = _sanitizeV1RecentlyOpenedFiles(files);
+  if (sanitized.isEmpty) {
+    _v1RecentlyOpenedFilesBySession.remove(key);
+    return;
+  }
+  _v1RecentlyOpenedFilesBySession[key] = List<PbFilesItemData>.unmodifiable(sanitized);
+}
+
+@visibleForTesting
+void powerboardsV1ClearRecentlyOpenedFileSessionCache() {
+  _v1RecentlyOpenedFilesBySession.clear();
+}
+
+@visibleForTesting
+bool powerboardsV1FileItemIsSelectable(PbFilesItemData item) {
+  return item.kind == PbFilesItemKind.file || item.kind == PbFilesItemKind.folder;
+}
+
+@visibleForTesting
+Set<String> powerboardsV1SelectedVisibleItemIds(Set<String> selectedIds, Iterable<PbFilesItemData> visibleItems) {
+  final visibleIds = {for (final item in visibleItems) item.id};
+  return selectedIds.where(visibleIds.contains).toSet();
+}
+
+@visibleForTesting
+List<PbFilesItemData> powerboardsV1ItemsExcludingReplacementRows(Iterable<PbFilesItemData> items, Set<String> replacementRowIds) {
+  return [
+    for (final item in items)
+      if (!replacementRowIds.contains(item.id)) item,
+  ];
+}
 
 String _relocatePathForMove(String currentPath, String sourcePath, String destinationPath) {
   if (currentPath == sourcePath) {
@@ -164,6 +786,20 @@ class _FilePathKey {
   static bool isFolderKey(String key) => key.endsWith('/');
 }
 
+class _PendingDeleteOperation {
+  const _PendingDeleteOperation({required this.handle, required this.displayUntil});
+
+  final PendingStorageDeleteHandle handle;
+  final DateTime displayUntil;
+}
+
+class _DownloadArchiveItem {
+  const _DownloadArchiveItem({required this.path, required this.isFolder});
+
+  final String path;
+  final bool isFolder;
+}
+
 class FileManagerViewController {
   Future<void> Function()? _createFolderInCurrentLocation;
   void Function()? _createTextFileInCurrentLocation;
@@ -212,6 +848,11 @@ class FileManagerView extends StatefulWidget {
   final double desktopHeaderActionMinimumLeadingWidth;
   final double desktopHeaderActionReserve;
   final bool showDesktopSidetrayToggle;
+  final bool? v1RoomPanelCollapsed;
+  final ValueChanged<bool>? onV1RoomPanelCollapsedChanged;
+  final double? v1RoomPanelWidth;
+  final ValueChanged<double>? onV1RoomPanelWidthChanged;
+  final FutureOr<void> Function(ChatFilePromptAction action, String filePath, {bool showThreadAfterPrompt})? onV1FilePromptRequested;
 
   const FileManagerView({
     super.key,
@@ -227,6 +868,11 @@ class FileManagerView extends StatefulWidget {
     this.desktopHeaderActionMinimumLeadingWidth = 0,
     this.desktopHeaderActionReserve = desktopPaneHeaderActionReserve,
     this.showDesktopSidetrayToggle = true,
+    this.v1RoomPanelCollapsed,
+    this.onV1RoomPanelCollapsedChanged,
+    this.v1RoomPanelWidth,
+    this.onV1RoomPanelWidthChanged,
+    this.onV1FilePromptRequested,
   });
 
   @override
@@ -259,11 +905,142 @@ class _FileManagerViewState extends State<FileManagerView> {
   late final _folderSig = Signal<String>(_location.folder);
   final _sortSig = Signal<FileSort>(const FileSort(FileSortField.name, true));
   final _selectedSig = Signal<Set<String>>(<String>{});
+  final TextEditingController _v1FilterController = TextEditingController();
+  final OverlayPortalController _v1FilesRoomPanelOverlayController = OverlayPortalController();
+  final FocusNode _v1FilesKeyboardFocusNode = FocusNode(debugLabel: 'Files keyboard navigation');
+  PbFilesSortKey _v1SortKey = PbFilesSortKey.updated;
+  bool _v1SortDirectionDescending = true;
+  bool _v1FilesRoomPanelCollapsed = false;
+  bool _v1FilesRoomPanelOverlayOpen = false;
+  bool _v1FilePreviewFullscreen = false;
+  bool _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+  String? _v1KeyboardPreviewFileId;
+  int _v1KeyboardPreviewDirection = 0;
+  bool _v1FilesKeyboardBrowseArmed = false;
+  final ValueNotifier<bool> _v1FilesDropTargetActive = ValueNotifier(false);
+  PbFilesItemData? _v1PreviewFile;
+  List<PbFilesItemData> _v1RecentlyOpenedFiles = const <PbFilesItemData>[];
+  final Set<String> _v1SavingFileIds = <String>{};
+  final Map<String, PbFilesItemData> _v1FileStateRowsById = <String, PbFilesItemData>{};
+  final Map<String, Future<String>> _v1DownloadUrlFuturesByPath = <String, Future<String>>{};
+  List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
+  final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
 
   PendingStorageDeleteScope get _deleteScope => PendingStorageDeleteScope(projectId: widget.projectId, roomName: widget.client.roomName);
+  bool get _effectiveV1FilesRoomPanelCollapsed => widget.v1RoomPanelCollapsed ?? _v1FilesRoomPanelCollapsed;
+
+  void _setV1FilesRoomPanelCollapsed(bool collapsed) {
+    if (widget.v1RoomPanelCollapsed != null) {
+      if (widget.v1RoomPanelCollapsed != collapsed) {
+        widget.onV1RoomPanelCollapsedChanged?.call(collapsed);
+      }
+      return;
+    }
+
+    if (_v1FilesRoomPanelCollapsed == collapsed) {
+      return;
+    }
+
+    setState(() => _v1FilesRoomPanelCollapsed = collapsed);
+  }
+
+  void _setV1FilesDropTargetActive(bool active) {
+    if (_isDisposing || _v1FilesDropTargetActive.value == active) {
+      return;
+    }
+
+    _v1FilesDropTargetActive.value = active;
+  }
 
   bool _isDeletePending(String path, bool isFolder) {
     return PendingStorageDeletes.contains(scope: _deleteScope, path: path, isFolder: isFolder);
+  }
+
+  bool _usesDesktopV1FilesBrowser() {
+    return mounted && !_usesAdaptiveMobileLayout(context) && powerboardsUsesDesktopUiPreview(context);
+  }
+
+  bool _v1DeleteCoversPath({required String deletePath, required bool isFolder, required String candidatePath}) {
+    final normalizedDeletePath = PendingStorageDeletes.normalizePath(deletePath);
+    final normalizedCandidatePath = PendingStorageDeletes.normalizePath(candidatePath);
+    if (normalizedDeletePath == normalizedCandidatePath) {
+      return true;
+    }
+
+    return isFolder && normalizedDeletePath.isNotEmpty && normalizedCandidatePath.startsWith('$normalizedDeletePath/');
+  }
+
+  bool _v1StateRowMatchesPath(PbFilesItemData item, String path, {required bool isFolder}) {
+    final normalizedPath = PendingStorageDeletes.normalizePath(path);
+    return item.id == _FilePathKey.keyForPath(path, isFolder) || item.id.startsWith('upload-error:$normalizedPath:');
+  }
+
+  void _prepareV1PendingDeleteFeedback(Iterable<String> keys) {
+    if (!_usesDesktopV1FilesBrowser()) {
+      return;
+    }
+
+    final targets = [for (final key in keys) (path: _FilePathKey.pathFromKey(key), isFolder: _FilePathKey.isFolderKey(key))];
+    if (targets.isEmpty) {
+      return;
+    }
+
+    final closesPreviewFile =
+        _v1PreviewFile != null &&
+        targets.any(
+          (target) =>
+              _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _v1PathForItem(_v1PreviewFile!)),
+        );
+    final closesOpenedFile =
+        _openedFile != null &&
+        targets.any((target) => _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _openedFile!));
+    final nextRecentlyOpenedFiles = [
+      for (final item in _v1RecentlyOpenedFiles)
+        if (!targets.any(
+          (target) => _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _v1PathForItem(item)),
+        ))
+          item,
+    ];
+    final recentFilesChanged = nextRecentlyOpenedFiles.length != _v1RecentlyOpenedFiles.length;
+    final stateRowKeys = keys.toSet();
+    final stateRowsChanged = stateRowKeys.any(_v1FileStateRowsById.containsKey);
+
+    if (closesPreviewFile || closesOpenedFile || recentFilesChanged || stateRowsChanged) {
+      setState(() {
+        if (stateRowsChanged) {
+          _v1FileStateRowsById.removeWhere((key, _) => stateRowKeys.contains(key));
+        }
+
+        if (recentFilesChanged) {
+          _replaceV1RecentlyOpenedFiles(nextRecentlyOpenedFiles);
+        }
+
+        if (closesPreviewFile || closesOpenedFile) {
+          _v1PreviewFile = null;
+          _v1FilePreviewFullscreen = false;
+          _v1FilesRoomPanelOverlayOpen = false;
+          _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+          setPreviewFilePreviewFullscreen(false);
+        }
+      });
+    }
+
+    if (closesOpenedFile) {
+      _closeFile();
+    }
+  }
+
+  Future<void> _waitForV1PendingDeleteDisplay(DateTime displayUntil) async {
+    final shouldHoldForFeedback = _usesDesktopV1FilesBrowser();
+    if (!shouldHoldForFeedback) {
+      return;
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    final remaining = displayUntil.difference(DateTime.now());
+    if (remaining > Duration.zero) {
+      await Future<void>.delayed(remaining);
+    }
   }
 
   late final storageEntries = Resource<List<StorageEntry>>(() => _getChildren(_folderSig.value), source: _folderSig);
@@ -304,9 +1081,11 @@ class _FileManagerViewState extends State<FileManagerView> {
   @override
   void initState() {
     super.initState();
+    _restoreV1RecentlyOpenedFilesFromSession();
     roomSub = widget.client.listen(_onRoomEvent);
     _bindController(widget.controller);
     unawaited(_rebindThreadIndexDocument());
+    unawaited(_refreshFileAttachmentLinks());
   }
 
   @override
@@ -322,15 +1101,24 @@ class _FileManagerViewState extends State<FileManagerView> {
       _unbindController(oldWidget.controller);
       _bindController(widget.controller);
     }
+    if (oldWidget.projectId != widget.projectId || oldWidget.client.roomName != widget.client.roomName) {
+      _restoreV1RecentlyOpenedFilesFromSession();
+    }
   }
 
   @override
   void dispose() {
     _unbindController(widget.controller);
     _isDisposing = true;
+    if (previewFilePreviewFullscreenListenable.value) {
+      setPreviewFilePreviewFullscreen(false);
+    }
     roomSub.cancel();
 
     uploadNotifications.dispose();
+    _v1FilterController.dispose();
+    _v1FilesKeyboardFocusNode.dispose();
+    _v1FilesDropTargetActive.dispose();
     _collapsedBreadcrumbMenuController.dispose();
     popoverController.dispose();
     _codePreviewController.dispose();
@@ -348,6 +1136,16 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     widget.client.localParticipant?.setAttribute("current_file", null);
     super.dispose();
+  }
+
+  void _restoreV1RecentlyOpenedFilesFromSession() {
+    _v1RecentlyOpenedFiles = powerboardsV1RecentlyOpenedFilesForSession(projectId: widget.projectId, roomName: widget.client.roomName);
+  }
+
+  void _replaceV1RecentlyOpenedFiles(List<PbFilesItemData> files) {
+    final sanitized = _sanitizeV1RecentlyOpenedFiles(files);
+    _v1RecentlyOpenedFiles = sanitized;
+    powerboardsV1SaveRecentlyOpenedFilesForSession(projectId: widget.projectId, roomName: widget.client.roomName, files: sanitized);
   }
 
   void _bindController(FileManagerViewController? controller) {
@@ -405,24 +1203,57 @@ class _FileManagerViewState extends State<FileManagerView> {
       if (openedFileChanged) {
         _tab = 'preview';
       }
+      if (folderChanged || openedFileChanged) {
+        _clearV1KeyboardPreviewNavigationState();
+      }
       _location = next;
     });
   }
 
   void _onRoomEvent(RoomEvent event) {
     if (event is FileUpdatedEvent) {
+      _rememberFileCreator(event.path, event.participantId);
+      if (normalizePowerboardsAttachmentPath(event.path) == powerboardsFileAttachmentIndexPath) {
+        unawaited(_refreshFileAttachmentLinks());
+      }
       _onFileUpdated(event.path);
       return;
     }
 
     if (event is FileDeletedEvent) {
+      if (normalizePowerboardsAttachmentPath(event.path) == powerboardsFileAttachmentIndexPath) {
+        unawaited(_refreshFileAttachmentLinks());
+      }
       _onFileDeleted(event.path);
       return;
     }
 
     if (event is FileMovedEvent) {
+      _moveFileCreatorState(event.sourcePath, event.destinationPath);
       _onFileMoved(event.sourcePath, event.destinationPath);
     }
+  }
+
+  void _moveFileCreatorState(String sourcePath, String destinationPath) {
+    final creator = _fileCreatorNamesByPath.remove(normalizePowerboardsAttachmentPath(sourcePath));
+    if (creator == null) {
+      return;
+    }
+    _fileCreatorNamesByPath[normalizePowerboardsAttachmentPath(destinationPath)] = creator;
+  }
+
+  void _removeV1RecentlyOpenedPath(String path) {
+    final key = _FilePathKey.keyForPath(path, false);
+    if (!_v1RecentlyOpenedFiles.any((item) => item.id == key)) {
+      return;
+    }
+
+    setState(() {
+      _replaceV1RecentlyOpenedFiles([
+        for (final item in _v1RecentlyOpenedFiles)
+          if (item.id != key) item,
+      ]);
+    });
   }
 
   void _onFileUpdated(String path) {
@@ -447,6 +1278,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     final idx = next.indexWhere((e) => e.name == name);
+    _v1FileStateRowsById.removeWhere((_, item) => _v1StateRowMatchesPath(item, path, isFolder: false));
     if (idx == -1) {
       next.add(StorageEntry(name: name, isFolder: false, size: null, createdAt: now, updatedAt: now));
       unawaited(_refreshCurrentFolder());
@@ -468,8 +1300,18 @@ class _FileManagerViewState extends State<FileManagerView> {
     final name = path.split('/').where((s) => s.isNotEmpty).last;
     final next = List<StorageEntry>.of(ready.value);
     next.removeWhere((e) => e.name == name);
+    _v1FileStateRowsById.removeWhere((_, item) => _v1StateRowMatchesPath(item, path, isFolder: false));
+    final previewFile = _v1PreviewFile;
+    if (previewFile != null && _v1PathForItem(previewFile) == path) {
+      _v1PreviewFile = null;
+      _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelOverlayOpen = false;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      setPreviewFilePreviewFullscreen(false);
+    }
     _toggleSelected(_FilePathKey.keyForPath(path, false), false);
     _optimisticEmptyTextFiles.remove(path);
+    _removeV1RecentlyOpenedPath(path);
 
     _setEntries(next);
   }
@@ -543,6 +1385,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onFileMoved(String sourcePath, String destinationPath) {
+    _removeV1RecentlyOpenedPath(sourcePath);
     _moveSelectedPaths(sourcePath, destinationPath);
     _moveOptimisticPaths(sourcePath, destinationPath);
     _moveThreadDisplayNameState(sourcePath, destinationPath);
@@ -577,6 +1420,984 @@ class _FileManagerViewState extends State<FileManagerView> {
   String _displayNameForEntry(StorageEntry entry) {
     final path = joinPaths(_folderSig.value, entry.name);
     return entry.isFolder ? entry.name : _displayNameForPath(path);
+  }
+
+  Future<void> _refreshFileAttachmentLinks() async {
+    final links = await loadPowerboardsFileAttachmentLinks(widget.client);
+    if (!_canUpdateUi) {
+      return;
+    }
+
+    setState(() {
+      _fileAttachmentLinks = links;
+    });
+  }
+
+  String? _participantDisplayNameForId(String participantId) {
+    final localParticipant = widget.client.localParticipant;
+    if (localParticipant != null && localParticipant.id == participantId) {
+      final name = localParticipant.getAttribute("name");
+      if (name is String && name.trim().isNotEmpty) {
+        return name.trim();
+      }
+    }
+
+    for (final participant in widget.client.messaging.remoteParticipants) {
+      if (participant.id != participantId) {
+        continue;
+      }
+
+      final name = participant.getAttribute("name");
+      if (name is String && name.trim().isNotEmpty) {
+        return name.trim();
+      }
+    }
+
+    return null;
+  }
+
+  void _rememberFileCreator(String path, String participantId) {
+    final name = _participantDisplayNameForId(participantId);
+    if (name == null) {
+      return;
+    }
+
+    _fileCreatorNamesByPath[normalizePowerboardsAttachmentPath(path)] = name;
+  }
+
+  String _fallbackCreatorName() {
+    final name = widget.client.localParticipant?.getAttribute("name");
+    if (name is String && name.trim().isNotEmpty) {
+      return name.trim();
+    }
+    return 'Unknown';
+  }
+
+  List<PowerboardsFileAttachmentLink> _fileAttachmentLinksForPath(String path) {
+    final normalizedPath = normalizePowerboardsAttachmentPath(path);
+    final links = _fileAttachmentLinks.where((link) => link.filePath == normalizedPath).toList()
+      ..sort((left, right) {
+        final rightCreatedAt = right.createdAt?.millisecondsSinceEpoch ?? 0;
+        final leftCreatedAt = left.createdAt?.millisecondsSinceEpoch ?? 0;
+        return rightCreatedAt.compareTo(leftCreatedAt);
+      });
+    return links;
+  }
+
+  List<String> _linkedThreadNamesForPath(String path) {
+    final seen = <String>{};
+    final names = <String>[];
+    for (final link in _fileAttachmentLinksForPath(path)) {
+      final name = link.threadDisplayName.trim();
+      final key = name.toLowerCase();
+      if (name.isEmpty || seen.contains(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      names.add(name);
+    }
+    return names;
+  }
+
+  String _creatorNameForPath(String path) {
+    final normalizedPath = normalizePowerboardsAttachmentPath(path);
+    final creator = _fileCreatorNamesByPath[normalizedPath];
+    if (creator != null && creator.trim().isNotEmpty) {
+      return creator.trim();
+    }
+
+    for (final link in _fileAttachmentLinksForPath(path)) {
+      final attachedBy = link.createdBy.trim();
+      if (attachedBy.isNotEmpty) {
+        return attachedBy;
+      }
+    }
+
+    return _fallbackCreatorName();
+  }
+
+  String _creatorInitialsForName(String creator) {
+    final parts = creator.trim().split(RegExp(r'[\s@._-]+')).where((part) => part.trim().isNotEmpty).toList(growable: false);
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+
+    final compact = creator.trim().replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
+    if (compact.isEmpty) {
+      return '?';
+    }
+    return compact.substring(0, math.min(2, compact.length)).toUpperCase();
+  }
+
+  void _openV1LinkedThread(PbFilesItemData item, String threadName) {
+    final target = _fileAttachmentLinksForPath(
+      _v1PathForItem(item),
+    ).firstWhereOrNull((link) => link.threadDisplayName.toLowerCase() == threadName.toLowerCase());
+    if (target == null) {
+      return;
+    }
+
+    _openEntry(target.threadPath, false);
+  }
+
+  String _v1UpdatedLabel(StorageEntry entry) {
+    return entry.updatedAt?.modified() ?? entry.createdAt?.modified() ?? '';
+  }
+
+  int _v1UpdatedSort(StorageEntry entry) {
+    return (entry.updatedAt ?? entry.createdAt)?.millisecondsSinceEpoch ?? 0;
+  }
+
+  String _v1SizeLabel(StorageEntry entry) {
+    if (entry.isFolder) {
+      return '-';
+    }
+
+    final size = entry.size;
+    if (size == null) {
+      return '-';
+    }
+
+    return _formatFileSizeBytes(size);
+  }
+
+  int _v1SizeSort(StorageEntry entry) {
+    if (entry.isFolder) {
+      return -1;
+    }
+
+    return entry.size ?? 0;
+  }
+
+  PbFilesItemData _v1ItemForEntry(StorageEntry entry) {
+    final folder = _folderSig.value;
+    final fullPath = _FilePathKey.pathForEntry(folder, entry);
+    final key = _FilePathKey.keyForEntry(folder, entry);
+    final updatedLabel = _v1UpdatedLabel(entry);
+    final updatedSort = _v1UpdatedSort(entry);
+    final sizeLabel = _v1SizeLabel(entry);
+    final sizeSort = _v1SizeSort(entry);
+    final creator = _creatorNameForPath(fullPath);
+    final creatorInitials = _creatorInitialsForName(creator);
+
+    if (entry.isFolder) {
+      return PbFilesItemData(
+        id: key,
+        title: entry.name,
+        type: PbAttachmentFileType.folder.defaultDisplayLabel,
+        sizeLabel: sizeLabel,
+        sizeSort: sizeSort,
+        thread: '',
+        creator: creator,
+        creatorInitials: creatorInitials,
+        updatedLabel: updatedLabel,
+        updatedSort: updatedSort,
+        parentPath: folder,
+        folderPath: fullPath,
+        fileType: PbAttachmentFileType.folder,
+        kind: PbFilesItemKind.folder,
+      );
+    }
+
+    final linkedThreads = _linkedThreadNamesForPath(fullPath);
+    return PbFilesItemData.fromFileName(
+      id: key,
+      title: _displayNameForEntry(entry),
+      thread: linkedThreads.firstOrNull ?? '',
+      linkedThreads: linkedThreads,
+      sizeLabel: sizeLabel,
+      sizeSort: sizeSort,
+      creator: creator,
+      creatorInitials: creatorInitials,
+      updatedLabel: updatedLabel,
+      updatedSort: updatedSort,
+      parentPath: folder,
+      fileTypeKey: powerboardsV1FileTypeKeyForPath(fullPath),
+      previewState: powerboardsV1PreviewStateForPath(fullPath),
+    );
+  }
+
+  PbFilesItemData _v1ItemForPath(String fullPath) {
+    final linkedThreads = _linkedThreadNamesForPath(fullPath);
+    final creator = _creatorNameForPath(fullPath);
+
+    return PbFilesItemData.fromFileName(
+      id: _FilePathKey.keyForPath(fullPath, false),
+      title: _displayNameForPath(fullPath),
+      thread: linkedThreads.firstOrNull ?? '',
+      linkedThreads: linkedThreads,
+      sizeLabel: '-',
+      sizeSort: 0,
+      creator: creator,
+      creatorInitials: _creatorInitialsForName(creator),
+      updatedLabel: '',
+      updatedSort: 0,
+      parentPath: parentPath(fullPath),
+      fileTypeKey: powerboardsV1FileTypeKeyForPath(fullPath),
+      previewState: powerboardsV1PreviewStateForPath(fullPath),
+    );
+  }
+
+  PbFilesItemData _v1ProcessingDeleteItem(PendingStorageDeleteEntry pendingDelete) {
+    final path = pendingDelete.path;
+    final fallbackName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+    final displayName = pendingDelete.isFolder ? fallbackName : _displayNameForPath(path);
+    final title = displayName.isEmpty ? 'Deleting item' : 'Deleting $displayName';
+
+    return _v1StateRow(
+      id: _FilePathKey.keyForPath(path, pendingDelete.isFolder),
+      title: title,
+      path: path,
+      isFolder: pendingDelete.isFolder,
+      updatedLabel: 'Deleting',
+      updatedSort: pendingDelete.startedAt.millisecondsSinceEpoch + pendingDelete.sequence,
+      kind: PbFilesItemKind.processing,
+    );
+  }
+
+  PbFilesItemData _v1StateRow({
+    required String id,
+    required String title,
+    required String path,
+    required bool isFolder,
+    required String updatedLabel,
+    required int updatedSort,
+    required PbFilesItemKind kind,
+  }) {
+    return PbFilesItemData.fromFileName(
+      id: id,
+      title: title,
+      type: '',
+      thread: '',
+      creator: '',
+      creatorInitials: '',
+      updatedLabel: updatedLabel,
+      updatedSort: updatedSort,
+      parentPath: parentPath(path),
+      folderPath: isFolder ? path : '',
+      fileType: isFolder ? PbAttachmentFileType.folder : PbAttachmentFileType.generic,
+      kind: kind,
+    );
+  }
+
+  PbFilesItemData _v1DeleteErrorRow({required String path, required bool isFolder}) {
+    final fallbackName = path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+    final displayName = isFolder ? fallbackName : _displayNameForPath(path);
+    final title = displayName.isEmpty ? 'Delete failed' : 'Failed to delete $displayName';
+
+    return _v1StateRow(
+      id: _FilePathKey.keyForPath(path, isFolder),
+      title: title,
+      path: path,
+      isFolder: isFolder,
+      updatedLabel: 'Failed',
+      updatedSort: DateTime.now().millisecondsSinceEpoch,
+      kind: PbFilesItemKind.processingError,
+    );
+  }
+
+  PbFilesItemData _v1UploadErrorRow(String path) {
+    final displayName = _displayNameForPath(path);
+    final title = displayName.isEmpty ? 'Upload failed' : 'Failed upload $displayName';
+
+    return _v1StateRow(
+      id: 'upload-error:${PendingStorageDeletes.normalizePath(path)}:${DateTime.now().microsecondsSinceEpoch}',
+      title: title,
+      path: path,
+      isFolder: false,
+      updatedLabel: 'Failed',
+      updatedSort: DateTime.now().millisecondsSinceEpoch,
+      kind: PbFilesItemKind.processingError,
+    );
+  }
+
+  bool _v1EntryCanEnableFilter(StorageEntry entry) {
+    final path = _FilePathKey.pathForEntry(_folderSig.value, entry);
+    if (widget.hideSystem && entry.name.startsWith('.')) {
+      return false;
+    }
+
+    if (_isDeletePending(path, entry.isFolder)) {
+      return false;
+    }
+
+    final key = _FilePathKey.keyForEntry(_folderSig.value, entry);
+    return !_v1FileStateRowsById.containsKey(key);
+  }
+
+  bool _v1FilterEnabled(List<StorageEntry> entries) {
+    return entries.any(_v1EntryCanEnableFilter);
+  }
+
+  void _clearV1FilterIfUnavailable(bool filterEnabled) {
+    if (filterEnabled || _v1FilterController.text.isEmpty) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _v1FilterEnabled(storageEntries.state.value ?? const <StorageEntry>[]) || _v1FilterController.text.isEmpty) {
+        return;
+      }
+
+      _v1FilterController.clear();
+      setState(() {});
+    });
+  }
+
+  List<PbFilesItemData> _v1VisibleItems(List<StorageEntry> entries) {
+    final query = _v1FilterController.text.trim().toLowerCase();
+    final pendingDeleteItemsForFolder = PendingStorageDeletes.entriesFor(
+      _deleteScope,
+    ).where((pendingDelete) => parentPath(pendingDelete.path) == _folderSig.value).map(_v1ProcessingDeleteItem).toList();
+    final pendingDeleteItems = pendingDeleteItemsForFolder.where((item) => query.isEmpty || item.filterText.contains(query)).toList();
+    final stateRowsForFolder = _v1FileStateRowsById.values.where((item) => item.parentPath == _folderSig.value).toList();
+    final stateRows = stateRowsForFolder.where((item) => query.isEmpty || item.filterText.contains(query)).toList();
+    final replacementRowIds = {for (final item in pendingDeleteItemsForFolder) item.id, for (final item in stateRowsForFolder) item.id};
+    final items = entries
+        .where((entry) => !widget.hideSystem || !entry.name.startsWith('.'))
+        .where((entry) => !_isDeletePending(_FilePathKey.pathForEntry(_folderSig.value, entry), entry.isFolder))
+        .where((entry) => !replacementRowIds.contains(_FilePathKey.keyForEntry(_folderSig.value, entry)))
+        .map(_v1ItemForEntry)
+        .where((item) => query.isEmpty || item.filterText.contains(query))
+        .toList();
+    items.addAll(pendingDeleteItems);
+    items.addAll(stateRows);
+    items.sort(_compareV1Files);
+    return items;
+  }
+
+  void _setV1FileStateRow(PbFilesItemData item) {
+    setState(() => _v1FileStateRowsById[item.id] = item);
+  }
+
+  void _removeV1FileStateRow(PbFilesItemData item) {
+    if (!_v1FileStateRowsById.containsKey(item.id)) {
+      return;
+    }
+
+    setState(() => _v1FileStateRowsById.remove(item.id));
+  }
+
+  bool _v1ItemIsSelectable(PbFilesItemData item) {
+    return powerboardsV1FileItemIsSelectable(item);
+  }
+
+  Iterable<PbFilesItemData> _v1SelectableItems(Iterable<PbFilesItemData> items) {
+    return items.where(_v1ItemIsSelectable);
+  }
+
+  List<PbFilesItemData> get _v1RecentlyOpenedFilesForSidePane {
+    return [
+      for (final item in _v1RecentlyOpenedFiles)
+        if (item.canPreview && !_isDeletePending(_v1PathForItem(item), false)) item,
+    ].take(_v1RecentlyOpenedFilesLimit).toList(growable: false);
+  }
+
+  void _recordV1RecentlyOpenedFile(PbFilesItemData item) {
+    _replaceV1RecentlyOpenedFiles(powerboardsV1RecordRecentlyOpenedFile(_v1RecentlyOpenedFiles, item));
+  }
+
+  int _compareV1Files(PbFilesItemData left, PbFilesItemData right) {
+    if (left.kind == PbFilesItemKind.folder && right.kind != PbFilesItemKind.folder) {
+      return -1;
+    }
+    if (left.kind != PbFilesItemKind.folder && right.kind == PbFilesItemKind.folder) {
+      return 1;
+    }
+
+    final result = switch (_v1SortKey) {
+      PbFilesSortKey.updated => left.updatedSort.compareTo(right.updatedSort),
+      PbFilesSortKey.name => left.title.toLowerCase().compareTo(right.title.toLowerCase()),
+      PbFilesSortKey.type => left.type.toLowerCase().compareTo(right.type.toLowerCase()),
+      PbFilesSortKey.size => left.sizeSort.compareTo(right.sizeSort),
+      PbFilesSortKey.thread => left.threadLabel.toLowerCase().compareTo(right.threadLabel.toLowerCase()),
+      PbFilesSortKey.creator => left.creator.toLowerCase().compareTo(right.creator.toLowerCase()),
+    };
+
+    return _v1SortDirectionDescending ? -result : result;
+  }
+
+  void _setV1Sort(PbFilesSortKey key) {
+    setState(() {
+      if (_v1SortKey == key) {
+        _v1SortDirectionDescending = !_v1SortDirectionDescending;
+      } else {
+        _v1SortKey = key;
+        _v1SortDirectionDescending = key == PbFilesSortKey.updated || key == PbFilesSortKey.size;
+      }
+    });
+  }
+
+  String _v1PathForItem(PbFilesItemData item) {
+    return _FilePathKey.pathFromKey(item.id);
+  }
+
+  bool _v1IsFolder(PbFilesItemData item) {
+    return item.kind == PbFilesItemKind.folder;
+  }
+
+  bool get _v1KeyboardPreviewNavigationActive =>
+      _v1FilesKeyboardBrowseArmed || _v1KeyboardPreviewFileId != null || _v1KeyboardPreviewDirection != 0;
+
+  void _clearV1KeyboardPreviewNavigationState() {
+    _v1KeyboardPreviewFileId = null;
+    _v1KeyboardPreviewDirection = 0;
+    _v1FilesKeyboardBrowseArmed = false;
+  }
+
+  void _clearV1KeyboardPreviewNavigation() {
+    if (!_v1KeyboardPreviewNavigationActive) {
+      return;
+    }
+
+    setState(_clearV1KeyboardPreviewNavigationState);
+  }
+
+  bool _isV1FilesKeyboardNavigationBlocked() {
+    return FocusManager.instance.primaryFocus?.context?.widget is EditableText;
+  }
+
+  void _openV1Preview(
+    PbFilesItemData item, {
+    bool openOverlay = false,
+    bool openFullscreen = false,
+    bool restoreOverlayOnClose = false,
+    bool armKeyboardBrowse = true,
+    int keyboardDirection = 0,
+  }) {
+    if (!item.canPreview) {
+      return;
+    }
+
+    if (armKeyboardBrowse) {
+      _v1FilesKeyboardFocusNode.requestFocus();
+    }
+
+    setState(() {
+      _v1PreviewFile = item;
+      _v1FilePreviewFullscreen = openFullscreen;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = restoreOverlayOnClose && (openOverlay || openFullscreen);
+      _v1FilesRoomPanelCollapsed = false;
+      _v1FilesRoomPanelOverlayOpen = openFullscreen ? false : openOverlay;
+      if (armKeyboardBrowse) {
+        _v1KeyboardPreviewFileId = keyboardDirection == 0 ? null : item.id;
+        _v1KeyboardPreviewDirection = keyboardDirection;
+        _v1FilesKeyboardBrowseArmed = true;
+      } else {
+        _clearV1KeyboardPreviewNavigationState();
+      }
+      _recordV1RecentlyOpenedFile(item);
+      _clearSelected();
+    });
+    _setV1FilesRoomPanelCollapsed(false);
+    setPreviewFilePreviewFullscreen(openFullscreen);
+  }
+
+  void _closeV1Preview() {
+    final clearOpenedFileRoute = _openedFile != null && !_usesAdaptiveMobileLayout(context) && powerboardsUsesDesktopUiPreview(context);
+    final restoreRoomPanelOverlay = _v1RestoreRoomPanelOverlayOnPreviewClose && !clearOpenedFileRoute;
+
+    setState(() {
+      _v1PreviewFile = null;
+      _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelOverlayOpen = restoreRoomPanelOverlay;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      _clearV1KeyboardPreviewNavigationState();
+    });
+    setPreviewFilePreviewFullscreen(false);
+
+    if (clearOpenedFileRoute) {
+      _closeFile();
+    }
+  }
+
+  void _closeV1FilePromptHandoffSurface() {
+    _v1FilesRoomPanelOverlayController.hide();
+    setState(() {
+      _v1PreviewFile = null;
+      _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelOverlayOpen = false;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      _clearV1KeyboardPreviewNavigationState();
+    });
+    setPreviewFilePreviewFullscreen(false);
+  }
+
+  void _revealV1PreviewPanelForKeyboard({required bool openOverlay}) {
+    if (openOverlay) {
+      if (!_v1FilesRoomPanelOverlayOpen) {
+        setState(() => _v1FilesRoomPanelOverlayOpen = true);
+      }
+      return;
+    }
+
+    _setV1FilesRoomPanelCollapsed(false);
+  }
+
+  void _openV1PreviewFromKeyboard(PbFilesItemData item, {required bool openOverlay, required bool openFullscreen, required int direction}) {
+    _openV1Preview(item, openOverlay: openOverlay, openFullscreen: openFullscreen, keyboardDirection: direction);
+  }
+
+  KeyEventResult _handleV1FilesKeyEvent(
+    KeyEvent event, {
+    required List<PbFilesItemData> items,
+    required PbFilesItemData? previewFile,
+    required bool responsivePanel,
+    required bool openFullscreen,
+  }) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.escape) {
+      if (!_v1KeyboardPreviewNavigationActive) {
+        return KeyEventResult.ignored;
+      }
+
+      _clearV1KeyboardPreviewNavigation();
+      return KeyEventResult.handled;
+    }
+
+    if (key != LogicalKeyboardKey.arrowDown && key != LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.ignored;
+    }
+
+    if (_selectedSig.value.isNotEmpty || previewFile == null || !_v1FilesKeyboardBrowseArmed || _isV1FilesKeyboardNavigationBlocked()) {
+      return KeyEventResult.ignored;
+    }
+
+    final previewableItems = items.where((item) => item.canPreview).toList(growable: false);
+    final currentIndex = previewableItems.indexWhere((item) => item.id == previewFile.id);
+    if (currentIndex < 0) {
+      return KeyEventResult.ignored;
+    }
+
+    final direction = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
+    final nextIndex = math.max(0, math.min(previewableItems.length - 1, currentIndex + direction));
+    if (nextIndex == currentIndex) {
+      _revealV1PreviewPanelForKeyboard(openOverlay: responsivePanel);
+      return KeyEventResult.handled;
+    }
+
+    _openV1PreviewFromKeyboard(
+      previewableItems[nextIndex],
+      openOverlay: responsivePanel,
+      openFullscreen: openFullscreen,
+      direction: direction,
+    );
+    return KeyEventResult.handled;
+  }
+
+  void _setV1PreviewFullscreen(bool fullscreen) {
+    setState(() {
+      _v1FilePreviewFullscreen = fullscreen;
+      if (fullscreen) {
+        _v1RestoreRoomPanelOverlayOnPreviewClose = _v1RestoreRoomPanelOverlayOnPreviewClose || _v1FilesRoomPanelOverlayOpen;
+        _v1FilesRoomPanelOverlayOpen = false;
+      } else if (_v1PreviewFile != null || _openedFile != null) {
+        _v1FilesRoomPanelOverlayOpen = true;
+      }
+    });
+    setPreviewFilePreviewFullscreen(fullscreen);
+  }
+
+  void _closeV1FilesRoomPanelOverlay() {
+    _v1FilesRoomPanelOverlayController.hide();
+    setState(() {
+      _v1FilesRoomPanelOverlayOpen = false;
+      if (_v1PreviewFile == null && _openedFile == null) {
+        _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      }
+    });
+  }
+
+  String _v1ExtensionForPath(String path) {
+    return p.extension(path).replaceFirst('.', '').toLowerCase();
+  }
+
+  bool _v1IsEditableTextPreview(PbFilesItemData item, String path) {
+    if (path.startsWith('dataset://')) {
+      return false;
+    }
+
+    final extension = _v1ExtensionForPath(path);
+    if (_v1EditableTextExtensions.contains(extension)) {
+      return true;
+    }
+
+    final kind = classifyFile(path);
+    if (kind == FileKind.markdown || kind == FileKind.code || kind == FileKind.tsv) {
+      return true;
+    }
+
+    return switch (item.fileType) {
+      PbAttachmentFileType.codeGeneric ||
+      PbAttachmentFileType.script ||
+      PbAttachmentFileType.code ||
+      PbAttachmentFileType.key ||
+      PbAttachmentFileType.settings => true,
+      _ => false,
+    };
+  }
+
+  bool _v1IsNativeDocumentPath(String path) {
+    return const {'thread', 'widget', 'document', 'gallery', 'presentation', 'form'}.contains(_v1ExtensionForPath(path));
+  }
+
+  Future<String> _loadV1PreviewText(String path) async {
+    final content = await widget.client.storage.download(path);
+    return utf8.decode(content.data, allowMalformed: true);
+  }
+
+  Future<void> _saveV1PreviewText(PbFilesItemData item, String path, String text) async {
+    if (!item.canPreview) {
+      await Future<void>.delayed(_v1SaveProcessingStep);
+      return;
+    }
+
+    setState(() => _v1SavingFileIds.add(item.id));
+
+    try {
+      final bytes = Uint8List.fromList(utf8.encode(text));
+      await widget.client.storage.uploadStream(path, Stream<Uint8List>.value(bytes), overwrite: true, size: bytes.length);
+
+      if (!mounted) {
+        return;
+      }
+
+      _finishV1PreviewSave(item);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _v1SavingFileIds.remove(item.id));
+      }
+      rethrow;
+    }
+  }
+
+  Future<String> _v1DownloadUrlForPath(String path) {
+    return _v1DownloadUrlFuturesByPath.putIfAbsent(path, () => widget.client.storage.downloadUrl(path));
+  }
+
+  Widget _v1StorageUrlPreview(PbFilesItemData item, String path, Widget Function(Uri url) builder) {
+    return FutureBuilder<String>(
+      future: _v1DownloadUrlForPath(path),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return ColoredBox(
+            color: PbColors.surfacePanel,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: PbFilePreviewStateCard(file: item.toAttachmentData(), state: PbAttachmentPreviewState.unavailable),
+              ),
+            ),
+          );
+        }
+
+        final url = snapshot.data;
+        if (url == null) {
+          return const Center(child: CircularProgressIndicator(color: PbColors.textSubtle));
+        }
+
+        return builder(Uri.parse(url));
+      },
+    );
+  }
+
+  Widget _v1DocumentPaneContent(PbFilesItemData item, String path) {
+    return DocumentPane(
+      path: path,
+      room: widget.client,
+      noPreviewBuilder: (context, _) => Center(
+        child: PbFilePreviewStateCard(file: item.toAttachmentData(), state: PbAttachmentPreviewState.unavailable),
+      ),
+    );
+  }
+
+  Widget? _buildV1PreviewContentChild(PbFilesItemData item, String path) {
+    final kind = classifyFile(path);
+
+    if (item.fileType == PbAttachmentFileType.thread || _v1ExtensionForPath(path) == 'thread' || kind == FileKind.thread) {
+      return null;
+    }
+
+    if (_v1IsNativeDocumentPath(path)) {
+      return _v1DocumentPaneContent(item, path);
+    }
+
+    switch (item.fileType) {
+      case PbAttachmentFileType.image:
+        return _v1StorageUrlPreview(item, path, (url) => ImagePreview(url: url, fit: BoxFit.contain));
+      case PbAttachmentFileType.video:
+      case PbAttachmentFileType.mediaGeneric:
+        return _v1StorageUrlPreview(item, path, powerboardsV1VideoPreview);
+      case PbAttachmentFileType.sound:
+      case PbAttachmentFileType.music:
+        return _v1StorageUrlPreview(item, path, (url) => AudioPreview(url: url));
+      case PbAttachmentFileType.pdf:
+        return PowerboardsV1PdfPreview(room: widget.client, path: path, file: item.toAttachmentData());
+      case PbAttachmentFileType.transcript:
+      case PbAttachmentFileType.thread:
+      case PbAttachmentFileType.presentation:
+        return null;
+      case PbAttachmentFileType.generic:
+      case PbAttachmentFileType.folder:
+      case PbAttachmentFileType.archive:
+      case PbAttachmentFileType.type:
+      case PbAttachmentFileType.widget:
+      case PbAttachmentFileType.businessGeneric:
+      case PbAttachmentFileType.spreadsheet:
+      case PbAttachmentFileType.document:
+      case PbAttachmentFileType.codeGeneric:
+      case PbAttachmentFileType.script:
+      case PbAttachmentFileType.code:
+      case PbAttachmentFileType.key:
+      case PbAttachmentFileType.settings:
+        break;
+    }
+
+    switch (kind) {
+      case FileKind.image:
+        return _v1StorageUrlPreview(item, path, (url) => ImagePreview(url: url, fit: BoxFit.contain));
+      case FileKind.video:
+        return _v1StorageUrlPreview(item, path, powerboardsV1VideoPreview);
+      case FileKind.audio:
+        return _v1StorageUrlPreview(item, path, (url) => AudioPreview(url: url));
+      case FileKind.pdf:
+        return PowerboardsV1PdfPreview(room: widget.client, path: path, file: item.toAttachmentData());
+      case FileKind.thread:
+      case FileKind.markdown:
+      case FileKind.code:
+      case FileKind.tsv:
+        return null;
+      case FileKind.custom:
+      case FileKind.parquet:
+      case FileKind.office:
+      case FileKind.lance:
+      case FileKind.unknown:
+        break;
+    }
+
+    return null;
+  }
+
+  PbFilePreviewSource _buildV1PreviewSource(PbFilesItemData item) {
+    final path = _v1PathForItem(item);
+    final extension = _v1ExtensionForPath(path);
+    final kind = classifyFile(path);
+    if (item.fileType == PbAttachmentFileType.thread || extension == 'thread' || kind == FileKind.thread) {
+      return powerboardsV1PreviewSourceForAttachment(
+        room: widget.client,
+        file: item.toAttachmentData(),
+        path: path,
+        loadText: (_) => _loadV1PreviewText(path),
+        saveText: (_, text) => _saveV1PreviewText(item, path, text),
+        downloadUrl: (_) => _v1DownloadUrlForPath(path),
+      );
+    }
+
+    if (item.fileType == PbAttachmentFileType.transcript || extension == 'transcript' || extension == 'srt' || extension == 'vtt') {
+      final file = item.toAttachmentData();
+      return PbFilePreviewSource(
+        sourceKey: path,
+        childBuilder: (fullscreen) => extension == 'transcript'
+            ? _V1TranscriptDocumentPreview(room: widget.client, path: path, file: file, fullscreen: fullscreen)
+            : _V1TextTranscriptPreview(room: widget.client, path: path, file: file, title: item.title, fullscreen: fullscreen),
+      );
+    }
+
+    if (_v1IsEditableTextPreview(item, path)) {
+      return PbFilePreviewSource(
+        sourceKey: path,
+        loadText: () => _loadV1PreviewText(path),
+        saveText: (text) => _saveV1PreviewText(item, path, text),
+      );
+    }
+
+    return PbFilePreviewSource(sourceKey: path, child: _buildV1PreviewContentChild(item, path));
+  }
+
+  void _finishV1PreviewSave(PbFilesItemData item) {
+    setState(() {
+      _v1SavingFileIds.remove(item.id);
+
+      final updatedItem = item.copyWith(updatedLabel: 'Now', updatedSort: DateTime.now().millisecondsSinceEpoch);
+      if (_v1PreviewFile?.id == item.id) {
+        _v1PreviewFile = updatedItem;
+      }
+      _replaceV1RecentlyOpenedFiles([
+        updatedItem,
+        for (final recent in _v1RecentlyOpenedFiles)
+          if (recent.id != item.id) recent,
+      ]);
+    });
+  }
+
+  Future<void> _saveV1PreviewFile(PbFilesItemData item) async {
+    if (!item.canPreview) {
+      await Future<void>.delayed(_v1SaveProcessingStep);
+      return;
+    }
+
+    setState(() => _v1SavingFileIds.add(item.id));
+    await Future<void>.delayed(_v1SaveProcessingStep);
+
+    if (!mounted) {
+      return;
+    }
+
+    _finishV1PreviewSave(item);
+  }
+
+  PbFilesItemData? _v1PreviewFileFromRoute(List<PbFilesItemData> items) {
+    final openedFile = _openedFile;
+    if (openedFile == null) {
+      return null;
+    }
+
+    final key = _FilePathKey.keyForPath(openedFile, false);
+    final item = items.firstWhereOrNull((item) => item.id == key);
+    if (item != null) {
+      return item.canPreview ? item : null;
+    }
+
+    return _v1ItemForPath(openedFile);
+  }
+
+  void _toggleV1VisibleSelection(List<PbFilesItemData> items) {
+    _clearV1KeyboardPreviewNavigation();
+
+    final visibleIds = _v1SelectableItems(items).map((item) => item.id).toSet();
+    final selected = powerboardsV1SelectedVisibleItemIds(_selectedSig.value, items);
+    final allSelected = visibleIds.isNotEmpty && visibleIds.every(selected.contains);
+
+    _mutateSelected((next) {
+      if (allSelected) {
+        next.removeAll(visibleIds);
+      } else {
+        next.addAll(visibleIds);
+      }
+      return next;
+    });
+  }
+
+  List<ChatFilePromptAction> _filePromptActionsForPath(String fullPath, {required bool isFolder}) {
+    if (isFolder || widget.services?.state.isReady != true) {
+      return const <ChatFilePromptAction>[];
+    }
+
+    final actions = resolveChatFilePromptActions(services: widget.services!.state.value!, filePath: fullPath);
+    if (actions.isNotEmpty) {
+      return actions;
+    }
+
+    final fallback = _fallbackFilePromptAction();
+    return fallback == null ? const <ChatFilePromptAction>[] : [fallback];
+  }
+
+  ChatFilePromptAction? _fallbackFilePromptAction() {
+    if (widget.services?.state.isReady != true) {
+      return null;
+    }
+
+    for (final service in widget.services!.state.value!) {
+      final descriptor = ma.serviceConversationDescriptor(service, remoteParticipants: widget.client.messaging.remoteParticipants);
+      if (descriptor?.isChat != true) {
+        continue;
+      }
+
+      final rawAgentName = service.agents.firstOrNull?.name;
+      if (rawAgentName == null) {
+        continue;
+      }
+
+      final agentName = rawAgentName.trim();
+      if (agentName.isNotEmpty) {
+        return defaultChatFilePromptAction(agentName: agentName);
+      }
+    }
+
+    for (final participant in widget.client.messaging.remoteParticipants) {
+      final descriptor = ma.participantConversationDescriptor(participant);
+      if (descriptor?.isChat != true) {
+        continue;
+      }
+
+      final agentName = ma.participantDisplayName(participant);
+      if (agentName != null) {
+        return defaultChatFilePromptAction(agentName: agentName);
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _openManageAgentsForFilePrompt() async {
+    final projectId = widget.projectId?.trim();
+    if (projectId == null || projectId.isEmpty) {
+      if (mounted) {
+        ShadToaster.of(context).show(
+          powerboardsToast(
+            title: "No chat agent available",
+            description: "Install a chat agent before asking about files.",
+            destructive: true,
+          ),
+        );
+      }
+      return;
+    }
+
+    await showManageAgentsSurface(
+      context: context,
+      projectId: projectId,
+      room: widget.client,
+      onServiceChanged: () {
+        widget.services?.refresh();
+      },
+    );
+    if (!mounted) {
+      return;
+    }
+    widget.services?.refresh();
+  }
+
+  Future<void> _startDefaultFilePrompt(String fullPath, {PbFilesItemData? recentlyOpenedItem, bool showThreadAfterPrompt = false}) async {
+    final action = _filePromptActionsForPath(fullPath, isFolder: false).firstOrNull;
+    if (action == null) {
+      await _openManageAgentsForFilePrompt();
+      return;
+    }
+
+    final callback = widget.onV1FilePromptRequested;
+    if (callback != null) {
+      if (showThreadAfterPrompt) {
+        _closeV1FilePromptHandoffSurface();
+      }
+      if (recentlyOpenedItem != null && recentlyOpenedItem.canPreview) {
+        setState(() {
+          _recordV1RecentlyOpenedFile(recentlyOpenedItem);
+        });
+      }
+      await callback(action, fullPath, showThreadAfterPrompt: showThreadAfterPrompt);
+      return;
+    }
+
+    try {
+      final threadPath = await startChatFilePromptThread(room: widget.client, action: action, filePath: fullPath);
+      if (!mounted) {
+        return;
+      }
+
+      _openEntry(threadPath, false);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ShadToaster.of(context).show(powerboardsToast(title: "Unable to start chat", description: "$error", destructive: true));
+    }
   }
 
   Future<void> _closeThreadIndexDocument({bool refreshUi = true}) async {
@@ -716,6 +2537,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final name = path.split('/').where((s) => s.isNotEmpty).last;
     final next = List<StorageEntry>.of(ready.value);
     next.removeWhere((e) => e.name == name && e.isFolder == isFolder);
+    _v1FileStateRowsById.removeWhere((_, item) => _v1StateRowMatchesPath(item, path, isFolder: isFolder));
     _toggleSelected(_FilePathKey.keyForPath(path, isFolder), false);
 
     _setEntries(next);
@@ -796,6 +2618,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _openEntry(String path, bool isFolder) {
+    _clearV1KeyboardPreviewNavigation();
+
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
 
@@ -847,21 +2671,177 @@ class _FileManagerViewState extends State<FileManagerView> {
     uploadNotifications.addUpload(upload, totalBytes);
 
     unawaited(
-      upload.done.then((_) async {
-        if (!mounted) {
-          return;
-        }
+      upload.done
+          .then((_) async {
+            if (!mounted) {
+              return;
+            }
 
-        if (parentPath(path) == _folderSig.value) {
-          await _refreshCurrentFolder();
-        }
-      }),
+            if (parentPath(path) == _folderSig.value) {
+              await _refreshCurrentFolder();
+            }
+          })
+          .catchError((Object error) {
+            if (!mounted || !_usesDesktopV1FilesBrowser()) {
+              return;
+            }
+
+            _setV1FileStateRow(_v1UploadErrorRow(path));
+          }),
     );
   }
 
-  Future<void> _downloadFile(String path) async {
+  Future<void> _downloadFile(String path, {bool throwOnLaunchFailure = false}) async {
     final url = await widget.client.storage.downloadUrl(path, download: true);
-    launchUrl(Uri.parse(url));
+    final launched = await launchUrl(Uri.parse(url));
+    if (!launched && throwOnLaunchFailure) {
+      throw StateError('Unable to open download URL.');
+    }
+  }
+
+  void _showDownloadFailure(Object error) {
+    if (!mounted) {
+      return;
+    }
+
+    ShadToaster.of(
+      context,
+    ).show(powerboardsToast(title: 'Download failed', description: '$error', destructive: true, duration: const Duration(seconds: 6)));
+  }
+
+  Future<void> _downloadV1FileWithToast(String path) async {
+    final toaster = ShadToaster.of(context);
+    toaster.show(powerboardsToast(title: 'Downloading', description: _displayNameForPath(path), duration: const Duration(seconds: 4)));
+
+    try {
+      await _downloadFile(path, throwOnLaunchFailure: true);
+    } catch (error) {
+      _showDownloadFailure(error);
+    }
+  }
+
+  Future<void> _downloadV1FilesWithToast(List<String> paths) async {
+    if (paths.isEmpty) {
+      return;
+    }
+
+    final toaster = ShadToaster.of(context);
+    toaster.show(
+      powerboardsToast(
+        title: 'Downloading',
+        description: paths.length == 1 ? _displayNameForPath(paths.single) : '${paths.length} files',
+        duration: const Duration(seconds: 4),
+      ),
+    );
+
+    try {
+      for (final path in paths) {
+        await _downloadFile(path, throwOnLaunchFailure: true);
+      }
+    } catch (error) {
+      _showDownloadFailure(error);
+    }
+  }
+
+  Future<void> _downloadV1Item(PbFilesItemData item) async {
+    final path = _v1PathForItem(item);
+    if (_v1IsFolder(item)) {
+      await _downloadV1Archive([_DownloadArchiveItem(path: path, isFolder: true)]);
+      return;
+    }
+
+    await _downloadV1FileWithToast(path);
+  }
+
+  Future<void> _downloadV1Archive(List<_DownloadArchiveItem> items) async {
+    if (items.isEmpty) {
+      return;
+    }
+
+    final currentFolder = _folderSig.value;
+    final itemNames = [for (final item in items) p.basename(item.path)];
+    final archiveBaseName = items.length == 1 && items.single.isFolder
+        ? p.basename(items.single.path)
+        : _v1FolderLabelForPath(currentFolder);
+    final archiveFileName = powerboardsDownloadArchiveFileName(
+      baseName: archiveBaseName,
+      itemCount: items.length,
+      createdAt: DateTime.now(),
+    );
+    final archivePath = joinPaths(currentFolder, archiveFileName);
+    final toaster = ShadToaster.of(context);
+
+    toaster.show(
+      powerboardsToast(
+        title: 'Preparing download',
+        description: '${items.length} item${items.length == 1 ? '' : 's'} as zip',
+        duration: const Duration(seconds: 5),
+      ),
+    );
+
+    String? containerId;
+    try {
+      containerId = await widget.client.containers.run(
+        image: "docker.io/joshkeegan/zip:latest",
+        command: powerboardsDownloadArchiveCommand(archiveFileName: archiveFileName, itemNames: itemNames),
+        mountPath: "/data",
+        workingDir: "/data/$currentFolder",
+        private: true,
+      );
+
+      final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
+      if (!mounted) {
+        return;
+      }
+
+      if (returnCode != 0) {
+        toaster.show(
+          powerboardsToast(
+            title: 'Download failed',
+            description: 'Couldn’t prepare the zip archive. (Error code: $returnCode)',
+            destructive: true,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+        return;
+      }
+
+      await _downloadFile(archivePath, throwOnLaunchFailure: true);
+      if (!mounted) {
+        return;
+      }
+
+      toaster.show(powerboardsToast(title: 'Downloading', description: archiveFileName, duration: const Duration(seconds: 4)));
+      _scheduleDownloadArchiveCleanup(archivePath);
+    } catch (error) {
+      _showDownloadFailure(error);
+    } finally {
+      try {
+        if (containerId != null) {
+          await widget.client.containers.deleteContainer(containerId: containerId);
+        }
+      } catch (error) {
+        debugPrint("Failed to clean up download archive container: $error");
+      }
+    }
+  }
+
+  void _scheduleDownloadArchiveCleanup(String archivePath) {
+    final client = widget.client;
+    unawaited(
+      Future<void>.delayed(_downloadArchiveCleanupDelay, () async {
+        try {
+          await client.storage.delete(archivePath);
+          if (!mounted) {
+            return;
+          }
+
+          _removePath(archivePath, isFolder: false);
+        } catch (error) {
+          debugPrint("Failed to clean up download archive: $error");
+        }
+      }),
+    );
   }
 
   Future<void> _shareFile(String path) async {
@@ -872,29 +2852,65 @@ class _FileManagerViewState extends State<FileManagerView> {
         return;
       }
 
-      ShadToaster.of(context).show(ShadToast.destructive(title: const Text('Unable to share file'), description: Text('$error')));
+      ShadToaster.of(context).show(powerboardsToast(title: 'Unable to share file', description: '$error', destructive: true));
     }
   }
 
-  Future<void> _deleteFile(String path) async {
+  Future<void> _deleteFile(
+    String path, {
+    PendingStorageDeleteHandle? pendingDelete,
+    DateTime? pendingDeleteDisplayUntil,
+    bool prepareV1Feedback = true,
+  }) async {
     _toggleSelected(_FilePathKey.keyForPath(path, false), false);
-    final pendingDelete = PendingStorageDeletes.begin(scope: _deleteScope, path: path, isFolder: false);
+    final displayUntil = pendingDeleteDisplayUntil ?? DateTime.now().add(_v1DeleteProcessingStep);
+    final deleteHandle = pendingDelete ?? PendingStorageDeletes.begin(scope: _deleteScope, path: path, isFolder: false);
+    if (prepareV1Feedback) {
+      _prepareV1PendingDeleteFeedback([_FilePathKey.keyForPath(path, false)]);
+    }
+
     try {
-      await widget.client.storage.delete(path);
-      _onFileDeleted(path);
+      await Future.wait<void>([
+        widget.client.storage.delete(path).then((_) => _onFileDeleted(path)),
+        _waitForV1PendingDeleteDisplay(displayUntil),
+      ]);
+    } catch (_) {
+      deleteHandle.complete();
+      if (mounted && _usesDesktopV1FilesBrowser()) {
+        _setV1FileStateRow(_v1DeleteErrorRow(path: path, isFolder: false));
+      }
+      rethrow;
     } finally {
-      pendingDelete.complete();
+      deleteHandle.complete();
     }
   }
 
-  Future<void> _deleteFolder(String folderPath) async {
+  Future<void> _deleteFolder(
+    String folderPath, {
+    PendingStorageDeleteHandle? pendingDelete,
+    DateTime? pendingDeleteDisplayUntil,
+    bool prepareV1Feedback = true,
+  }) async {
     _toggleSelected(_FilePathKey.keyForPath(folderPath, true), false);
-    final pendingDelete = PendingStorageDeletes.begin(scope: _deleteScope, path: folderPath, isFolder: true);
+    final displayUntil = pendingDeleteDisplayUntil ?? DateTime.now().add(_v1DeleteProcessingStep);
+    final deleteHandle = pendingDelete ?? PendingStorageDeletes.begin(scope: _deleteScope, path: folderPath, isFolder: true);
+    if (prepareV1Feedback) {
+      _prepareV1PendingDeleteFeedback([_FilePathKey.keyForPath(folderPath, true)]);
+    }
+
     try {
-      await widget.client.storage.delete(folderPath, recursive: true);
-      _removePath(folderPath, isFolder: true);
+      await Future.wait<void>([
+        widget.client.storage.delete(folderPath, recursive: true).then((_) => _removePath(folderPath, isFolder: true)),
+        _waitForV1PendingDeleteDisplay(displayUntil),
+      ]);
+    } catch (_) {
+      deleteHandle.complete();
+      if (mounted && _usesDesktopV1FilesBrowser()) {
+        _setV1FileStateRow(_v1DeleteErrorRow(path: folderPath, isFolder: true));
+      }
+      rethrow;
     } finally {
-      pendingDelete.complete();
+      deleteHandle.complete();
     }
   }
 
@@ -1027,11 +3043,11 @@ class _FileManagerViewState extends State<FileManagerView> {
         }
 
         toaster.show(
-          ShadToast.destructive(
-            title: const Text("Rename failed"),
-            description: Text(
-              "${isFolder ? 'Folder' : 'File'} `${_renameConflictDisplayName(resolvedNextName, isFolder: isFolder)}` already exists in this location.",
-            ),
+          powerboardsToast(
+            title: "Rename failed",
+            description:
+                "${isFolder ? 'Folder' : 'File'} `${_renameConflictDisplayName(resolvedNextName, isFolder: isFolder)}` already exists in this location.",
+            destructive: true,
             duration: const Duration(seconds: 5),
           ),
         );
@@ -1049,16 +3065,9 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
 
       toaster.show(
-        ShadToast.destructive(title: const Text("Rename failed"), description: Text("$error"), duration: const Duration(seconds: 6)),
+        powerboardsToast(title: "Rename failed", description: "$error", destructive: true, duration: const Duration(seconds: 6)),
       );
     }
-  }
-
-  String _shellQuote(String value) {
-    if (value.isEmpty) {
-      return "''";
-    }
-    return "'${value.replaceAll("'", r"'\''")}'";
   }
 
   Future<void> _refreshCurrentFolder() async {
@@ -1084,9 +3093,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final zipFileName = "$folderName.zip";
 
-    toaster.show(
-      ShadToast(title: const Text("Compressing folder"), description: Text("Creating $zipFileName"), duration: const Duration(seconds: 5)),
-    );
+    toaster.show(powerboardsToast(title: "Compressing folder", description: "Creating $zipFileName", duration: const Duration(seconds: 5)));
 
     String? containerId;
 
@@ -1107,18 +3114,15 @@ class _FileManagerViewState extends State<FileManagerView> {
 
       if (returnCode == 0) {
         toaster.show(
-          ShadToast(
-            title: const Text("Compression complete"),
-            description: Text("Created $zipFileName"),
-            duration: const Duration(seconds: 5),
-          ),
+          powerboardsToast(title: "Compression complete", description: "Created $zipFileName", duration: const Duration(seconds: 5)),
         );
         _refreshCurrentFolder();
       } else {
         toaster.show(
-          ShadToast.destructive(
-            title: const Text("Compression failed"),
-            description: Text("Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)"),
+          powerboardsToast(
+            title: "Compression failed",
+            description: "Ups something went wrong while compressing the folder. Please try again. (Error code: $returnCode)",
+            destructive: true,
             duration: const Duration(seconds: 8),
           ),
         );
@@ -1239,9 +3243,10 @@ class _FileManagerViewState extends State<FileManagerView> {
         }
 
         ShadToaster.of(context).show(
-          ShadToast.destructive(
-            title: Text("Unable to delete ${isFolder ? 'folder' : 'file'}"),
-            description: Text("$error"),
+          powerboardsToast(
+            title: "Unable to delete ${isFolder ? 'folder' : 'file'}",
+            description: "$error",
+            destructive: true,
             duration: const Duration(seconds: 6),
           ),
         );
@@ -1254,7 +3259,11 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _confirmAndDeleteSelected() async {
-    final selected = _visibleSelected.value;
+    final useDesktopV1FilesBrowser = _usesDesktopV1FilesBrowser();
+    final v1Items = useDesktopV1FilesBrowser
+        ? _v1VisibleItems(storageEntries.state.value ?? const <StorageEntry>[])
+        : const <PbFilesItemData>[];
+    final selected = useDesktopV1FilesBrowser ? powerboardsV1SelectedVisibleItemIds(_selectedSig.value, v1Items) : _visibleSelected.value;
     if (selected.isEmpty) return;
 
     final toaster = ShadToaster.of(context);
@@ -1297,11 +3306,15 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     int success = 0;
     final failures = <String>[];
-    final toDelete = selected.toList();
-
-    if (isMobile) {
-      _clearMobileSelectionMode();
-    }
+    final v1SelectedItems = useDesktopV1FilesBrowser
+        ? [
+            for (final item in v1Items)
+              if (selected.contains(item.id) && _v1ItemIsSelectable(item)) item,
+          ]
+        : const <PbFilesItemData>[];
+    final toDelete = useDesktopV1FilesBrowser ? [for (final item in v1SelectedItems) item.id] : selected.toList();
+    final pendingDeletes = <String, _PendingDeleteOperation>{};
+    final batchStartedAt = DateTime.now();
 
     for (final key in toDelete) {
       final isFolder = _FilePathKey.isFolderKey(key);
@@ -1310,11 +3323,44 @@ class _FileManagerViewState extends State<FileManagerView> {
         continue;
       }
 
+      pendingDeletes[key] = _PendingDeleteOperation(
+        handle: PendingStorageDeletes.begin(scope: _deleteScope, path: path, isFolder: isFolder),
+        displayUntil: batchStartedAt.add(Duration(milliseconds: _v1DeleteProcessingStep.inMilliseconds * (pendingDeletes.length + 1))),
+      );
+    }
+
+    _prepareV1PendingDeleteFeedback(pendingDeletes.keys);
+
+    if (isMobile) {
+      _clearMobileSelectionMode();
+    } else {
+      _clearSelected();
+    }
+
+    for (final key in toDelete) {
+      final pendingDeleteOperation = pendingDeletes[key];
+      if (pendingDeleteOperation == null) {
+        continue;
+      }
+
+      final isFolder = _FilePathKey.isFolderKey(key);
+      final path = _FilePathKey.pathFromKey(key);
+
       try {
         if (isFolder) {
-          await _deleteFolder(path);
+          await _deleteFolder(
+            path,
+            pendingDelete: pendingDeleteOperation.handle,
+            pendingDeleteDisplayUntil: pendingDeleteOperation.displayUntil,
+            prepareV1Feedback: false,
+          );
         } else {
-          await _deleteFile(path);
+          await _deleteFile(
+            path,
+            pendingDelete: pendingDeleteOperation.handle,
+            pendingDeleteDisplayUntil: pendingDeleteOperation.displayUntil,
+            prepareV1Feedback: false,
+          );
         }
         success++;
       } catch (e) {
@@ -1323,17 +3369,41 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (failures.isEmpty) {
-      toaster.show(ShadToast(description: Text("Deleted $success item${success == 1 ? '' : 's'}"), duration: const Duration(seconds: 4)));
+      toaster.show(
+        powerboardsToast(title: "Deleted", description: "$success item${success == 1 ? '' : 's'}", duration: const Duration(seconds: 4)),
+      );
     } else {
       toaster.show(
-        ShadToast.destructive(description: Text("Deleted $success, failed ${failures.length}"), duration: const Duration(seconds: 6)),
+        powerboardsToast(
+          title: "Delete failed",
+          description: "Deleted $success item${success == 1 ? '' : 's'}. Failed ${failures.length} item${failures.length == 1 ? '' : 's'}.",
+          destructive: true,
+          duration: const Duration(seconds: 6),
+        ),
       );
     }
   }
 
   Future<void> _downloadSelected() async {
-    final selected = _visibleSelected.value;
+    final useDesktopV1FilesBrowser = _usesDesktopV1FilesBrowser();
+    final selected = useDesktopV1FilesBrowser
+        ? powerboardsV1SelectedVisibleItemIds(_selectedSig.value, _v1VisibleItems(storageEntries.state.value ?? const <StorageEntry>[]))
+        : _visibleSelected.value;
     if (selected.isEmpty) return;
+
+    if (useDesktopV1FilesBrowser) {
+      final items = [
+        for (final key in selected) _DownloadArchiveItem(path: _FilePathKey.pathFromKey(key), isFolder: _FilePathKey.isFolderKey(key)),
+      ];
+
+      if (items.any((item) => item.isFolder)) {
+        await _downloadV1Archive(items);
+        return;
+      }
+
+      await _downloadV1FilesWithToast([for (final item in items) item.path]);
+      return;
+    }
 
     final toaster = ShadToaster.of(context);
     var downloaded = 0;
@@ -1355,17 +3425,21 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     if (downloaded > 0 && skippedFolders == 0) {
       toaster.show(
-        ShadToast(description: Text("Downloading $downloaded file${downloaded == 1 ? '' : 's'}"), duration: const Duration(seconds: 4)),
+        powerboardsToast(
+          title: "Downloading",
+          description: "$downloaded file${downloaded == 1 ? '' : 's'}",
+          duration: const Duration(seconds: 4),
+        ),
       );
       return;
     }
 
     if (downloaded > 0) {
       toaster.show(
-        ShadToast(
-          description: Text(
-            "Downloading $downloaded file${downloaded == 1 ? '' : 's'}. Skipped $skippedFolders folder${skippedFolders == 1 ? '' : 's'}.",
-          ),
+        powerboardsToast(
+          title: "Downloading",
+          description:
+              "Downloading $downloaded file${downloaded == 1 ? '' : 's'}. Skipped $skippedFolders folder${skippedFolders == 1 ? '' : 's'}.",
           duration: const Duration(seconds: 5),
         ),
       );
@@ -1373,7 +3447,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     toaster.show(
-      ShadToast(description: const Text("Folders can’t be downloaded from multi-select yet."), duration: const Duration(seconds: 4)),
+      powerboardsToast(
+        title: "Download unavailable",
+        description: "Folders can’t be downloaded from multi-select yet.",
+        duration: const Duration(seconds: 4),
+      ),
     );
   }
 
@@ -1463,13 +3541,42 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     final isFolder = uploads.length == 1 && uploads.first.upload.filename == placeholderFileName;
+    final failed = uploads.where((item) => item.failed).length;
+    final completed = uploads.where((item) => item.completed).length;
     if (isFolder) {
+      if (failed > 0) {
+        return "Folder failed";
+      }
+
       return isCompleted ? "Folder created" : "Creating folder";
     }
 
     final count = uploads.length;
+    if (isCompleted && failed > 0) {
+      if (completed == 0) {
+        return "Upload failed";
+      }
+
+      return "Uploaded $completed, $failed failed";
+    }
+
     final verb = isCompleted ? "Uploaded" : "Uploading";
     return "$verb $count file${count > 1 ? 's' : ''}";
+  }
+
+  String _uploadDisplayName(UploadProgressItem item) {
+    final upload = item.upload;
+    return upload.filename == placeholderFileName ? parentPath(upload.path) : upload.path.split('/').last;
+  }
+
+  Widget _v1UploadProgressPopover(BuildContext context) {
+    return PbUploadProgressPopover(
+      uploadsListenable: uploadNotifications.uploadsVN,
+      isCompletedListenable: uploadNotifications.isCompletedVN,
+      onClose: uploadNotifications.hide,
+      titleBuilder: _uploadTitle,
+      nameBuilder: _uploadDisplayName,
+    );
   }
 
   Widget _popover(BuildContext context) {
@@ -1550,6 +3657,264 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  Widget _buildDesktopV1FilesBrowser(BuildContext context, {required List<StorageEntry> entries, required bool isRefreshing}) {
+    final items = _v1VisibleItems(entries);
+    final selected = powerboardsV1SelectedVisibleItemIds(_selectedSig.value, items);
+    final routePreviewFile = _v1PreviewFileFromRoute(items);
+    final previewFile = _v1PreviewFile ?? routePreviewFile;
+    final recentlyOpenedFiles = _v1RecentlyOpenedFilesForSidePane;
+    final currentFolder = _folderSig.value;
+    final filterEnabled = _v1FilterEnabled(entries);
+    _clearV1FilterIfUnavailable(filterEnabled);
+
+    return IconTheme(
+      data: IconThemeData(color: ShadTheme.of(context).colorScheme.primary),
+      child: ShadPopover(
+        controller: popoverController,
+        padding: EdgeInsets.zero,
+        decoration: ShadDecoration.none,
+        shadows: const [],
+        anchor: ShadAnchor(
+          childAlignment: Alignment.bottomLeft,
+          overlayAlignment: Alignment.bottomLeft,
+          offset: _uploadProgressPopoverOffset,
+        ),
+        popover: _v1UploadProgressPopover,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final usesStackedRoomPanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint;
+            final filePreviewFullscreen = _v1FilePreviewFullscreen || (usesStackedRoomPanel && previewFile != null);
+            final responsivePanel = usesStackedRoomPanel && !filePreviewFullscreen;
+            final responsiveMode = responsivePanel ? PbFilesResponsiveMode.overlay : PbFilesResponsiveMode.docked;
+            final roomHasInstalledAgent = widget.services?.state.isReady == true && widget.services!.state.value!.isNotEmpty;
+            final sidePaneAvailable =
+                previewFile != null ||
+                recentlyOpenedFiles.isNotEmpty ||
+                items.isNotEmpty ||
+                currentFolder.isNotEmpty ||
+                roomHasInstalledAgent;
+            final roomPanelCollapsed = !sidePaneAvailable || (routePreviewFile == null && _effectiveV1FilesRoomPanelCollapsed);
+            final roomPanelExpanded = responsivePanel ? false : !roomPanelCollapsed;
+            final dropTargetPadding = responsiveMode == PbFilesResponsiveMode.overlay
+                ? const PbFilesPanelPadding(left: 20, right: 20)
+                : const PbFilesPanelPadding(left: 30, right: 28);
+            if (filePreviewFullscreen && !_v1FilePreviewFullscreen) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                final previewStillAvailable = _v1PreviewFile != null || routePreviewFile != null;
+                if (!mounted || !previewStillAvailable || _v1FilePreviewFullscreen) {
+                  return;
+                }
+
+                setState(() {
+                  _v1FilePreviewFullscreen = true;
+                  _v1RestoreRoomPanelOverlayOnPreviewClose = _v1RestoreRoomPanelOverlayOnPreviewClose || _v1FilesRoomPanelOverlayOpen;
+                  _v1FilesRoomPanelOverlayOpen = false;
+                });
+                setPreviewFilePreviewFullscreen(true);
+              });
+            }
+            final mainPanel = Stack(
+              children: [
+                PbFilesMainPanel(
+                  currentPath: currentFolder,
+                  folderLabelForPath: _v1FolderLabelForPath,
+                  items: items,
+                  selectedIds: selected,
+                  sortKey: _v1SortKey,
+                  sortDirectionDescending: _v1SortDirectionDescending,
+                  filterController: _v1FilterController,
+                  filterEnabled: filterEnabled,
+                  hasActiveFilter: _v1FilterController.text.trim().isNotEmpty,
+                  roomPanelExpanded: roomPanelExpanded,
+                  responsiveMode: responsiveMode,
+                  showRoomPanelControls: sidePaneAvailable,
+                  previewFileId: previewFile?.id,
+                  keyboardPreviewFileId: _v1KeyboardPreviewFileId,
+                  keyboardPreviewDirection: _v1KeyboardPreviewDirection,
+                  savingIds: _v1SavingFileIds,
+                  enableDropTarget: false,
+                  onBreadcrumbPressed: (path) => _openEntry(path, true),
+                  onSortChanged: _setV1Sort,
+                  onFilterChanged: (_) => setState(() {}),
+                  onToggleSelection: (id) {
+                    final item = items.firstWhereOrNull((item) => item.id == id);
+                    if (item == null || !_v1ItemIsSelectable(item)) {
+                      return;
+                    }
+
+                    _clearV1KeyboardPreviewNavigation();
+                    _toggleSelected(id, !selected.contains(id));
+                  },
+                  onToggleVisibleSelection: () => _toggleV1VisibleSelection(items),
+                  onClearSelection: () {
+                    _clearV1KeyboardPreviewNavigation();
+                    _clearSelected();
+                  },
+                  onDeleteSelection: _confirmAndDeleteSelected,
+                  onDownloadSelection: _downloadSelected,
+                  onCreateFolder: () => unawaited(_addFolder(currentFolder)),
+                  onCreateTextFile: _showNewTextFileDialog,
+                  onUpload: () => unawaited(_addFiles(currentFolder)),
+                  onFilesDropped: (_) {},
+                  onOpenRecentFiles: () {
+                    if (!sidePaneAvailable) {
+                      return;
+                    }
+
+                    if (responsivePanel) {
+                      setState(() => _v1FilesRoomPanelOverlayOpen = true);
+                      return;
+                    }
+
+                    _setV1FilesRoomPanelCollapsed(false);
+                  },
+                  onRoomPanelToggle: () {
+                    if (!sidePaneAvailable) {
+                      return;
+                    }
+
+                    if (responsivePanel) {
+                      setState(() => _v1FilesRoomPanelOverlayOpen = true);
+                      return;
+                    }
+
+                    _setV1FilesRoomPanelCollapsed(!roomPanelCollapsed);
+                  },
+                  onItemPressed: (item) {
+                    if (_v1IsFolder(item)) {
+                      _openEntry(_v1PathForItem(item), true);
+                      return;
+                    }
+                    _openV1Preview(item, openOverlay: responsivePanel, openFullscreen: usesStackedRoomPanel);
+                  },
+                  onBrowseFolder: (item) => _openEntry(item.folderPath, true),
+                  onRemoveProcessingRow: _removeV1FileStateRow,
+                  onLinkedThreadPressed: _openV1LinkedThread,
+                  onAskAgent: (item) => unawaited(
+                    _startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item, showThreadAfterPrompt: usesStackedRoomPanel),
+                  ),
+                  onDownload: (item) => unawaited(_downloadV1Item(item)),
+                  onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
+                  onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
+                ),
+                if (isRefreshing)
+                  const Positioned(
+                    right: 30,
+                    top: 28,
+                    child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: _v1FilesDropTargetActive,
+                  builder: (context, active, child) => Positioned.fill(
+                    child: PbFilesDropTargetOverlayLayer(active: active, top: 142, padding: dropTargetPadding),
+                  ),
+                ),
+              ],
+            );
+            final keyboardPanel = Focus(
+              focusNode: _v1FilesKeyboardFocusNode,
+              autofocus: true,
+              onKeyEvent: (node, event) => _handleV1FilesKeyEvent(
+                event,
+                items: items,
+                previewFile: previewFile,
+                responsivePanel: responsivePanel,
+                openFullscreen: usesStackedRoomPanel || filePreviewFullscreen,
+              ),
+              child: Listener(onPointerDown: (_) => _clearV1KeyboardPreviewNavigation(), child: mainPanel),
+            );
+
+            PbFilesSidePane sidePaneBuilder(BuildContext context, bool resizing) {
+              return PbFilesSidePane(
+                files: recentlyOpenedFiles,
+                previewFile: previewFile,
+                fullscreen: filePreviewFullscreen,
+                resizing: resizing,
+                borderOnTop: responsivePanel,
+                responsiveOverlay: responsivePanel,
+                responsiveOverlayMobile: usesStackedRoomPanel,
+                onPreviewFile: (item) => _openV1Preview(
+                  item,
+                  openOverlay: responsivePanel,
+                  openFullscreen: usesStackedRoomPanel,
+                  restoreOverlayOnClose: responsivePanel,
+                  armKeyboardBrowse: false,
+                ),
+                previewSourceBuilder: _buildV1PreviewSource,
+                onAskAgent: (item) => unawaited(
+                  _startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item, showThreadAfterPrompt: usesStackedRoomPanel),
+                ),
+                onDownload: (item) => unawaited(_downloadV1FileWithToast(_v1PathForItem(item))),
+                onSaveRequested: _saveV1PreviewFile,
+                onToggleFullscreen: () => _setV1PreviewFullscreen(!_v1FilePreviewFullscreen),
+                onClosePreview: _closeV1Preview,
+              );
+            }
+
+            if (responsivePanel) {
+              if (!sidePaneAvailable && _v1FilesRoomPanelOverlayOpen) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _closeV1FilesRoomPanelOverlay();
+                  }
+                });
+              } else if (_v1FilesRoomPanelOverlayOpen) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _v1FilesRoomPanelOverlayController.show();
+                  }
+                });
+              }
+
+              return OverlayPortal(
+                controller: _v1FilesRoomPanelOverlayController,
+                overlayChildBuilder: (context) => Positioned.fill(
+                  child: sidePaneAvailable
+                      ? sidePaneBuilder(context, false).asOverlayFrame(mobile: false, onClose: _closeV1FilesRoomPanelOverlay)
+                      : const SizedBox.shrink(),
+                ),
+                child: ColoredBox(color: PbColors.surfacePanelWash, child: keyboardPanel),
+              );
+            }
+
+            if (_v1FilesRoomPanelOverlayOpen || !sidePaneAvailable && _v1FilesRoomPanelOverlayController.isShowing) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  if (_v1FilesRoomPanelOverlayController.isShowing) {
+                    _v1FilesRoomPanelOverlayController.hide();
+                  }
+                  setState(() => _v1FilesRoomPanelOverlayOpen = false);
+                }
+              });
+            }
+
+            return ColoredBox(
+              color: PbColors.surfacePanelWash,
+              child: PbRoomPanelMount(
+                activeTab: PbRoomPanelTab.files,
+                filePreviewOpen: previewFile != null,
+                filePreviewFullscreen: filePreviewFullscreen,
+                roomPanelCollapsed: roomPanelCollapsed,
+                panelWidth: widget.v1RoomPanelWidth,
+                onPanelWidthChanged: widget.onV1RoomPanelWidthChanged,
+                threadPanel: keyboardPanel,
+                roomPanelBuilder: sidePaneBuilder,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  String _v1FolderLabelForPath(String path) {
+    if (path.isEmpty) {
+      return 'Files';
+    }
+
+    return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+  }
+
   Widget _buildActionsMenu(BuildContext? boundaryContext, String fullPath, bool isFolder, bool showTrigger) {
     final isAdaptiveMobile = _usesAdaptiveMobileLayout(context);
 
@@ -1580,6 +3945,12 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     Future<void> onStartFilePrompt(ChatFilePromptAction action) async {
+      final callback = widget.onV1FilePromptRequested;
+      if (callback != null) {
+        await callback(action, fullPath);
+        return;
+      }
+
       try {
         final threadPath = await startChatFilePromptThread(room: widget.client, action: action, filePath: fullPath);
         if (!mounted) {
@@ -1592,16 +3963,12 @@ class _FileManagerViewState extends State<FileManagerView> {
           return;
         }
 
-        ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to start chat"), description: Text("$error")));
+        ShadToaster.of(context).show(powerboardsToast(title: "Unable to start chat", description: "$error", destructive: true));
       }
     }
 
     List<ChatFilePromptAction> filePromptActions() {
-      if (isFolder || widget.services?.state.isReady != true) {
-        return const <ChatFilePromptAction>[];
-      }
-
-      return resolveChatFilePromptActions(services: widget.services!.state.value!, filePath: fullPath);
+      return _filePromptActionsForPath(fullPath, isFolder: isFolder);
     }
 
     List<Widget> items() {
@@ -2598,6 +4965,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
+    final isAdaptiveMobile = widget.mobileShellOwnsHeader && _usesAdaptiveMobileLayout(context);
 
     return CallbackShortcuts(
       bindings: {
@@ -2611,11 +4979,27 @@ class _FileManagerViewState extends State<FileManagerView> {
         autofocus: true,
         child: FileDropArea(
           onFileDrop: _onFileDrop,
+          onDraggingChanged: _setV1FilesDropTargetActive,
+          overlayBuilder: !isAdaptiveMobile && powerboardsUsesDesktopUiPreview(context) ? (_, _) => const SizedBox.shrink() : null,
           child: SignalBuilder(
             builder: (context, _) {
               final selected = _visibleSelected.value;
-              final isAdaptiveMobile = widget.mobileShellOwnsHeader && _usesAdaptiveMobileLayout(context);
               final hasOpenedFile = _openedFile != null;
+              final useDesktopV1FilesBrowser = !isAdaptiveMobile && powerboardsUsesDesktopUiPreview(context);
+              if (useDesktopV1FilesBrowser) {
+                return SizedBox.expand(
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: PendingStorageDeletes.listenableFor(_deleteScope),
+                    builder: (context, _, _) => storageEntries.state.when(
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (e, st) => Center(child: Text("Error loading files: $e")),
+                      ready: (entries) =>
+                          _buildDesktopV1FilesBrowser(context, entries: entries, isRefreshing: storageEntries.state.isRefreshing),
+                    ),
+                  ),
+                );
+              }
+
               final hideEmbeddedMobileToolbar = isAdaptiveMobile && !hasOpenedFile;
               final showAdaptiveOpenedFileDivider = isAdaptiveMobile && hasOpenedFile;
               final adaptiveSecondaryRow = showAdaptiveOpenedFileDivider
@@ -2761,7 +5145,6 @@ class FileTableView extends StatefulWidget {
 class _FileTableViewState extends State<FileTableView> {
   static TextStyle get dataStyle => powerboardsFileListTitleStyle();
   static TextStyle get headerStyle => powerboardsFileListMetadataStyle();
-  static const List<String> _sizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
   static const BorderRadius _fileCheckboxRadius = BorderRadius.all(Radius.circular(6));
 
   final ValueNotifier<String?> _hoveredRowKey = ValueNotifier<String?>(null);
@@ -2895,23 +5278,7 @@ class _FileTableViewState extends State<FileTableView> {
       return null;
     }
 
-    return _formatBytes(size);
-  }
-
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    }
-
-    var value = bytes.toDouble();
-    var unitIndex = 0;
-    while (value >= 1024 && unitIndex < _sizeUnits.length - 1) {
-      value /= 1024;
-      unitIndex++;
-    }
-
-    final decimals = value >= 10 || value == value.roundToDouble() ? 0 : 1;
-    return '${value.toStringAsFixed(decimals)} ${_sizeUnits[unitIndex]}';
+    return _formatFileSizeBytes(size);
   }
 
   Widget _hoverRegion(String rowKey, Widget child) {
@@ -3401,78 +5768,6 @@ class _FileActionsMenuButtonState extends State<_FileActionsMenuButton> {
         ),
       ),
     );
-  }
-}
-
-class UploadProgressItem {
-  const UploadProgressItem({required this.upload, required this.totalBytes});
-
-  final MeshagentFileUpload upload;
-  final int totalBytes;
-}
-
-class UploadProgressNotifications {
-  UploadProgressNotifications({required this.popoverController});
-
-  final ShadPopoverController popoverController;
-
-  final _uploads = Signal<List<UploadProgressItem>>([]);
-  final _isCompleted = Signal<bool>(false);
-  final _activeUploads = <Future<void>>[];
-
-  late final isCompletedVN = _isCompleted.toValueNotifier();
-  late final uploadsVN = _uploads.toValueNotifier();
-
-  bool _running = false;
-  bool _resetUploads = true;
-  Timer? _autoHideTimer;
-
-  void addUpload(MeshagentFileUpload upload, int totalBytes) {
-    _autoHideTimer?.cancel();
-    _isCompleted.value = false;
-
-    final item = UploadProgressItem(upload: upload, totalBytes: totalBytes);
-    _uploads.value = _resetUploads ? [item] : [..._uploads.value, item];
-    _resetUploads = false;
-    _activeUploads.add(upload.done);
-
-    _ensureRunning();
-  }
-
-  void dispose() {
-    _autoHideTimer?.cancel();
-    _uploads.dispose();
-    _isCompleted.dispose();
-  }
-
-  void _ensureRunning() {
-    if (_running) return;
-
-    _running = true;
-    _run();
-  }
-
-  Future<void> _run() async {
-    if (!popoverController.isOpen) {
-      popoverController.show();
-    }
-
-    try {
-      while (_activeUploads.isNotEmpty) {
-        await _activeUploads.removeAt(0);
-      }
-      _resetUploads = true;
-      _isCompleted.value = true;
-      _autoHideTimer?.cancel();
-      _autoHideTimer = Timer(Duration(seconds: 3), hide);
-    } finally {
-      _running = false;
-    }
-  }
-
-  void hide() {
-    _autoHideTimer?.cancel();
-    popoverController.hide();
   }
 }
 
