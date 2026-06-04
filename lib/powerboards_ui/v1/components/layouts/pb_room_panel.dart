@@ -316,7 +316,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
       resizing: widget.filePreviewResizing,
       borderOnTop: widget.borderOnTop,
       showInlineBorder: showInlineBorder,
-      hideFullscreenToggle: widget.openFilePreviewAsFullscreen || widget.responsiveOverlay,
+      hideFullscreenToggle: widget.responsiveOverlay,
       onAskAgent: widget.onAskFileAgent == null ? null : () => widget.onAskFileAgent!(_previewFile),
       onShare: widget.onShareFile == null ? null : () => widget.onShareFile!(_previewFile),
       onDownload: widget.onDownloadFile == null ? null : () => widget.onDownloadFile!(_previewFile),

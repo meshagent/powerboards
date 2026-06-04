@@ -10,6 +10,7 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.d
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_sidepane_item_menu.dart' as sidepane_menu;
 import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_transcript_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 
 class _NoopProtocolChannel extends ProtocolChannel {
@@ -996,6 +997,67 @@ void main() {
     expect(previewFrame.left, 0);
     expect(previewFrame.width, 560);
     expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
+  });
+
+  testWidgets('room panel forced fullscreen keeps minimize control when not a responsive overlay', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'scratch.md', path: 'sample-attachments/scratch.md');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 960,
+            height: 560,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              openFilePreviewAsFullscreen: true,
+              attachments: [file],
+              threads: const ['Planning'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'minimize-2'), findsOneWidget);
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'maximize-2'), findsNothing);
+  });
+
+  testWidgets('room panel responsive overlay fullscreen hides minimize control', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'scratch.md', path: 'sample-attachments/scratch.md');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              openFilePreviewAsFullscreen: true,
+              responsiveOverlay: true,
+              attachments: [file],
+              threads: const ['Planning'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'minimize-2'), findsNothing);
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'maximize-2'), findsNothing);
   });
 
   testWidgets('file preview uses real native document child instead of editable sample fallback', (tester) async {
