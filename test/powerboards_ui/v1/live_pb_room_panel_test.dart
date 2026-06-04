@@ -15,13 +15,13 @@ class _TracingMessagingChatClient extends MessagingChatClient {
   _TracingMessagingChatClient({required super.room, super.agentName});
 
   @override
-  Future<void> sendAgentMessage(AgentMessage message, {Uint8List? attachment, bool ignoreOffline = false}) async {
+  Future<void> sendAgentMessage(AgentMessage message, {Uint8List? attachment}) async {
     // ignore: avoid_print
     print(
       '[TRACE sendAgentMessage] type=${message.type} id=${message.messageId} '
       'json=${jsonEncode(message.toJson())}',
     );
-    return super.sendAgentMessage(message, attachment: attachment, ignoreOffline: ignoreOffline);
+    return super.sendAgentMessage(message, attachment: attachment);
   }
 }
 

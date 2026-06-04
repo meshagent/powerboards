@@ -21,7 +21,7 @@ class _NoopProtocolChannel extends ProtocolChannel {
 
 class _FakeChatClient extends agent_sessions.BaseChatClient {
   @override
-  Future<void> sendAgentMessage(agent_sessions.AgentMessage message, {Uint8List? attachment, bool ignoreOffline = false}) async {}
+  Future<void> sendAgentMessage(agent_sessions.AgentMessage message, {Uint8List? attachment}) async {}
 }
 
 class _FakeThreadStorageRepository extends agent_sessions.ThreadStorageRepository {
