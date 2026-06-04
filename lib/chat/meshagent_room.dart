@@ -4714,10 +4714,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       );
     }
 
-    if (canViewStorageAllowed && controller.isFilesShown) {
-      return _buildFilesArea(context, const [], showDesktopSidetrayToggle: false);
-    }
-
+    final showFilesWorkspace = canViewStorageAllowed && controller.isFilesShown;
     final chatContext = _resolveMobileChatHeaderContext(supported, selected);
     final threadListPath = chatContext?.threadListPath;
     final agentItems = _desktopPreviewAgentItems(supported, selected);
@@ -4803,6 +4800,24 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             builder: (context, constraints) {
               final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_desktopPreviewFilePreviewFullscreen;
               final roomPanelExpanded = responsivePanel ? false : !_desktopPreviewRoomPanelCollapsed;
+              Widget preserveWorkspaceSwitch(Widget threadWorkspace) {
+                if (!canViewStorageAllowed) {
+                  return threadWorkspace;
+                }
+
+                return IndexedStack(
+                  index: showFilesWorkspace ? 1 : 0,
+                  sizing: StackFit.expand,
+                  children: [
+                    KeyedSubtree(key: const ValueKey("desktop-preview-thread-workspace"), child: threadWorkspace),
+                    KeyedSubtree(
+                      key: const ValueKey("desktop-preview-files-workspace"),
+                      child: _buildFilesArea(context, const [], showDesktopSidetrayToggle: false),
+                    ),
+                  ],
+                );
+              }
+
               final effectiveThreadPanel = hasVisibleAgents
                   ? Column(
                       children: [
@@ -4933,9 +4948,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               }
 
               if (!hasVisibleAgents) {
-                return ColoredBox(
-                  color: ShadTheme.of(context).colorScheme.card,
-                  child: SizedBox.expand(child: effectiveThreadPanel),
+                return preserveWorkspaceSwitch(
+                  ColoredBox(
+                    color: ShadTheme.of(context).colorScheme.card,
+                    child: SizedBox.expand(child: effectiveThreadPanel),
+                  ),
                 );
               }
 
@@ -4948,10 +4965,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   });
                 }
 
-                return OverlayPortal(
-                  controller: _desktopPreviewRoomPanelOverlayController,
-                  overlayChildBuilder: (context) => Positioned.fill(child: buildRoomPanel(responsiveOverlay: true)),
-                  child: ColoredBox(color: ShadTheme.of(context).colorScheme.card, child: effectiveThreadPanel),
+                return preserveWorkspaceSwitch(
+                  OverlayPortal(
+                    controller: _desktopPreviewRoomPanelOverlayController,
+                    overlayChildBuilder: (context) => Positioned.fill(child: buildRoomPanel(responsiveOverlay: true)),
+                    child: ColoredBox(color: ShadTheme.of(context).colorScheme.card, child: effectiveThreadPanel),
+                  ),
                 );
               }
 
@@ -4966,17 +4985,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 });
               }
 
-              return ColoredBox(
-                color: ShadTheme.of(context).colorScheme.card,
-                child: PbRoomPanelMount(
-                  activeTab: _desktopPreviewRoomPanelTab,
-                  filePreviewOpen: _desktopPreviewFilePreviewOpen,
-                  filePreviewFullscreen: _desktopPreviewFilePreviewFullscreen,
-                  roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
-                  panelWidth: _desktopPreviewRoomPanelWidth,
-                  onPanelWidthChanged: _setDesktopPreviewRoomPanelWidth,
-                  threadPanel: effectiveThreadPanel,
-                  roomPanelBuilder: (context, resizing) => buildRoomPanel(resizing: resizing),
+              return preserveWorkspaceSwitch(
+                ColoredBox(
+                  color: ShadTheme.of(context).colorScheme.card,
+                  child: PbRoomPanelMount(
+                    activeTab: _desktopPreviewRoomPanelTab,
+                    filePreviewOpen: _desktopPreviewFilePreviewOpen,
+                    filePreviewFullscreen: _desktopPreviewFilePreviewFullscreen,
+                    roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
+                    panelWidth: _desktopPreviewRoomPanelWidth,
+                    onPanelWidthChanged: _setDesktopPreviewRoomPanelWidth,
+                    threadPanel: effectiveThreadPanel,
+                    roomPanelBuilder: (context, resizing) => buildRoomPanel(resizing: resizing),
+                  ),
                 ),
               );
             },
