@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
@@ -6,7 +8,10 @@ import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dar
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 
 void main() {
-  tearDown(powerboardsV1ClearRecentlyOpenedFileSessionCache);
+  tearDown(() {
+    powerboardsV1ClearRecentlyOpenedFileSessionCache();
+    powerboardsV1ClearPdfPreviewCache();
+  });
 
   test('file manager maps Powerboards-native paths to v1 file type keys', () {
     expect(powerboardsV1FileTypeKeyForPath('.threads/main.thread'), 'thread');
@@ -39,6 +44,63 @@ void main() {
     final preview = powerboardsV1VideoPreview(Uri.parse('https://example.com/clip.mp4'));
 
     expect(preview.allowNativeFullscreen, isFalse);
+  });
+
+  test('v1 pdf preview cache reuses loaded bytes for the same room and path', () async {
+    final room = Object();
+    var loads = 0;
+
+    Future<Uint8List> loader() async {
+      loads += 1;
+      return Uint8List.fromList([loads]);
+    }
+
+    final first = await powerboardsV1LoadCachedPdfPreviewDataForTesting(room: room, path: 'docs/brief.pdf', loader: loader);
+    final second = await powerboardsV1LoadCachedPdfPreviewDataForTesting(room: room, path: 'docs/brief.pdf', loader: loader);
+
+    expect(loads, 1);
+    expect(identical(first, second), isTrue);
+  });
+
+  test('v1 pdf preview cache isolates identical paths by room identity', () async {
+    final firstRoom = Object();
+    final secondRoom = Object();
+    var loads = 0;
+
+    Future<Uint8List> loader() async {
+      loads += 1;
+      return Uint8List.fromList([loads]);
+    }
+
+    final first = await powerboardsV1LoadCachedPdfPreviewDataForTesting(room: firstRoom, path: 'docs/brief.pdf', loader: loader);
+    final second = await powerboardsV1LoadCachedPdfPreviewDataForTesting(room: secondRoom, path: 'docs/brief.pdf', loader: loader);
+
+    expect(loads, 2);
+    expect(first, [1]);
+    expect(second, [2]);
+  });
+
+  test('v1 pdf preview cache retries after a failed load', () async {
+    final room = Object();
+    var attempts = 0;
+
+    Future<Uint8List> loader() async {
+      attempts += 1;
+      if (attempts == 1) {
+        throw StateError('boom');
+      }
+      return Uint8List.fromList([7]);
+    }
+
+    await expectLater(
+      powerboardsV1LoadCachedPdfPreviewDataForTesting(room: room, path: 'docs/brief.pdf', loader: loader),
+      throwsA(isA<StateError>()),
+    );
+
+    final loaded = await powerboardsV1LoadCachedPdfPreviewDataForTesting(room: room, path: 'docs/brief.pdf', loader: loader);
+
+    expect(attempts, 2);
+    expect(loaded, [7]);
   });
 
   test('recently opened files move opened file to the front and de-dupe', () {

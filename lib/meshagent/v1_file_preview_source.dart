@@ -49,6 +49,28 @@ typedef PowerboardsV1PreviewTextSaver = Future<void> Function(String path, Strin
 typedef PowerboardsV1PreviewDownloadUrl = Future<String> Function(String path);
 typedef PowerboardsV1UnavailablePreviewBuilder = Widget Function(BuildContext context, PbAttachmentListItemData file, String? subtitle);
 
+const int _powerboardsV1PdfPreviewCacheEntryLimit = 4;
+const int _powerboardsV1PdfPreviewCacheByteLimit = 80 * 1024 * 1024;
+
+final _powerboardsV1PdfPreviewCache = _PowerboardsV1PdfPreviewCache(
+  maxEntries: _powerboardsV1PdfPreviewCacheEntryLimit,
+  maxBytes: _powerboardsV1PdfPreviewCacheByteLimit,
+);
+
+@visibleForTesting
+void powerboardsV1ClearPdfPreviewCache() {
+  _powerboardsV1PdfPreviewCache.clear();
+}
+
+@visibleForTesting
+Future<Uint8List> powerboardsV1LoadCachedPdfPreviewDataForTesting({
+  required Object room,
+  required String path,
+  required Future<Uint8List> Function() loader,
+}) {
+  return _powerboardsV1PdfPreviewCache.load(room: room, path: path, loader: loader);
+}
+
 VideoPreview powerboardsV1VideoPreview(Uri url) => VideoPreview(url: url, fit: BoxFit.contain, allowNativeFullscreen: false);
 
 @visibleForTesting
@@ -102,6 +124,128 @@ Future<String> powerboardsV1LoadPreviewText(RoomClient room, String path) async 
 Future<void> powerboardsV1SavePreviewText(RoomClient room, String path, String text) async {
   final bytes = Uint8List.fromList(utf8.encode(text));
   await room.storage.uploadStream(path, Stream<Uint8List>.value(bytes), overwrite: true, size: bytes.length);
+}
+
+Future<Uint8List> _powerboardsV1LoadPdfPreviewData({required RoomClient room, required String path}) {
+  return _powerboardsV1PdfPreviewCache.load(
+    room: room,
+    path: path,
+    loader: () async {
+      final content = await room.storage.download(path);
+      return Uint8List.fromList(content.data);
+    },
+  );
+}
+
+class _PowerboardsV1PdfPreviewCacheKey {
+  const _PowerboardsV1PdfPreviewCacheKey({required this.room, required this.path});
+
+  final Object room;
+  final String path;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _PowerboardsV1PdfPreviewCacheKey && identical(room, other.room) && path == other.path;
+  }
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(room), path);
+}
+
+class _PowerboardsV1PdfPreviewCacheEntry {
+  _PowerboardsV1PdfPreviewCacheEntry(this.future);
+
+  final Future<Uint8List> future;
+  int sizeBytes = 0;
+}
+
+class _PowerboardsV1PdfPreviewCache {
+  _PowerboardsV1PdfPreviewCache({required this.maxEntries, required this.maxBytes});
+
+  final int maxEntries;
+  final int maxBytes;
+  final Map<_PowerboardsV1PdfPreviewCacheKey, _PowerboardsV1PdfPreviewCacheEntry> _entries = {};
+  int _totalBytes = 0;
+
+  Future<Uint8List> load({required Object room, required String path, required Future<Uint8List> Function() loader}) {
+    final key = _PowerboardsV1PdfPreviewCacheKey(room: room, path: path);
+    final cached = _entries.remove(key);
+    if (cached != null) {
+      _entries[key] = cached;
+      return cached.future;
+    }
+
+    late final _PowerboardsV1PdfPreviewCacheEntry entry;
+    final future = Future<Uint8List>.sync(loader).then(
+      (data) {
+        if (!identical(_entries[key], entry)) {
+          return data;
+        }
+
+        _totalBytes -= entry.sizeBytes;
+        entry.sizeBytes = data.lengthInBytes;
+        _totalBytes += entry.sizeBytes;
+        _evictIfNeeded(protectedKey: key);
+        return data;
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (identical(_entries[key], entry)) {
+          _remove(key, entry);
+        }
+        return Future<Uint8List>.error(error, stackTrace);
+      },
+    );
+    entry = _PowerboardsV1PdfPreviewCacheEntry(future);
+    _entries[key] = entry;
+    _evictIfNeeded(protectedKey: key);
+    return future;
+  }
+
+  void clear() {
+    _entries.clear();
+    _totalBytes = 0;
+  }
+
+  void _remove(_PowerboardsV1PdfPreviewCacheKey key, _PowerboardsV1PdfPreviewCacheEntry entry) {
+    if (!identical(_entries[key], entry)) {
+      return;
+    }
+
+    _entries.remove(key);
+    _totalBytes -= entry.sizeBytes;
+  }
+
+  void _evictIfNeeded({_PowerboardsV1PdfPreviewCacheKey? protectedKey}) {
+    while (_entries.length > maxEntries) {
+      final removed = _removeOldestEvictableEntry(protectedKey: protectedKey);
+      if (!removed) {
+        break;
+      }
+    }
+
+    while (_totalBytes > maxBytes && _entries.length > 1) {
+      final removed = _removeOldestEvictableEntry(protectedKey: protectedKey, loadedEntriesOnly: true);
+      if (!removed) {
+        break;
+      }
+    }
+  }
+
+  bool _removeOldestEvictableEntry({_PowerboardsV1PdfPreviewCacheKey? protectedKey, bool loadedEntriesOnly = false}) {
+    for (final entry in _entries.entries) {
+      if (entry.key == protectedKey) {
+        continue;
+      }
+      if (loadedEntriesOnly && entry.value.sizeBytes == 0) {
+        continue;
+      }
+
+      _remove(entry.key, entry.value);
+      return true;
+    }
+
+    return false;
+  }
 }
 
 PbFilePreviewSource powerboardsV1PreviewSourceForAttachment({
@@ -300,9 +444,8 @@ class _PowerboardsV1PdfPreviewState extends State<PowerboardsV1PdfPreview> {
     }
   }
 
-  Future<Uint8List> _loadPdfData() async {
-    final content = await widget.room.storage.download(widget.path);
-    return Uint8List.fromList(content.data);
+  Future<Uint8List> _loadPdfData() {
+    return _powerboardsV1LoadPdfPreviewData(room: widget.room, path: widget.path);
   }
 
   @override
