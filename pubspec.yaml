@@ -83,6 +83,7 @@ dependencies:
   meshagent_flutter_shadcn: ^0.44.3
   meshagent_flutter_dev: ^0.44.3
   meshagent_flutter_auth: ^0.44.3
+  pdfrx: ^2.2.18
 
   data_table_2: ^2.6.0
   file_icon: ^1.0.0
@@ -206,6 +207,10 @@ flutter:
           weight: 700
         - asset: lib/powerboards_ui/v1/assets/fonts/Inter-ExtraBold.ttf
           weight: 800
+    - family: DM Mono
+      fonts:
+        - asset: lib/powerboards_ui/v1/assets/fonts/DMMono-Regular.ttf
+          weight: 400
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages

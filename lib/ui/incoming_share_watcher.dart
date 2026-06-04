@@ -11,6 +11,7 @@ import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/settings/selected_room.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -293,9 +294,7 @@ class _IncomingShareWatcherState extends State<IncomingShareWatcher> {
       return;
     }
 
-    final toast = destructive
-        ? ShadToast.destructive(title: title, description: description)
-        : ShadToast(title: title, description: description);
+    final toast = powerboardsWidgetToast(title: title, description: description, destructive: destructive);
     final toastContext = widget.navigatorKey.currentContext ?? context;
     final toaster = ShadToaster.maybeOf(toastContext) ?? ShadToaster.maybeOf(context);
     if (toaster == null) {

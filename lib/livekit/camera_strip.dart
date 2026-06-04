@@ -8,18 +8,19 @@ import 'participant_track.dart';
 import 'hover_builder.dart';
 
 class CameraStrip extends StatelessWidget {
-  const CameraStrip({super.key, required this.room, this.gap = 5, this.horizontal = false, this.participants});
+  const CameraStrip({super.key, required this.room, this.gap = 5, this.horizontal = false, this.participants, this.borderRadius = 8});
 
   final lk.Room room;
   final double gap;
   final bool horizontal;
   final List<lk.Participant>? participants;
+  final double borderRadius;
 
   Widget displayWrapper(Object key, Widget child) {
     return Container(
       key: ObjectKey(key),
       margin: .only(bottom: horizontal ? 0 : gap, right: horizontal ? gap : 0),
-      decoration: BoxDecoration(borderRadius: .circular(8)),
+      decoration: BoxDecoration(borderRadius: .circular(borderRadius)),
       clipBehavior: .antiAlias,
       child: AspectRatio(aspectRatio: 16 / 9, child: child),
     );
@@ -45,6 +46,7 @@ class CameraStrip extends StatelessWidget {
                       fit: videoTrack.source == lk.TrackSource.screenShareVideo ? lk.VideoViewFit.contain : lk.VideoViewFit.cover,
                     ),
                     interactive: videoTrack.source != lk.TrackSource.screenShareVideo,
+                    borderRadius: borderRadius,
                   ),
                 );
               },
@@ -67,6 +69,7 @@ class CameraStrip extends StatelessWidget {
             participant: participant,
             expandSource: lk.TrackSource.camera,
             showName: hovered,
+            borderRadius: borderRadius,
             camera: Container(
               color: const Color(0xFF2A2A2A),
               alignment: Alignment.center,

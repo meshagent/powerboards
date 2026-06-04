@@ -3,21 +3,16 @@ import 'package:flutter/material.dart';
 import '../../models/pb_agent_display.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_typography.dart';
-import '../menus/pb_menu_anchor.dart';
-import '../menus/pb_switcher_menu.dart';
 import '../primitives/pb_svg_icon.dart';
 
-class PbThreadHeader extends StatefulWidget {
+class PbThreadHeader extends StatelessWidget {
   const PbThreadHeader({
     super.key,
     this.title = 'Launch planning',
     this.agentName = 'Assistant',
-    this.threads = const ['Launch planning'],
     this.selectedThreadTitle,
-    this.threadMenuEnabled = true,
-    this.onThreadSelected,
-    this.onCreateThread,
     this.roomPanelExpanded = true,
+    this.blankRoom = false,
     this.onTitlePressed,
     this.onRoomPanelToggle,
     this.onOpenAllAgentsAndThreads,
@@ -25,124 +20,39 @@ class PbThreadHeader extends StatefulWidget {
 
   final String title;
   final String agentName;
-  final List<String> threads;
   final String? selectedThreadTitle;
-  final bool threadMenuEnabled;
-  final ValueChanged<String>? onThreadSelected;
-  final VoidCallback? onCreateThread;
   final bool roomPanelExpanded;
+  final bool blankRoom;
   final VoidCallback? onTitlePressed;
   final VoidCallback? onRoomPanelToggle;
   final VoidCallback? onOpenAllAgentsAndThreads;
 
-  @override
-  State<PbThreadHeader> createState() => _PbThreadHeaderState();
-}
-
-class _PbThreadHeaderState extends State<PbThreadHeader> {
-  static const int _defaultVisibleThreadCount = 6;
-
-  final TextEditingController _filterController = TextEditingController();
-  bool _threadMenuOpen = false;
-
-  @override
-  void dispose() {
-    _filterController.dispose();
-    super.dispose();
-  }
-
-  String get _selectedThreadTitle => widget.selectedThreadTitle ?? widget.title;
-
-  void _toggleThreadMenu() {
-    if (!widget.threadMenuEnabled) {
-      return;
-    }
-
-    setState(() => _threadMenuOpen = !_threadMenuOpen);
-    widget.onTitlePressed?.call();
-  }
-
-  void _closeThreadMenu() {
-    if (!_threadMenuOpen) {
-      return;
-    }
-
-    setState(() => _threadMenuOpen = false);
-  }
-
-  void _setThreadFilter(String value) => setState(() {});
-
-  void _clearThreadFilter() {
-    _filterController.clear();
-    setState(() {});
-  }
-
-  void _selectThread(String thread) {
-    _filterController.clear();
-    widget.onThreadSelected?.call(thread);
-    setState(() => _threadMenuOpen = false);
-  }
-
-  void _createThread() {
-    _filterController.clear();
-    widget.onCreateThread?.call();
-    setState(() => _threadMenuOpen = false);
-  }
-
-  Widget _buildThreadMenu() {
-    final query = _filterController.text.trim().toLowerCase();
-    final filtering = query.isNotEmpty;
-    final filteredThreads = widget.threads.where((thread) => !filtering || thread.toLowerCase().contains(query)).toList();
-    final visibleThreads = filtering ? filteredThreads : filteredThreads.take(_defaultVisibleThreadCount).toList();
-
-    return PbSwitcherMenu(
-      width: 240,
-      filterController: _filterController,
-      onFilterChanged: _setThreadFilter,
-      items: [for (final thread in visibleThreads) PbSwitcherMenuItem(title: thread, selected: thread == _selectedThreadTitle)],
-      emptyLabel: 'No matching threads',
-      actionLabel: filtering ? 'Clear results' : 'New Thread',
-      actionLeadingIconAssetName: 'plus',
-      actionLeadingIconTurns: filtering ? -0.125 : 0,
-      onActionPressed: filtering ? _clearThreadFilter : _createThread,
-      onItemPressed: _selectThread,
-    );
-  }
+  String get _selectedThreadTitle => selectedThreadTitle ?? title;
+  VoidCallback? get _titleAction => onOpenAllAgentsAndThreads ?? onTitlePressed;
 
   @override
   Widget build(BuildContext context) {
-    final titleButton = _ThreadTitleButton(
-      title: _selectedThreadTitle,
-      selected: _threadMenuOpen,
-      menuEnabled: widget.threadMenuEnabled,
-      onPressed: widget.threadMenuEnabled ? _toggleThreadMenu : null,
-    );
-    final threadTitleButton = widget.threadMenuEnabled
-        ? PbMenuAnchor(
-            panel: _threadMenuOpen ? _buildThreadMenu() : null,
-            gap: 10,
-            triggerHeight: 38,
-            onDismiss: _closeThreadMenu,
-            child: titleButton,
-          )
-        : titleButton;
+    if (blankRoom) {
+      return Container(
+        constraints: const BoxConstraints(minHeight: 76),
+        padding: const EdgeInsets.fromLTRB(30, 19, 28, 19),
+        child: const Row(children: [Expanded(child: _BlankRoomTitle())]),
+      );
+    }
+
+    final threadTitleButton = _ThreadTitleButton(title: _selectedThreadTitle, onPressed: _titleAction);
 
     return Container(
       constraints: const BoxConstraints(minHeight: 76),
-      padding: const EdgeInsets.fromLTRB(30, 27, 28, 11),
+      padding: const EdgeInsets.fromLTRB(30, 19, 28, 19),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final stacked = constraints.maxWidth < 560;
-          final titleGroup = _ThreadTitleGroup(
-            titleButton: threadTitleButton,
-            agentName: widget.agentName,
-            showThreadPrefix: widget.threadMenuEnabled,
-            stacked: stacked,
-          );
+          final titleGroup = _ThreadTitleGroup(titleButton: threadTitleButton, agentName: agentName, stacked: stacked);
           final actions = _ThreadHeaderActions(
-            roomPanelExpanded: widget.roomPanelExpanded,
-            onRoomPanelToggle: widget.onRoomPanelToggle,
-            onOpenAllAgentsAndThreads: widget.onOpenAllAgentsAndThreads,
+            roomPanelExpanded: roomPanelExpanded,
+            onRoomPanelToggle: onRoomPanelToggle,
+            onOpenAllAgentsAndThreads: onOpenAllAgentsAndThreads,
           );
 
           if (stacked) {
@@ -175,17 +85,31 @@ class _PbThreadHeaderState extends State<PbThreadHeader> {
   }
 }
 
+class _BlankRoomTitle extends StatelessWidget {
+  const _BlankRoomTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 38,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text('Welcome', maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: PowerboardsTypography.h1),
+      ),
+    );
+  }
+}
+
 class _ThreadTitleGroup extends StatelessWidget {
-  const _ThreadTitleGroup({required this.titleButton, required this.agentName, required this.showThreadPrefix, required this.stacked});
+  const _ThreadTitleGroup({required this.titleButton, required this.agentName, required this.stacked});
 
   final Widget titleButton;
   final String agentName;
-  final bool showThreadPrefix;
   final bool stacked;
 
   @override
   Widget build(BuildContext context) {
-    final meta = _ThreadMeta(agentName: agentName, showThreadPrefix: showThreadPrefix);
+    final meta = _ThreadMeta(agentName: agentName);
 
     if (stacked) {
       return Column(
@@ -207,11 +131,9 @@ class _ThreadTitleGroup extends StatelessWidget {
 }
 
 class _ThreadTitleButton extends StatefulWidget {
-  const _ThreadTitleButton({required this.title, this.selected = false, this.menuEnabled = true, this.onPressed});
+  const _ThreadTitleButton({required this.title, this.onPressed});
 
   final String title;
-  final bool selected;
-  final bool menuEnabled;
   final VoidCallback? onPressed;
 
   @override
@@ -224,7 +146,7 @@ class _ThreadTitleButtonState extends State<_ThreadTitleButton> {
 
   @override
   Widget build(BuildContext context) {
-    final interactive = widget.menuEnabled && widget.onPressed != null;
+    final interactive = widget.onPressed != null;
     final lifted = interactive && _hovered && !_pressed;
 
     return MouseRegion(
@@ -257,15 +179,6 @@ class _ThreadTitleButtonState extends State<_ThreadTitleButton> {
               Flexible(
                 child: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: PowerboardsTypography.h2),
               ),
-              if (widget.menuEnabled) ...[
-                const SizedBox(width: 6),
-                AnimatedRotation(
-                  turns: widget.selected ? -0.5 : 0,
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  child: const PbSvgIcon(assetName: 'chevron-down', size: 15, color: PbColors.customBrandInk),
-                ),
-              ],
             ],
           ),
         ),
@@ -275,31 +188,51 @@ class _ThreadTitleButtonState extends State<_ThreadTitleButton> {
 }
 
 class _ThreadMeta extends StatelessWidget {
-  const _ThreadMeta({required this.agentName, required this.showThreadPrefix});
+  const _ThreadMeta({required this.agentName});
 
   final String agentName;
-  final bool showThreadPrefix;
 
   @override
   Widget build(BuildContext context) {
     final displayAgentName = pbDisplayAgentName(agentName);
-    final label = showThreadPrefix ? 'Thread with $displayAgentName' : 'with $displayAgentName';
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            softWrap: false,
-            style: PowerboardsTypography.meta.copyWith(color: PbColors.textMuted),
-          ),
-        ),
-        const SizedBox(width: 7),
-        const _ThreadAgentPill(),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 52) {
+          return const SizedBox.shrink();
+        }
+
+        if (constraints.maxWidth < 104) {
+          return const _ThreadAgentPill();
+        }
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                'Thread with',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: PowerboardsTypography.meta.copyWith(color: PbColors.textMuted),
+              ),
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                displayAgentName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: PowerboardsTypography.meta.copyWith(color: PbColors.textMuted, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 7),
+            const _ThreadAgentPill(),
+          ],
+        );
+      },
     );
   }
 }
@@ -339,45 +272,51 @@ class _ThreadHeaderActions extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (!roomPanelExpanded) _ThreadHeaderQuaternaryButton(label: 'All agents & threads', onPressed: onOpenAllAgentsAndThreads),
+        if (!roomPanelExpanded) PbThreadHeaderQuaternaryButton(label: 'All agents & threads', onPressed: onOpenAllAgentsAndThreads),
         if (!roomPanelExpanded) const SizedBox(width: 6),
-        _ThreadPanelToggle(expanded: roomPanelExpanded, onPressed: onRoomPanelToggle),
+        PbThreadPanelToggle(expanded: roomPanelExpanded, onPressed: onRoomPanelToggle),
       ],
     );
   }
 }
 
-class _ThreadHeaderQuaternaryButton extends StatefulWidget {
-  const _ThreadHeaderQuaternaryButton({required this.label, this.onPressed});
+class PbThreadHeaderQuaternaryButton extends StatefulWidget {
+  const PbThreadHeaderQuaternaryButton({super.key, required this.label, this.onPressed});
 
   final String label;
   final VoidCallback? onPressed;
 
   @override
-  State<_ThreadHeaderQuaternaryButton> createState() => _ThreadHeaderQuaternaryButtonState();
+  State<PbThreadHeaderQuaternaryButton> createState() => _PbThreadHeaderQuaternaryButtonState();
 }
 
-class _ThreadHeaderQuaternaryButtonState extends State<_ThreadHeaderQuaternaryButton> {
+class _PbThreadHeaderQuaternaryButtonState extends State<PbThreadHeaderQuaternaryButton> {
   bool _hovered = false;
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
+    final interactive = widget.onPressed != null;
+
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
+      cursor: interactive ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: interactive ? (_) => setState(() => _hovered = true) : null,
+      onExit: interactive
+          ? (_) => setState(() {
+              _hovered = false;
+              _pressed = false;
+            })
+          : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) {
-          setState(() => _pressed = false);
-          widget.onPressed?.call();
-        },
-        onTapCancel: () => setState(() => _pressed = false),
+        onTapDown: interactive ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: interactive
+            ? (_) {
+                setState(() => _pressed = false);
+                widget.onPressed?.call();
+              }
+            : null,
+        onTapCancel: interactive ? () => setState(() => _pressed = false) : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           curve: Curves.ease,
@@ -397,39 +336,44 @@ class _ThreadHeaderQuaternaryButtonState extends State<_ThreadHeaderQuaternaryBu
   }
 }
 
-class _ThreadPanelToggle extends StatefulWidget {
-  const _ThreadPanelToggle({required this.expanded, this.onPressed});
+class PbThreadPanelToggle extends StatefulWidget {
+  const PbThreadPanelToggle({super.key, required this.expanded, this.onPressed});
 
   final bool expanded;
   final VoidCallback? onPressed;
 
   @override
-  State<_ThreadPanelToggle> createState() => _ThreadPanelToggleState();
+  State<PbThreadPanelToggle> createState() => _PbThreadPanelToggleState();
 }
 
-class _ThreadPanelToggleState extends State<_ThreadPanelToggle> {
+class _PbThreadPanelToggleState extends State<PbThreadPanelToggle> {
   bool _hovered = false;
   bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
+    final interactive = widget.onPressed != null;
     final active = _hovered || _pressed;
 
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() {
-        _hovered = false;
-        _pressed = false;
-      }),
+      cursor: interactive ? SystemMouseCursors.click : MouseCursor.defer,
+      onEnter: interactive ? (_) => setState(() => _hovered = true) : null,
+      onExit: interactive
+          ? (_) => setState(() {
+              _hovered = false;
+              _pressed = false;
+            })
+          : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) {
-          setState(() => _pressed = false);
-          widget.onPressed?.call();
-        },
-        onTapCancel: () => setState(() => _pressed = false),
+        onTapDown: interactive ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: interactive
+            ? (_) {
+                setState(() => _pressed = false);
+                widget.onPressed?.call();
+              }
+            : null,
+        onTapCancel: interactive ? () => setState(() => _pressed = false) : null,
         child: SizedBox(
           width: 38,
           height: 38,

@@ -17,6 +17,7 @@ import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -33,6 +34,7 @@ class DocumentPane extends StatefulWidget {
     this.readOnlyTextViewer = false,
     this.codePreviewController,
     this.showCodeToolbar = true,
+    this.noPreviewBuilder,
   });
 
   final String path;
@@ -41,6 +43,7 @@ class DocumentPane extends StatefulWidget {
   final bool readOnlyTextViewer;
   final CodePreviewController? codePreviewController;
   final bool showCodeToolbar;
+  final Widget Function(BuildContext context, String? subtitle)? noPreviewBuilder;
 
   @override
   State createState() => _DocumentPane();
@@ -171,6 +174,11 @@ class _DocumentPane extends State<DocumentPane> {
   }
 
   Widget _noPreview({String? subtitle}) {
+    final customBuilder = widget.noPreviewBuilder;
+    if (customBuilder != null) {
+      return customBuilder(context, subtitle);
+    }
+
     final isMobile = MediaQuery.sizeOf(context).width < 600;
 
     return PaneEmptyState(
@@ -246,10 +254,10 @@ class _DocumentPane extends State<DocumentPane> {
       await Clipboard.setData(ClipboardData(text: url));
 
       if (!mounted) return;
-      ShadToaster.of(context).show(const ShadToast(title: Text("Download link copied to clipboard")));
+      ShadToaster.of(context).show(powerboardsToast(title: "Download link", description: "Copied to clipboard."));
     } catch (e) {
       if (!mounted) return;
-      ShadToaster.of(context).show(const ShadToast(title: Text("Failed to copy download link")));
+      ShadToaster.of(context).show(powerboardsToast(title: "Download link", description: "Failed to copy to clipboard."));
     }
   }
 
@@ -263,7 +271,7 @@ class _DocumentPane extends State<DocumentPane> {
       await shareRemoteStorageFile(context: context, client: widget.room, path: widget.path);
     } catch (error) {
       if (!mounted) return;
-      ShadToaster.of(context).show(ShadToast.destructive(title: const Text("Unable to share file"), description: Text('$error')));
+      ShadToaster.of(context).show(powerboardsToast(title: "Unable to share file", description: '$error', destructive: true));
     }
   }
 

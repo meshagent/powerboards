@@ -19,19 +19,20 @@ class MainWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final useDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
+    final useMobileChrome = isMobile && !useDesktopUiPreview;
 
     return Semantics(
       container: true,
       explicitChildNodes: true,
       child: Column(
         children: [
-          if (!(useDesktopUiPreview && !isMobile))
+          if (!useDesktopUiPreview)
             ColoredBox(
-              color: isMobile ? Colors.transparent : shadCard,
+              color: useMobileChrome ? Colors.transparent : shadCard,
               child: SizedBox(
                 height: headerHeight,
                 child: Padding(
-                  padding: isMobile ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: 10),
+                  padding: useMobileChrome ? powerboardsMobileHorizontalPadding : const EdgeInsets.symmetric(horizontal: 10),
                   child: Row(
                     children: [
                       ?leftSideBar,
@@ -45,7 +46,7 @@ class MainWrapper extends StatelessWidget {
               ),
             ),
           Expanded(
-            child: ColoredBox(color: isMobile ? Colors.transparent : shadCard, child: child),
+            child: ColoredBox(color: useMobileChrome ? Colors.transparent : shadCard, child: child),
           ),
         ],
       ),

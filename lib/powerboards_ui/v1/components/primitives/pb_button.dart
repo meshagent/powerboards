@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/pb_colors.dart';
+import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
+import 'pb_spinning_icon.dart';
 import 'pb_svg_icon.dart';
 
 enum PbButtonVariant { primary, secondary }
@@ -18,6 +20,13 @@ class PbButton extends StatefulWidget {
     this.horizontalPadding = 18,
     this.iconSize = 18,
     this.iconGap = 10,
+    this.iconSpinning = false,
+    this.contentOffset = Offset.zero,
+    this.backgroundColor,
+    this.pressedBackgroundColor,
+    this.borderColor,
+    this.pressedBorderColor,
+    this.foregroundColor,
     this.onPressed,
   });
 
@@ -30,6 +39,13 @@ class PbButton extends StatefulWidget {
   final double horizontalPadding;
   final double iconSize;
   final double iconGap;
+  final bool iconSpinning;
+  final Offset contentOffset;
+  final Color? backgroundColor;
+  final Color? pressedBackgroundColor;
+  final Color? borderColor;
+  final Color? pressedBorderColor;
+  final Color? foregroundColor;
   final VoidCallback? onPressed;
 
   @override
@@ -46,22 +62,29 @@ class _PbButtonState extends State<PbButton> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = _pressed
-        ? (_isPrimary ? PbColors.surfaceActionPrimary : PbColors.borderStateSelected)
-        : (_isPrimary ? PbColors.surfaceActionPrimary : PbColors.borderSoft);
-    final gradientColors = _pressed
-        ? (_isPrimary
-              ? const [PbColors.surfaceActionPrimary, PbColors.surfaceActionPrimary]
-              : const [PbColors.surfaceStateSelected, PbColors.surfaceStateSelected])
+    final idleBorderColor = widget.borderColor ?? (_isPrimary ? PbColors.surfaceActionPrimary : PbColors.borderSoft);
+    final activeBorderColor =
+        widget.pressedBorderColor ?? widget.borderColor ?? (_isPrimary ? PbColors.surfaceActionPrimary : PbColors.borderStateSelected);
+    final borderColor = _pressed ? activeBorderColor : idleBorderColor;
+    final idleGradientColors = widget.backgroundColor != null
+        ? [widget.backgroundColor!, widget.backgroundColor!]
         : (_isPrimary
               ? const [PbColors.surfaceRailActive, PbColors.surfaceActionPrimary]
               : const [PbColors.surfacePanel, PbColors.surfacePanelSoft]);
+    final pressedGradientColors = widget.pressedBackgroundColor != null
+        ? [widget.pressedBackgroundColor!, widget.pressedBackgroundColor!]
+        : widget.backgroundColor != null
+        ? [widget.backgroundColor!, widget.backgroundColor!]
+        : (_isPrimary
+              ? const [PbColors.surfaceActionPrimary, PbColors.surfaceActionPrimary]
+              : const [PbColors.surfaceStateSelected, PbColors.surfaceStateSelected]);
+    final gradientColors = _pressed ? pressedGradientColors : idleGradientColors;
     final boxShadow = _pressed
-        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.08), blurRadius: 2, offset: Offset(0, 1), blurStyle: BlurStyle.inner)]
+        ? PbShadows.statePressedInset
         : _lifted
-        ? const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 30, offset: Offset(0, 14))]
+        ? PbShadows.stateHover
         : null;
-    final textColor = _isPrimary ? PbColors.textInverse : PbColors.textPrimary;
+    final textColor = widget.foregroundColor ?? (_isPrimary ? PbColors.textInverse : PbColors.textPrimary);
 
     return MouseRegion(
       cursor: _enabled ? SystemMouseCursors.click : MouseCursor.defer,
@@ -93,7 +116,7 @@ class _PbButtonState extends State<PbButton> {
               constraints: BoxConstraints(minWidth: widget.iconOnly ? widget.iconOnlySize : 0),
               padding: EdgeInsets.symmetric(horizontal: widget.iconOnly ? 0 : widget.horizontalPadding),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(widget.iconOnly ? 14 : 10),
+                borderRadius: BorderRadius.circular(widget.iconOnly ? PbRadii.medium : PbRadii.small),
                 border: Border.all(color: borderColor),
                 gradient: LinearGradient(colors: gradientColors, begin: Alignment.topCenter, end: Alignment.bottomCenter),
                 boxShadow: boxShadow,
@@ -109,15 +132,24 @@ class _PbButtonState extends State<PbButton> {
                   );
                   final shouldFlexLabel = constraints.maxWidth.isFinite && constraints.maxWidth < 180;
 
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (widget.iconAssetName != null)
-                        PbSvgIcon(assetName: widget.iconAssetName!, size: widget.iconOnly ? 20 : widget.iconSize, color: textColor),
-                      if (!widget.iconOnly && widget.iconAssetName != null) SizedBox(width: widget.iconGap),
-                      if (!widget.iconOnly) shouldFlexLabel ? Flexible(child: label) : label,
-                    ],
+                  return Transform.translate(
+                    offset: widget.contentOffset,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (widget.iconAssetName != null)
+                          widget.iconSpinning
+                              ? PbSpinningIcon(
+                                  assetName: widget.iconAssetName!,
+                                  size: widget.iconOnly ? 20 : widget.iconSize,
+                                  color: textColor,
+                                )
+                              : PbSvgIcon(assetName: widget.iconAssetName!, size: widget.iconOnly ? 20 : widget.iconSize, color: textColor),
+                        if (!widget.iconOnly && widget.iconAssetName != null) SizedBox(width: widget.iconGap),
+                        if (!widget.iconOnly) shouldFlexLabel ? Flexible(child: label) : label,
+                      ],
+                    ),
                   );
                 },
               ),
@@ -145,7 +177,7 @@ class PbTertiaryButton extends StatelessWidget {
       iconAssetName: iconAssetName,
       label: label,
       variant: solid ? PbButtonVariant.primary : PbButtonVariant.secondary,
-      height: 36,
+      height: PbSizes.buttonTertiaryHeight,
       horizontalPadding: 14,
       iconSize: 16,
       iconGap: 8,

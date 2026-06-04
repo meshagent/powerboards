@@ -13,6 +13,7 @@ import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 enum _InstallerStep { url, review, selectProject, selectRoom, confirm }
@@ -755,7 +756,7 @@ class _AgentInstaller extends State<AgentInstaller> {
               }
             } catch (e) {
               if (!mounted) return;
-              ShadToaster.of(context).show(ShadToast.destructive(description: Text('Failed to create project: $e')));
+              ShadToaster.of(context).show(powerboardsToast(title: 'Create project failed', description: '$e', destructive: true));
             }
           },
           leading: const Icon(LucideIcons.plus, size: 16),
@@ -830,7 +831,7 @@ class _AgentInstaller extends State<AgentInstaller> {
               }
             } catch (e) {
               if (!mounted) return;
-              ShadToaster.of(context).show(ShadToast.destructive(description: Text('Failed to create room: $e')));
+              ShadToaster.of(context).show(powerboardsToast(title: 'Create room failed', description: '$e', destructive: true));
             }
           },
           leading: const Icon(LucideIcons.plus, size: 16),

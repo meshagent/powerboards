@@ -27,6 +27,7 @@ class PbAvatarButton extends StatefulWidget {
 }
 
 class _PbAvatarButtonState extends State<PbAvatarButton> {
+  static const _chevronSize = 18.0;
   static const _chevronDuration = Duration(milliseconds: 180);
   bool _hovered = false;
   bool _pressed = false;
@@ -70,7 +71,7 @@ class _PbAvatarButtonState extends State<PbAvatarButton> {
                 turns: widget.selected ? -0.5 : 0,
                 duration: _chevronDuration,
                 curve: Curves.easeOutCubic,
-                child: PbSvgIcon(assetName: 'chevron-down', size: 16, color: widget.chevronColor),
+                child: PbSvgIcon(assetName: 'chevron-down', size: _chevronSize, color: widget.chevronColor),
               ),
             ],
           ),

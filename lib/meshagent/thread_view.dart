@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
@@ -14,6 +15,7 @@ import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:powerboards/ui/powerboards_mobile_action_pills.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
@@ -26,6 +28,7 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
+import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
@@ -34,6 +37,14 @@ import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
+
+typedef PowerboardsThreadAttachmentsChanged =
+    void Function({
+      required String threadPath,
+      required String threadName,
+      required String createdBy,
+      required Iterable<String> attachmentPaths,
+    });
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
   MeshagentRoomChatThreadController({required super.room});
@@ -92,6 +103,14 @@ class MeshagentThreadView extends StatefulWidget {
     this.onInvite,
     this.onOpenFiles,
     this.onOpenMeet,
+    this.onThreadAttachmentsChanged,
+    this.composerAttachmentSeedVersion = 0,
+    this.composerAttachmentPaths = const [],
+    this.onComposerAttachmentSeedApplied,
+    this.onComposerAttachmentOpen,
+    this.onComposerAttachmentRemoved,
+    this.onThreadAttachmentOpen,
+    this.fileDropOverlayBuilder,
   });
 
   final String projectId;
@@ -119,6 +138,14 @@ class MeshagentThreadView extends StatefulWidget {
   final VoidCallback? onInvite;
   final VoidCallback? onOpenFiles;
   final VoidCallback? onOpenMeet;
+  final PowerboardsThreadAttachmentsChanged? onThreadAttachmentsChanged;
+  final int composerAttachmentSeedVersion;
+  final List<String> composerAttachmentPaths;
+  final VoidCallback? onComposerAttachmentSeedApplied;
+  final ValueChanged<String>? onComposerAttachmentOpen;
+  final ValueChanged<String>? onComposerAttachmentRemoved;
+  final ValueChanged<String>? onThreadAttachmentOpen;
+  final FileDropOverlayBuilder? fileDropOverlayBuilder;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -130,6 +157,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   late final ChatThreadController _chatController;
   String? _lastRestoredThreadScrollOffsetValue;
+  final Set<String> _reportedAttachmentKeys = <String>{};
+  int _lastAppliedComposerAttachmentSeedVersion = 0;
 
   bool _usesCompactMobileThreadEmptyState(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -139,6 +168,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   bool _usesMobileThreadLayout(BuildContext context) {
+    if (powerboardsUsesDesktopUiPreview(context)) {
+      return false;
+    }
+
     return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
   }
 
@@ -225,6 +258,14 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   void initState() {
     super.initState();
     _chatController = MeshagentRoomChatThreadController(room: widget.client);
+    _chatController.addListener(_onChatControllerChanged);
+    _scheduleComposerAttachmentSeed();
+  }
+
+  @override
+  void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _scheduleComposerAttachmentSeed();
   }
 
   @override
@@ -235,11 +276,144 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   @override
   void dispose() {
+    _chatController.removeListener(_onChatControllerChanged);
     _chatController.dispose();
     super.dispose();
   }
 
-  void _onMessageSent(ma.ChatMessage message) {}
+  String _currentParticipantDisplayName() {
+    final name = widget.client.localParticipant?.getAttribute("name");
+    if (name is String && name.trim().isNotEmpty) {
+      return name.trim();
+    }
+    return 'Unknown';
+  }
+
+  String _currentThreadPathForAttachmentIndex() {
+    final selectedThreadPath = widget.selectedThreadPath?.trim();
+    if (selectedThreadPath != null && selectedThreadPath.isNotEmpty) {
+      return selectedThreadPath;
+    }
+    return widget.documentPath.trim();
+  }
+
+  String _currentThreadNameForAttachmentIndex(String threadPath) {
+    final selectedDisplayName = widget.selectedThreadDisplayName?.trim();
+    if (selectedDisplayName != null && selectedDisplayName.isNotEmpty) {
+      return selectedDisplayName;
+    }
+    return defaultThreadDisplayNameFromPath(threadPath);
+  }
+
+  void _notifyThreadAttachments({required String threadPath, required String threadName, required Iterable<String> attachmentPaths}) {
+    final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+    if (normalizedThreadPath.isEmpty) {
+      return;
+    }
+
+    final normalizedAttachmentPaths = attachmentPaths
+        .where(isPowerboardsStorageAttachmentPath)
+        .map(normalizePowerboardsAttachmentPath)
+        .where((path) => path.isNotEmpty)
+        .toList(growable: false);
+    if (normalizedAttachmentPaths.isEmpty) {
+      return;
+    }
+
+    final freshAttachmentPaths = <String>[];
+    for (final attachmentPath in normalizedAttachmentPaths) {
+      if (_reportedAttachmentKeys.add('$normalizedThreadPath\n$attachmentPath')) {
+        freshAttachmentPaths.add(attachmentPath);
+      }
+    }
+    if (freshAttachmentPaths.isEmpty) {
+      return;
+    }
+
+    widget.onThreadAttachmentsChanged?.call(
+      threadPath: normalizedThreadPath,
+      threadName: threadName,
+      createdBy: _currentParticipantDisplayName(),
+      attachmentPaths: freshAttachmentPaths,
+    );
+  }
+
+  void _onChatControllerChanged() {
+    for (final message in _chatController.pendingAgentMessages) {
+      _notifyThreadAttachments(
+        threadPath: message.threadPath,
+        threadName: _currentThreadNameForAttachmentIndex(message.threadPath),
+        attachmentPaths: message.attachments.map((attachment) => attachment.url),
+      );
+    }
+  }
+
+  String _composerAttachmentDisplayName(String path) {
+    final normalized = path.trim();
+    if (normalized.isEmpty) {
+      return normalized;
+    }
+
+    final segments = normalized.split('/').where((segment) => segment.trim().isNotEmpty).toList(growable: false);
+    return segments.isEmpty ? normalized : segments.last;
+  }
+
+  void _scheduleComposerAttachmentSeed() {
+    final version = widget.composerAttachmentSeedVersion;
+    if (version <= 0 || version == _lastAppliedComposerAttachmentSeedVersion) {
+      return;
+    }
+
+    _lastAppliedComposerAttachmentSeedVersion = version;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.composerAttachmentSeedVersion != version) {
+        return;
+      }
+
+      final seen = <String>{};
+      final paths = <String>[];
+      for (final path in widget.composerAttachmentPaths) {
+        final normalizedPath = normalizePowerboardsAttachmentPath(path);
+        if (normalizedPath.isNotEmpty && seen.add(normalizedPath)) {
+          paths.add(normalizedPath);
+        }
+      }
+      if (paths.isEmpty) {
+        return;
+      }
+
+      _chatController.clear();
+      for (final path in paths) {
+        _chatController.attachFile(path, displayName: _composerAttachmentDisplayName(path));
+      }
+      widget.onComposerAttachmentSeedApplied?.call();
+    });
+  }
+
+  void _onMessageSent(ma.ChatMessage message) {
+    final attachmentPaths = message.attachments;
+    if (attachmentPaths.isEmpty) {
+      return;
+    }
+
+    final threadPath = _currentThreadPathForAttachmentIndex();
+    _notifyThreadAttachments(
+      threadPath: threadPath,
+      threadName: _currentThreadNameForAttachmentIndex(threadPath),
+      attachmentPaths: attachmentPaths,
+    );
+    unawaited(
+      recordPowerboardsFileAttachmentLinks(
+        room: widget.client,
+        threadPath: threadPath,
+        threadName: _currentThreadNameForAttachmentIndex(threadPath),
+        createdBy: _currentParticipantDisplayName(),
+        attachmentPaths: attachmentPaths,
+      ).catchError((Object error, StackTrace stackTrace) {
+        debugPrint('Failed to record file attachment index: $error');
+      }),
+    );
+  }
 
   Uri? _currentRouteUriOrNull() {
     try {
@@ -249,16 +423,27 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
   }
 
+  void _openThreadAttachment(String path) {
+    final normalizedPath = path.trim();
+    if (normalizedPath.isEmpty || normalizedPath.startsWith('data:')) {
+      return;
+    }
+
+    final callback = widget.onThreadAttachmentOpen;
+    if (callback != null) {
+      callback(normalizedPath);
+      return;
+    }
+
+    _open(normalizedPath);
+  }
+
   Widget _fileInThreadBuilder(BuildContext context, String path) {
     if (path.endsWith('.meeting')) {
       return MeetingCard(onJoin: () => widget.joinMeeting());
     }
 
-    return ShadGestureDetector(
-      cursor: SystemMouseCursors.click,
-      onTap: () => _open(path),
-      child: ChatThreadPreview(room: widget.client, path: path),
-    );
+    return ChatThreadPreview(room: widget.client, path: path);
   }
 
   void _open(String path) {
@@ -282,6 +467,21 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     final newUri = currentUri.replace(queryParameters: updatedQueryParameters);
 
     context.go(newUri.toString());
+  }
+
+  void _openComposerAttachment(FileAttachment attachment) {
+    final path = attachment.path.trim();
+    if (path.isEmpty || path.startsWith('data:')) {
+      return;
+    }
+
+    final callback = widget.onComposerAttachmentOpen;
+    if (callback != null) {
+      callback(path);
+      return;
+    }
+
+    _open(path);
   }
 
   void _restoreThreadScrollOffsetFromRoute() {
@@ -323,6 +523,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   @override
   Widget build(BuildContext context) {
+    final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
     final usesMobileLayout = _usesMobileThreadLayout(context);
     final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
     final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
@@ -345,51 +546,56 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
               )
             : null);
 
+    final chatBotView = ChatBotView(
+      room: widget.client,
+      chatClient: widget.chatClient,
+      agentName: widget.agentName,
+      threadDisplayMode: widget.threadDisplayMode,
+      threadListPath: widget.threadListPath,
+      documentPath: widget.documentPath,
+      controller: _chatController,
+      onAttachmentOpen: _openComposerAttachment,
+      onAttachmentRemoved: (attachment) => widget.onComposerAttachmentRemoved?.call(attachment.path),
+      selectedThreadPath: widget.selectedThreadPath,
+      selectedThreadDisplayName: widget.selectedThreadDisplayName,
+      onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
+      onSelectedThreadResolved: widget.onSelectedThreadResolved,
+      newThreadResetVersion: widget.newThreadResetVersion,
+      participantNames: widget.participantNames,
+      initialMessage: widget.initialMessageText == null
+          ? null
+          : ChatMessage(
+              id: widget.initialMessageID ?? widget.documentPath,
+              text: widget.initialMessageText!,
+              attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
+            ),
+      onMessageSent: _onMessageSent,
+      fileInThreadBuilder: _fileInThreadBuilder,
+      openFile: _openThreadAttachment,
+      fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
+      chatInputBoxBuilder: usesMobileLayout ? (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox) : null,
+      toolsBuilder: (context, controller, snapshot) =>
+          buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
+      inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
+      emptyStateTitle: null,
+      emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
+      emptyState: resolvedEmptyState,
+      inputContextMenuBuilder: powerboardsUsesSystemAdaptiveTextSelectionToolbar()
+          ? powerboardsThreadMobileAttachmentContextMenuBuilder(
+              onPasteFile: (name, dataStream, size) => _chatController.uploadFile(name, dataStream, size),
+            )
+          : powerboardsAdaptiveInputContextMenuBuilder,
+      inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
+      mobileStorageSaveSurfacePresenter: usesMobileLayout ? showPowerboardsThreadStorageSaveSurface : null,
+      mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
+      centerComposer: false,
+      hideChatInput: widget.hideChatInput,
+      showThreadList: false,
+    );
+
     return IconTheme(
       data: const IconThemeData(size: 14),
-      child: ChatBotView(
-        room: widget.client,
-        chatClient: widget.chatClient,
-        agentName: widget.agentName,
-        threadDisplayMode: widget.threadDisplayMode,
-        threadListPath: widget.threadListPath,
-        documentPath: widget.documentPath,
-        controller: _chatController,
-        selectedThreadPath: widget.selectedThreadPath,
-        selectedThreadDisplayName: widget.selectedThreadDisplayName,
-        onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
-        onSelectedThreadResolved: widget.onSelectedThreadResolved,
-        newThreadResetVersion: widget.newThreadResetVersion,
-        participantNames: widget.participantNames,
-        initialMessage: widget.initialMessageText == null
-            ? null
-            : ChatMessage(
-                id: widget.initialMessageID ?? widget.documentPath,
-                text: widget.initialMessageText!,
-                attachments: widget.initialMessageAttachments?.map((attachment) => attachment.path).toList() ?? const [],
-              ),
-        onMessageSent: _onMessageSent,
-        fileInThreadBuilder: _fileInThreadBuilder,
-        openFile: _open,
-        chatInputBoxBuilder: (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox),
-        toolsBuilder: (context, controller, snapshot) =>
-            buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
-        inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
-        emptyStateTitle: null,
-        emptyStateDescription: usesMobileEmptyState ? null : _threadEmptyDescription,
-        emptyState: resolvedEmptyState,
-        inputContextMenuBuilder: powerboardsUsesSystemAdaptiveTextSelectionToolbar()
-            ? powerboardsThreadMobileAttachmentContextMenuBuilder(
-                onPasteFile: (name, dataStream, size) => _chatController.uploadFile(name, dataStream, size),
-              )
-            : powerboardsAdaptiveInputContextMenuBuilder,
-        inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
-        mobileStorageSaveSurfacePresenter: showPowerboardsThreadStorageSaveSurface,
-        mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
-        centerComposer: false,
-        hideChatInput: widget.hideChatInput,
-        showThreadList: false,
-      ),
+      child: usesDesktopUiPreview ? ChatContextLayoutOverride(useMobileLayout: false, child: chatBotView) : chatBotView,
     );
   }
 }
@@ -768,7 +974,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       if (!mounted) {
         return;
       }
-      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to rename thread: $e")));
+      ShadToaster.of(context).show(powerboardsToast(title: "Unable to rename thread", description: "$e", destructive: true));
     }
   }
 
@@ -797,7 +1003,7 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
       if (!mounted) {
         return;
       }
-      ShadToaster.of(context).show(ShadToast.destructive(description: Text("Unable to delete thread: $e")));
+      ShadToaster.of(context).show(powerboardsToast(title: "Unable to delete thread", description: "$e", destructive: true));
     }
   }
 

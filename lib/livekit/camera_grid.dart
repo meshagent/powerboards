@@ -13,9 +13,18 @@ import 'hover_builder.dart';
 import 'room.dart';
 
 class ExpandableCameraGrid extends StatefulWidget {
-  const ExpandableCameraGrid({super.key, required this.participants});
+  const ExpandableCameraGrid({
+    super.key,
+    required this.participants,
+    this.largeBorderRadius = 8,
+    this.smallBorderRadius = 8,
+    this.smallBorderRadiusBreakpoint = 0,
+  });
 
   final List<Participant> participants;
+  final double largeBorderRadius;
+  final double smallBorderRadius;
+  final double smallBorderRadiusBreakpoint;
 
   @override
   State createState() => _ExpandableCameraGridState();
@@ -54,6 +63,15 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
     }
 
     return false;
+  }
+
+  double _tileRadiusFor(BoxConstraints constraints) {
+    final minDimension = min(constraints.maxWidth, constraints.maxHeight);
+    if (widget.smallBorderRadiusBreakpoint > 0 && minDimension <= widget.smallBorderRadiusBreakpoint) {
+      return widget.smallBorderRadius;
+    }
+
+    return widget.largeBorderRadius;
   }
 
   void _scheduleCollapseIfNeeded() {
@@ -108,21 +126,27 @@ class _ExpandableCameraGridState extends State<ExpandableCameraGrid> {
       preferredSource: expandedTarget?.source,
       spacing: 12.0,
       frameBuilder: (context, participant, publication, trackWidget, showName) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: HoverBuilder(
-            cursor: SystemMouseCursors.basic,
-            builder: (hovered) {
-              final alwaysShowName = isMobile && _expandedController.isExpandedIdentity(participant.identity);
-              return ParticipantTrack(
-                participant: participant,
-                expandSource: publication?.source ?? TrackSource.camera,
-                track: trackWidget,
-                showName: (showName && hovered) || alwaysShowName,
-                interactive: publication?.source != TrackSource.screenShareVideo,
-              );
-            },
-          ),
+        return LayoutBuilder(
+          builder: (context, tileConstraints) {
+            final tileRadius = _tileRadiusFor(tileConstraints);
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(tileRadius),
+              child: HoverBuilder(
+                cursor: SystemMouseCursors.basic,
+                builder: (hovered) {
+                  final alwaysShowName = isMobile && _expandedController.isExpandedIdentity(participant.identity);
+                  return ParticipantTrack(
+                    participant: participant,
+                    expandSource: publication?.source ?? TrackSource.camera,
+                    track: trackWidget,
+                    showName: (showName && hovered) || alwaysShowName,
+                    interactive: publication?.source != TrackSource.screenShareVideo,
+                    borderRadius: tileRadius,
+                  );
+                },
+              ),
+            );
+          },
         );
       },
     );

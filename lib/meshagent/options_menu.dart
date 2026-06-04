@@ -11,6 +11,7 @@ import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'agent_option.dart';
@@ -71,7 +72,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
     final toaster = ShadToaster.of(context);
     final sessionId = widget.room.sessionId;
     if (sessionId == null || sessionId.isEmpty) {
-      toaster.show(ShadToast.destructive(description: Text("Unable to shut down room: session id is not available yet.")));
+      toaster.show(powerboardsToast(title: "Unable to shut down room", description: "Session id is not available yet.", destructive: true));
       return;
     }
 
@@ -87,14 +88,14 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
     }
 
     try {
-      toaster.show(const ShadToast(title: Text("Room shutdown requested")));
+      toaster.show(powerboardsToast(title: "Room shutdown", description: "Requested."));
       widget.room.dispose();
       await getMeshagentClient().terminate(projectId: widget.projectId, sessionId: sessionId);
     } catch (error) {
       if (!mounted) {
         return;
       }
-      toaster.show(ShadToast.destructive(description: Text("Unable to shut down room: $error")));
+      toaster.show(powerboardsToast(title: "Unable to shut down room", description: "$error", destructive: true));
     }
   }
 

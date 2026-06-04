@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:meshagent/agent.dart';
 import 'package:meshagent/room_server_client.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 final toastSchema = {
@@ -29,7 +30,7 @@ class Toast extends FunctionTool {
     final description = arguments["description"];
 
     ShadToaster.of(this.context).show(
-      ShadToast(
+      powerboardsWidgetToast(
         title: Text(title),
         description: Text(description),
         action: ShadButton.outline(child: const Text('Dismiss'), onPressed: () => ShadToaster.of(this.context).hide()),
