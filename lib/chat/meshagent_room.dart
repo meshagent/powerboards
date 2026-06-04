@@ -458,6 +458,71 @@ String? powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads({
 const powerboardsDesktopPreviewLoadingThreadTitle = 'Loading thread';
 
 @visibleForTesting
+List<MeshElement> powerboardsDesktopPreviewThreadMessageElements(RuntimeDocument document) {
+  final rootChildren = document.root.getChildren().whereType<MeshElement>().toList(growable: false);
+  for (final child in rootChildren) {
+    if (child.tagName == 'messages') {
+      return child.getChildren().whereType<MeshElement>().toList(growable: false);
+    }
+  }
+
+  return rootChildren.where(powerboardsDesktopPreviewIsThreadMessageElement).toList(growable: false);
+}
+
+@visibleForTesting
+bool powerboardsDesktopPreviewIsThreadMessageElement(MeshElement element) {
+  return switch (element.tagName) {
+    'message' || 'reasoning' || 'exec' || 'event' => true,
+    _ => false,
+  };
+}
+
+@visibleForTesting
+String powerboardsDesktopPreviewThreadAttachmentPath(MeshElement attachment) {
+  if (attachment.tagName != 'file' && attachment.tagName != 'image') {
+    return '';
+  }
+
+  for (final attributeName in const ['path', 'url', 'src', 'title', 'name', 'alt']) {
+    final rawPath = attachment.getAttribute(attributeName);
+    if (rawPath is! String) {
+      continue;
+    }
+
+    final filePath = powerboardsStorageAttachmentPathFromUrl(rawPath);
+    if (filePath.isNotEmpty) {
+      return filePath;
+    }
+  }
+
+  return '';
+}
+
+@visibleForTesting
+List<String> powerboardsDesktopPreviewAgentMessageAttachmentPaths(agent_sessions.AgentMessage message) {
+  Iterable<Object?> content = const <Object?>[];
+  if (message is agent_sessions.StartThread) {
+    content = message.content ?? const <Object?>[];
+  } else if (message is agent_sessions.TurnStart) {
+    content = message.content;
+  } else if (message is agent_sessions.TurnSteer) {
+    content = message.content;
+  } else if (message is agent_sessions.TurnStartAccepted) {
+    content = message.content;
+  }
+
+  final paths = <String>[];
+  final seen = <String>{};
+  for (final attachment in content.whereType<agent_sessions.AgentFileContent>()) {
+    final path = powerboardsStorageAttachmentPathFromUrl(attachment.url);
+    if (path.isNotEmpty && seen.add(path)) {
+      paths.add(path);
+    }
+  }
+  return paths;
+}
+
+@visibleForTesting
 String powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads({
   required String? selectedThreadPath,
   required String? currentThreadLabel,
@@ -667,6 +732,7 @@ class _DesktopPreviewThreadAttachments extends StatefulWidget {
     required this.threads,
     required this.selectedThreadPath,
     required this.selectedThreadName,
+    required this.chatClient,
     required this.localLinks,
     required this.builder,
   });
@@ -675,6 +741,7 @@ class _DesktopPreviewThreadAttachments extends StatefulWidget {
   final List<_DesktopPreviewThreadEntry> threads;
   final String? selectedThreadPath;
   final String? selectedThreadName;
+  final agent_sessions.BaseChatClient? chatClient;
   final List<PowerboardsFileAttachmentLink> localLinks;
   final Widget Function(BuildContext context, List<PbAttachmentListItemData> attachments) builder;
 
@@ -700,9 +767,11 @@ class _DesktopPreviewThreadAttachmentRecord {
 class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadAttachments> {
   StreamSubscription<RoomEvent>? _roomSubscription;
   final Map<String, MeshDocument> _threadDocuments = <String, MeshDocument>{};
+  final Map<String, agent_sessions.ChatThreadSession> _agentThreadSessions = <String, agent_sessions.ChatThreadSession>{};
   final Map<String, StorageEntry> _attachmentEntriesByPath = <String, StorageEntry>{};
   List<PowerboardsFileAttachmentLink> _links = const <PowerboardsFileAttachmentLink>[];
   List<_DesktopPreviewThreadAttachmentRecord> _threadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
+  List<_DesktopPreviewThreadAttachmentRecord> _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
   int _loadGeneration = 0;
   int _attachmentEntryGeneration = 0;
 
@@ -710,6 +779,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   void initState() {
     super.initState();
     _bindRoom();
+    _bindAgentChatClient();
     unawaited(_loadAttachments());
   }
 
@@ -717,8 +787,21 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   void didUpdateWidget(covariant _DesktopPreviewThreadAttachments oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.client != widget.client) {
+      if (oldWidget.chatClient != widget.chatClient) {
+        _unbindAgentChatClient(oldWidget: oldWidget);
+        _unbindAgentThreadSessions();
+        _bindAgentChatClient();
+      }
       unawaited(_closeThreadDocuments(client: oldWidget.client));
       _bindRoom();
+      unawaited(_loadAttachments());
+      return;
+    }
+
+    if (oldWidget.chatClient != widget.chatClient) {
+      _unbindAgentChatClient(oldWidget: oldWidget);
+      _unbindAgentThreadSessions();
+      _bindAgentChatClient();
       unawaited(_loadAttachments());
       return;
     }
@@ -737,6 +820,8 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   void dispose() {
     _roomSubscription?.cancel();
     _roomSubscription = null;
+    _unbindAgentThreadSessions();
+    _unbindAgentChatClient(oldWidget: widget);
     unawaited(_closeThreadDocuments(client: widget.client));
     super.dispose();
   }
@@ -744,6 +829,25 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   void _bindRoom() {
     _roomSubscription?.cancel();
     _roomSubscription = widget.client.listen(_onRoomEvent);
+  }
+
+  void _bindAgentChatClient() {
+    widget.chatClient?.addListener(_onAgentChatClientChanged);
+  }
+
+  void _unbindAgentChatClient({required _DesktopPreviewThreadAttachments oldWidget}) {
+    oldWidget.chatClient?.removeListener(_onAgentChatClientChanged);
+  }
+
+  void _onAgentChatClientChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
+    });
+    unawaited(_syncAttachmentEntries());
   }
 
   void _onRoomEvent(RoomEvent event) {
@@ -794,8 +898,9 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     final refs = <_DesktopPreviewAttachmentThreadRef>[];
 
     void addRef(String path, String name) {
-      final normalizedPath = normalizePowerboardsAttachmentPath(path);
-      if (normalizedPath.isEmpty || !seen.add(normalizedPath)) {
+      final normalizedPath = normalizePowerboardsThreadAttachmentPath(path);
+      final matchKey = powerboardsThreadAttachmentMatchKey(normalizedPath);
+      if (normalizedPath.isEmpty || matchKey.isEmpty || !seen.add(matchKey)) {
         return;
       }
 
@@ -823,6 +928,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   Future<void> _loadAttachments() async {
     final generation = ++_loadGeneration;
     final threadRefs = _threadRefs();
+    _syncAgentThreadSessions(threadRefs);
     final links = await loadPowerboardsFileAttachmentLinks(widget.client);
     await _syncThreadDocuments(threadRefs, generation: generation);
     if (!mounted || generation != _loadGeneration) {
@@ -832,6 +938,58 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     setState(() {
       _links = links;
       _threadAttachments = _collectThreadAttachments(threadRefs);
+      _agentThreadAttachments = _collectAgentThreadAttachments(threadRefs);
+    });
+    unawaited(_syncAttachmentEntries());
+  }
+
+  void _syncAgentThreadSessions(List<_DesktopPreviewAttachmentThreadRef> threads) {
+    final chatClient = widget.chatClient;
+    final desiredPaths = threads.map((thread) => thread.path).toSet();
+
+    for (final path in _agentThreadSessions.keys.toList()) {
+      if (desiredPaths.contains(path)) {
+        continue;
+      }
+      final session = _agentThreadSessions.remove(path);
+      session?.removeListener(_onAgentThreadSessionChanged);
+    }
+
+    if (chatClient == null) {
+      for (final session in _agentThreadSessions.values) {
+        session.removeListener(_onAgentThreadSessionChanged);
+      }
+      _agentThreadSessions.clear();
+      _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
+      return;
+    }
+
+    for (final thread in threads) {
+      if (_agentThreadSessions.containsKey(thread.path)) {
+        continue;
+      }
+
+      final session = chatClient.openThread(thread.path);
+      session.addListener(_onAgentThreadSessionChanged);
+      _agentThreadSessions[thread.path] = session;
+    }
+  }
+
+  void _unbindAgentThreadSessions() {
+    for (final session in _agentThreadSessions.values) {
+      session.removeListener(_onAgentThreadSessionChanged);
+    }
+    _agentThreadSessions.clear();
+    _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
+  }
+
+  void _onAgentThreadSessionChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
     });
     unawaited(_syncAttachmentEntries());
   }
@@ -910,22 +1068,12 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
         continue;
       }
 
-      final messages = entry.value.root.getChildren().whereType<MeshElement>().firstWhereOrNull((node) => node.tagName == 'messages');
-      final messageElements = messages?.getChildren().whereType<MeshElement>() ?? const Iterable<MeshElement>.empty();
+      final messageElements = powerboardsDesktopPreviewThreadMessageElements(entry.value);
       final seenAttachments = <String>{};
 
       for (final message in messageElements) {
         for (final attachment in message.getChildren().whereType<MeshElement>()) {
-          if (attachment.tagName != 'file' && attachment.tagName != 'image') {
-            continue;
-          }
-
-          final rawPath = attachment.getAttribute('path');
-          if (rawPath is! String || !isPowerboardsStorageAttachmentPath(rawPath)) {
-            continue;
-          }
-
-          final filePath = normalizePowerboardsAttachmentPath(rawPath);
+          final filePath = powerboardsDesktopPreviewThreadAttachmentPath(attachment);
           if (filePath.isEmpty) {
             continue;
           }
@@ -935,6 +1083,37 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
 
           attachments.add(_DesktopPreviewThreadAttachmentRecord(filePath: filePath, threadPath: entry.key, threadName: threadName));
         }
+      }
+    }
+
+    return attachments;
+  }
+
+  List<_DesktopPreviewThreadAttachmentRecord> _collectAgentThreadAttachments(List<_DesktopPreviewAttachmentThreadRef> threads) {
+    final attachments = <_DesktopPreviewThreadAttachmentRecord>[];
+    final threadNamesByPath = {for (final thread in threads) thread.path: thread.name};
+
+    for (final entry in _agentThreadSessions.entries) {
+      final threadName = threadNamesByPath[entry.key];
+      if (threadName == null) {
+        continue;
+      }
+
+      final seenAttachments = <String>{};
+      void addFromMessage(agent_sessions.AgentMessage message) {
+        for (final filePath in powerboardsDesktopPreviewAgentMessageAttachmentPaths(message)) {
+          if (!seenAttachments.add('$filePath\n${entry.key}')) {
+            continue;
+          }
+          attachments.add(_DesktopPreviewThreadAttachmentRecord(filePath: filePath, threadPath: entry.key, threadName: threadName));
+        }
+      }
+
+      for (final event in entry.value.messages) {
+        addFromMessage(event.message);
+      }
+      for (final input in entry.value.pendingInputs) {
+        addFromMessage(input.payload);
       }
     }
 
@@ -951,24 +1130,42 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   }
 
   Set<String> _scopedAttachmentPaths() {
-    final threadPaths = _threadRefs().map((thread) => thread.path).toSet();
+    final threadPathKeys = _threadRefs().map((thread) => powerboardsThreadAttachmentMatchKey(thread.path)).toSet();
     final paths = <String>{};
 
     for (final link in widget.localLinks) {
-      if (threadPaths.contains(link.threadPath) && link.filePath.isNotEmpty) {
-        paths.add(link.filePath);
+      if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(link.threadPath)) && link.filePath.isNotEmpty) {
+        final filePath = powerboardsStorageAttachmentPathFromUrl(link.filePath);
+        if (filePath.isNotEmpty) {
+          paths.add(filePath);
+        }
       }
     }
 
     for (final attachment in _threadAttachments) {
-      if (threadPaths.contains(attachment.threadPath) && attachment.filePath.isNotEmpty) {
-        paths.add(attachment.filePath);
+      if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(attachment.threadPath)) && attachment.filePath.isNotEmpty) {
+        final filePath = powerboardsStorageAttachmentPathFromUrl(attachment.filePath);
+        if (filePath.isNotEmpty) {
+          paths.add(filePath);
+        }
+      }
+    }
+
+    for (final attachment in _agentThreadAttachments) {
+      if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(attachment.threadPath)) && attachment.filePath.isNotEmpty) {
+        final filePath = powerboardsStorageAttachmentPathFromUrl(attachment.filePath);
+        if (filePath.isNotEmpty) {
+          paths.add(filePath);
+        }
       }
     }
 
     for (final link in _links) {
-      if (threadPaths.contains(link.threadPath) && link.filePath.isNotEmpty) {
-        paths.add(link.filePath);
+      if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(link.threadPath)) && link.filePath.isNotEmpty) {
+        final filePath = powerboardsStorageAttachmentPathFromUrl(link.filePath);
+        if (filePath.isNotEmpty) {
+          paths.add(filePath);
+        }
       }
     }
 
@@ -1026,14 +1223,13 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
 
   List<PbAttachmentListItemData> _attachments() {
     final threadRefs = _threadRefs();
-    final threadNamesByPath = {for (final thread in threadRefs) thread.path: thread.name};
-    final threadPaths = threadNamesByPath.keys.toSet();
+    final threadNamesByMatchKey = {for (final thread in threadRefs) powerboardsThreadAttachmentMatchKey(thread.path): thread.name};
     final seenAttachments = <String>{};
     final attachments = <PbAttachmentListItemData>[];
 
     void addAttachment({required String filePath, required String threadPath, required String threadName}) {
-      final normalizedFilePath = normalizePowerboardsAttachmentPath(filePath);
-      final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+      final normalizedFilePath = powerboardsStorageAttachmentPathFromUrl(filePath);
+      final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
       if (normalizedFilePath.isEmpty || normalizedThreadPath.isEmpty) {
         return;
       }
@@ -1058,19 +1254,28 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     }
 
     for (final link in widget.localLinks) {
-      if (!threadPaths.contains(link.threadPath)) {
+      final threadName = threadNamesByMatchKey[powerboardsThreadAttachmentMatchKey(link.threadPath)];
+      if (threadName == null) {
         continue;
       }
 
       addAttachment(
         filePath: link.filePath,
         threadPath: link.threadPath,
-        threadName: threadNamesByPath[link.threadPath] ?? link.threadDisplayName,
+        threadName: threadName.isNotEmpty ? threadName : link.threadDisplayName,
       );
     }
 
     for (final attachment in _threadAttachments) {
-      if (!threadPaths.contains(attachment.threadPath)) {
+      if (!threadNamesByMatchKey.containsKey(powerboardsThreadAttachmentMatchKey(attachment.threadPath))) {
+        continue;
+      }
+
+      addAttachment(filePath: attachment.filePath, threadPath: attachment.threadPath, threadName: attachment.threadName);
+    }
+
+    for (final attachment in _agentThreadAttachments) {
+      if (!threadNamesByMatchKey.containsKey(powerboardsThreadAttachmentMatchKey(attachment.threadPath))) {
         continue;
       }
 
@@ -1078,14 +1283,15 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     }
 
     for (final link in _links) {
-      if (!threadPaths.contains(link.threadPath)) {
+      final threadName = threadNamesByMatchKey[powerboardsThreadAttachmentMatchKey(link.threadPath)];
+      if (threadName == null) {
         continue;
       }
 
       addAttachment(
         filePath: link.filePath,
         threadPath: link.threadPath,
-        threadName: threadNamesByPath[link.threadPath] ?? link.threadDisplayName,
+        threadName: threadName.isNotEmpty ? threadName : link.threadDisplayName,
       );
     }
 
@@ -2487,10 +2693,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _setComposerAttachmentSeed(String agentKey, Iterable<String> paths) {
-    final normalizedPaths = paths
-        .map((path) => normalizePowerboardsAttachmentPath(path))
-        .where((path) => path.isNotEmpty)
-        .toList(growable: false);
+    final normalizedPaths = paths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toList(growable: false);
     if (normalizedPaths.isEmpty) {
       return;
     }
@@ -3864,7 +4067,28 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             ? _closeDesktopPreviewAttachmentPreviewIfRemoved
             : null,
         onThreadAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
-            ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel)
+            ? (path) {
+                if (selectedThreadPath != null) {
+                  _recordLocalThreadAttachments(
+                    threadPath: selectedThreadPath,
+                    threadName: currentThreadLabel,
+                    createdBy: userEmail is String ? userEmail : '',
+                    attachmentPaths: [path],
+                  );
+                  unawaited(
+                    recordPowerboardsFileAttachmentLinks(
+                      room: widget.room,
+                      threadPath: selectedThreadPath,
+                      threadName: currentThreadLabel,
+                      createdBy: userEmail is String ? userEmail : '',
+                      attachmentPaths: [path],
+                    ).catchError((Object error, StackTrace stackTrace) {
+                      debugPrint('Failed to record file attachment index: $error');
+                    }),
+                  );
+                }
+                _openDesktopPreviewAttachment(path, threadName: currentThreadLabel);
+              }
             : null,
         fileDropOverlayBuilder: chatDropOverlayBuilder,
         projectId: widget.projectId,
@@ -4985,6 +5209,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final showFilesWorkspace = canViewStorageAllowed && controller.isFilesShown;
     final rawChatContext = _resolveMobileChatHeaderContext(supported, selected, includePersistedThreadLabel: true);
     final threadListPath = rawChatContext?.threadListPath;
+    final threadListChatClient = _agentChatClientFor(rawChatContext?.agentName);
     final agentItems = _desktopPreviewAgentItems(supported, selected);
     final hasVisibleAgents = _hasVisibleAgents(supported);
 
@@ -4993,7 +5218,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       agentName: rawChatContext?.agentName,
       threadListPath: threadListPath,
       chatClientFactory: (_, agentName) =>
-          _agentChatClientFor(agentName) ?? agent_sessions.MessagingChatClient(room: widget.room, agentName: agentName),
+          _agentChatClientFor(agentName) ??
+          threadListChatClient ??
+          agent_sessions.MessagingChatClient(room: widget.room, agentName: agentName),
       disposeChatClient: false,
       builder: (context, threads, threadListLoaded) {
         final chatContext = _desktopPreviewChatContextForVisibleThreads(rawChatContext, threads, threadListLoaded: threadListLoaded);
@@ -5073,6 +5300,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           threads: threads,
           selectedThreadPath: chatContext?.selectedThreadPath,
           selectedThreadName: selectedThreadTitle,
+          chatClient: threadListChatClient,
           localLinks: _localThreadAttachmentLinks,
           builder: (context, attachments) => LayoutBuilder(
             builder: (context, constraints) {
@@ -5997,16 +6225,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required String createdBy,
     required Iterable<String> attachmentPaths,
   }) {
-    final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+    final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
     if (normalizedThreadPath.isEmpty) {
       return;
     }
 
-    final normalizedAttachmentPaths = attachmentPaths
-        .where(isPowerboardsStorageAttachmentPath)
-        .map(normalizePowerboardsAttachmentPath)
-        .where((path) => path.isNotEmpty)
-        .toSet();
+    final normalizedAttachmentPaths = attachmentPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toSet();
     if (normalizedAttachmentPaths.isEmpty) {
       return;
     }
@@ -6035,7 +6259,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   PbAttachmentListItemData _attachmentDataForPromptPath(String filePath, {required String threadName}) {
-    final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     final title = normalizedPath.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? normalizedPath;
     final metadata = PbResolvedAttachmentMetadata.resolve(title: title);
     final displayThreadName = threadName.trim();
@@ -6050,7 +6274,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _openDesktopPreviewAttachment(String filePath, {required String threadName, bool fromComposerAttachment = false}) {
-    final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     if (normalizedPath.isEmpty) {
       return;
     }
@@ -6073,7 +6297,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final normalizedRemovedPath = normalizePowerboardsAttachmentPath(filePath);
+    final normalizedRemovedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     if (!_desktopPreviewRemovedAttachmentMatchesPreview(normalizedRemovedPath)) {
       return;
     }
@@ -6092,12 +6316,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return false;
     }
 
-    final normalizedPreviewPath = normalizePowerboardsAttachmentPath(_desktopPreviewFilePreviewFile?.path ?? '');
+    final normalizedPreviewPath = powerboardsStorageAttachmentPathFromUrl(_desktopPreviewFilePreviewFile?.path ?? '');
     if (normalizedRemovedPath == normalizedPreviewPath) {
       return true;
     }
 
-    final normalizedComposerPreviewPath = normalizePowerboardsAttachmentPath(_desktopPreviewComposerAttachmentPreviewPath ?? '');
+    final normalizedComposerPreviewPath = powerboardsStorageAttachmentPathFromUrl(_desktopPreviewComposerAttachmentPreviewPath ?? '');
     if (normalizedComposerPreviewPath.isEmpty) {
       return false;
     }
@@ -6145,7 +6369,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewFilePreviewFile = previewFile;
       _desktopPreviewFilePreviewOpen = true;
       _desktopPreviewFilePreviewFullscreen = false;
-      _desktopPreviewComposerAttachmentPreviewPath = normalizePowerboardsAttachmentPath(filePath);
+      _desktopPreviewComposerAttachmentPreviewPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     });
     if (_roomNameForSelectionPersistence case final roomName?) {
       clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
@@ -6160,7 +6384,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _openDesktopPreviewThreadComposerWithAttachment(BuildContext context, {required String agentKey, required String filePath}) {
-    final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     if (normalizedPath.isEmpty) {
       return;
     }

@@ -306,14 +306,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   void _notifyThreadAttachments({required String threadPath, required String threadName, required Iterable<String> attachmentPaths}) {
-    final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+    final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
     if (normalizedThreadPath.isEmpty) {
       return;
     }
 
     final normalizedAttachmentPaths = attachmentPaths
-        .where(isPowerboardsStorageAttachmentPath)
-        .map(normalizePowerboardsAttachmentPath)
+        .map(powerboardsStorageAttachmentPathFromUrl)
         .where((path) => path.isNotEmpty)
         .toList(growable: false);
     if (normalizedAttachmentPaths.isEmpty) {
@@ -373,7 +372,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       final seen = <String>{};
       final paths = <String>[];
       for (final path in widget.composerAttachmentPaths) {
-        final normalizedPath = normalizePowerboardsAttachmentPath(path);
+        final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
         if (normalizedPath.isNotEmpty && seen.add(normalizedPath)) {
           paths.add(normalizedPath);
         }

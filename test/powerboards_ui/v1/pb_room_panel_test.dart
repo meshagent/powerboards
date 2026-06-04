@@ -58,6 +58,71 @@ class _FakeThreadStorageRepository extends agent_sessions.ThreadStorageRepositor
   Future<void> renameThread(String threadPath, String name) async {}
 }
 
+RuntimeDocument _threadDocumentWithJson(List<Map<String, dynamic>> children) {
+  final schema = MeshSchema(
+    rootTagName: 'thread',
+    elements: [
+      ElementType(
+        tagName: 'thread',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['messages', 'message', 'reasoning', 'exec', 'event']),
+        ],
+      ),
+      ElementType(
+        tagName: 'messages',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['message', 'reasoning', 'exec', 'event']),
+        ],
+      ),
+      ElementType(
+        tagName: 'message',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['file', 'image']),
+        ],
+      ),
+      ElementType(
+        tagName: 'reasoning',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['file', 'image']),
+        ],
+      ),
+      ElementType(
+        tagName: 'exec',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['file', 'image']),
+        ],
+      ),
+      ElementType(
+        tagName: 'event',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['file', 'image']),
+        ],
+      ),
+      ElementType(tagName: 'file', description: null, properties: const []),
+      ElementType(tagName: 'image', description: null, properties: const []),
+    ],
+  );
+  final document = RuntimeDocument(id: 'thread', sendChanges: (_) {}, schema: schema);
+  document.receiveChanges({
+    'root': true,
+    'elements': [
+      {
+        'insert': [
+          for (final child in children) {'element': child},
+        ],
+      },
+    ],
+    'attributes': {'set': const [], 'delete': const []},
+  });
+  return document;
+}
+
 void main() {
   test('desktop preview does not derive loading thread title from stale path slugs', () {
     final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
@@ -94,6 +159,103 @@ void main() {
     );
 
     expect(title, 'IBM Presentation Summary');
+  });
+
+  test('desktop preview extracts attachments from messages containers', () {
+    final document = _threadDocumentWithJson([
+      {
+        'tagName': 'messages',
+        'children': [
+          {
+            'element': {
+              'tagName': 'message',
+              'children': [
+                {
+                  'element': {
+                    'tagName': 'file',
+                    'attributes': {'path': 'scratch.md'},
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    final messages = powerboardsDesktopPreviewThreadMessageElements(document);
+    final attachments = [
+      for (final message in messages)
+        for (final attachment in message.getChildren().whereType<MeshElement>()) powerboardsDesktopPreviewThreadAttachmentPath(attachment),
+    ];
+
+    expect(attachments, ['scratch.md']);
+  });
+
+  test('desktop preview extracts attachments from top-level message nodes', () {
+    final document = _threadDocumentWithJson([
+      {
+        'tagName': 'message',
+        'children': [
+          {
+            'element': {
+              'tagName': 'image',
+              'attributes': {'url': 'screenshots/testing.png'},
+            },
+          },
+        ],
+      },
+    ]);
+
+    final messages = powerboardsDesktopPreviewThreadMessageElements(document);
+    final attachments = [
+      for (final message in messages)
+        for (final attachment in message.getChildren().whereType<MeshElement>()) powerboardsDesktopPreviewThreadAttachmentPath(attachment),
+    ];
+
+    expect(attachments, ['screenshots/testing.png']);
+  });
+
+  test('desktop preview extracts room URL attachments from thread nodes', () {
+    final document = _threadDocumentWithJson([
+      {
+        'tagName': 'message',
+        'children': [
+          {
+            'element': {
+              'tagName': 'image',
+              'attributes': {'url': 'room:///sample-attachments/testing.png'},
+            },
+          },
+        ],
+      },
+    ]);
+
+    final messages = powerboardsDesktopPreviewThreadMessageElements(document);
+    final attachments = [
+      for (final message in messages)
+        for (final attachment in message.getChildren().whereType<MeshElement>()) powerboardsDesktopPreviewThreadAttachmentPath(attachment),
+    ];
+
+    expect(attachments, ['sample-attachments/testing.png']);
+  });
+
+  test('desktop preview extracts attachments from agent input content', () {
+    final turnStart = agent_sessions.TurnStart(
+      threadId: 'dataset://agents/assistant/threads/testing-screenshot-upload',
+      content: const [
+        agent_sessions.AgentFileContent(url: 'room:///sample-attachments/screenshot.png'),
+        agent_sessions.AgentFileContent(url: 'room:///sample-attachments/screenshot.png'),
+      ],
+    );
+    final turnSteer = agent_sessions.TurnSteer(
+      threadId: 'dataset://agents/assistant/threads/testing-screenshot-upload',
+      turnId: 'turn-1',
+      content: const [agent_sessions.AgentFileContent(url: 'sample-attachments/scratch.md')],
+    );
+
+    expect(powerboardsDesktopPreviewAgentMessageAttachmentPaths(turnStart), ['sample-attachments/screenshot.png']);
+    expect(powerboardsDesktopPreviewAgentMessageAttachmentPaths(turnSteer), ['sample-attachments/scratch.md']);
   });
 
   Widget buildHarness({
