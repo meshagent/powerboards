@@ -4859,7 +4859,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     )
                   : threadPanel;
 
-              PbRoomPanel buildRoomPanel({bool responsiveOverlay = false, bool resizing = false}) {
+              Widget buildRoomPanel({bool responsiveOverlay = false, bool resizing = false}) {
                 void selectThreadFromRoomPanel(String? path, {String? displayName}) {
                   _selectDesktopPreviewThread(chatContext, path, displayName: displayName);
                   if (responsiveOverlay) {
@@ -4867,83 +4867,85 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   }
                 }
 
-                return PbRoomPanel(
-                  selectedTab: _desktopPreviewRoomPanelTab,
-                  onTabSelected: (tab) {
-                    setState(() {
-                      _desktopPreviewRoomPanelTab = tab;
-                    });
-                  },
-                  agents: agentItems,
-                  selectedAgentId: selected.routeId,
-                  selectedAgentTitle: agentName,
-                  onAgentItemSelected: _selectDesktopPreviewAgent,
-                  onManageAgents: isOwner.state.value == true ? showManageAgents : null,
-                  agentsExpanded: _desktopPreviewAgentsExpanded,
-                  onAgentsExpandedChanged: (expanded) {
-                    setState(() {
-                      _desktopPreviewAgentsExpanded = expanded;
-                    });
-                  },
-                  showThreadsSection: threadListPath != null,
-                  showFilesTab: true,
-                  threads: [for (final thread in threads) thread.name],
-                  threadItems: threadItems,
-                  selectedThreadId: chatContext?.selectedThreadPath,
-                  selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
-                  onThreadSelected: (_) {},
-                  onThreadItemSelected: (thread) => selectThreadFromRoomPanel(thread.id, displayName: thread.title),
-                  onThreadRename: (thread) {
-                    final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
-                    if (entry != null) {
-                      unawaited(_renameDesktopPreviewThread(entry));
-                    }
-                  },
-                  onThreadDelete: (thread) {
-                    final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
-                    if (entry != null) {
-                      unawaited(_deleteDesktopPreviewThread(chatContext, entry));
-                    }
-                  },
-                  onCreateThread: () => selectThreadFromRoomPanel(null),
-                  attachments: attachments,
-                  initialPreviewFile: _desktopPreviewFilePreviewFile,
-                  initialFilePreviewOpen: _desktopPreviewFilePreviewOpen,
-                  openFilePreviewAsFullscreen: responsiveOverlay || _desktopPreviewFilePreviewFullscreen,
-                  onFilePreviewSelected: (file) {
-                    setState(() {
-                      _desktopPreviewFilePreviewFile = file;
-                      _desktopPreviewComposerAttachmentPreviewPath = null;
-                    });
-                  },
-                  onFilePreviewOpenChanged: (open) {
-                    setState(() {
-                      _desktopPreviewFilePreviewOpen = open;
-                      if (!open) {
-                        _desktopPreviewFilePreviewFile = null;
-                        _desktopPreviewFilePreviewFullscreen = false;
-                        _desktopPreviewComposerAttachmentPreviewPath = null;
+                return StatefulBuilder(
+                  builder: (context, setRoomPanelState) => PbRoomPanel(
+                    selectedTab: _desktopPreviewRoomPanelTab,
+                    onTabSelected: (tab) {
+                      setRoomPanelState(() {
+                        _desktopPreviewRoomPanelTab = tab;
+                      });
+                    },
+                    agents: agentItems,
+                    selectedAgentId: selected.routeId,
+                    selectedAgentTitle: agentName,
+                    onAgentItemSelected: _selectDesktopPreviewAgent,
+                    onManageAgents: isOwner.state.value == true ? showManageAgents : null,
+                    agentsExpanded: _desktopPreviewAgentsExpanded,
+                    onAgentsExpandedChanged: (expanded) {
+                      setState(() {
+                        _desktopPreviewAgentsExpanded = expanded;
+                      });
+                    },
+                    showThreadsSection: threadListPath != null,
+                    showFilesTab: true,
+                    threads: [for (final thread in threads) thread.name],
+                    threadItems: threadItems,
+                    selectedThreadId: chatContext?.selectedThreadPath,
+                    selectedThreadTitle: chatContext?.selectedThreadPath == null ? null : selectedThreadTitle,
+                    onThreadSelected: (_) {},
+                    onThreadItemSelected: (thread) => selectThreadFromRoomPanel(thread.id, displayName: thread.title),
+                    onThreadRename: (thread) {
+                      final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                      if (entry != null) {
+                        unawaited(_renameDesktopPreviewThread(entry));
                       }
-                    });
-                    if (!open) {
-                      setPreviewFilePreviewFullscreen(false);
-                    }
-                  },
-                  onFilePreviewFullscreenChanged: (fullscreen) {
-                    _setDesktopPreviewFilePreviewFullscreen(fullscreen, closeOverlay: responsiveOverlay);
-                  },
-                  filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
-                  filePreviewSourceBuilder: _buildAttachmentPreviewSource,
-                  onAskFileAgent: (file) => unawaited(
-                    _startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey, showThreadAfterPrompt: responsiveOverlay),
+                    },
+                    onThreadDelete: (thread) {
+                      final entry = threads.firstWhereOrNull((entry) => entry.path == thread.id);
+                      if (entry != null) {
+                        unawaited(_deleteDesktopPreviewThread(chatContext, entry));
+                      }
+                    },
+                    onCreateThread: () => selectThreadFromRoomPanel(null),
+                    attachments: attachments,
+                    initialPreviewFile: _desktopPreviewFilePreviewFile,
+                    initialFilePreviewOpen: _desktopPreviewFilePreviewOpen,
+                    openFilePreviewAsFullscreen: responsiveOverlay || _desktopPreviewFilePreviewFullscreen,
+                    onFilePreviewSelected: (file) {
+                      setState(() {
+                        _desktopPreviewFilePreviewFile = file;
+                        _desktopPreviewComposerAttachmentPreviewPath = null;
+                      });
+                    },
+                    onFilePreviewOpenChanged: (open) {
+                      setState(() {
+                        _desktopPreviewFilePreviewOpen = open;
+                        if (!open) {
+                          _desktopPreviewFilePreviewFile = null;
+                          _desktopPreviewFilePreviewFullscreen = false;
+                          _desktopPreviewComposerAttachmentPreviewPath = null;
+                        }
+                      });
+                      if (!open) {
+                        setPreviewFilePreviewFullscreen(false);
+                      }
+                    },
+                    onFilePreviewFullscreenChanged: (fullscreen) {
+                      _setDesktopPreviewFilePreviewFullscreen(fullscreen, closeOverlay: responsiveOverlay);
+                    },
+                    filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
+                    filePreviewSourceBuilder: _buildAttachmentPreviewSource,
+                    onAskFileAgent: (file) => unawaited(
+                      _startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey, showThreadAfterPrompt: responsiveOverlay),
+                    ),
+                    onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
+                    onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
+                    filePreviewResizing: resizing,
+                    borderOnTop: responsiveOverlay,
+                    responsiveOverlay: responsiveOverlay,
+                    responsiveOverlayMobile: false,
+                    onResponsiveOverlayClose: _closeDesktopPreviewRoomPanelOverlay,
                   ),
-                  onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
-                  onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
-                  filePreviewResizing: resizing,
-                  borderOnTop: responsiveOverlay,
-                  responsiveOverlay: responsiveOverlay,
-                  responsiveOverlayMobile: false,
-                  onResponsiveOverlayClose: _closeDesktopPreviewRoomPanelOverlay,
                 );
               }
 
