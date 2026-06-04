@@ -38,14 +38,31 @@ String _lastSelectedRoomThreadKey(String projectId, String roomName, String agen
   return 'lastSelectedRoomThread::$projectId::$roomName::$agentRouteId';
 }
 
-void setLastSelectedRoomThread(String projectId, String roomName, String agentRouteId, String threadPath) {
+String _lastSelectedRoomThreadTitleKey(String projectId, String roomName, String agentRouteId) {
+  return 'lastSelectedRoomThreadTitle::$projectId::$roomName::$agentRouteId';
+}
+
+void setLastSelectedRoomThread(String projectId, String roomName, String agentRouteId, String threadPath, {String? threadTitle}) {
   localStorage.setItem(_lastSelectedRoomThreadKey(projectId, roomName, agentRouteId), threadPath);
+
+  final normalizedTitle = threadTitle?.trim();
+  if (normalizedTitle == null || normalizedTitle.isEmpty) {
+    localStorage.removeItem(_lastSelectedRoomThreadTitleKey(projectId, roomName, agentRouteId));
+    return;
+  }
+
+  localStorage.setItem(_lastSelectedRoomThreadTitleKey(projectId, roomName, agentRouteId), normalizedTitle);
 }
 
 void clearLastSelectedRoomThread(String projectId, String roomName, String agentRouteId) {
   localStorage.removeItem(_lastSelectedRoomThreadKey(projectId, roomName, agentRouteId));
+  localStorage.removeItem(_lastSelectedRoomThreadTitleKey(projectId, roomName, agentRouteId));
 }
 
 String? getLastSelectedRoomThread(String projectId, String roomName, String agentRouteId) {
   return localStorage.getItem(_lastSelectedRoomThreadKey(projectId, roomName, agentRouteId));
+}
+
+String? getLastSelectedRoomThreadTitle(String projectId, String roomName, String agentRouteId) {
+  return localStorage.getItem(_lastSelectedRoomThreadTitleKey(projectId, roomName, agentRouteId));
 }

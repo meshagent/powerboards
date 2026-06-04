@@ -203,6 +203,17 @@ class _MobileChatHeaderContext {
   final bool isVoiceOnly;
 
   bool get canOpenContextSwitcher => threadListPath != null || agentKey != null;
+
+  _MobileChatHeaderContext withThreadSelection({required String currentThreadLabel, required String? selectedThreadPath}) {
+    return _MobileChatHeaderContext(
+      agentName: agentName,
+      agentKey: agentKey,
+      currentThreadLabel: currentThreadLabel,
+      selectedThreadPath: selectedThreadPath,
+      threadListPath: threadListPath,
+      isVoiceOnly: isVoiceOnly,
+    );
+  }
 }
 
 enum _MobileRoomContextSwitcherState { threads, agents }
@@ -420,6 +431,63 @@ String? _agentThreadListPath(String? path) {
   return "agent://threads";
 }
 
+@visibleForTesting
+String? powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads({
+  required String? selectedThreadPath,
+  required Iterable<String> threadPaths,
+  required bool threadListLoaded,
+}) {
+  final normalizedSelectedThreadPath = selectedThreadPath?.trim();
+  if (normalizedSelectedThreadPath == null || normalizedSelectedThreadPath.isEmpty) {
+    return null;
+  }
+
+  if (!threadListLoaded) {
+    return normalizedSelectedThreadPath;
+  }
+
+  for (final threadPath in threadPaths) {
+    if (threadPath.trim() == normalizedSelectedThreadPath) {
+      return normalizedSelectedThreadPath;
+    }
+  }
+
+  return null;
+}
+
+const powerboardsDesktopPreviewLoadingThreadTitle = 'Loading thread';
+
+@visibleForTesting
+String powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads({
+  required String? selectedThreadPath,
+  required String? currentThreadLabel,
+  required bool currentThreadLabelTrusted,
+  required Map<String, String> threadNamesByPath,
+  required bool threadListLoaded,
+}) {
+  final normalizedSelectedThreadPath = selectedThreadPath?.trim();
+  if (normalizedSelectedThreadPath == null || normalizedSelectedThreadPath.isEmpty) {
+    final normalizedCurrentThreadLabel = currentThreadLabel?.trim();
+    return normalizedCurrentThreadLabel == null || normalizedCurrentThreadLabel.isEmpty ? 'New thread' : normalizedCurrentThreadLabel;
+  }
+
+  for (final entry in threadNamesByPath.entries) {
+    if (entry.key.trim() != normalizedSelectedThreadPath) {
+      continue;
+    }
+    final normalizedThreadName = entry.value.trim();
+    return normalizedThreadName.isEmpty ? defaultThreadDisplayNameFromPath(normalizedSelectedThreadPath) : normalizedThreadName;
+  }
+
+  final normalizedCurrentThreadLabel = currentThreadLabel?.trim();
+  if (currentThreadLabelTrusted && normalizedCurrentThreadLabel != null && normalizedCurrentThreadLabel.isNotEmpty) {
+    return normalizedCurrentThreadLabel;
+  }
+
+  final fallbackThreadLabel = defaultThreadDisplayNameFromPath(normalizedSelectedThreadPath);
+  return threadListLoaded ? fallbackThreadLabel : powerboardsDesktopPreviewLoadingThreadTitle;
+}
+
 class _DesktopPreviewThreadList extends StatefulWidget {
   const _DesktopPreviewThreadList({
     required this.client,
@@ -434,7 +502,7 @@ class _DesktopPreviewThreadList extends StatefulWidget {
   final RoomClient client;
   final String? agentName;
   final String? threadListPath;
-  final Widget Function(BuildContext context, List<_DesktopPreviewThreadEntry> threads) builder;
+  final Widget Function(BuildContext context, List<_DesktopPreviewThreadEntry> threads, bool threadListLoaded) builder;
   final PowerboardsDesktopPreviewChatClientFactory? chatClientFactory;
   final PowerboardsDesktopPreviewThreadStorageFactory? threadStorageFactory;
   final bool disposeChatClient;
@@ -590,7 +658,7 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(context, _entries());
+  Widget build(BuildContext context) => widget.builder(context, _entries(), _storage != null || _normalizedThreadListPath() == null);
 }
 
 class _DesktopPreviewThreadAttachments extends StatefulWidget {
@@ -1040,6 +1108,8 @@ class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
     this.threadStorageFactory,
     this.disposeChatClient,
     this.agentName = 'assistant',
+    this.selectedThreadPath,
+    this.selectedThreadName,
   });
 
   final RoomClient client;
@@ -1048,6 +1118,8 @@ class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
   final PowerboardsDesktopPreviewChatClientFactory? chatClientFactory;
   final PowerboardsDesktopPreviewThreadStorageFactory? threadStorageFactory;
   final bool? disposeChatClient;
+  final String? selectedThreadPath;
+  final String? selectedThreadName;
 
   @override
   Widget build(BuildContext context) {
@@ -1058,7 +1130,16 @@ class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
       chatClientFactory: chatClientFactory,
       threadStorageFactory: threadStorageFactory,
       disposeChatClient: disposeChatClient ?? chatClientFactory == null,
-      builder: (context, threads) {
+      builder: (context, threads, threadListLoaded) {
+        final visibleSelectedThreadPath = powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads(
+          selectedThreadPath: selectedThreadPath,
+          threadPaths: threads.map((thread) => thread.path),
+          threadListLoaded: threadListLoaded,
+        );
+        final selectedThread = visibleSelectedThreadPath == null
+            ? null
+            : threads.firstWhereOrNull((thread) => thread.path.trim() == visibleSelectedThreadPath);
+        final selectedThreadTitle = visibleSelectedThreadPath == null ? null : selectedThread?.name ?? selectedThreadName;
         final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
         return PbRoomPanel(
           agents: const [PbAgentListItemData(id: 'assistant', title: 'Assistant', status: 'Available', icon: 'bot', selected: true)],
@@ -1067,7 +1148,8 @@ class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
           showFilesTab: false,
           threads: [for (final thread in threads) thread.name],
           threadItems: threadItems,
-          selectedThreadTitle: null,
+          selectedThreadId: visibleSelectedThreadPath,
+          selectedThreadTitle: selectedThreadTitle,
           onThreadSelected: (_) {},
           onCreateThread: () {},
         );
@@ -1897,6 +1979,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     if (oldWidget.projectId != widget.projectId || oldWidget.room.roomName != widget.room.roomName) {
       _resolvedRoomDisplayName = null;
+      _clearRoomScopedThreadSelectionState();
       unawaited(_loadRoomDisplayName());
     }
     if (oldWidget.room != widget.room) {
@@ -1905,6 +1988,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
       _agentChatClients.clear();
     }
+  }
+
+  void _clearRoomScopedThreadSelectionState() {
+    _selectedThreadPathByAgentKey.clear();
+    _selectedThreadLabelByAgentKey.clear();
+    _composerAttachmentPathsByAgentKey.clear();
+    _composerAttachmentSeedVersionByAgentKey.clear();
+    _newThreadResetVersion++;
   }
 
   @override
@@ -2225,6 +2316,29 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return trimmed.isEmpty ? null : trimmed;
   }
 
+  String? _persistedSelectedThreadLabelForAgentKey(String? agentKey, {String? selectedThreadPath}) {
+    final roomName = _roomNameForSelectionPersistence;
+    if (roomName == null || agentKey == null) {
+      return null;
+    }
+
+    final normalizedSelectedThreadPath = selectedThreadPath?.trim();
+    if (normalizedSelectedThreadPath != null && normalizedSelectedThreadPath.isNotEmpty) {
+      final persistedPath = _persistedSelectedThreadPathForAgentKey(agentKey);
+      if (persistedPath != normalizedSelectedThreadPath) {
+        return null;
+      }
+    }
+
+    final stored = getLastSelectedRoomThreadTitle(widget.projectId, roomName, agentKey);
+    if (stored == null) {
+      return null;
+    }
+
+    final trimmed = stored.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   _ResolvedAgentSelection _resolveSelectedAgent(List<ServiceSpec> supported, {String? requestedRouteId}) {
     final resolvedRouteId = requestedRouteId ?? widget.service;
     if (resolvedRouteId != null) {
@@ -2300,7 +2414,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   // ignore: unused_element
-  String? _selectedThreadLabelForAgentKey(String? agentKey) {
+  String? _selectedThreadLabelForAgentKey(String? agentKey, {bool includePersistedSelectionLabel = false, String? selectedThreadPath}) {
     if (agentKey == null) {
       return null;
     }
@@ -2309,7 +2423,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (stored != null && stored.trim().isNotEmpty) {
       return stored;
     }
-    return null;
+    if (!includePersistedSelectionLabel) {
+      return null;
+    }
+
+    return _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: selectedThreadPath);
   }
 
   void _setSelectedThreadPath(String? agentKey, String? path, {String? displayName}) {
@@ -2323,9 +2441,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final resolvedDisplayName = normalizedName == null || normalizedName.isEmpty ? null : normalizedName;
     final previousPath = _selectedThreadPathByAgentKey[agentKey];
     final previousDisplayName = _selectedThreadLabelByAgentKey[agentKey];
-    final effectiveDisplayName = resolvedPath == previousPath && resolvedDisplayName == null ? previousDisplayName : resolvedDisplayName;
+    final persistedDisplayName = resolvedPath == null
+        ? null
+        : _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: resolvedPath);
+    final effectiveDisplayName = resolvedDisplayName ?? (resolvedPath == previousPath ? previousDisplayName : null) ?? persistedDisplayName;
 
-    if (resolvedPath == previousPath && effectiveDisplayName == previousDisplayName) {
+    final roomName = _roomNameForSelectionPersistence;
+    final persistedPath = _persistedSelectedThreadPathForAgentKey(agentKey);
+    final persistedSelectionMatches =
+        roomName == null ||
+        (resolvedPath == null
+            ? persistedPath == null
+            : persistedPath == resolvedPath &&
+                  _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: resolvedPath) == effectiveDisplayName);
+
+    if (resolvedPath == previousPath && effectiveDisplayName == previousDisplayName && persistedSelectionMatches) {
       return;
     }
 
@@ -2344,7 +2474,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
     });
 
-    final roomName = _roomNameForSelectionPersistence;
     if (roomName == null) {
       return;
     }
@@ -2354,7 +2483,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    setLastSelectedRoomThread(widget.projectId, roomName, agentKey, resolvedPath);
+    setLastSelectedRoomThread(widget.projectId, roomName, agentKey, resolvedPath, threadTitle: effectiveDisplayName);
   }
 
   void _setComposerAttachmentSeed(String agentKey, Iterable<String> paths) {
@@ -2541,7 +2670,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  _MobileChatHeaderContext? _resolveMobileChatHeaderContext(List<ServiceSpec> supported, _ResolvedAgentSelection selection) {
+  _MobileChatHeaderContext? _resolveMobileChatHeaderContext(
+    List<ServiceSpec> supported,
+    _ResolvedAgentSelection selection, {
+    bool includePersistedThreadSelection = true,
+    bool includePersistedThreadLabel = false,
+  }) {
     String? agentName;
     String? threadListPath;
     var currentThreadLabel = "New thread";
@@ -2586,9 +2720,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final agentKey = selection.routeId;
-    final selectedThreadPath = supportsThreads ? _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: true) : null;
+    final selectedThreadPath = supportsThreads
+        ? _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: includePersistedThreadSelection)
+        : null;
     if (supportsThreads && selectedThreadPath != null) {
-      currentThreadLabel = _selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath);
+      currentThreadLabel =
+          _selectedThreadLabelForAgentKey(
+            agentKey,
+            includePersistedSelectionLabel: includePersistedThreadLabel,
+            selectedThreadPath: selectedThreadPath,
+          ) ??
+          defaultThreadDisplayNameFromPath(selectedThreadPath);
     }
 
     return _MobileChatHeaderContext(
@@ -3623,6 +3765,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     String? threadDir,
     String? threadPath,
     String? selectedThreadPath,
+    String? selectedThreadDisplayName,
     ValueChanged<String?>? onSelectedThreadPathChanged,
     Widget? emptyState,
     bool hideChatInput = false,
@@ -3657,9 +3800,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final agentKey = selectedAgentRouteId;
     final composerAttachmentPaths = agentKey == null ? const <String>[] : _composerAttachmentPathsByAgentKey[agentKey] ?? const <String>[];
     final composerAttachmentSeedVersion = agentKey == null ? 0 : _composerAttachmentSeedVersionByAgentKey[agentKey] ?? 0;
+    final normalizedSelectedThreadDisplayName = selectedThreadDisplayName?.trim();
+    final resolvedSelectedThreadDisplayName = normalizedSelectedThreadDisplayName == null || normalizedSelectedThreadDisplayName.isEmpty
+        ? null
+        : normalizedSelectedThreadDisplayName;
     final currentThreadLabel = selectedThreadPath == null
         ? "New thread"
-        : (_selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
+        : (resolvedSelectedThreadDisplayName ??
+              _selectedThreadLabelForAgentKey(agentKey) ??
+              defaultThreadDisplayNameFromPath(selectedThreadPath));
     final chatDropOverlayBuilder = !isMobile && powerboardsUsesDesktopUiPreview(context)
         ? (BuildContext context, bool dragging) => PbFilesDropTargetOverlayLayer(
             active: dragging,
@@ -3681,7 +3830,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         client: widget.room,
         documentPath: documentPath,
         selectedThreadPath: selectedThreadPath,
-        selectedThreadDisplayName: _selectedThreadLabelForAgentKey(agentKey),
+        selectedThreadDisplayName: resolvedSelectedThreadDisplayName ?? _selectedThreadLabelForAgentKey(agentKey),
         onSelectedThreadPathChanged: onSelectedThreadPathChanged,
         onSelectedThreadResolved: (path, displayName) => _setSelectedThreadPath(agentKey, path, displayName: displayName),
         participantNames: [
@@ -4569,10 +4718,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     ];
   }
 
-  String _desktopPreviewSelectedThreadTitle(_MobileChatHeaderContext? chatContext, List<_DesktopPreviewThreadEntry> threads) {
+  String? _desktopPreviewSelectedThreadDisplayName(_MobileChatHeaderContext? chatContext, List<_DesktopPreviewThreadEntry> threads) {
     final selectedThreadPath = chatContext?.selectedThreadPath;
     if (selectedThreadPath == null) {
-      return chatContext?.currentThreadLabel ?? 'New thread';
+      return null;
     }
 
     for (final thread in threads) {
@@ -4581,7 +4730,126 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
     }
 
-    return chatContext?.currentThreadLabel ?? defaultThreadDisplayNameFromPath(selectedThreadPath);
+    return _selectedThreadLabelForAgentKey(
+      chatContext?.agentKey,
+      includePersistedSelectionLabel: true,
+      selectedThreadPath: selectedThreadPath,
+    );
+  }
+
+  String _desktopPreviewSelectedThreadTitle(
+    _MobileChatHeaderContext? chatContext,
+    List<_DesktopPreviewThreadEntry> threads, {
+    required bool threadListLoaded,
+  }) {
+    final selectedThreadPath = chatContext?.selectedThreadPath;
+    final currentThreadLabelTrusted =
+        selectedThreadPath != null &&
+        _selectedThreadLabelForAgentKey(
+              chatContext?.agentKey,
+              includePersistedSelectionLabel: true,
+              selectedThreadPath: selectedThreadPath,
+            ) !=
+            null;
+
+    return powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+      selectedThreadPath: selectedThreadPath,
+      currentThreadLabel: chatContext?.currentThreadLabel,
+      currentThreadLabelTrusted: currentThreadLabelTrusted,
+      threadNamesByPath: {for (final thread in threads) thread.path: thread.name},
+      threadListLoaded: threadListLoaded,
+    );
+  }
+
+  _MobileChatHeaderContext? _desktopPreviewChatContextForVisibleThreads(
+    _MobileChatHeaderContext? chatContext,
+    List<_DesktopPreviewThreadEntry> threads, {
+    required bool threadListLoaded,
+  }) {
+    if (chatContext == null) {
+      return null;
+    }
+
+    final selectedThreadPath = chatContext.selectedThreadPath;
+    final visibleSelectedThreadPath = powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads(
+      selectedThreadPath: selectedThreadPath,
+      threadPaths: threads.map((thread) => thread.path),
+      threadListLoaded: threadListLoaded,
+    );
+
+    if (selectedThreadPath == visibleSelectedThreadPath) {
+      return chatContext;
+    }
+
+    final trimmedSelectedThreadPath = selectedThreadPath?.trim();
+    if (threadListLoaded &&
+        visibleSelectedThreadPath == null &&
+        trimmedSelectedThreadPath != null &&
+        trimmedSelectedThreadPath.isNotEmpty) {
+      _clearMissingDesktopPreviewThreadSelection(chatContext, trimmedSelectedThreadPath);
+    }
+
+    return chatContext.withThreadSelection(currentThreadLabel: 'New thread', selectedThreadPath: visibleSelectedThreadPath);
+  }
+
+  void _clearMissingDesktopPreviewThreadSelection(_MobileChatHeaderContext chatContext, String selectedThreadPath) {
+    final agentKey = chatContext.agentKey;
+    if (agentKey == null) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      final inMemoryPath = _selectedThreadPathByAgentKey[agentKey]?.trim();
+      final persistedPath = _persistedSelectedThreadPathForAgentKey(agentKey);
+      if (inMemoryPath != selectedThreadPath && persistedPath != selectedThreadPath) {
+        return;
+      }
+
+      if (inMemoryPath == selectedThreadPath) {
+        _setSelectedThreadPath(agentKey, null);
+        return;
+      }
+
+      if (_roomNameForSelectionPersistence case final roomName?) {
+        clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
+      }
+    });
+  }
+
+  void _syncDesktopPreviewVisibleThreadSelection(_MobileChatHeaderContext? chatContext, String selectedThreadTitle) {
+    final agentKey = chatContext?.agentKey;
+    final selectedThreadPath = chatContext?.selectedThreadPath;
+    if (agentKey == null || selectedThreadPath == null) {
+      return;
+    }
+
+    final normalizedTitle = selectedThreadTitle.trim();
+    final resolvedTitle = normalizedTitle.isEmpty ? null : normalizedTitle;
+    final persistedTitle = _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: selectedThreadPath);
+    if (_selectedThreadPathByAgentKey[agentKey] == selectedThreadPath &&
+        (resolvedTitle == null || _selectedThreadLabelByAgentKey[agentKey] == resolvedTitle) &&
+        (resolvedTitle == null || persistedTitle == resolvedTitle)) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      final nextPersistedTitle = _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: selectedThreadPath);
+      if (_selectedThreadPathByAgentKey[agentKey] == selectedThreadPath &&
+          (resolvedTitle == null || _selectedThreadLabelByAgentKey[agentKey] == resolvedTitle) &&
+          (resolvedTitle == null || nextPersistedTitle == resolvedTitle)) {
+        return;
+      }
+
+      _setSelectedThreadPath(agentKey, selectedThreadPath, displayName: resolvedTitle);
+    });
   }
 
   void _selectDesktopPreviewThread(_MobileChatHeaderContext? chatContext, String? path, {String? displayName}) {
@@ -4715,20 +4983,26 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final showFilesWorkspace = canViewStorageAllowed && controller.isFilesShown;
-    final chatContext = _resolveMobileChatHeaderContext(supported, selected);
-    final threadListPath = chatContext?.threadListPath;
+    final rawChatContext = _resolveMobileChatHeaderContext(supported, selected, includePersistedThreadLabel: true);
+    final threadListPath = rawChatContext?.threadListPath;
     final agentItems = _desktopPreviewAgentItems(supported, selected);
     final hasVisibleAgents = _hasVisibleAgents(supported);
 
     return _DesktopPreviewThreadList(
       client: widget.room,
-      agentName: chatContext?.agentName,
+      agentName: rawChatContext?.agentName,
       threadListPath: threadListPath,
       chatClientFactory: (_, agentName) =>
           _agentChatClientFor(agentName) ?? agent_sessions.MessagingChatClient(room: widget.room, agentName: agentName),
       disposeChatClient: false,
-      builder: (context, threads) {
-        final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads);
+      builder: (context, threads, threadListLoaded) {
+        final chatContext = _desktopPreviewChatContextForVisibleThreads(rawChatContext, threads, threadListLoaded: threadListLoaded);
+        final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads, threadListLoaded: threadListLoaded);
+        final selectedThreadDisplayName = _desktopPreviewSelectedThreadDisplayName(chatContext, threads);
+        final selectedThreadTitleResolving = chatContext?.selectedThreadPath != null && !threadListLoaded;
+        if (selectedThreadDisplayName != null) {
+          _syncDesktopPreviewVisibleThreadSelection(chatContext, selectedThreadDisplayName);
+        }
         final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
         final agentName = chatContext?.agentName ?? selected.service?.agents.firstOrNull?.name ?? 'Assistant';
         final threadPanel = hasVisibleAgents
@@ -4738,6 +5012,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     title: selectedThreadTitle,
                     agentName: agentName,
                     selectedThreadTitle: selectedThreadTitle,
+                    titleResolving: selectedThreadTitleResolving,
                     roomPanelExpanded: !_desktopPreviewRoomPanelCollapsed,
                     onRoomPanelToggle: () {
                       setState(() {
@@ -4758,6 +5033,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       showEmbeddedThreadList: false,
                       embedMobileChrome: false,
                       showDesktopThreadListAlternatives: false,
+                      useSelectedThreadOverride: chatContext != null,
+                      selectedThreadPathOverride: chatContext?.selectedThreadPath,
+                      selectedThreadDisplayNameOverride: selectedThreadDisplayName,
                     ),
                   ),
                 ],
@@ -4825,6 +5103,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                           title: selectedThreadTitle,
                           agentName: agentName,
                           selectedThreadTitle: selectedThreadTitle,
+                          titleResolving: selectedThreadTitleResolving,
                           roomPanelExpanded: roomPanelExpanded,
                           onRoomPanelToggle: () {
                             setState(() {
@@ -4853,6 +5132,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                             showEmbeddedThreadList: false,
                             embedMobileChrome: false,
                             showDesktopThreadListAlternatives: false,
+                            useSelectedThreadOverride: chatContext != null,
+                            selectedThreadPathOverride: chatContext?.selectedThreadPath,
+                            selectedThreadDisplayNameOverride: selectedThreadDisplayName,
                           ),
                         ),
                       ],
@@ -5527,6 +5809,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     bool showEmbeddedThreadList = true,
     bool embedMobileChrome = true,
     bool showDesktopThreadListAlternatives = true,
+    bool useSelectedThreadOverride = false,
+    String? selectedThreadPathOverride,
+    String? selectedThreadDisplayNameOverride,
   }) {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = _usesMobileRoomLayout(context);
@@ -5590,6 +5875,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               }
 
               if (descriptor?.isChat == true) {
+                final selectedThreadPath = useSelectedThreadOverride
+                    ? selectedThreadPathOverride
+                    : _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile);
                 return _buildChatArea(
                   context,
                   name,
@@ -5600,7 +5888,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   threadDir: descriptor.threadDir,
                   threadListPath: descriptor.threadListPath,
                   threadPath: descriptor.threadPath,
-                  selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
+                  selectedThreadPath: selectedThreadPath,
+                  selectedThreadDisplayName: useSelectedThreadOverride && selectedThreadPath != null
+                      ? selectedThreadDisplayNameOverride
+                      : null,
                   onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                   embedMobileChrome: embedMobileChrome,
                   showDesktopThreadListAlternatives: showDesktopThreadListAlternatives,
@@ -5619,6 +5910,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             final type = _serviceType(service);
             final agentKey = selected.routeId;
             if (descriptor?.isChat == true) {
+              final selectedThreadPath = useSelectedThreadOverride
+                  ? selectedThreadPathOverride
+                  : _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile);
               return _buildChatArea(
                 context,
                 service.agents[0].name,
@@ -5629,7 +5923,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 threadDir: descriptor.threadDir,
                 threadListPath: descriptor.threadListPath,
                 threadPath: descriptor.threadPath,
-                selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
+                selectedThreadPath: selectedThreadPath,
+                selectedThreadDisplayName: useSelectedThreadOverride && selectedThreadPath != null
+                    ? selectedThreadDisplayNameOverride
+                    : null,
                 onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                 embedMobileChrome: embedMobileChrome,
                 showDesktopThreadListAlternatives: showDesktopThreadListAlternatives,

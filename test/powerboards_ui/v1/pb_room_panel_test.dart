@@ -59,6 +59,43 @@ class _FakeThreadStorageRepository extends agent_sessions.ThreadStorageRepositor
 }
 
 void main() {
+  test('desktop preview does not derive loading thread title from stale path slugs', () {
+    final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+      selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',
+      currentThreadLabel: 'New Chat',
+      currentThreadLabelTrusted: false,
+      threadNamesByPath: const {},
+      threadListLoaded: false,
+    );
+
+    expect(title, powerboardsDesktopPreviewLoadingThreadTitle);
+    expect(title, isNot('New Chat'));
+  });
+
+  test('desktop preview uses remembered title while selected thread list is loading', () {
+    final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+      selectedThreadPath: 'dataset://agents/assistant/threads/testing-screenshot-upload',
+      currentThreadLabel: 'Testing Screenshot Upload',
+      currentThreadLabelTrusted: true,
+      threadNamesByPath: const {},
+      threadListLoaded: false,
+    );
+
+    expect(title, 'Testing Screenshot Upload');
+  });
+
+  test('desktop preview uses thread list title after remembered thread loads', () {
+    final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+      selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',
+      currentThreadLabel: 'New Chat',
+      currentThreadLabelTrusted: false,
+      threadNamesByPath: const {'dataset://agents/assistant/threads/new-chat': 'IBM Presentation Summary'},
+      threadListLoaded: true,
+    );
+
+    expect(title, 'IBM Presentation Summary');
+  });
+
   Widget buildHarness({
     required List<PbAgentListItemData> agents,
     String? selectedAgentId,
@@ -158,6 +195,100 @@ void main() {
 
     expect(find.text('Realtime Thread'), findsOneWidget);
     expect(find.text('Greeting Chat2'), findsOneWidget);
+  });
+
+  testWidgets('desktop preview treats missing selected thread as new thread', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final storage = _FakeThreadStorageRepository([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/real',
+        name: 'Real Thread',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              height: 720,
+              child: PowerboardsDesktopPreviewThreadListHarness(
+                client: room,
+                threadListPath: 'dataset://agents/assistant/threads',
+                selectedThreadPath: 'dataset://agents/assistant/threads/missing',
+                selectedThreadName: 'Invisible Thread',
+                chatClientFactory: (_, _) => _FakeChatClient(),
+                threadStorageFactory: (_) => storage,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final newThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'New Thread...'));
+    final realThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Real Thread'));
+
+    expect(newThreadChip.selected, isTrue);
+    expect(realThreadChip.selected, isFalse);
+    expect(find.text('Invisible Thread'), findsNothing);
+  });
+
+  testWidgets('desktop preview restores visible selected thread', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final storage = _FakeThreadStorageRepository([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/real',
+        name: 'Real Thread',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/other',
+        name: 'Other Thread',
+        createdAt: '2026-05-28T22:00:00.000Z',
+        modifiedAt: '2026-05-28T22:00:00.000Z',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              height: 720,
+              child: PowerboardsDesktopPreviewThreadListHarness(
+                client: room,
+                threadListPath: 'dataset://agents/assistant/threads',
+                selectedThreadPath: 'dataset://agents/assistant/threads/real',
+                chatClientFactory: (_, _) => _FakeChatClient(),
+                threadStorageFactory: (_) => storage,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final newThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'New Thread...'));
+    final realThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Real Thread'));
+    final otherThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Other Thread'));
+
+    expect(newThreadChip.selected, isFalse);
+    expect(realThreadChip.selected, isTrue);
+    expect(otherThreadChip.selected, isFalse);
   });
 
   testWidgets('agent list uses ids so duplicate titles stay independently selectable', (tester) async {
