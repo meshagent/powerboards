@@ -524,6 +524,8 @@ void main() {
 
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Save'), findsOneWidget);
+    expect(find.text('Working draft'), findsNothing);
+    expect(find.text('Markdown'), findsNothing);
     final textField = tester.widget<TextField>(find.byType(TextField));
     expect(textField.enableInteractiveSelection, isTrue);
     final selectionTheme = tester.widget<TextSelectionTheme>(find.byKey(const ValueKey('editable-document-selection-theme')));
@@ -559,6 +561,8 @@ void main() {
     final textField = tester.widget<TextField>(find.byType(TextField));
     expect(textField.decoration?.hintText, 'Type here');
     expect(find.text('Type here'), findsOneWidget);
+    expect(find.text('Working draft'), findsNothing);
+    expect(find.text('Text'), findsNothing);
   });
 
   testWidgets('editable document preview keeps draft when parent rebuilds with fresh loader', (tester) async {
