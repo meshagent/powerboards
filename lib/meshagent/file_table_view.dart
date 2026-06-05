@@ -2023,6 +2023,44 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
   }
 
+  void _closeV1PreviewForSelection() {
+    final openedFile = _openedFile;
+    final clearOpenedFileRoute = openedFile != null && !_usesAdaptiveMobileLayout(context) && powerboardsUsesDesktopUiPreview(context);
+    final previewFile = _v1PreviewFile;
+
+    if (previewFile == null && !clearOpenedFileRoute) {
+      _clearV1KeyboardPreviewNavigation();
+      return;
+    }
+
+    setState(() {
+      _clearV1PreviewDraftForItem(previewFile);
+      if (openedFile != null && _v1PreviewDraftPath == openedFile) {
+        _clearV1PreviewDraft();
+      }
+      _v1PreviewFile = null;
+      _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelOverlayOpen = false;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      _clearV1KeyboardPreviewNavigationState();
+    });
+    setPreviewFilePreviewFullscreen(false);
+
+    if (clearOpenedFileRoute) {
+      _openEntry(_folderSig.value, true);
+    }
+  }
+
+  void _toggleV1ItemSelection(String id, bool selected) {
+    if (selected) {
+      _closeV1PreviewForSelection();
+    } else {
+      _clearV1KeyboardPreviewNavigation();
+    }
+
+    _toggleSelected(id, selected);
+  }
+
   void _minimizeV1FilePromptHandoffSurfaceIfNeeded() {
     if (!_v1FilePreviewFullscreen) {
       return;
@@ -2379,11 +2417,15 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _toggleV1VisibleSelection(List<PbFilesItemData> items) {
-    _clearV1KeyboardPreviewNavigation();
-
     final visibleIds = _v1SelectableItems(items).map((item) => item.id).toSet();
     final selected = powerboardsV1SelectedVisibleItemIds(_selectedSig.value, items);
     final allSelected = visibleIds.isNotEmpty && visibleIds.every(selected.contains);
+
+    if (allSelected) {
+      _clearV1KeyboardPreviewNavigation();
+    } else {
+      _closeV1PreviewForSelection();
+    }
 
     _mutateSelected((next) {
       if (allSelected) {
@@ -3773,7 +3815,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     final items = _v1VisibleItems(entries);
     final selected = powerboardsV1SelectedVisibleItemIds(_selectedSig.value, items);
     final routePreviewFile = _v1PreviewFileFromRoute(items);
-    final previewFile = _v1PreviewFile ?? routePreviewFile;
+    final activePreviewFile = _v1PreviewFile ?? routePreviewFile;
+    final previewFile = selected.isEmpty ? activePreviewFile : null;
     final recentlyOpenedFiles = _v1RecentlyOpenedFilesForSidePane;
     final currentFolder = _folderSig.value;
     final filterEnabled = _v1FilterEnabled(entries);
@@ -3854,8 +3897,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                       return;
                     }
 
-                    _clearV1KeyboardPreviewNavigation();
-                    _toggleSelected(id, !selected.contains(id));
+                    _toggleV1ItemSelection(id, !selected.contains(id));
                   },
                   onToggleVisibleSelection: () => _toggleV1VisibleSelection(items),
                   onClearSelection: () {
@@ -3893,6 +3935,11 @@ class _FileManagerViewState extends State<FileManagerView> {
                     _setV1FilesRoomPanelCollapsed(!roomPanelCollapsed);
                   },
                   onItemPressed: (item) {
+                    if (selected.isNotEmpty && _v1ItemIsSelectable(item)) {
+                      _toggleV1ItemSelection(item.id, !selected.contains(item.id));
+                      return;
+                    }
+
                     if (_v1IsFolder(item)) {
                       _openEntry(_v1PathForItem(item), true);
                       return;
