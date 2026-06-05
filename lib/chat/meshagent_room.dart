@@ -553,6 +553,36 @@ String powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads({
   return threadListLoaded ? fallbackThreadLabel : powerboardsDesktopPreviewLoadingThreadTitle;
 }
 
+@visibleForTesting
+List<PbThreadListItemData> powerboardsDesktopPreviewThreadItemsForVisibleThreads({
+  required String? selectedThreadPath,
+  required String? selectedThreadTitle,
+  required Iterable<PbThreadListItemData> threadItems,
+  required bool threadListLoaded,
+}) {
+  final items = threadItems.toList(growable: true);
+  if (threadListLoaded) {
+    return items;
+  }
+
+  final normalizedSelectedThreadPath = selectedThreadPath?.trim();
+  if (normalizedSelectedThreadPath == null || normalizedSelectedThreadPath.isEmpty) {
+    return items;
+  }
+
+  if (items.any((thread) => thread.id.trim() == normalizedSelectedThreadPath)) {
+    return items;
+  }
+
+  final trimmedTitle = selectedThreadTitle?.trim();
+  final fallbackTitle = defaultThreadDisplayNameFromPath(normalizedSelectedThreadPath);
+  final title = trimmedTitle == null || trimmedTitle.isEmpty || trimmedTitle == powerboardsDesktopPreviewLoadingThreadTitle
+      ? fallbackTitle
+      : trimmedTitle;
+
+  return <PbThreadListItemData>[PbThreadListItemData(id: normalizedSelectedThreadPath, title: title, actionsEnabled: false), ...items];
+}
+
 class _DesktopPreviewThreadList extends StatefulWidget {
   const _DesktopPreviewThreadList({
     required this.client,
@@ -1346,7 +1376,12 @@ class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
             ? null
             : threads.firstWhereOrNull((thread) => thread.path.trim() == visibleSelectedThreadPath);
         final selectedThreadTitle = visibleSelectedThreadPath == null ? null : selectedThread?.name ?? selectedThreadName;
-        final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
+        final threadItems = powerboardsDesktopPreviewThreadItemsForVisibleThreads(
+          selectedThreadPath: visibleSelectedThreadPath,
+          selectedThreadTitle: selectedThreadTitle,
+          threadItems: [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)],
+          threadListLoaded: threadListLoaded,
+        );
         return PbRoomPanel(
           agents: const [PbAgentListItemData(id: 'assistant', title: 'Assistant', status: 'Available', icon: 'bot', selected: true)],
           selectedAgentId: 'assistant',
@@ -5230,7 +5265,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         if (selectedThreadDisplayName != null) {
           _syncDesktopPreviewVisibleThreadSelection(chatContext, selectedThreadDisplayName);
         }
-        final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
+        final threadItems = powerboardsDesktopPreviewThreadItemsForVisibleThreads(
+          selectedThreadPath: chatContext?.selectedThreadPath,
+          selectedThreadTitle: selectedThreadDisplayName ?? selectedThreadTitle,
+          threadItems: [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)],
+          threadListLoaded: threadListLoaded,
+        );
         final agentName = chatContext?.agentName ?? selected.service?.agents.firstOrNull?.name ?? 'Assistant';
         final threadPanel = hasVisibleAgents
             ? Column(

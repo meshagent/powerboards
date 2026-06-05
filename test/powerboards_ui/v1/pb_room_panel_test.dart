@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -56,6 +58,21 @@ class _FakeThreadStorageRepository extends agent_sessions.ThreadStorageRepositor
 
   @override
   Future<void> renameThread(String threadPath, String name) async {}
+}
+
+class _DelayedThreadStorageRepository extends _FakeThreadStorageRepository {
+  _DelayedThreadStorageRepository(super.entries);
+
+  final Completer<void> _openCompleter = Completer<void>();
+
+  void completeOpen() {
+    if (!_openCompleter.isCompleted) {
+      _openCompleter.complete();
+    }
+  }
+
+  @override
+  Future<void> open() => _openCompleter.future;
 }
 
 RuntimeDocument _threadDocumentWithJson(List<Map<String, dynamic>> children) {
@@ -401,6 +418,65 @@ void main() {
     expect(newThreadChip.selected, isTrue);
     expect(realThreadChip.selected, isFalse);
     expect(find.text('Invisible Thread'), findsNothing);
+  });
+
+  testWidgets('desktop preview keeps selected thread visible while thread list opens', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final storage = _DelayedThreadStorageRepository([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/real',
+        name: 'Real Thread',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/other',
+        name: 'Other Thread',
+        createdAt: '2026-05-28T22:00:00.000Z',
+        modifiedAt: '2026-05-28T22:00:00.000Z',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              height: 720,
+              child: PowerboardsDesktopPreviewThreadListHarness(
+                client: room,
+                threadListPath: 'dataset://agents/assistant/threads',
+                selectedThreadPath: 'dataset://agents/assistant/threads/real',
+                selectedThreadName: 'Real Thread',
+                chatClientFactory: (_, _) => _FakeChatClient(),
+                threadStorageFactory: (_) => storage,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final loadingNewThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'New Thread...'));
+    final loadingRealThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Real Thread'));
+
+    expect(loadingNewThreadChip.selected, isFalse);
+    expect(loadingRealThreadChip.selected, isTrue);
+    expect(find.text('Other Thread'), findsNothing);
+
+    storage.completeOpen();
+    await tester.pumpAndSettle();
+
+    final loadedRealThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Real Thread'));
+    final loadedOtherThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Other Thread'));
+
+    expect(loadedRealThreadChip.selected, isTrue);
+    expect(loadedOtherThreadChip.selected, isFalse);
   });
 
   testWidgets('desktop preview restores visible selected thread', (tester) async {

@@ -1187,6 +1187,7 @@ class _ThreadsSectionState extends State<_ThreadsSection> {
   Widget _threadChip(PbThreadListItemData thread) {
     final selectedThreadId = widget.selectedThreadId;
     final selected = selectedThreadId == null ? thread.title == widget.selectedThread : thread.id == selectedThreadId;
+    final actionsEnabled = thread.actionsEnabled;
 
     return PbThreadChip(
       title: thread.title,
@@ -1195,8 +1196,8 @@ class _ThreadsSectionState extends State<_ThreadsSection> {
         widget.onThreadSelected(thread.title);
         widget.onThreadItemSelected?.call(thread);
       },
-      onRename: widget.onThreadRename == null ? null : () => widget.onThreadRename!(thread),
-      onDelete: widget.onThreadDelete == null ? null : () => widget.onThreadDelete!(thread),
+      onRename: !actionsEnabled || widget.onThreadRename == null ? null : () => widget.onThreadRename!(thread),
+      onDelete: !actionsEnabled || widget.onThreadDelete == null ? null : () => widget.onThreadDelete!(thread),
     );
   }
 
@@ -1447,6 +1448,7 @@ class _PbThreadChipState extends State<PbThreadChip> {
     final showAction = (widget.create && !widget.selected) || _menuOpen || hovered || _pressed;
     final showSelectedMark = widget.selected && !_menuOpen && !hovered && !_pressed;
     final stateDuration = hovered || _pressed || _menuOpen ? const Duration(milliseconds: 160) : Duration.zero;
+    final hasThreadActions = widget.onRename != null || widget.onDelete != null;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -1537,16 +1539,18 @@ class _PbThreadChipState extends State<PbThreadChip> {
                       ),
                       AnimatedOpacity(
                         duration: const Duration(milliseconds: 160),
-                        opacity: showAction ? 1 : 0,
+                        opacity: showAction && (widget.create || hasThreadActions) ? 1 : 0,
                         child: IgnorePointer(
-                          ignoring: !showAction,
+                          ignoring: !showAction || (!widget.create && !hasThreadActions),
                           child: widget.create
                               ? const _GhostIcon(assetName: 'plus', color: PbColors.textPrimary, opacity: 1)
-                              : PbSidepaneItemMenu(
+                              : hasThreadActions
+                              ? PbSidepaneItemMenu(
                                   onOpenChanged: (open) => setState(() => _menuOpen = open),
                                   panelBuilder: (closeMenu) =>
                                       PbThreadItemMenu(onRename: widget.onRename, onDelete: widget.onDelete, onDismiss: closeMenu),
-                                ),
+                                )
+                              : const SizedBox.shrink(),
                         ),
                       ),
                     ],
@@ -4842,8 +4846,9 @@ class PbAgentListItemData {
 }
 
 class PbThreadListItemData {
-  const PbThreadListItemData({required this.id, required this.title});
+  const PbThreadListItemData({required this.id, required this.title, this.actionsEnabled = true});
 
   final String id;
   final String title;
+  final bool actionsEnabled;
 }
