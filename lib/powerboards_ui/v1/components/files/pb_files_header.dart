@@ -463,6 +463,39 @@ class _FilesCreateActionsState extends State<_FilesCreateActions> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.fullWidth) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _FilesToolbarButton(
+            label: 'New folder',
+            iconAssetName: 'folder-plus',
+            iconOnly: widget.iconActions,
+            width: widget.iconActions ? 48 : 148,
+            contentOffset: widget.iconActions ? Offset.zero : const Offset(-2, 0),
+            onPressed: widget.onCreateFolder,
+          ),
+          const SizedBox(width: 10),
+          _FilesToolbarButton(
+            label: 'New text file',
+            iconAssetName: 'file-plus-corner',
+            iconOnly: widget.iconActions,
+            width: widget.iconActions ? 48 : 164,
+            contentOffset: widget.iconActions ? Offset.zero : const Offset(-2, 0),
+            onPressed: widget.onCreateTextFile,
+          ),
+          const SizedBox(width: 10),
+          _FilesToolbarButton(
+            label: 'Upload',
+            iconAssetName: 'arrow-up-from-line',
+            iconOnly: widget.iconActions,
+            width: widget.iconActions ? 48 : 132,
+            onPressed: widget.onUpload,
+          ),
+        ],
+      );
+    }
+
     final createButton = PbMenuAnchor(
       placement: PbMenuAnchorPlacement.bottomLeft,
       gap: 6,
@@ -516,11 +549,11 @@ class _FilesCreateActionsState extends State<_FilesCreateActions> {
     );
 
     return Row(
-      mainAxisSize: widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: [
-        if (widget.fullWidth) Expanded(child: createButton) else createButton,
+        Expanded(child: createButton),
         const SizedBox(width: 10),
-        if (widget.fullWidth) Expanded(child: uploadButton) else uploadButton,
+        Expanded(child: uploadButton),
       ],
     );
   }
