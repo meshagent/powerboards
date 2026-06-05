@@ -458,6 +458,16 @@ String? powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads({
 const powerboardsDesktopPreviewLoadingThreadTitle = 'Loading thread';
 
 @visibleForTesting
+bool powerboardsDesktopPreviewThreadTitleIsGenericFallback(String? title) {
+  final normalized = title?.trim().toLowerCase();
+  if (normalized == null || normalized.isEmpty) {
+    return true;
+  }
+
+  return normalized == 'new chat' || normalized == 'new thread' || normalized == powerboardsDesktopPreviewLoadingThreadTitle.toLowerCase();
+}
+
+@visibleForTesting
 List<MeshElement> powerboardsDesktopPreviewThreadMessageElements(RuntimeDocument document) {
   final rootChildren = document.root.getChildren().whereType<MeshElement>().toList(growable: false);
   for (final child in rootChildren) {
@@ -570,7 +580,11 @@ String powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads({
   }
 
   final normalizedCurrentThreadLabel = currentThreadLabel?.trim();
-  if (currentThreadLabelTrusted && normalizedCurrentThreadLabel != null && normalizedCurrentThreadLabel.isNotEmpty) {
+  if (currentThreadLabelTrusted &&
+      normalizedCurrentThreadLabel != null &&
+      normalizedCurrentThreadLabel.isNotEmpty &&
+      !powerboardsDesktopPreviewThreadTitleIsGenericFallback(normalizedCurrentThreadLabel) &&
+      !shouldBackfillThreadDisplayName(normalizedCurrentThreadLabel)) {
     return normalizedCurrentThreadLabel;
   }
 

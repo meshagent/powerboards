@@ -166,6 +166,21 @@ void main() {
     expect(title, 'Testing Screenshot Upload');
   });
 
+  test('desktop preview ignores remembered generic thread title while selected thread list is loading', () {
+    for (final genericTitle in const ['New Chat', 'New thread']) {
+      final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+        selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',
+        currentThreadLabel: genericTitle,
+        currentThreadLabelTrusted: true,
+        threadNamesByPath: const {},
+        threadListLoaded: false,
+      );
+
+      expect(title, powerboardsDesktopPreviewLoadingThreadTitle);
+      expect(title, isNot(genericTitle));
+    }
+  });
+
   test('desktop preview uses thread list title after remembered thread loads', () {
     final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
       selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',
