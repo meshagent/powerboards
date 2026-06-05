@@ -70,6 +70,8 @@ class _PbFilesPageState extends State<PbFilesPage> {
   late bool _filePreviewOpen = widget.blankRoom || widget.newRoom ? false : widget.initialPreviewOpen;
   bool _collapseRoomPanelAfterPreviewClose = false;
   late PbFilesItemData? _previewFile = widget.blankRoom || widget.newRoom ? null : (widget.initialPreviewFile ?? _initialFiles.first);
+  String? _previewDraftFileId;
+  String? _previewDraftText;
   String? _keyboardPreviewFileId;
   int _keyboardPreviewDirection = 0;
   bool _filesKeyboardBrowseArmed = false;
@@ -286,6 +288,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
     final collapseRoomPanelAfterClose = !responsivePanel && widget.roomPanelCollapsed;
 
     setState(() {
+      _discardPreviewDraftIfDifferent(item);
       _selectedIds.clear();
       _keyboardPreviewFileId = null;
       _keyboardPreviewDirection = 0;
@@ -309,6 +312,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
 
   void _openPreviewFromSidepane(PbFilesItemData item) {
     setState(() {
+      _discardPreviewDraftIfDifferent(item);
       _selectedIds.clear();
       _keyboardPreviewFileId = null;
       _keyboardPreviewDirection = 0;
@@ -324,6 +328,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
   }
 
   void _closePreview() {
+    _clearPreviewDraftForFile(_previewFile);
     _filePreviewOpen = false;
     _collapseRoomPanelAfterPreviewClose = false;
     _keyboardPreviewFileId = null;
@@ -404,6 +409,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
     final collapseRoomPanelAfterClose = !responsivePanel && widget.roomPanelCollapsed;
 
     setState(() {
+      _discardPreviewDraftIfDifferent(item);
       _selectedIds.clear();
       _previewFile = item;
       _keyboardPreviewFileId = item.id;
@@ -440,6 +446,43 @@ class _PbFilesPageState extends State<PbFilesPage> {
     }
 
     widget.onFilePreviewFullscreenChanged(fullscreen);
+  }
+
+  String? _previewDraftTextForFile(PbFilesItemData? file) {
+    return file != null && _previewDraftFileId == file.id ? _previewDraftText : null;
+  }
+
+  bool _previewDraftDirtyForFile(PbFilesItemData? file) {
+    return file != null && _previewDraftFileId == file.id && _previewDraftText != null;
+  }
+
+  void _setPreviewDraftText(PbFilesItemData file, String text) {
+    if (_previewDraftFileId == file.id && _previewDraftText == text) {
+      return;
+    }
+
+    setState(() {
+      _previewDraftFileId = file.id;
+      _previewDraftText = text;
+    });
+  }
+
+  void _clearPreviewDraftForFile(PbFilesItemData? file) {
+    if (file == null || _previewDraftFileId != file.id) {
+      return;
+    }
+
+    _previewDraftFileId = null;
+    _previewDraftText = null;
+  }
+
+  void _discardPreviewDraftIfDifferent(PbFilesItemData file) {
+    if (_previewDraftFileId == null || _previewDraftFileId == file.id) {
+      return;
+    }
+
+    _previewDraftFileId = null;
+    _previewDraftText = null;
   }
 
   void _toggleRoomPanel({required bool responsivePanel, required PbFilesResponsiveMode responsiveMode}) {
@@ -538,19 +581,25 @@ class _PbFilesPageState extends State<PbFilesPage> {
       if (_previewFile?.id == file.id) {
         _previewFile = updatedItem;
       }
+      _clearPreviewDraftForFile(file);
     });
   }
 
   @override
   Widget build(BuildContext context) {
     if (widget.filePreviewFullscreen && _filePreviewOpen) {
+      final previewFile = _previewFile ?? _initialFiles.first;
       return PbFilePreviewPane(
-        file: (_previewFile ?? _initialFiles.first).toAttachmentData(),
+        file: previewFile.toAttachmentData(),
         fullscreen: true,
         showInlineBorder: false,
         onSaveRequested: _savePreviewFile,
         onToggleFullscreen: () => _setFullscreen(false),
         onClose: _handlePreviewClose,
+        draftText: _previewDraftTextForFile(previewFile),
+        draftDirty: _previewDraftDirtyForFile(previewFile),
+        onDraftTextChanged: (text) => _setPreviewDraftText(previewFile, text),
+        onDraftSaved: () => setState(() => _clearPreviewDraftForFile(previewFile)),
       );
     }
 
@@ -608,6 +657,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
           child: Listener(onPointerDown: (_) => _clearKeyboardPreviewNavigation(), child: mainPanel),
         );
         PbFilesSidePane sidePaneBuilder(BuildContext context, bool resizing) {
+          final previewDraftFile = _previewFile;
           return PbFilesSidePane(
             files: _recentlyOpenedFiles,
             previewFile: _filePreviewOpen ? _previewFile : null,
@@ -620,6 +670,10 @@ class _PbFilesPageState extends State<PbFilesPage> {
             onToggleFullscreen: () => _setFullscreen(true),
             onClosePreview: _handlePreviewClose,
             onSaveRequested: (_) => _savePreviewFile(),
+            previewDraftText: _previewDraftTextForFile(previewDraftFile),
+            previewDraftDirty: _previewDraftDirtyForFile(previewDraftFile),
+            onPreviewDraftChanged: previewDraftFile == null ? null : (text) => _setPreviewDraftText(previewDraftFile, text),
+            onPreviewDraftSaved: previewDraftFile == null ? null : () => setState(() => _clearPreviewDraftForFile(previewDraftFile)),
           );
         }
 

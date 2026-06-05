@@ -919,6 +919,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   bool _v1FilesKeyboardBrowseArmed = false;
   final ValueNotifier<bool> _v1FilesDropTargetActive = ValueNotifier(false);
   PbFilesItemData? _v1PreviewFile;
+  String? _v1PreviewDraftPath;
+  String? _v1PreviewDraftText;
   List<PbFilesItemData> _v1RecentlyOpenedFiles = const <PbFilesItemData>[];
   final Set<String> _v1SavingFileIds = <String>{};
   final Map<String, PbFilesItemData> _v1FileStateRowsById = <String, PbFilesItemData>{};
@@ -1016,6 +1018,12 @@ class _FileManagerViewState extends State<FileManagerView> {
         }
 
         if (closesPreviewFile || closesOpenedFile) {
+          if (_v1PreviewDraftPath != null &&
+              targets.any(
+                (target) => _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _v1PreviewDraftPath!),
+              )) {
+            _clearV1PreviewDraft();
+          }
           _v1PreviewFile = null;
           _v1FilePreviewFullscreen = false;
           _v1FilesRoomPanelOverlayOpen = false;
@@ -1833,6 +1841,53 @@ class _FileManagerViewState extends State<FileManagerView> {
     return _FilePathKey.pathFromKey(item.id);
   }
 
+  String? _v1PreviewDraftTextForItem(PbFilesItemData? item) {
+    return item != null && _v1PreviewDraftPath == _v1PathForItem(item) ? _v1PreviewDraftText : null;
+  }
+
+  bool _v1PreviewDraftDirtyForItem(PbFilesItemData? item) {
+    return item != null && _v1PreviewDraftPath == _v1PathForItem(item) && _v1PreviewDraftText != null;
+  }
+
+  void _setV1PreviewDraftText(PbFilesItemData item, String text) {
+    final path = _v1PathForItem(item);
+    if (_v1PreviewDraftPath == path && _v1PreviewDraftText == text) {
+      return;
+    }
+
+    setState(() {
+      _v1PreviewDraftPath = path;
+      _v1PreviewDraftText = text;
+    });
+  }
+
+  void _clearV1PreviewDraftForItem(PbFilesItemData? item) {
+    if (item == null) {
+      return;
+    }
+
+    final path = _v1PathForItem(item);
+    if (_v1PreviewDraftPath != path) {
+      return;
+    }
+
+    _clearV1PreviewDraft();
+  }
+
+  void _discardV1PreviewDraftIfDifferent(PbFilesItemData item) {
+    final path = _v1PathForItem(item);
+    if (_v1PreviewDraftPath == null || _v1PreviewDraftPath == path) {
+      return;
+    }
+
+    _clearV1PreviewDraft();
+  }
+
+  void _clearV1PreviewDraft() {
+    _v1PreviewDraftPath = null;
+    _v1PreviewDraftText = null;
+  }
+
   bool _v1IsFolder(PbFilesItemData item) {
     return item.kind == PbFilesItemKind.folder;
   }
@@ -1875,6 +1930,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     setState(() {
+      _discardV1PreviewDraftIfDifferent(item);
       _v1PreviewFile = item;
       _v1FilePreviewFullscreen = openFullscreen;
       _v1RestoreRoomPanelOverlayOnPreviewClose = restoreOverlayOnClose && (openOverlay || openFullscreen);
@@ -1899,6 +1955,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     final restoreRoomPanelOverlay = _v1RestoreRoomPanelOverlayOnPreviewClose && !clearOpenedFileRoute;
 
     setState(() {
+      if (_v1PreviewFile != null) {
+        _clearV1PreviewDraftForItem(_v1PreviewFile);
+      } else if (_openedFile != null && _v1PreviewDraftPath == _openedFile) {
+        _clearV1PreviewDraft();
+      }
       _v1PreviewFile = null;
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelOverlayOpen = restoreRoomPanelOverlay;
@@ -1915,6 +1976,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _closeV1FilePromptHandoffSurface() {
     _v1FilesRoomPanelOverlayController.hide();
     setState(() {
+      _clearV1PreviewDraftForItem(_v1PreviewFile);
       _v1PreviewFile = null;
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelOverlayOpen = false;
@@ -3825,6 +3887,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             );
 
             PbFilesSidePane sidePaneBuilder(BuildContext context, bool resizing) {
+              final previewDraftFile = previewFile;
               return PbFilesSidePane(
                 files: recentlyOpenedFiles,
                 previewFile: previewFile,
@@ -3846,6 +3909,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                 ),
                 onDownload: (item) => unawaited(_downloadV1FileWithToast(_v1PathForItem(item))),
                 onSaveRequested: _saveV1PreviewFile,
+                previewDraftText: _v1PreviewDraftTextForItem(previewDraftFile),
+                previewDraftDirty: _v1PreviewDraftDirtyForItem(previewDraftFile),
+                onPreviewDraftChanged: previewDraftFile == null ? null : (text) => _setV1PreviewDraftText(previewDraftFile, text),
+                onPreviewDraftSaved: previewDraftFile == null ? null : () => setState(() => _clearV1PreviewDraftForItem(previewDraftFile)),
                 onToggleFullscreen: () => _setV1PreviewFullscreen(!_v1FilePreviewFullscreen),
                 onClosePreview: _closeV1Preview,
               );

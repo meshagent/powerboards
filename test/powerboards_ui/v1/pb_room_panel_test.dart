@@ -1021,6 +1021,80 @@ void main() {
     expect(loadCount, 1);
   });
 
+  testWidgets('editable document preview keeps controlled draft across preview remounts', (tester) async {
+    late StateSetter rebuildParent;
+    var fullscreen = false;
+    var loadCount = 0;
+    String? draftText;
+    String? savedText;
+    var draftDirty = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuildParent = setState;
+              return SizedBox(
+                width: 560,
+                height: 480,
+                child: PbFilePreviewPane(
+                  key: ValueKey(fullscreen ? 'fullscreen-preview' : 'side-preview'),
+                  file: PbAttachmentListItemData.fromFileName(title: 'mobile-test.txt', path: 'docs/mobile-test.txt'),
+                  fullscreen: fullscreen,
+                  sourceKey: 'docs/mobile-test.txt',
+                  loadText: () async {
+                    loadCount += 1;
+                    return 'Loaded text $loadCount';
+                  },
+                  onSaveTextRequested: (text) async {
+                    savedText = text;
+                  },
+                  draftText: draftText,
+                  draftDirty: draftDirty,
+                  onDraftTextChanged: (text) {
+                    draftText = text;
+                    draftDirty = true;
+                  },
+                  onDraftSaved: () {
+                    draftText = null;
+                    draftDirty = false;
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(loadCount, 1);
+    await tester.enterText(find.byType(TextField), 'Unsaved remount draft');
+    await tester.pump();
+
+    rebuildParent(() => fullscreen = true);
+    await tester.pumpAndSettle();
+
+    var textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.controller?.text, 'Unsaved remount draft');
+    expect(loadCount, 1);
+
+    rebuildParent(() => fullscreen = false);
+    await tester.pumpAndSettle();
+
+    textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.controller?.text, 'Unsaved remount draft');
+    expect(loadCount, 1);
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(savedText, 'Unsaved remount draft');
+    expect(draftText, isNull);
+    expect(draftDirty, isFalse);
+  });
+
   testWidgets('room panel file preview source owns editable real content instead of legacy child', (tester) async {
     String? savedText;
     final file = PbAttachmentListItemData.fromFileName(title: 'notes.csv', path: 'docs/notes.csv');

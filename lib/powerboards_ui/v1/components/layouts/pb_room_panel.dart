@@ -133,6 +133,8 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
   late bool _filePreviewOpen = widget.initialFilePreviewOpen;
   late bool _filePreviewFullscreen = widget.initialFilePreviewOpen && widget.openFilePreviewAsFullscreen;
   late PbAttachmentListItemData _previewFile = widget.initialPreviewFile ?? _placeholderPreviewFile;
+  Object? _filePreviewDraftKey;
+  String? _filePreviewDraftText;
 
   static const PbAttachmentListItemData _placeholderPreviewFile = PbAttachmentListItemData(
     title: 'File name.ext',
@@ -202,6 +204,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
     final nextPreviewFile = widget.initialPreviewFile;
     if (nextPreviewFile != null && nextPreviewFile != oldWidget.initialPreviewFile) {
       _previewFile = nextPreviewFile;
+      _clearFilePreviewDraft();
     }
 
     if (widget.openFilePreviewAsFullscreen && !oldWidget.openFilePreviewAsFullscreen && _filePreviewOpen) {
@@ -223,6 +226,9 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
 
   void _openFilePreview(PbAttachmentListItemData file) {
     setState(() {
+      if (_previewTextSourceChanged(_previewFile, file, null, null)) {
+        _clearFilePreviewDraft();
+      }
       _previewFile = file;
       _filePreviewOpen = true;
       _filePreviewFullscreen = widget.openFilePreviewAsFullscreen;
@@ -241,9 +247,46 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
     setState(() {
       _filePreviewOpen = false;
       _filePreviewFullscreen = false;
+      _clearFilePreviewDraft();
     });
     widget.onFilePreviewOpenChanged?.call(false);
     widget.onFilePreviewFullscreenChanged?.call(false);
+  }
+
+  Object _filePreviewDraftKeyFor(PbAttachmentListItemData file, Object? sourceKey) {
+    return sourceKey ?? file.path ?? '${file.title}|${file.subtitle}|${file.fileType.name}';
+  }
+
+  String? _filePreviewDraftTextFor(Object draftKey) {
+    return _filePreviewDraftKey == draftKey ? _filePreviewDraftText : null;
+  }
+
+  bool _filePreviewDraftDirtyFor(Object draftKey) {
+    return _filePreviewDraftKey == draftKey && _filePreviewDraftText != null;
+  }
+
+  void _setFilePreviewDraftText(Object draftKey, String text) {
+    if (_filePreviewDraftKey == draftKey && _filePreviewDraftText == text) {
+      return;
+    }
+
+    setState(() {
+      _filePreviewDraftKey = draftKey;
+      _filePreviewDraftText = text;
+    });
+  }
+
+  void _clearFilePreviewDraftFor(Object draftKey) {
+    if (_filePreviewDraftKey != draftKey) {
+      return;
+    }
+
+    setState(_clearFilePreviewDraft);
+  }
+
+  void _clearFilePreviewDraft() {
+    _filePreviewDraftKey = null;
+    _filePreviewDraftText = null;
   }
 
   Widget _buildPanelContent({
@@ -309,6 +352,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
         ? widget.filePreviewSourceBuilder?.call(_previewFile)
         : null;
     final previewContentChild = previewSource?.buildChild(previewFullscreen);
+    final draftKey = _filePreviewDraftKeyFor(_previewFile, previewSource?.sourceKey);
 
     return PbFilePreviewPane(
       file: _previewFile,
@@ -326,6 +370,10 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
       loadText: previewSource?.loadText,
       onSaveTextRequested: previewSource?.saveText,
       sourceKey: previewSource?.sourceKey,
+      draftText: _filePreviewDraftTextFor(draftKey),
+      draftDirty: _filePreviewDraftDirtyFor(draftKey),
+      onDraftTextChanged: (text) => _setFilePreviewDraftText(draftKey, text),
+      onDraftSaved: () => _clearFilePreviewDraftFor(draftKey),
       child: previewSource == null && _previewFile.previewState == PbAttachmentPreviewState.none
           ? widget.filePreviewBuilder?.call(_previewFile)
           : null,
@@ -1943,6 +1991,10 @@ class PbFilePreviewPane extends StatefulWidget {
     this.onSaveRequested,
     this.onSaveTextRequested,
     this.sourceKey,
+    this.draftText,
+    this.draftDirty,
+    this.onDraftTextChanged,
+    this.onDraftSaved,
   });
 
   final PbAttachmentListItemData file;
@@ -1962,6 +2014,10 @@ class PbFilePreviewPane extends StatefulWidget {
   final Future<void> Function()? onSaveRequested;
   final Future<void> Function(String text)? onSaveTextRequested;
   final Object? sourceKey;
+  final String? draftText;
+  final bool? draftDirty;
+  final ValueChanged<String>? onDraftTextChanged;
+  final VoidCallback? onDraftSaved;
 
   @override
   State<PbFilePreviewPane> createState() => _PbFilePreviewPaneState();
@@ -1974,6 +2030,10 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
 
   static const _stateAlignment = Alignment.center;
   static const _localSaveProcessingStep = Duration(milliseconds: 850);
+
+  bool get _effectiveDirty => widget.draftDirty ?? _dirty;
+
+  String? get _effectiveEditedText => widget.draftDirty == null ? _editedText : widget.draftText;
 
   @override
   void didUpdateWidget(covariant PbFilePreviewPane oldWidget) {
@@ -1999,10 +2059,11 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
       _dirty = true;
       _editedText = editedText;
     });
+    widget.onDraftTextChanged?.call(editedText);
   }
 
   Future<void> _saveEdits() async {
-    if (!_dirty || _saving) {
+    if (!_effectiveDirty || _saving) {
       return;
     }
 
@@ -2010,7 +2071,7 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
 
     try {
       final saveTextRequested = widget.onSaveTextRequested;
-      final editedText = _editedText;
+      final editedText = _effectiveEditedText;
       final saveRequested = widget.onSaveRequested;
       if (saveTextRequested != null && editedText != null) {
         await saveTextRequested(editedText);
@@ -2036,6 +2097,7 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
       _saving = false;
       _editedText = null;
     });
+    widget.onDraftSaved?.call();
   }
 
   @override
@@ -2049,6 +2111,8 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
         widget.child == null && widget.previewContentChild == null && !hasPreviewState && contentMode.hasHeaderSaveAction;
     final edgeToEdgeSurface =
         !hasPreviewState && (widget.child != null || widget.previewContentChild != null || contentMode.usesEdgeToEdgeSurface);
+    final effectiveDirty = _effectiveDirty;
+    final effectiveEditedText = _effectiveEditedText;
 
     return Container(
       padding: fullscreen ? EdgeInsets.zero : const EdgeInsets.fromLTRB(22, 18, 22, 24),
@@ -2093,7 +2157,7 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
                     ),
                     const SizedBox(width: 7),
                     if (showHeaderSaveAction) ...[
-                      _FilePreviewHeaderSaveAction(enabled: _dirty, saving: _saving, onPressed: _saveEdits),
+                      _FilePreviewHeaderSaveAction(enabled: effectiveDirty, saving: _saving, onPressed: _saveEdits),
                       const SizedBox(width: 6),
                     ],
                     _FilePreviewToolbar(state: toolbarState, onAskAgent: widget.onAskAgent, onDownload: widget.onDownload),
@@ -2149,7 +2213,7 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
                             previewContentChild: widget.previewContentChild,
                             loadText: widget.loadText,
                             sourceKey: widget.sourceKey,
-                            draftText: _editedText,
+                            draftText: effectiveEditedText,
                             onEdited: _updateEditedText,
                           ),
                     ),

@@ -23,6 +23,10 @@ class PbFilesSidePane extends StatelessWidget {
     this.onShare,
     this.onDownload,
     this.onSaveRequested,
+    this.previewDraftText,
+    this.previewDraftDirty,
+    this.onPreviewDraftChanged,
+    this.onPreviewDraftSaved,
     required this.onToggleFullscreen,
     required this.onClosePreview,
   });
@@ -47,6 +51,10 @@ class PbFilesSidePane extends StatelessWidget {
   final ValueChanged<PbFilesItemData>? onShare;
   final ValueChanged<PbFilesItemData>? onDownload;
   final Future<void> Function(PbFilesItemData file)? onSaveRequested;
+  final String? previewDraftText;
+  final bool? previewDraftDirty;
+  final ValueChanged<String>? onPreviewDraftChanged;
+  final VoidCallback? onPreviewDraftSaved;
   final VoidCallback onToggleFullscreen;
   final VoidCallback onClosePreview;
 
@@ -73,6 +81,10 @@ class PbFilesSidePane extends StatelessWidget {
         loadText: previewSource?.loadText,
         onSaveTextRequested: previewSource?.saveText,
         sourceKey: previewSource?.sourceKey,
+        draftText: previewDraftText,
+        draftDirty: previewDraftDirty,
+        onDraftTextChanged: onPreviewDraftChanged,
+        onDraftSaved: onPreviewDraftSaved,
         child: preview.previewState == PbAttachmentPreviewState.none ? previewBuilder?.call(preview) : null,
       );
     }
