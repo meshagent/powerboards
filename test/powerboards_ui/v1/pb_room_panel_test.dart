@@ -275,6 +275,40 @@ void main() {
     expect(powerboardsDesktopPreviewAgentMessageAttachmentPaths(turnSteer), ['sample-attachments/scratch.md']);
   });
 
+  test('desktop preview attachment scope follows only the selected thread', () {
+    expect(powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread('dataset://agents/assistant/threads/selected'), [
+      'dataset://agents/assistant/threads/selected',
+    ]);
+
+    expect(powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(null), isEmpty);
+    expect(powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(''), isEmpty);
+  });
+
+  test('desktop preview attachment scope signature is stable for the same selected thread', () {
+    final initial = powerboardsDesktopPreviewAttachmentThreadScopeSignature(
+      selectedThreadPath: 'dataset://agents/assistant/threads/selected',
+      selectedThreadName: 'Selected',
+    );
+    final sameSelectedThread = powerboardsDesktopPreviewAttachmentThreadScopeSignature(
+      selectedThreadPath: 'dataset://agents/assistant/threads/selected',
+      selectedThreadName: 'Selected',
+    );
+    final selectedChanged = powerboardsDesktopPreviewAttachmentThreadScopeSignature(
+      selectedThreadPath: 'dataset://agents/assistant/threads/other',
+      selectedThreadName: 'Other',
+    );
+
+    expect(sameSelectedThread, initial);
+    expect(selectedChanged, isNot(initial));
+    expect(powerboardsDesktopPreviewAttachmentThreadScopeSignature(selectedThreadPath: null, selectedThreadName: null), isEmpty);
+  });
+
+  test('desktop preview attachment loader is gated to files tab or preview', () {
+    expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.agents, filePreviewOpen: false), isFalse);
+    expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.files, filePreviewOpen: false), isTrue);
+    expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.agents, filePreviewOpen: true), isTrue);
+  });
+
   Widget buildHarness({
     required List<PbAgentListItemData> agents,
     String? selectedAgentId,

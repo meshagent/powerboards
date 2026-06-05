@@ -1634,7 +1634,7 @@ class _FilesPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _RoomPanelDescription('Browse attachments by selected agent.'),
+        const _RoomPanelDescription('Browse attachments by selected thread.'),
         const SizedBox(height: 20),
         _AttachmentList(
           attachments: attachments,

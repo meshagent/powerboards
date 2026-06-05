@@ -523,6 +523,31 @@ List<String> powerboardsDesktopPreviewAgentMessageAttachmentPaths(agent_sessions
 }
 
 @visibleForTesting
+List<String> powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(String? selectedThreadPath) {
+  final normalizedPath = normalizePowerboardsThreadAttachmentPath(selectedThreadPath ?? '');
+  if (normalizedPath.isEmpty || powerboardsThreadAttachmentMatchKey(normalizedPath).isEmpty) {
+    return const <String>[];
+  }
+
+  return <String>[normalizedPath];
+}
+
+@visibleForTesting
+String powerboardsDesktopPreviewAttachmentThreadScopeSignature({required String? selectedThreadPath, required String? selectedThreadName}) {
+  final paths = powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(selectedThreadPath);
+  if (paths.isEmpty) {
+    return '';
+  }
+
+  return '${paths.single}\u{1d}${selectedThreadName?.trim() ?? ''}';
+}
+
+@visibleForTesting
+bool powerboardsDesktopPreviewShouldLoadThreadAttachments({required PbRoomPanelTab selectedTab, required bool filePreviewOpen}) {
+  return selectedTab == PbRoomPanelTab.files || filePreviewOpen;
+}
+
+@visibleForTesting
 String powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads({
   required String? selectedThreadPath,
   required String? currentThreadLabel,
@@ -759,6 +784,7 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
 class _DesktopPreviewThreadAttachments extends StatefulWidget {
   const _DesktopPreviewThreadAttachments({
     required this.client,
+    required this.enabled,
     required this.threads,
     required this.selectedThreadPath,
     required this.selectedThreadName,
@@ -768,6 +794,7 @@ class _DesktopPreviewThreadAttachments extends StatefulWidget {
   });
 
   final RoomClient client;
+  final bool enabled;
   final List<_DesktopPreviewThreadEntry> threads;
   final String? selectedThreadPath;
   final String? selectedThreadName;
@@ -804,10 +831,14 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   List<_DesktopPreviewThreadAttachmentRecord> _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
   int _loadGeneration = 0;
   int _attachmentEntryGeneration = 0;
+  Future<void> _pendingThreadDocumentClose = Future<void>.value();
 
   @override
   void initState() {
     super.initState();
+    if (!widget.enabled) {
+      return;
+    }
     _bindRoom();
     _bindAgentChatClient();
     unawaited(_loadAttachments());
@@ -816,6 +847,22 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   @override
   void didUpdateWidget(covariant _DesktopPreviewThreadAttachments oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!oldWidget.enabled && widget.enabled) {
+      _bindRoom();
+      _bindAgentChatClient();
+      unawaited(_loadAttachments());
+      return;
+    }
+
+    if (oldWidget.enabled && !widget.enabled) {
+      _deactivateAttachmentLoading(oldWidget: oldWidget);
+      return;
+    }
+
+    if (!widget.enabled) {
+      return;
+    }
+
     if (oldWidget.client != widget.client) {
       if (oldWidget.chatClient != widget.chatClient) {
         _unbindAgentChatClient(oldWidget: oldWidget);
@@ -854,6 +901,20 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     _unbindAgentChatClient(oldWidget: widget);
     unawaited(_closeThreadDocuments(client: widget.client));
     super.dispose();
+  }
+
+  void _deactivateAttachmentLoading({required _DesktopPreviewThreadAttachments oldWidget}) {
+    _loadGeneration++;
+    _attachmentEntryGeneration++;
+    _roomSubscription?.cancel();
+    _roomSubscription = null;
+    _unbindAgentChatClient(oldWidget: oldWidget);
+    _unbindAgentThreadSessions();
+    _pendingThreadDocumentClose = _closeThreadDocuments(client: oldWidget.client);
+    _attachmentEntriesByPath.clear();
+    _links = const <PowerboardsFileAttachmentLink>[];
+    _threadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
+    _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
   }
 
   void _bindRoom() {
@@ -913,10 +974,10 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   }
 
   String _threadSignature(_DesktopPreviewThreadAttachments widget) {
-    final threadPaths = widget.threads
-        .map((thread) => '${thread.path}\u{1f}${thread.name}\u{1f}${thread.createdAt}\u{1f}${thread.modifiedAt}')
-        .join('\u{1e}');
-    return '$threadPaths\u{1d}${widget.selectedThreadPath ?? ''}\u{1d}${widget.selectedThreadName ?? ''}';
+    return powerboardsDesktopPreviewAttachmentThreadScopeSignature(
+      selectedThreadPath: widget.selectedThreadPath,
+      selectedThreadName: widget.selectedThreadName,
+    );
   }
 
   String _localLinksSignature(List<PowerboardsFileAttachmentLink> links) {
@@ -943,13 +1004,8 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       );
     }
 
-    for (final thread in widget.threads) {
-      addRef(thread.path, thread.name);
-    }
-
-    final selectedThreadPath = widget.selectedThreadPath;
-    if (selectedThreadPath != null && selectedThreadPath.trim().isNotEmpty) {
-      addRef(selectedThreadPath, widget.selectedThreadName ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
+    for (final threadPath in powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(widget.selectedThreadPath)) {
+      addRef(threadPath, widget.selectedThreadName ?? defaultThreadDisplayNameFromPath(threadPath));
     }
 
     return refs;
@@ -960,6 +1016,10 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     final threadRefs = _threadRefs();
     _syncAgentThreadSessions(threadRefs);
     final links = await loadPowerboardsFileAttachmentLinks(widget.client);
+    await _pendingThreadDocumentClose;
+    if (!mounted || generation != _loadGeneration) {
+      return;
+    }
     await _syncThreadDocuments(threadRefs, generation: generation);
     if (!mounted || generation != _loadGeneration) {
       return;
@@ -1330,6 +1390,10 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.enabled) {
+      return widget.builder(context, const <PbAttachmentListItemData>[]);
+    }
+
     return widget.builder(context, _attachments());
   }
 }
@@ -5338,8 +5402,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 },
               );
 
+        final shouldLoadThreadAttachments = powerboardsDesktopPreviewShouldLoadThreadAttachments(
+          selectedTab: _desktopPreviewRoomPanelTab,
+          filePreviewOpen: _desktopPreviewFilePreviewOpen,
+        );
+
         return _DesktopPreviewThreadAttachments(
           client: widget.room,
+          enabled: shouldLoadThreadAttachments,
           threads: threads,
           selectedThreadPath: chatContext?.selectedThreadPath,
           selectedThreadName: selectedThreadTitle,
@@ -5403,10 +5473,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 }
 
                 return StatefulBuilder(
-                  builder: (context, setRoomPanelState) => PbRoomPanel(
+                  builder: (context, _) => PbRoomPanel(
                     selectedTab: _desktopPreviewRoomPanelTab,
                     onTabSelected: (tab) {
-                      setRoomPanelState(() {
+                      if (_desktopPreviewRoomPanelTab == tab) {
+                        return;
+                      }
+                      setState(() {
                         _desktopPreviewRoomPanelTab = tab;
                       });
                     },
