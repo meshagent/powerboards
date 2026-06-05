@@ -29,6 +29,7 @@ const double pbRoomPanelStackBreakpoint = PbBreakpoints.roomPanelStack;
 const double _sidepaneInlinePadding = 22;
 const double _sidepaneScrollTopPadding = 8;
 const double _sidepaneListTopHoverClearance = 2;
+const double _sidepaneCardListVisualOffset = _sidepaneScrollTopPadding - _sidepaneListTopHoverClearance;
 const double _sidepaneScrollBottomPadding = 24;
 const double _sidepaneDescriptionToListGap = 20;
 const double _sidepaneListToActionsGap = 20;
@@ -312,34 +313,37 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
           PbRoomTabs(selectedTab: _activeTab, showFilesTab: widget.showFilesTab, onTabSelected: _selectTab),
           const SizedBox(height: 20),
           Expanded(
-            child: _activeTab == PbRoomPanelTab.agents
-                ? _AgentsPanel(
-                    agents: widget.agents ?? _agents,
-                    threads: widget.threads,
-                    threadItems: widget.threadItems,
-                    selectedAgentId: widget.selectedAgentId,
-                    selectedAgentTitle: widget.selectedAgentTitle,
-                    onAgentSelected: widget.onAgentSelected,
-                    onAgentItemSelected: widget.onAgentItemSelected,
-                    onManageAgents: widget.onManageAgents,
-                    agentsExpanded: widget.agentsExpanded,
-                    onAgentsExpandedChanged: widget.onAgentsExpandedChanged,
-                    showThreadsSection: widget.showThreadsSection,
-                    selectedThreadId: widget.selectedThreadId,
-                    selectedThreadTitle: widget.selectedThreadTitle,
-                    onThreadSelected: widget.onThreadSelected,
-                    onThreadItemSelected: widget.onThreadItemSelected,
-                    onThreadRename: widget.onThreadRename,
-                    onThreadDelete: widget.onThreadDelete,
-                    onCreateThread: widget.onCreateThread,
-                  )
-                : _FilesPanel(
-                    attachments: widget.attachments ?? _attachments,
-                    onPreviewFile: _openFilePreview,
-                    onAskFileAgent: widget.onAskFileAgent,
-                    onShareFile: widget.onShareFile,
-                    onDownloadFile: widget.onDownloadFile,
-                  ),
+            child: Transform.translate(
+              offset: const Offset(0, -4),
+              child: _activeTab == PbRoomPanelTab.agents
+                  ? _AgentsPanel(
+                      agents: widget.agents ?? _agents,
+                      threads: widget.threads,
+                      threadItems: widget.threadItems,
+                      selectedAgentId: widget.selectedAgentId,
+                      selectedAgentTitle: widget.selectedAgentTitle,
+                      onAgentSelected: widget.onAgentSelected,
+                      onAgentItemSelected: widget.onAgentItemSelected,
+                      onManageAgents: widget.onManageAgents,
+                      agentsExpanded: widget.agentsExpanded,
+                      onAgentsExpandedChanged: widget.onAgentsExpandedChanged,
+                      showThreadsSection: widget.showThreadsSection,
+                      selectedThreadId: widget.selectedThreadId,
+                      selectedThreadTitle: widget.selectedThreadTitle,
+                      onThreadSelected: widget.onThreadSelected,
+                      onThreadItemSelected: widget.onThreadItemSelected,
+                      onThreadRename: widget.onThreadRename,
+                      onThreadDelete: widget.onThreadDelete,
+                      onCreateThread: widget.onCreateThread,
+                    )
+                  : _FilesPanel(
+                      attachments: widget.attachments ?? _attachments,
+                      onPreviewFile: _openFilePreview,
+                      onAskFileAgent: widget.onAskFileAgent,
+                      onShareFile: widget.onShareFile,
+                      onDownloadFile: widget.onDownloadFile,
+                    ),
+            ),
           ),
         ],
       ),
@@ -886,12 +890,15 @@ class _AgentsFixedSection extends StatelessWidget {
       children: [
         const _RoomPanelDescription('Browse threads by selected agent.'),
         SizedBox(height: _sidepaneDescriptionToListGap + (compactLayout ? _sidepaneListTopHoverClearance : 0)),
-        _AgentGroup(
-          agents: agents,
-          selectedAgentKey: selectedAgentKey,
-          expanded: expanded,
-          panelHeight: panelHeight,
-          onAgentSelected: onAgentSelected,
+        Transform.translate(
+          offset: const Offset(0, _sidepaneCardListVisualOffset),
+          child: _AgentGroup(
+            agents: agents,
+            selectedAgentKey: selectedAgentKey,
+            expanded: expanded,
+            panelHeight: panelHeight,
+            onAgentSelected: onAgentSelected,
+          ),
         ),
         const SizedBox(height: _sidepaneListToActionsGap),
         _AgentActions(
@@ -1668,7 +1675,7 @@ class _AttachmentList extends StatelessWidget {
       return _SidepaneScrollViewport.separated(
         itemCount: 1,
         gap: 10,
-        topPadding: _sidepaneListTopHoverClearance,
+        topPadding: _sidepaneScrollTopPadding,
         itemBuilder: (context, index) => const PbAttachmentCard(data: _emptyAttachment, emptyState: true),
       );
     }
@@ -1676,7 +1683,7 @@ class _AttachmentList extends StatelessWidget {
     return _SidepaneScrollViewport.separated(
       itemCount: attachments.length,
       gap: 10,
-      topPadding: _sidepaneListTopHoverClearance,
+      topPadding: _sidepaneScrollTopPadding,
       itemBuilder: (context, index) {
         final attachment = attachments[index];
         return PbAttachmentCard(
