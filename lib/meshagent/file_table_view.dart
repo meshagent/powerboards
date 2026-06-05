@@ -627,9 +627,15 @@ List<PbFilesItemData> powerboardsV1RecordRecentlyOpenedFile(
 }
 
 final Map<String, List<PbFilesItemData>> _v1RecentlyOpenedFilesBySession = <String, List<PbFilesItemData>>{};
+final Map<String, List<StorageEntry>> _v1FolderEntriesBySession = <String, List<StorageEntry>>{};
 
 String _v1RecentlyOpenedFilesSessionKey({required String? projectId, required String? roomName}) {
   return '${projectId?.trim() ?? ''}\u{1f}${roomName?.trim() ?? ''}';
+}
+
+String _v1FolderEntriesSessionKey({required String? projectId, required String? roomName, required String folderPath}) {
+  final normalizedFolderPath = folderPath.trim().replaceAll(RegExp(r'/+$'), '');
+  return '${_v1RecentlyOpenedFilesSessionKey(projectId: projectId, roomName: roomName)}\u{1f}$normalizedFolderPath';
 }
 
 List<PbFilesItemData> _sanitizeV1RecentlyOpenedFiles(List<PbFilesItemData> files) {
@@ -664,6 +670,42 @@ void powerboardsV1SaveRecentlyOpenedFilesForSession({
 @visibleForTesting
 void powerboardsV1ClearRecentlyOpenedFileSessionCache() {
   _v1RecentlyOpenedFilesBySession.clear();
+}
+
+@visibleForTesting
+List<StorageEntry>? powerboardsV1FolderEntriesForSession({
+  required String? projectId,
+  required String? roomName,
+  required String folderPath,
+}) {
+  final key = _v1FolderEntriesSessionKey(projectId: projectId, roomName: roomName, folderPath: folderPath);
+  final entries = _v1FolderEntriesBySession[key];
+  return entries == null ? null : List<StorageEntry>.of(entries);
+}
+
+void _saveV1FolderEntriesForSession({
+  required String? projectId,
+  required String? roomName,
+  required String folderPath,
+  required List<StorageEntry> entries,
+}) {
+  final key = _v1FolderEntriesSessionKey(projectId: projectId, roomName: roomName, folderPath: folderPath);
+  _v1FolderEntriesBySession[key] = List<StorageEntry>.unmodifiable(entries);
+}
+
+@visibleForTesting
+void powerboardsV1SaveFolderEntriesForTesting({
+  required String? projectId,
+  required String? roomName,
+  required String folderPath,
+  required List<StorageEntry> entries,
+}) {
+  _saveV1FolderEntriesForSession(projectId: projectId, roomName: roomName, folderPath: folderPath, entries: entries);
+}
+
+@visibleForTesting
+void powerboardsV1ClearFolderEntriesSessionCache() {
+  _v1FolderEntriesBySession.clear();
 }
 
 @visibleForTesting
@@ -1154,6 +1196,14 @@ class _FileManagerViewState extends State<FileManagerView> {
     final sanitized = _sanitizeV1RecentlyOpenedFiles(files);
     _v1RecentlyOpenedFiles = sanitized;
     powerboardsV1SaveRecentlyOpenedFilesForSession(projectId: widget.projectId, roomName: widget.client.roomName, files: sanitized);
+  }
+
+  List<StorageEntry>? _v1CachedFolderEntries(String folderPath) {
+    return powerboardsV1FolderEntriesForSession(projectId: widget.projectId, roomName: widget.client.roomName, folderPath: folderPath);
+  }
+
+  void _saveV1FolderEntries(String folderPath, List<StorageEntry> entries) {
+    _saveV1FolderEntriesForSession(projectId: widget.projectId, roomName: widget.client.roomName, folderPath: folderPath, entries: entries);
   }
 
   void _bindController(FileManagerViewController? controller) {
@@ -1973,19 +2023,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
   }
 
-  void _closeV1FilePromptHandoffSurface() {
-    _v1FilesRoomPanelOverlayController.hide();
-    setState(() {
-      _clearV1PreviewDraftForItem(_v1PreviewFile);
-      _v1PreviewFile = null;
-      _v1FilePreviewFullscreen = false;
-      _v1FilesRoomPanelOverlayOpen = false;
-      _v1RestoreRoomPanelOverlayOnPreviewClose = false;
-      _clearV1KeyboardPreviewNavigationState();
-    });
-    setPreviewFilePreviewFullscreen(false);
-  }
-
   void _minimizeV1FilePromptHandoffSurfaceIfNeeded() {
     if (!_v1FilePreviewFullscreen) {
       return;
@@ -1997,15 +2034,6 @@ class _FileManagerViewState extends State<FileManagerView> {
       _v1RestoreRoomPanelOverlayOnPreviewClose = false;
     });
     setPreviewFilePreviewFullscreen(false);
-  }
-
-  void _prepareV1FilePromptHandoff({required bool closePreviewSurface}) {
-    if (closePreviewSurface) {
-      _closeV1FilePromptHandoffSurface();
-      return;
-    }
-
-    _minimizeV1FilePromptHandoffSurfaceIfNeeded();
   }
 
   void _revealV1PreviewPanelForKeyboard({required bool openOverlay}) {
@@ -2456,7 +2484,6 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final callback = widget.onV1FilePromptRequested;
     if (callback != null) {
-      _prepareV1FilePromptHandoff(closePreviewSurface: showThreadAfterPrompt);
       if (recentlyOpenedItem != null && recentlyOpenedItem.canPreview) {
         setState(() {
           _recordV1RecentlyOpenedFile(recentlyOpenedItem);
@@ -2627,6 +2654,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _setEntries(List<StorageEntry> entries) {
     storageEntries.state = ResourceState.ready(entries);
+    _saveV1FolderEntries(_folderSig.value, entries);
     final hasThreadIndex = entries.any((entry) => !entry.isFolder && entry.name == _threadIndexFileName);
     final expectedThreadIndexPath = _threadIndexPathForFolder(_folderSig.value);
     if (hasThreadIndex && _threadIndexDocument == null && expectedThreadIndexPath != null) {
@@ -2741,7 +2769,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _nextFile() => _cycleFile(1);
 
   Future<List<StorageEntry>> _getChildren(String folderPath) async {
-    return widget.client.storage.list(folderPath);
+    final entries = await widget.client.storage.list(folderPath);
+    _saveV1FolderEntries(folderPath, entries);
+    return entries;
   }
 
   Future<void> _uploadFile(Stream<Uint8List> stream, String path, int totalBytes) async {
@@ -5079,7 +5109,13 @@ class _FileManagerViewState extends State<FileManagerView> {
                   child: ValueListenableBuilder<int>(
                     valueListenable: PendingStorageDeletes.listenableFor(_deleteScope),
                     builder: (context, _, _) => storageEntries.state.when(
-                      loading: () => const Center(child: CircularProgressIndicator()),
+                      loading: () {
+                        final cachedEntries = _v1CachedFolderEntries(_folderSig.value);
+                        if (cachedEntries != null) {
+                          return _buildDesktopV1FilesBrowser(context, entries: cachedEntries, isRefreshing: true);
+                        }
+                        return const Center(child: CircularProgressIndicator());
+                      },
                       error: (e, st) => Center(child: Text("Error loading files: $e")),
                       ready: (entries) =>
                           _buildDesktopV1FilesBrowser(context, entries: entries, isRefreshing: storageEntries.state.isRefreshing),
