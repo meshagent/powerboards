@@ -191,6 +191,42 @@ void main() {
     }
   });
 
+  test('composer attachment seed matching normalizes room attachment URLs', () {
+    expect(
+      powerboardsComposerAttachmentSeedMatchesAttachmentPaths(
+        seedPaths: const ['room:///sample-attachments/scratch.md'],
+        attachmentPaths: const ['sample-attachments/scratch.md'],
+      ),
+      isTrue,
+    );
+
+    expect(
+      powerboardsComposerAttachmentSeedMatchesAttachmentPaths(
+        seedPaths: const ['sample-attachments/scratch.md'],
+        attachmentPaths: const ['room://sample-attachments/scratch.md'],
+      ),
+      isTrue,
+    );
+  });
+
+  test('composer attachment seed matching ignores unrelated and non-attachment paths', () {
+    expect(
+      powerboardsComposerAttachmentSeedMatchesAttachmentPaths(
+        seedPaths: const ['sample-attachments/scratch.md'],
+        attachmentPaths: const ['sample-attachments/other.md'],
+      ),
+      isFalse,
+    );
+
+    expect(
+      powerboardsComposerAttachmentSeedMatchesAttachmentPaths(
+        seedPaths: const ['dataset://agents/assistant/threads/thread-1'],
+        attachmentPaths: const ['sample-attachments/scratch.md'],
+      ),
+      isFalse,
+    );
+  });
+
   testWidgets('switches from the new thread view to the selected thread when the parent selection changes', (tester) async {
     final pair = _ProtocolPair();
     final schema = MeshSchema(

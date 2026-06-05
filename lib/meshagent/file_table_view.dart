@@ -1986,6 +1986,28 @@ class _FileManagerViewState extends State<FileManagerView> {
     setPreviewFilePreviewFullscreen(false);
   }
 
+  void _minimizeV1FilePromptHandoffSurfaceIfNeeded() {
+    if (!_v1FilePreviewFullscreen) {
+      return;
+    }
+
+    setState(() {
+      _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelOverlayOpen = false;
+      _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+    });
+    setPreviewFilePreviewFullscreen(false);
+  }
+
+  void _prepareV1FilePromptHandoff({required bool closePreviewSurface}) {
+    if (closePreviewSurface) {
+      _closeV1FilePromptHandoffSurface();
+      return;
+    }
+
+    _minimizeV1FilePromptHandoffSurfaceIfNeeded();
+  }
+
   void _revealV1PreviewPanelForKeyboard({required bool openOverlay}) {
     if (openOverlay) {
       if (!_v1FilesRoomPanelOverlayOpen) {
@@ -2434,9 +2456,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final callback = widget.onV1FilePromptRequested;
     if (callback != null) {
-      if (showThreadAfterPrompt) {
-        _closeV1FilePromptHandoffSurface();
-      }
+      _prepareV1FilePromptHandoff(closePreviewSurface: showThreadAfterPrompt);
       if (recentlyOpenedItem != null && recentlyOpenedItem.canPreview) {
         setState(() {
           _recordV1RecentlyOpenedFile(recentlyOpenedItem);
@@ -4014,6 +4034,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     Future<void> onStartFilePrompt(ChatFilePromptAction action) async {
       final callback = widget.onV1FilePromptRequested;
       if (callback != null) {
+        _minimizeV1FilePromptHandoffSurfaceIfNeeded();
         await callback(action, fullPath);
         return;
       }

@@ -46,6 +46,19 @@ typedef PowerboardsThreadAttachmentsChanged =
       required Iterable<String> attachmentPaths,
     });
 
+@visibleForTesting
+bool powerboardsComposerAttachmentSeedMatchesAttachmentPaths({
+  required Iterable<String> seedPaths,
+  required Iterable<String> attachmentPaths,
+}) {
+  final normalizedSeedPaths = seedPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toSet();
+  if (normalizedSeedPaths.isEmpty) {
+    return false;
+  }
+
+  return attachmentPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).any(normalizedSeedPaths.contains);
+}
+
 class MeshagentRoomChatThreadController extends ChatThreadController {
   MeshagentRoomChatThreadController({required super.room});
 
@@ -106,7 +119,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.onThreadAttachmentsChanged,
     this.composerAttachmentSeedVersion = 0,
     this.composerAttachmentPaths = const [],
-    this.onComposerAttachmentSeedApplied,
+    this.onComposerAttachmentSeedCleared,
     this.onComposerAttachmentOpen,
     this.onComposerAttachmentRemoved,
     this.onThreadAttachmentOpen,
@@ -141,7 +154,7 @@ class MeshagentThreadView extends StatefulWidget {
   final PowerboardsThreadAttachmentsChanged? onThreadAttachmentsChanged;
   final int composerAttachmentSeedVersion;
   final List<String> composerAttachmentPaths;
-  final VoidCallback? onComposerAttachmentSeedApplied;
+  final VoidCallback? onComposerAttachmentSeedCleared;
   final ValueChanged<String>? onComposerAttachmentOpen;
   final ValueChanged<String>? onComposerAttachmentRemoved;
   final ValueChanged<String>? onThreadAttachmentOpen;
@@ -344,7 +357,19 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         threadName: _currentThreadNameForAttachmentIndex(message.threadPath),
         attachmentPaths: message.attachments.map((attachment) => attachment.url),
       );
+      _clearComposerAttachmentSeedIfAttachmentsMatch(message.attachments.map((attachment) => attachment.url));
     }
+  }
+
+  void _clearComposerAttachmentSeedIfAttachmentsMatch(Iterable<String> attachmentPaths) {
+    if (!powerboardsComposerAttachmentSeedMatchesAttachmentPaths(
+      seedPaths: widget.composerAttachmentPaths,
+      attachmentPaths: attachmentPaths,
+    )) {
+      return;
+    }
+
+    widget.onComposerAttachmentSeedCleared?.call();
   }
 
   String _composerAttachmentDisplayName(String path) {
@@ -385,7 +410,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       for (final path in paths) {
         _chatController.attachFile(path, displayName: _composerAttachmentDisplayName(path));
       }
-      widget.onComposerAttachmentSeedApplied?.call();
     });
   }
 
@@ -412,6 +436,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         debugPrint('Failed to record file attachment index: $error');
       }),
     );
+    _clearComposerAttachmentSeedIfAttachmentsMatch(attachmentPaths);
   }
 
   Uri? _currentRouteUriOrNull() {
@@ -554,7 +579,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       documentPath: widget.documentPath,
       controller: _chatController,
       onAttachmentOpen: _openComposerAttachment,
-      onAttachmentRemoved: (attachment) => widget.onComposerAttachmentRemoved?.call(attachment.path),
+      onAttachmentRemoved: (attachment) {
+        widget.onComposerAttachmentRemoved?.call(attachment.path);
+        _clearComposerAttachmentSeedIfAttachmentsMatch([attachment.path]);
+      },
       selectedThreadPath: widget.selectedThreadPath,
       selectedThreadDisplayName: widget.selectedThreadDisplayName,
       onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
