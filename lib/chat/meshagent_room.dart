@@ -4479,11 +4479,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 v1RoomPanelWidth: usesDesktopUiPreview ? _desktopPreviewRoomPanelWidth : null,
                 onV1RoomPanelWidthChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelWidth : null,
                 onV1FilePromptRequested: usesDesktopUiPreview
-                    ? (action, filePath, {showThreadAfterPrompt = false}) => _handleDesktopPreviewFilePromptRequested(
+                    ? (action, filePath, {required responsiveHandoff}) => _handleDesktopPreviewFilePromptRequested(
                         context,
                         action: action,
                         filePath: filePath,
-                        showThreadAfterPrompt: showThreadAfterPrompt,
+                        responsiveHandoff: responsiveHandoff,
                       )
                     : null,
               ),
@@ -4661,6 +4661,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           return LayoutBuilder(
             builder: (context, constraints) {
               final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !transcriptPreviewFullscreen;
+              final responsiveOverlayMobile = constraints.maxWidth <= pbShellMobileBreakpoint;
               final roomPanelCollapsed = !transcriptSidePaneAvailable || _desktopPreviewRoomPanelCollapsed;
               final roomPanelExpanded = responsivePanel ? false : !roomPanelCollapsed;
 
@@ -4736,10 +4737,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   emptyTranscripts: transcripts.isEmpty,
                   initialPreviewFile: transcriptPreviewFile,
                   initialFilePreviewOpen: transcriptPreviewOpen,
-                  openFilePreviewAsFullscreen: responsiveOverlay || transcriptPreviewFullscreen,
+                  openFilePreviewAsFullscreen: transcriptPreviewFullscreen || (responsiveOverlay && responsiveOverlayMobile),
                   filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
                   filePreviewSourceBuilder: _buildAttachmentPreviewSource,
-                  onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, showThreadAfterPrompt: responsiveOverlay)),
+                  onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, responsiveHandoff: responsiveOverlay)),
                   onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
                   onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
                   onFilePreviewSelected: (file) {
@@ -4768,7 +4769,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   filePreviewResizing: resizing,
                   borderOnTop: responsiveOverlay,
                   responsiveOverlay: responsiveOverlay,
-                  responsiveOverlayMobile: false,
+                  responsiveOverlayMobile: responsiveOverlayMobile,
                   onResponsiveOverlayClose: _closeDesktopPreviewRoomPanelOverlay,
                 );
               }
@@ -5432,6 +5433,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           builder: (context, attachments) => LayoutBuilder(
             builder: (context, constraints) {
               final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_desktopPreviewFilePreviewFullscreen;
+              final responsiveOverlayMobile = constraints.maxWidth <= pbShellMobileBreakpoint;
               final roomPanelExpanded = responsivePanel ? false : !_desktopPreviewRoomPanelCollapsed;
               final effectiveThreadPanel = hasVisibleAgents
                   ? Column(
@@ -5532,7 +5534,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     attachments: attachments,
                     initialPreviewFile: _desktopPreviewFilePreviewFile,
                     initialFilePreviewOpen: _desktopPreviewFilePreviewOpen,
-                    openFilePreviewAsFullscreen: responsiveOverlay || _desktopPreviewFilePreviewFullscreen,
+                    openFilePreviewAsFullscreen: _desktopPreviewFilePreviewFullscreen || (responsiveOverlay && responsiveOverlayMobile),
                     onFilePreviewSelected: (file) {
                       setState(() {
                         _desktopPreviewFilePreviewFile = file;
@@ -5558,14 +5560,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
                     filePreviewSourceBuilder: _buildAttachmentPreviewSource,
                     onAskFileAgent: (file) => unawaited(
-                      _startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey, showThreadAfterPrompt: responsiveOverlay),
+                      _startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey, responsiveHandoff: responsiveOverlay),
                     ),
                     onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
                     onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
                     filePreviewResizing: resizing,
                     borderOnTop: responsiveOverlay,
                     responsiveOverlay: responsiveOverlay,
-                    responsiveOverlayMobile: false,
+                    responsiveOverlayMobile: responsiveOverlayMobile,
                     onResponsiveOverlayClose: _closeDesktopPreviewRoomPanelOverlay,
                   ),
                 );
@@ -6447,7 +6449,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required ChatFilePromptAction action,
     required String filePath,
     String? preferredAgentKey,
-    bool showThreadAfterPrompt = false,
+    bool responsiveHandoff = false,
   }) async {
     if (!mounted || !context.mounted) {
       return;
@@ -6459,8 +6461,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    if (showThreadAfterPrompt) {
-      _openDesktopPreviewThreadComposerWithAttachment(context, agentKey: agentKey, filePath: filePath);
+    if (responsiveHandoff) {
+      _handoffResponsiveDesktopPreviewFilePrompt(context, agentKey: agentKey, filePath: filePath);
       return;
     }
 
@@ -6489,18 +6491,34 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _showDesktopPreviewChatPane(context, agentKey: agentKey);
   }
 
-  void _openDesktopPreviewThreadComposerWithAttachment(BuildContext context, {required String agentKey, required String filePath}) {
+  void _handoffResponsiveDesktopPreviewFilePrompt(BuildContext context, {required String agentKey, required String filePath}) {
     final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     if (normalizedPath.isEmpty) {
       return;
     }
 
-    _desktopPreviewRoomPanelOverlayController.hide();
     setState(() {
       _selectedThreadPathByAgentKey.remove(agentKey);
       _selectedThreadLabelByAgentKey.remove(agentKey);
       _newThreadResetVersion++;
+    });
+    if (_roomNameForSelectionPersistence case final roomName?) {
+      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
+    }
+    _setComposerAttachmentSeed(agentKey, [normalizedPath]);
+
+    if (!mounted || !context.mounted) {
+      return;
+    }
+    _showDesktopPreviewChatPane(context, agentKey: agentKey);
+    _closeResponsiveDesktopPreviewFilePromptSurfaces();
+  }
+
+  void _closeResponsiveDesktopPreviewFilePromptSurfaces() {
+    _desktopPreviewRoomPanelOverlayController.hide();
+    setState(() {
       _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
+      _desktopPreviewRoomPanelCollapsed = true;
       _desktopPreviewRoomPanelOverlayOpen = false;
       _desktopPreviewFilePreviewFile = null;
       _desktopPreviewFilePreviewOpen = false;
@@ -6511,21 +6529,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewMeetTranscriptPreviewFullscreen = false;
       _desktopPreviewRestoreTranscriptOverlayOnPreviewClose = false;
     });
-    if (_roomNameForSelectionPersistence case final roomName?) {
-      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
-    }
     setPreviewFilePreviewFullscreen(false);
-
-    if (!mounted || !context.mounted) {
-      return;
-    }
-    _showDesktopPreviewChatPane(context, agentKey: agentKey);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      _setComposerAttachmentSeed(agentKey, [normalizedPath]);
-    });
   }
 
   String? _previewAttachmentPath(PbAttachmentListItemData file) {
@@ -6624,11 +6628,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return fallback == null ? const <ChatFilePromptAction>[] : [fallback];
   }
 
-  Future<void> _startDefaultAttachmentFilePrompt(
-    PbAttachmentListItemData file, {
-    String? agentKey,
-    bool showThreadAfterPrompt = false,
-  }) async {
+  Future<void> _startDefaultAttachmentFilePrompt(PbAttachmentListItemData file, {String? agentKey, bool responsiveHandoff = false}) async {
     final path = _previewAttachmentPath(file);
     if (path == null) {
       return;
@@ -6645,7 +6645,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       action: action,
       filePath: path,
       preferredAgentKey: agentKey,
-      showThreadAfterPrompt: showThreadAfterPrompt,
+      responsiveHandoff: responsiveHandoff,
     );
   }
 

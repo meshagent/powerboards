@@ -351,7 +351,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
   }
 
   Widget _buildPreviewPane({required bool showInlineBorder}) {
-    final previewFullscreen = _filePreviewFullscreen || widget.openFilePreviewAsFullscreen || widget.responsiveOverlay;
+    final previewFullscreen = _filePreviewFullscreen || widget.openFilePreviewAsFullscreen;
     final previewSource = _previewFile.previewState == PbAttachmentPreviewState.none
         ? widget.filePreviewSourceBuilder?.call(_previewFile)
         : null;

@@ -118,9 +118,11 @@ class _FakeDocumentRuntime extends DocumentRuntime {
 }
 
 class _ThreadViewHarness extends StatefulWidget {
-  const _ThreadViewHarness({required this.room});
+  const _ThreadViewHarness({required this.room, this.composerAttachmentPaths = const [], this.composerAttachmentSeedVersion = 0});
 
   final RoomClient room;
+  final List<String> composerAttachmentPaths;
+  final int composerAttachmentSeedVersion;
 
   @override
   State<_ThreadViewHarness> createState() => _ThreadViewHarnessState();
@@ -143,6 +145,8 @@ class _ThreadViewHarnessState extends State<_ThreadViewHarness> {
           _selectedThreadPath = path;
         });
       },
+      composerAttachmentPaths: widget.composerAttachmentPaths,
+      composerAttachmentSeedVersion: widget.composerAttachmentSeedVersion,
     );
   }
 }
@@ -225,6 +229,29 @@ void main() {
       ),
       isFalse,
     );
+  });
+
+  testWidgets('composer attachment seed appears in the new thread composer', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        child: Scaffold(
+          body: SizedBox.expand(
+            child: _ThreadViewHarness(
+              room: room,
+              composerAttachmentPaths: const ['room:///docs/brief.pdf'],
+              composerAttachmentSeedVersion: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('brief.pdf'), findsOneWidget);
   });
 
   testWidgets('switches from the new thread view to the selected thread when the parent selection changes', (tester) async {

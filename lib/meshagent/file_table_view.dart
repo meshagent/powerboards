@@ -894,7 +894,7 @@ class FileManagerView extends StatefulWidget {
   final ValueChanged<bool>? onV1RoomPanelCollapsedChanged;
   final double? v1RoomPanelWidth;
   final ValueChanged<double>? onV1RoomPanelWidthChanged;
-  final FutureOr<void> Function(ChatFilePromptAction action, String filePath, {bool showThreadAfterPrompt})? onV1FilePromptRequested;
+  final FutureOr<void> Function(ChatFilePromptAction action, String filePath, {required bool responsiveHandoff})? onV1FilePromptRequested;
 
   const FileManagerView({
     super.key,
@@ -1002,6 +1002,10 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   bool _usesDesktopV1FilesBrowser() {
     return mounted && !_usesAdaptiveMobileLayout(context) && powerboardsUsesDesktopUiPreview(context);
+  }
+
+  bool _usesResponsiveV1FilePromptHandoff() {
+    return _usesDesktopV1FilesBrowser() && MediaQuery.sizeOf(context).width <= pbRoomPanelStackBreakpoint;
   }
 
   bool _v1DeleteCoversPath({required String deletePath, required bool isFolder, required String candidatePath}) {
@@ -2061,15 +2065,44 @@ class _FileManagerViewState extends State<FileManagerView> {
     _toggleSelected(id, selected);
   }
 
-  void _minimizeV1FilePromptHandoffSurfaceIfNeeded() {
-    if (!_v1FilePreviewFullscreen) {
+  void _finishV1FilePromptHandoff({PbFilesItemData? recentlyOpenedItem, required bool cleanupSurfaces}) {
+    final recentlyOpened = recentlyOpenedItem;
+
+    if (!cleanupSurfaces) {
+      if (recentlyOpened != null && recentlyOpened.canPreview) {
+        setState(() {
+          _recordV1RecentlyOpenedFile(recentlyOpened);
+        });
+      }
       return;
     }
 
+    _v1FilesRoomPanelOverlayController.hide();
+    _clearSelected();
+    final openedFile = _openedFile;
+    if (openedFile != null) {
+      widget.client.localParticipant?.setAttribute("current_file", null);
+    }
     setState(() {
+      if (recentlyOpened != null && recentlyOpened.canPreview) {
+        _recordV1RecentlyOpenedFile(recentlyOpened);
+      }
+      if (_v1PreviewFile != null) {
+        _clearV1PreviewDraftForItem(_v1PreviewFile);
+      }
+      if (openedFile != null && _v1PreviewDraftPath == openedFile) {
+        _clearV1PreviewDraft();
+      }
+      if (openedFile != null) {
+        _location = _FileLocation(folder: _location.folder, openedFile: null);
+        _tab = 'preview';
+      }
+      _v1PreviewFile = null;
       _v1FilePreviewFullscreen = false;
+      _v1FilesRoomPanelCollapsed = true;
       _v1FilesRoomPanelOverlayOpen = false;
       _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      _clearV1KeyboardPreviewNavigationState();
     });
     setPreviewFilePreviewFullscreen(false);
   }
@@ -2517,7 +2550,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     widget.services?.refresh();
   }
 
-  Future<void> _startDefaultFilePrompt(String fullPath, {PbFilesItemData? recentlyOpenedItem, bool showThreadAfterPrompt = false}) async {
+  Future<void> _startDefaultFilePrompt(
+    String fullPath, {
+    PbFilesItemData? recentlyOpenedItem,
+    required bool cleanupSurfacesAfterHandoff,
+  }) async {
     final action = _filePromptActionsForPath(fullPath, isFolder: false).firstOrNull;
     if (action == null) {
       await _openManageAgentsForFilePrompt();
@@ -2526,12 +2563,11 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final callback = widget.onV1FilePromptRequested;
     if (callback != null) {
-      if (recentlyOpenedItem != null && recentlyOpenedItem.canPreview) {
-        setState(() {
-          _recordV1RecentlyOpenedFile(recentlyOpenedItem);
-        });
+      await callback(action, fullPath, responsiveHandoff: cleanupSurfacesAfterHandoff);
+      if (!mounted) {
+        return;
       }
-      await callback(action, fullPath, showThreadAfterPrompt: showThreadAfterPrompt);
+      _finishV1FilePromptHandoff(recentlyOpenedItem: recentlyOpenedItem, cleanupSurfaces: cleanupSurfacesAfterHandoff);
       return;
     }
 
@@ -3839,7 +3875,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           builder: (context, constraints) {
             final usesStackedRoomPanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint;
             final usesShellMobileLayout = constraints.maxWidth <= pbShellMobileBreakpoint;
-            final filePreviewFullscreen = _v1FilePreviewFullscreen || (usesStackedRoomPanel && previewFile != null);
+            final filePreviewFullscreen = _v1FilePreviewFullscreen || (usesShellMobileLayout && previewFile != null);
             final responsivePanel = usesStackedRoomPanel && !filePreviewFullscreen;
             final responsiveMode = usesShellMobileLayout
                 ? PbFilesResponsiveMode.mobile
@@ -3950,13 +3986,17 @@ class _FileManagerViewState extends State<FileManagerView> {
                       _openEntry(_v1PathForItem(item), true);
                       return;
                     }
-                    _openV1Preview(item, openOverlay: responsivePanel, openFullscreen: usesStackedRoomPanel);
+                    _openV1Preview(item, openOverlay: responsivePanel, openFullscreen: usesShellMobileLayout);
                   },
                   onBrowseFolder: (item) => _openEntry(item.folderPath, true),
                   onRemoveProcessingRow: _removeV1FileStateRow,
                   onLinkedThreadPressed: _openV1LinkedThread,
                   onAskAgent: (item) => unawaited(
-                    _startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item, showThreadAfterPrompt: usesStackedRoomPanel),
+                    _startDefaultFilePrompt(
+                      _v1PathForItem(item),
+                      recentlyOpenedItem: item,
+                      cleanupSurfacesAfterHandoff: usesStackedRoomPanel,
+                    ),
                   ),
                   onDownload: (item) => unawaited(_downloadV1Item(item)),
                   onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
@@ -3984,7 +4024,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 items: items,
                 previewFile: previewFile,
                 responsivePanel: responsivePanel,
-                openFullscreen: usesStackedRoomPanel || filePreviewFullscreen,
+                openFullscreen: usesShellMobileLayout || filePreviewFullscreen,
               ),
               child: Listener(onPointerDown: (_) => _clearV1KeyboardPreviewNavigation(), child: mainPanel),
             );
@@ -4002,13 +4042,17 @@ class _FileManagerViewState extends State<FileManagerView> {
                 onPreviewFile: (item) => _openV1Preview(
                   item,
                   openOverlay: responsivePanel,
-                  openFullscreen: usesStackedRoomPanel,
+                  openFullscreen: usesShellMobileLayout,
                   restoreOverlayOnClose: responsivePanel,
                   armKeyboardBrowse: false,
                 ),
                 previewSourceBuilder: _buildV1PreviewSource,
                 onAskAgent: (item) => unawaited(
-                  _startDefaultFilePrompt(_v1PathForItem(item), recentlyOpenedItem: item, showThreadAfterPrompt: usesStackedRoomPanel),
+                  _startDefaultFilePrompt(
+                    _v1PathForItem(item),
+                    recentlyOpenedItem: item,
+                    cleanupSurfacesAfterHandoff: usesStackedRoomPanel,
+                  ),
                 ),
                 onDownload: (item) => unawaited(_downloadV1FileWithToast(_v1PathForItem(item))),
                 onSaveRequested: _saveV1PreviewFile,
@@ -4120,8 +4164,12 @@ class _FileManagerViewState extends State<FileManagerView> {
     Future<void> onStartFilePrompt(ChatFilePromptAction action) async {
       final callback = widget.onV1FilePromptRequested;
       if (callback != null) {
-        _minimizeV1FilePromptHandoffSurfaceIfNeeded();
-        await callback(action, fullPath);
+        final responsiveHandoff = _usesResponsiveV1FilePromptHandoff();
+        await callback(action, fullPath, responsiveHandoff: responsiveHandoff);
+        if (!mounted) {
+          return;
+        }
+        _finishV1FilePromptHandoff(cleanupSurfaces: responsiveHandoff);
         return;
       }
 

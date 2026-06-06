@@ -1350,6 +1350,67 @@ void main() {
     expect(find.text('Share'), findsNothing);
   });
 
+  testWidgets('interim room panel overlay keeps file preview in sheet mode', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'brief.pdf', path: 'docs/brief.pdf');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 760,
+            height: 560,
+            child: PbRoomPanel(
+              responsiveOverlay: true,
+              responsiveOverlayMobile: false,
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              attachments: [file],
+              threads: const ['New Thread...'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<PbFilePreviewPane>(find.byType(PbFilePreviewPane)).fullscreen, isFalse);
+  });
+
+  testWidgets('mobile room panel overlay can request fullscreen file preview', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'brief.pdf', path: 'docs/brief.pdf');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbRoomPanel(
+              responsiveOverlay: true,
+              responsiveOverlayMobile: true,
+              openFilePreviewAsFullscreen: true,
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              attachments: [file],
+              threads: const ['New Thread...'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<PbFilePreviewPane>(find.byType(PbFilePreviewPane)).fullscreen, isTrue);
+  });
+
   testWidgets('responsive ask agent closes file preview and returns to threads panel', (tester) async {
     final file = PbAttachmentListItemData.fromFileName(title: 'brief.pdf', path: 'docs/brief.pdf');
     var selectedTab = PbRoomPanelTab.files;
@@ -1772,6 +1833,57 @@ void main() {
 
     expect(find.text('Browse transcripts from recent meetings.'), findsOneWidget);
     expect(find.text('Browse transcripts from the last seven days.'), findsNothing);
+  });
+
+  testWidgets('interim meet transcript overlay keeps file preview in sheet mode', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'daily.transcript', path: 'transcripts/daily.transcript');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 760,
+            height: 560,
+            child: PbMeetTranscriptPanel(
+              responsiveOverlay: true,
+              responsiveOverlayMobile: false,
+              transcripts: [file],
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<PbFilePreviewPane>(find.byType(PbFilePreviewPane)).fullscreen, isFalse);
+  });
+
+  testWidgets('mobile meet transcript overlay can request fullscreen file preview', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'daily.transcript', path: 'transcripts/daily.transcript');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbMeetTranscriptPanel(
+              responsiveOverlay: true,
+              responsiveOverlayMobile: true,
+              openFilePreviewAsFullscreen: true,
+              transcripts: [file],
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<PbFilePreviewPane>(find.byType(PbFilePreviewPane)).fullscreen, isTrue);
   });
 
   testWidgets('meet transcript row menu exposes ask agent and download actions', (tester) async {
