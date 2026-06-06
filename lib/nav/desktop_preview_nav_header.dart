@@ -16,6 +16,8 @@ class DesktopPreviewNavHeader extends StatefulWidget {
     required this.projectId,
     required this.selectedRoom,
     required this.canCreateRooms,
+    this.shellMobile = false,
+    this.shellIconOnly = false,
     this.selectedRoomDisplayNameOverride,
     required this.onCreateProject,
     required this.onSelectProject,
@@ -34,6 +36,8 @@ class DesktopPreviewNavHeader extends StatefulWidget {
   final String? projectId;
   final String? selectedRoom;
   final bool canCreateRooms;
+  final bool shellMobile;
+  final bool shellIconOnly;
   final String? selectedRoomDisplayNameOverride;
   final Future<void> Function() onCreateProject;
   final ValueChanged<Project> onSelectProject;
@@ -313,8 +317,8 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
         onClose: _closeProjectDialog,
       ),
       child: PbPrimaryHeader(
-        shellMobile: false,
-        shellIconOnly: false,
+        shellMobile: widget.shellMobile,
+        shellIconOnly: widget.shellIconOnly,
         showRoomSwitcher: showRoomSwitcher,
         roomValue: resolvedRoomValue,
         roomSelected: _openMenu == _DesktopPreviewNavMenu.room,
