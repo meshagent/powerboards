@@ -12,7 +12,7 @@ enum PbSideRailDestination { recent, chat, files, meet }
 class PbSideRail extends StatelessWidget {
   const PbSideRail({
     super.key,
-    this.showRecent = true,
+    this.showRecent = false,
     this.showDestinations = true,
     this.destinationsEnabled = true,
     this.showMore = true,
@@ -349,8 +349,8 @@ class _RailNav extends StatelessWidget {
     final items = <_RailItemData>[
       if (showRecent)
         _RailItemData(
-          label: 'Home',
-          iconAssetName: 'house',
+          label: 'Recent',
+          iconAssetName: 'history',
           destination: PbSideRailDestination.recent,
           active: destinationsEnabled && selectedDestination == PbSideRailDestination.recent,
           enabled: destinationsEnabled,

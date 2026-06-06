@@ -825,21 +825,6 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     context.go(nextUri.toString());
   }
 
-  void _goToPreviewProjectHome(BuildContext context) {
-    final projectId = widget.projectId;
-    if (projectId == null) {
-      return;
-    }
-
-    final nextPath = '/p/${fromUUID(projectId)}';
-    final currentUri = PathRouteMatch.of(context).uri;
-    if (currentUri.path == nextPath && currentUri.queryParameters.isEmpty) {
-      return;
-    }
-
-    context.go(nextPath);
-  }
-
   Widget _buildPreviewRailMenu(PreviewRoomRailMenuBridge bridge) {
     return PbRoomOptionsMenu(
       width: 240,
@@ -1045,14 +1030,13 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                     });
                   }
                   return PbSideRail(
-                    showRecent: hasSelectedRoom,
+                    showRecent: false,
                     showDestinations: showDestinations,
                     destinationsEnabled: showDestinations && !balanceLow,
                     showMore: showMore,
                     moreEnabled: moreEnabled,
                     meetActive: false,
                     selectedDestination: selectedDestination,
-                    onRecentPressed: () => _goToPreviewProjectHome(context),
                     onChatPressed: () => _goToPreviewRoomPane(context, 'chat'),
                     onFilesPressed: () => _goToPreviewRoomPane(context, 'files'),
                     onMeetPressed: () => _goToPreviewRoomPane(context, 'meeting'),
@@ -1082,14 +1066,13 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                     }
 
                     return PbSideRail(
-                      showRecent: hasSelectedRoom,
+                      showRecent: false,
                       showDestinations: showDestinations,
                       destinationsEnabled: destinationsEnabled,
                       showMore: showMore,
                       moreEnabled: moreEnabled,
                       meetActive: bridge.meetActive,
                       selectedDestination: selectedDestination,
-                      onRecentPressed: () => _goToPreviewProjectHome(context),
                       onChatPressed: () => _goToPreviewRoomPane(context, 'chat'),
                       onFilesPressed: () => _goToPreviewRoomPane(context, 'files'),
                       onMeetPressed: () => _goToPreviewRoomPane(context, 'meeting'),
