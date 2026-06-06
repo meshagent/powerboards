@@ -3,7 +3,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_header.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
-import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
 
 void main() {
   String labelForPath(String path) {
@@ -161,7 +160,7 @@ void main() {
     expect(uploads, 1);
   });
 
-  testWidgets('files toolbar keeps split icon actions for cramped non-mobile mode', (tester) async {
+  testWidgets('files toolbar uses wide create actions in shell-mobile overlay mode', (tester) async {
     var folderCreates = 0;
     var textFileCreates = 0;
     var uploads = 0;
@@ -175,25 +174,29 @@ void main() {
       onUpload: () => uploads += 1,
     );
 
-    expect(find.text('Create'), findsNothing);
+    expect(find.text('Create'), findsOneWidget);
+    expect(find.text('Upload'), findsOneWidget);
     expect(find.text('New folder'), findsNothing);
     expect(find.text('New text file'), findsNothing);
-    expect(find.text('Upload'), findsNothing);
 
-    final newFolderButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'New folder' && widget.iconOnly);
-    final newTextFileButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'New text file' && widget.iconOnly);
-    final uploadButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Upload' && widget.iconOnly);
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
 
-    expect(newFolderButton, findsOneWidget);
-    expect(newTextFileButton, findsOneWidget);
-    expect(uploadButton, findsOneWidget);
+    expect(find.text('New folder'), findsOneWidget);
+    expect(find.text('New text file'), findsOneWidget);
 
-    await tester.tap(newFolderButton);
-    await tester.tap(newTextFileButton);
-    await tester.tap(uploadButton);
-
+    await tester.tap(find.text('New folder'));
+    await tester.pumpAndSettle();
     expect(folderCreates, 1);
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New text file'));
+    await tester.pumpAndSettle();
     expect(textFileCreates, 1);
+
+    await tester.tap(find.text('Upload'));
+
     expect(uploads, 1);
   });
 

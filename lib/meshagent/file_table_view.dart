@@ -3838,9 +3838,14 @@ class _FileManagerViewState extends State<FileManagerView> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final usesStackedRoomPanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint;
+            final usesShellMobileLayout = constraints.maxWidth <= pbShellMobileBreakpoint;
             final filePreviewFullscreen = _v1FilePreviewFullscreen || (usesStackedRoomPanel && previewFile != null);
             final responsivePanel = usesStackedRoomPanel && !filePreviewFullscreen;
-            final responsiveMode = responsivePanel ? PbFilesResponsiveMode.overlay : PbFilesResponsiveMode.docked;
+            final responsiveMode = usesShellMobileLayout
+                ? PbFilesResponsiveMode.mobile
+                : responsivePanel
+                ? PbFilesResponsiveMode.overlay
+                : PbFilesResponsiveMode.docked;
             final roomHasInstalledAgent = widget.services?.state.isReady == true && widget.services!.state.value!.isNotEmpty;
             final sidePaneAvailable =
                 previewFile != null ||
@@ -3850,9 +3855,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                 roomHasInstalledAgent;
             final roomPanelCollapsed = !sidePaneAvailable || (routePreviewFile == null && _effectiveV1FilesRoomPanelCollapsed);
             final roomPanelExpanded = responsivePanel ? false : !roomPanelCollapsed;
-            final dropTargetPadding = responsiveMode == PbFilesResponsiveMode.overlay
-                ? const PbFilesPanelPadding(left: 20, right: 20)
-                : const PbFilesPanelPadding(left: 30, right: 28);
+            final dropTargetPadding = responsiveMode == PbFilesResponsiveMode.docked
+                ? const PbFilesPanelPadding(left: 30, right: 28)
+                : const PbFilesPanelPadding(left: 20, right: 20);
+            final dropTargetTop = responsiveMode == PbFilesResponsiveMode.mobile ? 202.0 : 142.0;
             if (filePreviewFullscreen && !_v1FilePreviewFullscreen) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 final previewStillAvailable = _v1PreviewFile != null || routePreviewFile != null;
@@ -3965,7 +3971,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 ValueListenableBuilder<bool>(
                   valueListenable: _v1FilesDropTargetActive,
                   builder: (context, active, child) => Positioned.fill(
-                    child: PbFilesDropTargetOverlayLayer(active: active, top: 142, padding: dropTargetPadding),
+                    child: PbFilesDropTargetOverlayLayer(active: active, top: dropTargetTop, padding: dropTargetPadding),
                   ),
                 ),
               ],
@@ -3992,7 +3998,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 resizing: resizing,
                 borderOnTop: responsivePanel,
                 responsiveOverlay: responsivePanel,
-                responsiveOverlayMobile: usesStackedRoomPanel,
+                responsiveOverlayMobile: usesShellMobileLayout,
                 onPreviewFile: (item) => _openV1Preview(
                   item,
                   openOverlay: responsivePanel,
@@ -4034,7 +4040,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                 controller: _v1FilesRoomPanelOverlayController,
                 overlayChildBuilder: (context) => Positioned.fill(
                   child: sidePaneAvailable
-                      ? sidePaneBuilder(context, false).asOverlayFrame(mobile: false, onClose: _closeV1FilesRoomPanelOverlay)
+                      ? sidePaneBuilder(
+                          context,
+                          false,
+                        ).asOverlayFrame(mobile: usesShellMobileLayout, onClose: _closeV1FilesRoomPanelOverlay)
                       : const SizedBox.shrink(),
                 ),
                 child: ColoredBox(color: PbColors.surfacePanelWash, child: keyboardPanel),

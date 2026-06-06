@@ -114,11 +114,13 @@ class PbFilesToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final mobileActions = responsiveMode == PbFilesResponsiveMode.mobile;
-        final iconActions = constraints.maxWidth < 620 && !mobileActions;
+        final stackedActions =
+            responsiveMode == PbFilesResponsiveMode.mobile ||
+            responsiveMode == PbFilesResponsiveMode.overlay && constraints.maxWidth <= PbBreakpoints.shellMobile;
+        final iconActions = constraints.maxWidth < 620 && !stackedActions;
         final createActions = _FilesCreateActions(
           iconActions: iconActions,
-          fullWidth: mobileActions,
+          fullWidth: stackedActions,
           onCreateFolder: onCreateFolder,
           onCreateTextFile: onCreateTextFile,
           onUpload: onUpload,
@@ -137,7 +139,7 @@ class PbFilesToolbar extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(padding.left, 0, padding.right, 28),
           child: Transform.translate(
             offset: const Offset(0, -8),
-            child: mobileActions
+            child: stackedActions
                 ? Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
