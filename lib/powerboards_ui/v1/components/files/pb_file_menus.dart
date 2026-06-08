@@ -216,6 +216,7 @@ class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
             title: 'Ask agent',
             leadingIconAssetName: 'message-square-plus',
             singleLine: true,
+            state: onAskAgent == null ? PbMenuOptionVisualState.disabled : null,
             onPressed: () => _runMenuAction(onAskAgent, onDismiss),
           ),
         if (showShare)
@@ -223,6 +224,7 @@ class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
             title: 'Share',
             leadingIconAssetName: 'share',
             singleLine: true,
+            state: onShare == null ? PbMenuOptionVisualState.disabled : null,
             onPressed: () => _runMenuAction(onShare, onDismiss),
           ),
         if (showDownload)
@@ -230,6 +232,7 @@ class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
             title: 'Download',
             leadingIconAssetName: 'arrow-down-to-line',
             singleLine: true,
+            state: onDownload == null ? PbMenuOptionVisualState.disabled : null,
             onPressed: () => _runMenuAction(onDownload, onDismiss),
           ),
       ],
