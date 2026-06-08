@@ -9,11 +9,14 @@ import '../../models/pb_agent_display.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
+import '../files/pb_file_menus.dart';
 import '../files/pb_file_preview_state_card.dart';
 import '../menus/pb_menu_anchor.dart';
 import '../menus/pb_menu_card.dart';
 import '../menus/pb_menu_list.dart';
 import '../menus/pb_menu_option.dart';
+import '../menus/pb_sidepane_item_menu.dart';
+import '../menus/pb_thread_item_menu.dart';
 import '../primitives/pb_avatar.dart';
 import '../primitives/pb_button.dart';
 import '../primitives/pb_svg_icon.dart';
@@ -4609,222 +4612,11 @@ class _SideIconFrame extends StatelessWidget {
   }
 }
 
-typedef PbSidepaneMenuBuilder = Widget Function(VoidCallback closeMenu);
-
-class PbSidepaneItemMenu extends StatefulWidget {
-  const PbSidepaneItemMenu({super.key, required this.panelBuilder, this.size = 38, this.onOpenChanged});
-
-  final PbSidepaneMenuBuilder panelBuilder;
-  final double size;
-  final ValueChanged<bool>? onOpenChanged;
-
-  @override
-  State<PbSidepaneItemMenu> createState() => _PbSidepaneItemMenuState();
-}
-
-class _PbSidepaneItemMenuState extends State<PbSidepaneItemMenu> {
-  bool _open = false;
-
-  void _setOpen(bool open) {
-    if (_open == open) {
-      return;
-    }
-
-    setState(() => _open = open);
-    widget.onOpenChanged?.call(open);
-  }
-
-  void _closeMenu() {
-    if (!_open) {
-      return;
-    }
-
-    _setOpen(false);
-  }
-
-  void _toggleMenu() => _setOpen(!_open);
-
-  @override
-  Widget build(BuildContext context) {
-    return PbMenuAnchor(
-      placement: PbMenuAnchorPlacement.bottomRight,
-      gap: 2,
-      onDismiss: _closeMenu,
-      panel: _open ? PbMenuCard(width: 204, child: widget.panelBuilder(_closeMenu)) : null,
-      child: _GhostIcon(assetName: 'ellipsis', size: widget.size, selected: _open, onPressed: _toggleMenu),
-    );
-  }
-}
-
-class PbAgentItemMenu extends StatelessWidget {
-  const PbAgentItemMenu({super.key, this.onDetails, this.onShare, this.onUninstall, this.onDismiss});
-
-  final VoidCallback? onDetails;
-  final VoidCallback? onShare;
-  final VoidCallback? onUninstall;
-  final VoidCallback? onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    return PbMenuList(
-      children: [
-        PbMenuOption(
-          title: 'Details',
-          leadingIconAssetName: 'info',
-          singleLine: true,
-          onPressed: () => _runMenuAction(onDetails, onDismiss),
-        ),
-        PbMenuOption(title: 'Share', leadingIconAssetName: 'share', singleLine: true, onPressed: () => _runMenuAction(onShare, onDismiss)),
-        PbMenuOption(
-          title: 'Uninstall',
-          leadingIconAssetName: 'circle-minus-alert',
-          singleLine: true,
-          alert: true,
-          onPressed: () => _runMenuAction(onUninstall, onDismiss),
-        ),
-      ],
-    );
-  }
-}
-
-class PbThreadItemMenu extends StatelessWidget {
-  const PbThreadItemMenu({super.key, this.onRename, this.onDelete, this.onDismiss});
-
-  final VoidCallback? onRename;
-  final VoidCallback? onDelete;
-  final VoidCallback? onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    return PbMenuList(
-      children: [
-        PbMenuOption(
-          title: 'Rename',
-          leadingIconAssetName: 'text-cursor',
-          singleLine: true,
-          onPressed: () => _runMenuAction(onRename, onDismiss),
-        ),
-        PbMenuOption(
-          title: 'Delete',
-          leadingIconAssetName: 'trash-alert',
-          singleLine: true,
-          alert: true,
-          onPressed: () => _runMenuAction(onDelete, onDismiss),
-        ),
-      ],
-    );
-  }
-}
-
-class PbFileItemMenu extends StatelessWidget {
-  const PbFileItemMenu({super.key, this.onOpen, this.onAskAgent, this.onShare, this.onDownload, this.onDismiss});
-
-  final VoidCallback? onOpen;
-  final VoidCallback? onAskAgent;
-  final VoidCallback? onShare;
-  final VoidCallback? onDownload;
-  final VoidCallback? onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    return PbMenuList(
-      children: [
-        PbMenuOption(
-          title: 'Open',
-          leadingIconAssetName: 'arrow-up-right',
-          singleLine: true,
-          onPressed: () => _runMenuAction(onOpen, onDismiss),
-        ),
-        PbMenuOption(
-          title: 'Ask agent',
-          leadingIconAssetName: 'message-square-plus',
-          singleLine: true,
-          onPressed: () => _runMenuAction(onAskAgent, onDismiss),
-        ),
-        PbMenuOption(title: 'Share', leadingIconAssetName: 'share', singleLine: true, onPressed: () => _runMenuAction(onShare, onDismiss)),
-        PbMenuOption(
-          title: 'Download',
-          leadingIconAssetName: 'arrow-down-to-line',
-          singleLine: true,
-          onPressed: () => _runMenuAction(onDownload, onDismiss),
-        ),
-      ],
-    );
-  }
-}
-
-class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
-  const PbFilePreviewPaneOptionsMenu({
-    super.key,
-    this.showAskAgent = true,
-    this.showShare = true,
-    this.showDownload = true,
-    this.onAskAgent,
-    this.onShare,
-    this.onDownload,
-    this.onDismiss,
-  });
-
-  final bool showAskAgent;
-  final bool showShare;
-  final bool showDownload;
-  final VoidCallback? onAskAgent;
-  final VoidCallback? onShare;
-  final VoidCallback? onDownload;
-  final VoidCallback? onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    return PbMenuList(
-      children: [
-        if (showAskAgent)
-          PbMenuOption(
-            title: 'Ask agent',
-            leadingIconAssetName: 'message-square-plus',
-            singleLine: true,
-            state: onAskAgent == null ? PbMenuOptionVisualState.disabled : null,
-            onPressed: () => _runMenuAction(onAskAgent, onDismiss),
-          ),
-        if (showShare)
-          PbMenuOption(
-            title: 'Share',
-            leadingIconAssetName: 'share',
-            singleLine: true,
-            state: onShare == null ? PbMenuOptionVisualState.disabled : null,
-            onPressed: () => _runMenuAction(onShare, onDismiss),
-          ),
-        if (showDownload)
-          PbMenuOption(
-            title: 'Download',
-            leadingIconAssetName: 'arrow-down-to-line',
-            singleLine: true,
-            state: onDownload == null ? PbMenuOptionVisualState.disabled : null,
-            onPressed: () => _runMenuAction(onDownload, onDismiss),
-          ),
-      ],
-    );
-  }
-}
-
-void _runMenuAction(VoidCallback? action, VoidCallback? dismiss) {
-  action?.call();
-  dismiss?.call();
-}
-
 class _GhostIcon extends StatefulWidget {
-  const _GhostIcon({
-    required this.assetName,
-    this.size = 38,
-    this.selected = false,
-    this.selectionAffordance = false,
-    this.color,
-    this.opacity,
-    this.onPressed,
-  });
+  const _GhostIcon({required this.assetName, this.size = 38, this.selectionAffordance = false, this.color, this.opacity, this.onPressed});
 
   final String assetName;
   final double size;
-  final bool selected;
   final bool selectionAffordance;
   final Color? color;
   final double? opacity;
@@ -4840,7 +4632,7 @@ class _GhostIconState extends State<_GhostIcon> {
 
   @override
   Widget build(BuildContext context) {
-    final active = widget.selected || _hovered || _pressed;
+    final active = _hovered || _pressed;
     final iconColor = widget.color ?? (active || widget.selectionAffordance ? PbColors.customBrandInk : PbColors.customBrandInk);
     final iconOpacity =
         widget.opacity ??
