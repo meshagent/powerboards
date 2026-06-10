@@ -4,6 +4,7 @@ import '../../theme/pb_colors.dart';
 import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
 import '../primitives/pb_svg_icon.dart';
+import 'pb_file_selection_checkbox.dart';
 
 class PbDialogFileListItemData {
   const PbDialogFileListItemData({
@@ -26,18 +27,41 @@ class PbDialogFileListItemData {
 }
 
 class PbDialogFileList extends StatefulWidget {
+  const PbDialogFileList({
+    super.key,
+    required this.items,
+    this.selectedIds = const {},
+    this.showCheckboxes = false,
+    this.framed = true,
+    this.rowMargin = const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+    this.rowPadding = const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+    this.listPadding = const EdgeInsets.symmetric(vertical: 6),
+    this.clipBehavior = Clip.hardEdge,
+    this.onToggleSelection,
+    this.onItemPressed,
+  });
+
   const PbDialogFileList.unframed({
     super.key,
     required this.items,
     this.selectedIds = const {},
     this.showCheckboxes = false,
+    this.listPadding = const EdgeInsets.symmetric(vertical: 8),
+    this.clipBehavior = Clip.none,
     this.onToggleSelection,
     this.onItemPressed,
-  });
+  }) : framed = false,
+       rowMargin = EdgeInsets.zero,
+       rowPadding = const EdgeInsets.all(11);
 
   final List<PbDialogFileListItemData> items;
   final Set<String> selectedIds;
   final bool showCheckboxes;
+  final bool framed;
+  final EdgeInsetsGeometry rowMargin;
+  final EdgeInsetsGeometry rowPadding;
+  final EdgeInsetsGeometry listPadding;
+  final Clip clipBehavior;
   final ValueChanged<String>? onToggleSelection;
   final ValueChanged<PbDialogFileListItemData>? onItemPressed;
 
@@ -51,14 +75,16 @@ class _PbDialogFileListState extends State<PbDialogFileList> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
+    final list = ListView.builder(
       primary: false,
-      clipBehavior: Clip.none,
-      padding: const EdgeInsets.only(bottom: 12),
+      clipBehavior: widget.clipBehavior,
+      padding: widget.listPadding,
       itemCount: widget.items.length,
       itemBuilder: (context, index) {
         final item = widget.items[index];
         final selected = widget.selectedIds.contains(item.id);
+        final pressed = _pressedId == item.id;
+        final hovered = _hoveredId == item.id;
         final nextItem = index < widget.items.length - 1 ? widget.items[index + 1] : null;
         final previousSelected = index > 0 && widget.selectedIds.contains(widget.items[index - 1].id);
         final nextSelected = nextItem != null && widget.selectedIds.contains(nextItem.id);
@@ -71,13 +97,15 @@ class _PbDialogFileListState extends State<PbDialogFileList> {
         return _PbDialogFileListRow(
           item: item,
           selected: selected,
-          pressed: _pressedId == item.id,
-          hovered: _hoveredId == item.id,
+          pressed: pressed,
+          hovered: hovered,
           showCheckbox: widget.showCheckboxes,
           previousSelected: previousSelected,
           nextSelected: nextSelected,
           beforeActiveRow: beforeActiveRow,
           last: index == widget.items.length - 1,
+          rowMargin: widget.rowMargin,
+          rowPadding: widget.rowPadding,
           onHoverChanged: (isHovered) => setState(() {
             if (isHovered) {
               _hoveredId = item.id;
@@ -98,6 +126,35 @@ class _PbDialogFileListState extends State<PbDialogFileList> {
         );
       },
     );
+
+    if (!widget.framed) {
+      return ClipRect(clipper: const _PbDialogFileListOverflowClipper(), child: list);
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: PbColors.borderSoft),
+        color: PbColors.surfacePanel,
+      ),
+      child: ClipRRect(borderRadius: BorderRadius.circular(11), child: list),
+    );
+  }
+}
+
+class _PbDialogFileListOverflowClipper extends CustomClipper<Rect> {
+  const _PbDialogFileListOverflowClipper();
+
+  static const double _horizontalOverflow = 36;
+
+  @override
+  Rect getClip(Size size) {
+    return Rect.fromLTRB(-_horizontalOverflow, 0, size.width + _horizontalOverflow, size.height);
+  }
+
+  @override
+  bool shouldReclip(_PbDialogFileListOverflowClipper oldClipper) {
+    return false;
   }
 }
 
@@ -112,6 +169,8 @@ class _PbDialogFileListRow extends StatelessWidget {
     required this.nextSelected,
     required this.beforeActiveRow,
     required this.last,
+    required this.rowMargin,
+    required this.rowPadding,
     required this.onHoverChanged,
     required this.onPressedChanged,
     required this.onPressed,
@@ -128,6 +187,8 @@ class _PbDialogFileListRow extends StatelessWidget {
   final bool nextSelected;
   final bool beforeActiveRow;
   final bool last;
+  final EdgeInsetsGeometry rowMargin;
+  final EdgeInsetsGeometry rowPadding;
   final ValueChanged<bool> onHoverChanged;
   final ValueChanged<bool> onPressedChanged;
   final VoidCallback? onPressed;
@@ -140,6 +201,24 @@ class _PbDialogFileListRow extends StatelessWidget {
     final stateful = selected || pressed;
     final effectiveHovered = hovered && interactive;
     final hideDivider = last || stateful || effectiveHovered || beforeActiveRow;
+    final backgroundColor = selected || pressed ? PbColors.customStateSelectedSurface : null;
+    final gradient = effectiveHovered && !stateful
+        ? const LinearGradient(
+            colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          )
+        : null;
+    final borderColor = pressed || selected
+        ? PbColors.customStateSelectedBorder
+        : effectiveHovered
+        ? PbColors.borderSoft
+        : Colors.transparent;
+    final shadow = effectiveHovered && !stateful
+        ? PbShadows.stateHover
+        : pressed
+        ? PbShadows.statePressedInset
+        : null;
 
     return MouseRegion(
       cursor: interactive ? SystemMouseCursors.click : MouseCursor.defer,
@@ -158,29 +237,14 @@ class _PbDialogFileListRow extends StatelessWidget {
           child: Container(
             key: ValueKey('pb-dialog-file-list-row-${item.id}'),
             constraints: const BoxConstraints(minHeight: 54),
-            padding: const EdgeInsets.all(11),
+            margin: rowMargin,
+            padding: rowPadding,
             decoration: BoxDecoration(
-              color: selected || pressed ? PbColors.customStateSelectedSurface : null,
-              gradient: effectiveHovered && !stateful
-                  ? const LinearGradient(
-                      colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    )
-                  : null,
+              color: backgroundColor,
+              gradient: gradient,
               borderRadius: _selectionRadius(),
-              border: Border.all(
-                color: pressed || selected
-                    ? PbColors.customStateSelectedBorder
-                    : effectiveHovered
-                    ? PbColors.borderSoft
-                    : Colors.transparent,
-              ),
-              boxShadow: effectiveHovered && !stateful
-                  ? PbShadows.stateHover
-                  : pressed
-                  ? PbShadows.statePressedInset
-                  : null,
+              border: Border.all(color: borderColor),
+              boxShadow: shadow,
             ),
             foregroundDecoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: hideDivider ? Colors.transparent : PbColors.borderFaint)),
@@ -191,11 +255,7 @@ class _PbDialogFileListRow extends StatelessWidget {
                   SizedBox(
                     width: 28,
                     child: Center(
-                      child: _DialogFileSelectionCheckbox(
-                        checked: selected,
-                        enabled: checkboxEnabled,
-                        onPressed: onToggleSelection ?? () {},
-                      ),
+                      child: PbFileSelectionCheckbox(checked: selected, enabled: checkboxEnabled, onPressed: onToggleSelection ?? () {}),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -228,33 +288,5 @@ class _PbDialogFileListRow extends StatelessWidget {
       return const BorderRadius.vertical(bottom: Radius.circular(10));
     }
     return BorderRadius.zero;
-  }
-}
-
-class _DialogFileSelectionCheckbox extends StatelessWidget {
-  const _DialogFileSelectionCheckbox({required this.checked, required this.enabled, required this.onPressed});
-
-  final bool checked;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: enabled ? onPressed : null,
-      child: AnimatedContainer(
-        duration: PbMotion.state,
-        width: 18,
-        height: 18,
-        decoration: BoxDecoration(
-          color: checked ? PbColors.customBrandInk : PbColors.surfacePanel,
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: checked ? PbColors.customBrandInk : PbColors.borderSoft),
-        ),
-        alignment: Alignment.center,
-        child: checked ? const PbSvgIcon(assetName: 'circle-check-big', size: 13, color: Colors.white) : null,
-      ),
-    );
   }
 }
