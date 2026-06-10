@@ -11,12 +11,25 @@ import 'package:powerboards/powerboards_ui/v1/components/files/pb_archive_extrac
 
 const String _archiveToolImage = 'meshagent/python:default';
 const String _storageFolderPlaceholderFileName = '.placeholder';
+const int powerboardsClientSideZipExtractionMaxBytes = 32 * 1024 * 1024;
 
 class PowerboardsArchiveExtractResult {
-  const PowerboardsArchiveExtractResult({required this.targetFolderPath, required this.firstPreviewPath});
+  const PowerboardsArchiveExtractResult({
+    required this.targetFolderPath,
+    required this.firstPreviewPath,
+    this.extractedEntries = const [],
+    this.failedEntries = const [],
+  });
 
   final String targetFolderPath;
   final String? firstPreviewPath;
+  final List<PowerboardsArchiveExtractedEntry> extractedEntries;
+  final List<PowerboardsArchiveExtractFailedEntry> failedEntries;
+
+  bool get hasFailures => failedEntries.isNotEmpty;
+
+  int get extractedFileCount => extractedEntries.where((entry) => !entry.folder).length;
+  int get failedFileCount => failedEntries.where((entry) => !entry.folder).length;
 }
 
 class PowerboardsArchiveExtractedEntry {
@@ -27,7 +40,23 @@ class PowerboardsArchiveExtractedEntry {
   final int sizeBytes;
 }
 
+class PowerboardsArchiveExtractFailedEntry {
+  const PowerboardsArchiveExtractFailedEntry({
+    required this.path,
+    required this.folder,
+    required this.sizeBytes,
+    required this.errorDescription,
+  });
+
+  final String path;
+  final bool folder;
+  final int sizeBytes;
+  final String errorDescription;
+}
+
 typedef PowerboardsArchiveEntryExtractedCallback = FutureOr<void> Function(PowerboardsArchiveExtractedEntry entry);
+typedef PowerboardsArchiveStorageUploadCallback =
+    Future<void> Function(String path, Stream<Uint8List> chunks, {required bool overwrite, required int size});
 
 Future<PbArchiveInspectionResult> inspectPowerboardsArchive({
   required RoomClient room,
@@ -35,6 +64,11 @@ Future<PbArchiveInspectionResult> inspectPowerboardsArchive({
   required String targetFolderName,
 }) async {
   if (_isZipArchivePath(archivePath)) {
+    if (await _shouldUseServerSideZipArchive(room: room, archivePath: archivePath)) {
+      final payload = await _runPowerboardsArchiveTool(room: room, mode: 'inspect', archivePath: archivePath, targetPath: null);
+      return _inspectionFromPayload(payload, fallbackTargetFolderName: targetFolderName);
+    }
+
     try {
       final zip = await _loadPowerboardsZipArchive(room: room, archivePath: archivePath);
       return inspectPowerboardsZipArchiveBytesForTesting(
@@ -60,7 +94,7 @@ Future<PowerboardsArchiveExtractResult> extractPowerboardsArchive({
   required String targetFolderPath,
   PowerboardsArchiveEntryExtractedCallback? onEntryExtracted,
 }) async {
-  if (_isZipArchivePath(archivePath)) {
+  if (_isZipArchivePath(archivePath) && !await _shouldUseServerSideZipArchive(room: room, archivePath: archivePath)) {
     return _extractPowerboardsZipArchive(
       room: room,
       archivePath: archivePath,
@@ -69,13 +103,40 @@ Future<PowerboardsArchiveExtractResult> extractPowerboardsArchive({
     );
   }
 
+  return _extractPowerboardsArchiveWithTool(
+    room: room,
+    archivePath: archivePath,
+    targetFolderPath: targetFolderPath,
+    onEntryExtracted: onEntryExtracted,
+  );
+}
+
+Future<PowerboardsArchiveExtractResult> _extractPowerboardsArchiveWithTool({
+  required RoomClient room,
+  required String archivePath,
+  required String targetFolderPath,
+  PowerboardsArchiveEntryExtractedCallback? onEntryExtracted,
+}) async {
   final payload = await _runPowerboardsArchiveTool(room: room, mode: 'extract', archivePath: archivePath, targetPath: targetFolderPath);
   final inspection = _inspectionFromPayload(payload, fallbackTargetFolderName: targetFolderPath.split('/').last);
   if (!inspection.browsable) {
     throw StateError(inspection.overLimitReason ?? 'Archive cannot be extracted for preview.');
   }
 
-  return PowerboardsArchiveExtractResult(targetFolderPath: targetFolderPath, firstPreviewPath: inspection.firstPreviewPath);
+  final result = PowerboardsArchiveExtractResult(
+    targetFolderPath: targetFolderPath,
+    firstPreviewPath: inspection.firstPreviewPath,
+    extractedEntries: [
+      for (final entry in inspection.entries)
+        PowerboardsArchiveExtractedEntry(path: entry.path, folder: entry.folder, sizeBytes: entry.sizeBytes),
+    ],
+  );
+
+  for (final entry in result.extractedEntries) {
+    await onEntryExtracted?.call(entry);
+  }
+
+  return result;
 }
 
 Future<String> resolvePowerboardsArchiveExtractTargetPath({
@@ -95,12 +156,20 @@ Future<String> resolvePowerboardsArchiveExtractTargetPath({
     } catch (_) {
       existing = null;
     }
-    if (existing == null) {
+    if (existing == null && !await _powerboardsStoragePathHasChildren(room: room, path: candidatePath)) {
       return candidatePath;
     }
   }
 
   return joinPaths(parent, '$baseName ${DateTime.now().millisecondsSinceEpoch}');
+}
+
+Future<bool> _powerboardsStoragePathHasChildren({required RoomClient room, required String path}) async {
+  try {
+    return (await room.storage.list(path)).isNotEmpty;
+  } catch (_) {
+    return false;
+  }
 }
 
 PbArchiveInspectionResult _inspectionFromPayload(Map<String, dynamic> payload, {required String fallbackTargetFolderName}) {
@@ -226,6 +295,18 @@ bool _isZipArchivePath(String path) {
   return path.trim().toLowerCase().endsWith('.zip');
 }
 
+Future<bool> _shouldUseServerSideZipArchive({required RoomClient room, required String archivePath}) async {
+  try {
+    final storageEntry = await room.storage.stat(archivePath);
+    return storageEntry != null &&
+        !storageEntry.isFolder &&
+        storageEntry.size != null &&
+        storageEntry.size! > powerboardsClientSideZipExtractionMaxBytes;
+  } catch (_) {
+    return false;
+  }
+}
+
 Future<_LoadedZipArchive> _loadPowerboardsZipArchive({required RoomClient room, required String archivePath}) async {
   final storageEntry = await room.storage.stat(archivePath);
   if (storageEntry == null || storageEntry.isFolder) {
@@ -267,32 +348,100 @@ Future<PowerboardsArchiveExtractResult> _extractPowerboardsZipArchive({
   }
 
   final extractedFiles = extractPowerboardsZipArchiveFilesForTesting(zip.bytes, inspection: inspection);
-  final extractedFilePaths = extractedFiles.map((file) => file.path).toSet();
+  return uploadPowerboardsZipArchiveFilesForTesting(
+    targetFolderPath: targetFolderPath,
+    inspection: inspection,
+    files: extractedFiles,
+    uploadStream: (path, chunks, {required overwrite, required size}) =>
+        room.storage.uploadStream(path, chunks, overwrite: overwrite, size: size),
+    onEntryExtracted: onEntryExtracted,
+  );
+}
+
+// Visible for tests.
+Future<PowerboardsArchiveExtractResult> uploadPowerboardsZipArchiveFilesForTesting({
+  required String targetFolderPath,
+  required PbArchiveInspectionResult inspection,
+  required List<PowerboardsZipExtractedFile> files,
+  required PowerboardsArchiveStorageUploadCallback uploadStream,
+  PowerboardsArchiveEntryExtractedCallback? onEntryExtracted,
+}) async {
+  final extractedFilePaths = files.map((file) => file.path).toSet();
+  final extractedEntries = <PowerboardsArchiveExtractedEntry>[];
+  final failedEntries = <PowerboardsArchiveExtractFailedEntry>[];
   for (final entry in inspection.entries.where((entry) => entry.folder)) {
     final hasChildFile = extractedFilePaths.any((path) => path.startsWith('${entry.path}/'));
     if (hasChildFile) {
       continue;
     }
-    await room.storage.uploadStream(
-      joinPaths(joinPaths(targetFolderPath, entry.path), _storageFolderPlaceholderFileName),
-      Stream<Uint8List>.empty(),
-      overwrite: false,
-      size: 0,
-    );
-    await onEntryExtracted?.call(PowerboardsArchiveExtractedEntry(path: entry.path, folder: true, sizeBytes: 0));
+    final extractedEntry = PowerboardsArchiveExtractedEntry(path: entry.path, folder: true, sizeBytes: 0);
+    try {
+      await uploadStream(
+        joinPaths(joinPaths(targetFolderPath, entry.path), _storageFolderPlaceholderFileName),
+        Stream<Uint8List>.empty(),
+        overwrite: false,
+        size: 0,
+      );
+    } catch (error) {
+      failedEntries.add(PowerboardsArchiveExtractFailedEntry(path: entry.path, folder: true, sizeBytes: 0, errorDescription: '$error'));
+      continue;
+    }
+
+    extractedEntries.add(extractedEntry);
+    await onEntryExtracted?.call(extractedEntry);
   }
 
-  for (final file in extractedFiles) {
-    await room.storage.uploadStream(
-      joinPaths(targetFolderPath, file.path),
-      Stream<Uint8List>.value(file.bytes),
-      overwrite: false,
-      size: file.bytes.length,
-    );
-    await onEntryExtracted?.call(PowerboardsArchiveExtractedEntry(path: file.path, folder: false, sizeBytes: file.bytes.length));
+  for (final file in files) {
+    final extractedEntry = PowerboardsArchiveExtractedEntry(path: file.path, folder: false, sizeBytes: file.bytes.length);
+    try {
+      await uploadStream(
+        joinPaths(targetFolderPath, file.path),
+        Stream<Uint8List>.value(file.bytes),
+        overwrite: false,
+        size: file.bytes.length,
+      );
+    } catch (error) {
+      failedEntries.add(
+        PowerboardsArchiveExtractFailedEntry(path: file.path, folder: false, sizeBytes: file.bytes.length, errorDescription: '$error'),
+      );
+      continue;
+    }
+
+    extractedEntries.add(extractedEntry);
+    await onEntryExtracted?.call(extractedEntry);
   }
 
-  return PowerboardsArchiveExtractResult(targetFolderPath: targetFolderPath, firstPreviewPath: inspection.firstPreviewPath);
+  final successfulFilePaths = {for (final entry in extractedEntries.where((entry) => !entry.folder)) entry.path};
+  return PowerboardsArchiveExtractResult(
+    targetFolderPath: targetFolderPath,
+    firstPreviewPath: _firstSuccessfulPreviewPath(inspection: inspection, successfulFilePaths: successfulFilePaths),
+    extractedEntries: extractedEntries,
+    failedEntries: failedEntries,
+  );
+}
+
+String? _firstSuccessfulPreviewPath({required PbArchiveInspectionResult inspection, required Set<String> successfulFilePaths}) {
+  if (successfulFilePaths.isEmpty) {
+    return null;
+  }
+
+  final preferredPath = inspection.firstPreviewPath?.trim();
+  if (preferredPath != null && preferredPath.isNotEmpty && successfulFilePaths.contains(preferredPath)) {
+    return preferredPath;
+  }
+
+  final firstImage = inspection.entries.firstWhereOrNull(
+    (entry) =>
+        entry.previewable &&
+        successfulFilePaths.contains(entry.path) &&
+        _zipPreviewImageExtensions.contains(_extensionForPath(entry.path)) &&
+        entry.sizeBytes <= PbArchiveExtractLimits.autoPreviewImageMaxBytes,
+  );
+  if (firstImage != null) {
+    return firstImage.path;
+  }
+
+  return inspection.entries.firstWhereOrNull((entry) => entry.previewable && successfulFilePaths.contains(entry.path))?.path;
 }
 
 // Visible for tests.

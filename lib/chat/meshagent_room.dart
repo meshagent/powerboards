@@ -31,6 +31,7 @@ import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
 import 'package:powerboards/chat/hangup_button.dart';
 import 'package:powerboards/meshagent/archive_extract.dart';
+import 'package:powerboards/meshagent/archive_extract_toast.dart';
 import 'package:powerboards/livekit/room.dart' as room;
 import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
@@ -6816,7 +6817,22 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final archiveFolderPath = parentPath(archivePath);
+    await startPowerboardsArchiveExtractionWithToast(
+      context: context,
+      room: widget.room,
+      archivePath: archivePath,
+      inspection: inspection,
+      onOpenResult: _openExtractedAttachmentArchiveForPreview,
+    );
+  }
+
+  void _openExtractedAttachmentArchiveForPreview(PowerboardsArchiveExtractionOpenTarget target) {
+    if (!mounted || !context.mounted) {
+      return;
+    }
+
+    final previewPath = target.previewPath;
+    final rawPath = previewPath ?? (target.targetFolderPath.isEmpty ? '' : '${target.targetFolderPath}/');
 
     setState(() {
       _desktopPreviewFilePreviewFile = null;
@@ -6826,14 +6842,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     });
     setPreviewFilePreviewFullscreen(false);
     controller.showFiles();
-    _replaceRoomRouteState(
-      context,
-      pane: _MobileRoomPane.files,
-      rawPath: archiveFolderPath.isEmpty ? '' : '$archiveFolderPath/',
-      clearPreviewOrigin: true,
-    );
+    _replaceRoomRouteState(context, pane: _MobileRoomPane.files, rawPath: rawPath, clearPreviewOrigin: true);
 
-    await _filesHeaderController.extractArchiveForPreview(archivePath: archivePath, inspection: inspection);
+    _filesHeaderController.openExtractedArchiveForPreview(target);
   }
 
   Future<void> _downloadAttachmentFile(PbAttachmentListItemData file) async {

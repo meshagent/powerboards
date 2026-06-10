@@ -10,7 +10,7 @@ import '../primitives/pb_spinning_icon.dart';
 import '../primitives/pb_svg_icon.dart';
 import 'pb_dialog_file_list.dart';
 
-const String pbArchiveExtractTriggerLabel = 'Extract into folder to preview';
+const String pbArchiveExtractTriggerLabel = 'Extract files into folder';
 const String pbArchiveExtractMenuLabel = 'Extract';
 const String pbArchiveExtractFallbackSubtitle = 'To preview';
 
@@ -249,7 +249,7 @@ class _PbArchiveExtractPreviewDialogState extends State<PbArchiveExtractPreviewD
 
     return PbDialogShell(
       title: widget.file.title,
-      subtitle: 'Extract into a folder to preview.',
+      subtitle: 'Extract files into folder',
       bodyExpanded: isBrowsable,
       maxWidth: 425,
       maxHeight: 700,

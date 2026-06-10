@@ -97,6 +97,44 @@ void main() {
     expect(files.last.bytes, [4, 5]);
   });
 
+  test('zip upload reports partial extraction failures without dropping successes', () async {
+    final bytes = _realZipBytes({
+      'cover.jpg': Uint8List.fromList([1]),
+      'room.jpg': Uint8List.fromList([2]),
+      'notes.txt': Uint8List.fromList([3]),
+    });
+    final inspection = inspectPowerboardsZipArchiveBytesForTesting(
+      bytes,
+      targetFolderName: 'scotty_images',
+      archiveSizeBytes: bytes.length,
+    );
+    final files = extractPowerboardsZipArchiveFilesForTesting(bytes, inspection: inspection);
+    final callbacks = <String>[];
+    final uploadedPaths = <String>[];
+
+    final result = await uploadPowerboardsZipArchiveFilesForTesting(
+      targetFolderPath: 'thread/scotty_images',
+      inspection: inspection,
+      files: files,
+      uploadStream: (path, chunks, {required overwrite, required size}) async {
+        await for (final chunk in chunks) {
+          expect(chunk.length, lessThanOrEqualTo(size));
+        }
+        if (path.endsWith('/cover.jpg')) {
+          throw StateError('upload failed');
+        }
+        uploadedPaths.add(path);
+      },
+      onEntryExtracted: (entry) => callbacks.add(entry.path),
+    );
+
+    expect(uploadedPaths, ['thread/scotty_images/room.jpg', 'thread/scotty_images/notes.txt']);
+    expect(callbacks, ['room.jpg', 'notes.txt']);
+    expect(result.extractedEntries.map((entry) => entry.path), ['room.jpg', 'notes.txt']);
+    expect(result.failedEntries.map((entry) => entry.path), ['cover.jpg']);
+    expect(result.firstPreviewPath, 'room.jpg');
+  });
+
   testWidgets('small archive inspections render the browsable extract dialog', (tester) async {
     PbArchiveInspectionResult? confirmedInspection;
 
@@ -125,6 +163,7 @@ void main() {
     expect(find.text('cover.jpg'), findsOneWidget);
     expect(find.text('brief.pdf'), findsOneWidget);
     expect(find.text('notes.md'), findsOneWidget);
+    expect(find.text('Extract files into folder'), findsOneWidget);
     expect(find.text('Extract to folder'), findsOneWidget);
     expect(find.text('Download'), findsNothing);
 
