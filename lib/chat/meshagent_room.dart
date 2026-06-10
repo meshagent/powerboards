@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:http/http.dart';
 import 'package:powerboards/meshagent/project.dart';
@@ -867,6 +868,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   int _loadGeneration = 0;
   int _attachmentEntryGeneration = 0;
   Future<void> _pendingThreadDocumentClose = Future<void>.value();
+  bool _agentThreadAttachmentUpdateQueued = false;
 
   @override
   void initState() {
@@ -966,15 +968,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   }
 
   void _onAgentChatClientChanged() {
-    if (!mounted) {
-      return;
-    }
-
-    final agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
-    setState(() {
-      _agentThreadAttachments = agentThreadAttachments;
-    });
-    unawaited(_syncAttachmentEntries());
+    _scheduleAgentThreadAttachmentUpdate();
   }
 
   void _onRoomEvent(RoomEvent event) {
@@ -1112,15 +1106,36 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   }
 
   void _onAgentThreadSessionChanged() {
-    if (!mounted) {
+    _scheduleAgentThreadAttachmentUpdate();
+  }
+
+  void _scheduleAgentThreadAttachmentUpdate() {
+    if (!mounted || !widget.enabled || _agentThreadAttachmentUpdateQueued) {
       return;
     }
 
-    final agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
-    setState(() {
-      _agentThreadAttachments = agentThreadAttachments;
+    void applyUpdate() {
+      _agentThreadAttachmentUpdateQueued = false;
+      if (!mounted || !widget.enabled) {
+        return;
+      }
+
+      final agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
+      setState(() {
+        _agentThreadAttachments = agentThreadAttachments;
+      });
+      unawaited(_syncAttachmentEntries());
+    }
+
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+      applyUpdate();
+      return;
+    }
+
+    _agentThreadAttachmentUpdateQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      applyUpdate();
     });
-    unawaited(_syncAttachmentEntries());
   }
 
   Future<void> _syncThreadDocuments(List<_DesktopPreviewAttachmentThreadRef> threads, {required int generation}) async {
