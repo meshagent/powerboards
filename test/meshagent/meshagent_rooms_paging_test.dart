@@ -5,9 +5,9 @@ import 'package:powerboards/meshagent/meshagent.dart';
 void main() {
   group('collectMeshagentRoomsFromGrantPages', () {
     test('keeps paging until a short page even when total is misleading', () async {
-      final pages = <RoomGrantsPage>[
-        RoomGrantsPage(roomGrants: [_grant('alpha'), _grant('beta')], total: 1),
-        RoomGrantsPage(roomGrants: [_grant('gamma')], total: 1),
+      final pages = <RoomsPage>[
+        RoomsPage(rooms: [_room('alpha'), _room('beta')], total: 1),
+        RoomsPage(rooms: [_room('gamma')], total: 1),
       ];
       final requestedOffsets = <int>[];
 
@@ -25,15 +25,15 @@ void main() {
       final rooms = await collectMeshagentRoomsFromGrantPages((limit, offset) async {
         switch (offset) {
           case 0:
-            return RoomGrantsPage(
-              roomGrants: [
-                _grant('alpha', displayName: 'Alpha'),
-                _grant('beta'),
+            return RoomsPage(
+              rooms: [
+                _room('alpha', displayName: 'Alpha'),
+                _room('beta'),
               ],
               total: 4,
             );
           case 2:
-            return RoomGrantsPage(roomGrants: [_grant('alpha', displayName: 'Alpha renamed elsewhere')], total: 4);
+            return RoomsPage(rooms: [_room('alpha', displayName: 'Alpha renamed elsewhere')], total: 4);
         }
 
         throw StateError('Unexpected offset $offset');
@@ -45,15 +45,11 @@ void main() {
   });
 }
 
-ProjectRoomGrant _grant(String roomName, {String? displayName}) {
-  return ProjectRoomGrant(
-    room: Room(
-      id: '$roomName-id',
-      name: roomName,
-      metadata: displayName == null ? const {} : {'displayName': displayName},
-      annotations: const {},
-    ),
-    userId: 'me',
-    permissions: ApiScope.userDefault(),
+Room _room(String roomName, {String? displayName}) {
+  return Room(
+    id: '$roomName-id',
+    name: roomName,
+    metadata: displayName == null ? const {} : {'displayName': displayName},
+    annotations: const {},
   );
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:meshagent/meshagent.dart' as meshagent;
 import 'package:powerboards/meshagent/meshagent.dart';
 
 class User {
@@ -29,6 +30,16 @@ class User {
     isAdmin: json['is_admin'] ?? false,
     isDeveloper: json['is_developer'] ?? false,
     canCreateRooms: json['can_create_rooms'] ?? false,
+  );
+
+  factory User.fromProjectMember(meshagent.ProjectMember member) => User(
+    id: member.id,
+    email: member.email,
+    firstName: member.firstName,
+    lastName: member.lastName,
+    isAdmin: member.directRoles.contains('admin'),
+    isDeveloper: member.directRoles.contains('developer'),
+    canCreateRooms: member.directRoles.contains('room_creator'),
   );
 
   @override

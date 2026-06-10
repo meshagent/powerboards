@@ -21,6 +21,16 @@ bool hasMessagingParticipant(ServiceSpec service) {
   return type == "ChatBot" || type == "VoiceBot";
 }
 
+Future<bool> testCurrentUserProjectRole(String projectId, ProjectRole role) async {
+  final client = getMeshagentClient();
+  return (await client.testAccess(
+    projectId: projectId,
+    subject: const AccessSubject(type: 'user', id: 'me'),
+    resource: AccessResource(type: 'project', id: projectId),
+    relation: role.relation,
+  )).allowed;
+}
+
 class MeshagentConfig {
   MeshagentConfig({
     required this.serverUrl,
@@ -123,8 +133,6 @@ Future<Room?> createMeshagentRoom(BuildContext context, String projectId, {Value
     await showRoomCreationErrorDialog(context, MeshagentException("No user - you are not logged in"));
     return null;
   }
-
-  final userId = user["id"];
   final existingSlugs = <String>{};
   const maxAttempts = 10;
   var attempt = 0;
@@ -133,12 +141,7 @@ Future<Room?> createMeshagentRoom(BuildContext context, String projectId, {Value
     final slug = generateRoomSlug(res.name, existingSlugs: existingSlugs);
 
     try {
-      return await client.createRoom(
-        projectId: projectId,
-        name: slug,
-        metadata: {"displayName": res.name},
-        permissions: {userId: res.owner ? ApiScope.full() : ApiScope.userDefault()},
-      );
+      return await client.createRoom(projectId: projectId, name: slug, metadata: {"displayName": res.name});
     } on NameInUseException catch (e) {
       existingSlugs.add(slug);
       attempt++;
@@ -170,12 +173,13 @@ Future<Map<String, dynamic>?> createMeshagentProject(BuildContext context) async
   return null;
 }
 
-const int _roomGrantPageSize = 100;
+const int _roomPageSize = 100;
 
-typedef RoomGrantPageLoader = Future<RoomGrantsPage> Function(int limit, int offset);
+typedef RoomPageLoader = Future<RoomsPage> Function(int limit, int offset);
+typedef RoomCursorPageLoader = Future<RoomsPage> Function(int limit, String? continuationToken);
 
 @visibleForTesting
-Future<List<Room>> collectMeshagentRoomsFromGrantPages(RoomGrantPageLoader loadPage, {int pageSize = _roomGrantPageSize}) async {
+Future<List<Room>> collectMeshagentRoomsFromGrantPages(RoomPageLoader loadPage, {int pageSize = _roomPageSize}) async {
   if (pageSize <= 0) {
     throw ArgumentError.value(pageSize, 'pageSize', 'Must be greater than zero.');
   }
@@ -186,24 +190,43 @@ Future<List<Room>> collectMeshagentRoomsFromGrantPages(RoomGrantPageLoader loadP
   while (true) {
     final page = await loadPage(pageSize, offset);
 
-    for (final grant in page.roomGrants) {
-      roomsByName.putIfAbsent(grant.room.name, () => grant.room);
+    for (final room in page.rooms) {
+      roomsByName.putIfAbsent(room.name, () => room);
     }
 
     // Keep paging until the server returns a short page; the reported total
     // has not always been enough to trust as the lone termination condition.
-    if (page.roomGrants.length < pageSize) {
+    if (page.rooms.length < pageSize) {
       return roomsByName.values.toList(growable: false);
     }
 
-    offset += page.roomGrants.length;
+    offset += page.rooms.length;
   }
+}
+
+@visibleForTesting
+Future<List<Room>> collectMeshagentRoomsFromPermissionPages(RoomCursorPageLoader loadPage, {int pageSize = _roomPageSize}) async {
+  if (pageSize <= 0) {
+    throw ArgumentError.value(pageSize, 'pageSize', 'Must be greater than zero.');
+  }
+
+  final roomsByName = <String, Room>{};
+  String? continuationToken;
+  do {
+    final page = await loadPage(pageSize, continuationToken);
+    for (final room in page.rooms) {
+      roomsByName.putIfAbsent(room.name, () => room);
+    }
+    continuationToken = page.continuationToken;
+  } while (continuationToken != null);
+
+  return roomsByName.values.toList(growable: false)..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 }
 
 Future<List<Room>> listMeshagentRooms(String projectId) async {
   final client = getMeshagentClient();
-  return collectMeshagentRoomsFromGrantPages((limit, offset) {
-    return client.listRoomGrantsByUserPage(projectId: projectId, userId: "me", limit: limit, offset: offset);
+  return collectMeshagentRoomsFromPermissionPages((limit, continuationToken) {
+    return client.listRoomsPage(projectId: projectId, pageSize: limit, view: 'my', continuationToken: continuationToken);
   });
 }
 

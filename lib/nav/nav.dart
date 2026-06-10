@@ -203,10 +203,8 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       return null;
     }
 
-    final client = getMeshagentClient();
-
     try {
-      return (await client.getProjectRole(widget.projectId!)).role;
+      return await testCurrentUserProjectRole(widget.projectId!, ProjectRole.billingManager) ? ProjectRole.admin : ProjectRole.member;
     } on ForbiddenException {
       return ProjectRole.none;
     }
@@ -244,9 +242,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       return false;
     }
 
-    final client = getMeshagentClient();
-
-    return await client.canCreateRooms(projectId);
+    return await testCurrentUserProjectRole(projectId, ProjectRole.roomCreator);
   }, source: role);
 
   void setFilter(String value) {

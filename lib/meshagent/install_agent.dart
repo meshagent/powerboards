@@ -222,7 +222,7 @@ class _AgentInstaller extends State<AgentInstaller> {
   Uri? _url;
   late final Resource<ServiceTemplateSpec?> _spec;
   late final Resource<List<Project>?> _projects;
-  late final Resource<List<ProjectRoomGrant>?> _rooms;
+  late final Resource<List<Room>?> _rooms;
   late final Resource<List<ServiceSpec>?> _services;
 
   String? _projectId;
@@ -298,12 +298,11 @@ class _AgentInstaller extends State<AgentInstaller> {
 
     _projects = Resource<List<Project>?>(() => fetchProjects());
 
-    _rooms = Resource<List<ProjectRoomGrant>?>(() async {
+    _rooms = Resource<List<Room>?>(() async {
       if (_projectId == null) {
         return null;
       }
-      final client = getMeshagentClient();
-      return await client.listRoomGrantsByUser(projectId: _projectId!, userId: "me");
+      return await listMeshagentRooms(_projectId!);
     });
 
     _services = Resource<List<ServiceSpec>?>(() async {
@@ -806,18 +805,18 @@ class _AgentInstaller extends State<AgentInstaller> {
     } else if (state.isRefreshing || !state.isReady) {
       body = const Center(child: CircularProgressIndicator());
     } else {
-      final list = state.value ?? const <ProjectRoomGrant>[];
+      final list = state.value ?? const <Room>[];
       final children = <Widget>[
         for (final room in list)
           ShadButton.ghost(
             onPressed: () {
               setState(() {
-                _roomName = room.room.name;
-                _roomDisplayName = room.room.metadata["displayName"];
+                _roomName = room.name;
+                _roomDisplayName = room.metadata["displayName"];
               });
               _services.refresh();
             },
-            child: Text(room.room.metadata["displayName"] ?? room.room.name),
+            child: Text(room.metadata["displayName"] ?? room.name),
           ),
         ShadButton.ghost(
           onPressed: () async {

@@ -262,7 +262,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
   }
 
   Future<void> _loadGrants() async {
-    final grantMap = await roomGrantSummaries(projectId: widget.projectId, roomName: widget.room.name);
+    final grantMap = await roomGrantSummaries(projectId: widget.projectId, roomId: widget.room.id);
 
     if (!mounted) return;
 
@@ -300,11 +300,12 @@ class _PermissionDialogState extends State<_PermissionDialog> {
         canEdit: canEdit && !isMe(grant.userId),
         setAsOwner: () async {
           final client = getMeshagentClient();
-          await client.updateRoomGrant(
+          await client.grantResourcePolicy(
             projectId: widget.projectId,
-            roomId: widget.room.id,
-            userId: grant.userId,
-            permissions: GrantRole.owner.apiScope,
+            resourceType: 'room',
+            resourceId: widget.room.id,
+            subject: AccessSubject(type: 'user', id: grant.userId),
+            roles: [resourceRoleFromApiScope(GrantRole.owner.apiScope), 'list'],
           );
 
           if (!mounted) return;
@@ -315,11 +316,12 @@ class _PermissionDialogState extends State<_PermissionDialog> {
         },
         setAsNonOwner: () async {
           final client = getMeshagentClient();
-          await client.updateRoomGrant(
+          await client.grantResourcePolicy(
             projectId: widget.projectId,
-            roomId: widget.room.id,
-            userId: grant.userId,
-            permissions: GrantRole.nonOwner.apiScope,
+            resourceType: 'room',
+            resourceId: widget.room.id,
+            subject: AccessSubject(type: 'user', id: grant.userId),
+            roles: [resourceRoleFromApiScope(GrantRole.nonOwner.apiScope), 'list'],
           );
 
           if (!mounted) return;
@@ -330,7 +332,12 @@ class _PermissionDialogState extends State<_PermissionDialog> {
         },
         onRemove: () async {
           final client = getMeshagentClient();
-          await client.deleteRoomGrant(projectId: widget.projectId, roomId: widget.room.id, userId: grant.userId);
+          await client.revokeResourcePolicy(
+            projectId: widget.projectId,
+            resourceType: 'room',
+            resourceId: widget.room.id,
+            subject: AccessSubject(type: 'user', id: grant.userId),
+          );
 
           if (!mounted) return;
 
@@ -556,13 +563,13 @@ class _AddUserDialogState extends State<AddUserDialog> {
     final client = getMeshagentClient();
 
     final results = await client.getUsersInProject(widget.projectId);
-    final users = results.map((json) => User.fromJson(json)).toList();
+    final users = results.map(User.fromProjectMember).toList();
 
     return {for (final u in users) u.email.toLowerCase(): u};
   });
 
   late final grants = Resource<Map<String, GrantSummary>>(lazy: false, () {
-    return roomGrantSummaries(projectId: widget.projectId, roomName: widget.room.name);
+    return roomGrantSummaries(projectId: widget.projectId, roomId: widget.room.id);
   });
 
   void _scheduleInitialMobileFocus() {
@@ -1151,11 +1158,12 @@ class _AddUserDialogState extends State<AddUserDialog> {
             return Future.value();
           }
 
-          return client.createRoomGrantByEmail(
+          return client.grantResourcePolicy(
             projectId: widget.projectId,
-            roomId: widget.room.id,
-            email: u.email,
-            permissions: u.role.apiScope,
+            resourceType: 'room',
+            resourceId: widget.room.id,
+            subject: AccessSubject(type: 'user', id: '', email: u.email),
+            roles: [resourceRoleFromApiScope(u.role.apiScope), 'list'],
             inviteRedirectUrl: MeshagentConfig.current!.appUrl,
           );
         }),

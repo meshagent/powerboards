@@ -92,9 +92,7 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
     final pid = widget.projectId;
     if (pid == null) return null;
 
-    final client = getMeshagentClient();
-
-    return (await client.getProjectRole(pid)).role;
+    return await testCurrentUserProjectRole(pid, ProjectRole.billingManager) ? ProjectRole.admin : ProjectRole.member;
   });
 
   @override
@@ -270,7 +268,8 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
         final projectsState = widget.projects.state;
         final projectsList = projectsState.value ?? const <Project>[];
         final currentProject = widget.projectId == null ? null : projectsList.firstWhereOrNull((p) => p.id == widget.projectId);
-        final description = currentProject?.name ?? "Signed in";
+        final accountDescription = email.isNotEmpty ? email : "Signed in";
+        final projectTitle = currentProject?.name ?? "No project selected";
         final desktopUpdateController = DesktopUpdateControllerScope.maybeOf(context);
         final desktopUpdateState = desktopUpdateController?.state;
         final desktopUpdateCopy = desktopUpdateState == null
@@ -280,12 +279,12 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
         final entries = <AppMenuEntry>[
           AppMenuEntry(
             title: title,
-            description: description,
+            description: accountDescription,
             onPressed: null,
             leading: UserAvatarCircle(initials: initials, variant: UserAvatarVariant.standard),
           ),
           AppMenuEntry(
-            title: "Change project",
+            title: projectTitle,
             description: "Switch to a different project",
             icon: LucideIcons.package,
             onPressed: _switchProject,

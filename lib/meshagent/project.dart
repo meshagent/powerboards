@@ -1,8 +1,5 @@
 import 'package:powerboards/meshagent/meshagent.dart';
 
-// import 'package:flutter_solidart/flutter_solidart.dart';
-// import 'package:meshagent/meshagent.dart';
-
 class Project {
   Project({required this.id, required this.name});
 
@@ -20,26 +17,3 @@ Future<List<Project>> fetchProjects() async {
 
   return projectsJson.map((json) => Project.fromJson(json)).toList();
 }
-
-/*
-class ProjectResourceFactory {
-  ProjectResourceFactory(this.projectId);
-
-  final String projectId;
-  final client = getMeshagentClient();
-
-  static ProjectResourceFactory? _current;
-
-  static ProjectResourceFactory getCurrent(String projectId) {
-    if (projectId != _current?.projectId) {
-      _current = ProjectResourceFactory(projectId);
-    }
-
-    return _current!;
-  }
-
-  late final canCreateRooms = Resource<bool>(() => client.canCreateRooms(projectId));
-  late final status = Resource<bool>(() => client.getStatus(projectId));
-  late final rooms = Resource<List<Room>>(() => listMeshagentRooms(projectId));
-}
-*/

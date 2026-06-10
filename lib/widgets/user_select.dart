@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
+import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -22,7 +23,7 @@ class UserSelect extends StatefulWidget {
 class _UserSelectState extends State<UserSelect> {
   String searchValue = "";
 
-  late final users = Resource<List<Map<String, dynamic>>>(() async {
+  late final users = Resource<List<ProjectMember>>(() async {
     final client = getMeshagentClient();
 
     return await client.getUsersInProject(widget.projectId);
@@ -32,17 +33,17 @@ class _UserSelectState extends State<UserSelect> {
 
   late final controller = ShadSelectController<String?>(initialValue: {widget.initialUser});
 
-  List<Map<String, dynamic>> get _filteredUsers {
-    final list = users.state.isReady ? users.state.value! : const <Map<String, dynamic>>[];
+  List<ProjectMember> get _filteredUsers {
+    final list = users.state.isReady ? users.state.value! : const <ProjectMember>[];
     if (searchValue.isEmpty) return list;
     final lower = searchValue.toLowerCase();
-    return list.where((u) => (u["email"] as String).toLowerCase().contains(lower)).toList();
+    return list.where((u) => u.email.toLowerCase().contains(lower)).toList();
   }
 
-  Map<String, dynamic>? _firstStartsWith(List<Map<String, dynamic>> list) {
+  ProjectMember? _firstStartsWith(List<ProjectMember> list) {
     final lower = searchValue.toLowerCase();
 
-    return list.firstWhereOrNull((user) => (user["email"] as String).toLowerCase().startsWith(lower));
+    return list.firstWhereOrNull((user) => user.email.toLowerCase().startsWith(lower));
   }
 
   KeyEventResult _submitCurrentSelection() {
@@ -53,8 +54,7 @@ class _UserSelectState extends State<UserSelect> {
     final list = _filteredUsers;
     final firstStartsWith = _firstStartsWith(list);
 
-    final String? selectedEmail =
-        (firstStartsWith?["email"] as String?) ?? (list.firstOrNull?["email"] as String?) ?? (searchValue.isNotEmpty ? searchValue : null);
+    final String? selectedEmail = firstStartsWith?.email ?? list.firstOrNull?.email ?? (searchValue.isNotEmpty ? searchValue : null);
 
     if (selectedEmail == null) {
       return KeyEventResult.ignored;
@@ -110,8 +110,8 @@ class _UserSelectState extends State<UserSelect> {
                   for (final user in list)
                     ShadOption<String?>(
                       backgroundColor: user == firstMatch ? ShadTheme.of(context).colorScheme.selection : null,
-                      value: user["email"],
-                      child: Text(user["isNew"] == true ? "${user["email"]} (new user)" : user["email"]),
+                      value: user.email,
+                      child: Text(user.email),
                     ),
                 ],
           selectedOptionBuilder: (context, value) => Container(

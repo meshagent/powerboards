@@ -44,23 +44,23 @@ bool isMe(String userId) {
   return me?['id'] == userId;
 }
 
-Future<List<ProjectRoomGrant>> listRoomGrants({required String projectId, required String roomName}) async {
+Future<List<ProjectRoomGrant>> listRoomGrants({required String projectId, required String roomId}) async {
   final client = getMeshagentClient();
-  return client.listRoomGrantsByRoom(projectId: projectId, roomName: roomName);
+  return client.getResourcePolicy(projectId: projectId, resourceType: 'room', resourceId: roomId);
 }
 
-Future<ProjectRoomGrant?> myGrantForRoom({required String projectId, required String roomName}) async {
-  final grants = await listRoomGrants(projectId: projectId, roomName: roomName);
-  return grants.firstWhereOrNull((g) => isMe(g.userId));
+Future<ProjectRoomGrant?> myGrantForRoom({required String projectId, required String roomId}) async {
+  final grants = await listRoomGrants(projectId: projectId, roomId: roomId);
+  return grants.firstWhereOrNull((g) => g.subject.type == 'user' && isMe(g.subject.id));
 }
 
 Future<bool> amIOwnerOfRoom({required RoomClient room}) async {
   return room.apiGrant?.admin != null;
 }
 
-Future<Map<String, GrantSummary>> roomGrantSummaries({required String projectId, required String roomName}) async {
-  final grants = await listRoomGrants(projectId: projectId, roomName: roomName);
-  return {for (final g in grants) g.userId: GrantSummary.fromGrant(g)};
+Future<Map<String, GrantSummary>> roomGrantSummaries({required String projectId, required String roomId}) async {
+  final grants = await listRoomGrants(projectId: projectId, roomId: roomId);
+  return {for (final g in grants.where((grant) => grant.subject.type == 'user')) g.subject.id: GrantSummary.fromGrant(g)};
 }
 
 Future<bool> canViewDeveloperLogs({required RoomClient room}) async {

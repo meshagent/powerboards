@@ -519,7 +519,7 @@ final routes = [
               child: NavPage(
                 projectId: projectId,
                 builder: (context, projects) => FutureBuilder<bool>(
-                  future: getMeshagentClient().canCreateRooms(projectId),
+                  future: testCurrentUserProjectRole(projectId, ProjectRole.roomCreator),
                   builder: (context, snapshot) {
                     final canCreateRooms = snapshot.data ?? false;
 
