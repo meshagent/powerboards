@@ -1143,8 +1143,20 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   late final storageEntries = Resource<List<StorageEntry>>(() => _getChildren(_folderSig.value), source: _folderSig);
 
+  List<StorageEntry> _storageEntriesSnapshot() {
+    return storageEntries.state.when(
+      loading: () => _v1CachedFolderEntries(_folderSig.value) ?? const <StorageEntry>[],
+      error: (_, _) => _v1CachedFolderEntries(_folderSig.value) ?? const <StorageEntry>[],
+      ready: (entries) => entries,
+    );
+  }
+
+  List<StorageEntry>? _currentFolderEntriesForMutation() {
+    return storageEntries.state.asReady?.value ?? _v1CachedFolderEntries(_folderSig.value);
+  }
+
   late final _visibleSortedEntries = Computed<List<StorageEntry>>(() {
-    final entries = storageEntries.state.value ?? const <StorageEntry>[];
+    final entries = _storageEntriesSnapshot();
     final sort = _sortSig.value;
 
     var visible = entries;
@@ -1404,11 +1416,15 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onFileDeleted(String path) {
-    final ready = storageEntries.state.asReady;
-    if (ready == null) return; // ignore if loading/error
+    if (parentPath(path) != _folderSig.value) {
+      return;
+    }
+
+    final entries = _currentFolderEntriesForMutation();
+    if (entries == null) return; // ignore if loading/error without cache
 
     final name = path.split('/').where((s) => s.isNotEmpty).last;
-    final next = List<StorageEntry>.of(ready.value);
+    final next = List<StorageEntry>.of(entries);
     next.removeWhere((e) => e.name == name);
     _v1FileStateRowsById.removeWhere((_, item) => _v1StateRowMatchesPath(item, path, isFolder: false));
     final previewFile = _v1PreviewFile;
@@ -1848,7 +1864,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _v1FilterEnabled(storageEntries.state.value ?? const <StorageEntry>[]) || _v1FilterController.text.isEmpty) {
+      if (!mounted || _v1FilterEnabled(_storageEntriesSnapshot()) || _v1FilterController.text.isEmpty) {
         return;
       }
 
@@ -1893,6 +1909,16 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   bool _v1ItemIsSelectable(PbFilesItemData item) {
     return powerboardsV1FileItemIsSelectable(item);
+  }
+
+  Set<String> _v1SelectedItemIdsForAction(List<PbFilesItemData> items) {
+    final rawSelected = _selectedSig.value;
+    final visibleSelected = powerboardsV1SelectedVisibleItemIds(rawSelected, items);
+    if (visibleSelected.isNotEmpty || items.isNotEmpty || storageEntries.state.asReady != null) {
+      return visibleSelected;
+    }
+
+    return rawSelected;
   }
 
   Iterable<PbFilesItemData> _v1SelectableItems(Iterable<PbFilesItemData> items) {
@@ -2825,11 +2851,11 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _removePath(String path, {isFolder = false}) {
     if (parentPath(path) != _folderSig.value) return;
 
-    final ready = storageEntries.state.asReady;
-    if (ready == null) return; // ignore if loading/error
+    final entries = _currentFolderEntriesForMutation();
+    if (entries == null) return; // ignore if loading/error without cache
 
     final name = path.split('/').where((s) => s.isNotEmpty).last;
-    final next = List<StorageEntry>.of(ready.value);
+    final next = List<StorageEntry>.of(entries);
     next.removeWhere((e) => e.name == name && e.isFolder == isFolder);
     _v1FileStateRowsById.removeWhere((_, item) => _v1StateRowMatchesPath(item, path, isFolder: isFolder));
     _toggleSelected(_FilePathKey.keyForPath(path, isFolder), false);
@@ -2846,6 +2872,40 @@ class _FileManagerViewState extends State<FileManagerView> {
       unawaited(_rebindThreadIndexDocument());
     } else if (!hasThreadIndex && _threadIndexPath == expectedThreadIndexPath && _threadIndexDocument != null) {
       unawaited(_closeThreadIndexDocument());
+    }
+  }
+
+  bool _isTransientStorageDeleteError(Object error) {
+    final message = error.toString().toLowerCase();
+    if (message.contains('503')) {
+      return true;
+    }
+
+    if (!message.contains('gcs') && !message.contains('websocket') && !message.contains('connection closed')) {
+      return false;
+    }
+
+    return message.contains('unavailable') ||
+        message.contains('timeout') ||
+        message.contains('timed out') ||
+        message.contains('connection closed') ||
+        message.contains('websocket');
+  }
+
+  Future<void> _deleteStoragePath(String path, {bool recursive = false}) async {
+    const retryDelays = [Duration(milliseconds: 250), Duration(milliseconds: 650)];
+
+    for (var attempt = 0; ; attempt++) {
+      try {
+        await widget.client.storage.delete(path, recursive: recursive ? true : null);
+        return;
+      } catch (error) {
+        if (attempt >= retryDelays.length || !_isTransientStorageDeleteError(error)) {
+          rethrow;
+        }
+
+        await Future<void>.delayed(retryDelays[attempt]);
+      }
     }
   }
 
@@ -3454,7 +3514,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     try {
       await Future.wait<void>([
-        widget.client.storage.delete(path).then((_) => _onFileDeleted(path)),
+        _deleteStoragePath(path).then((_) => _onFileDeleted(path)),
         _waitForV1PendingDeleteDisplay(displayUntil),
       ]);
     } catch (_) {
@@ -3483,7 +3543,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     try {
       await Future.wait<void>([
-        widget.client.storage.delete(folderPath, recursive: true).then((_) => _removePath(folderPath, isFolder: true)),
+        _deleteStoragePath(folderPath, recursive: true).then((_) => _removePath(folderPath, isFolder: true)),
         _waitForV1PendingDeleteDisplay(displayUntil),
       ]);
     } catch (_) {
@@ -3843,10 +3903,8 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Future<void> _confirmAndDeleteSelected() async {
     final useDesktopV1FilesBrowser = _usesDesktopV1FilesBrowser();
-    final v1Items = useDesktopV1FilesBrowser
-        ? _v1VisibleItems(storageEntries.state.value ?? const <StorageEntry>[])
-        : const <PbFilesItemData>[];
-    final selected = useDesktopV1FilesBrowser ? powerboardsV1SelectedVisibleItemIds(_selectedSig.value, v1Items) : _visibleSelected.value;
+    final v1Items = useDesktopV1FilesBrowser ? _v1VisibleItems(_storageEntriesSnapshot()) : const <PbFilesItemData>[];
+    final selected = useDesktopV1FilesBrowser ? _v1SelectedItemIdsForAction(v1Items) : _visibleSelected.value;
     if (selected.isEmpty) return;
 
     final toaster = ShadToaster.of(context);
@@ -3889,13 +3947,13 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     int success = 0;
     final failures = <String>[];
-    final v1SelectedItems = useDesktopV1FilesBrowser
+    final v1ItemsById = useDesktopV1FilesBrowser ? {for (final item in v1Items) item.id: item} : const <String, PbFilesItemData>{};
+    final toDelete = useDesktopV1FilesBrowser
         ? [
-            for (final item in v1Items)
-              if (selected.contains(item.id) && _v1ItemIsSelectable(item)) item,
+            for (final key in selected)
+              if (v1ItemsById[key] == null || _v1ItemIsSelectable(v1ItemsById[key]!)) key,
           ]
-        : const <PbFilesItemData>[];
-    final toDelete = useDesktopV1FilesBrowser ? [for (final item in v1SelectedItems) item.id] : selected.toList();
+        : selected.toList();
     final pendingDeletes = <String, _PendingDeleteOperation>{};
     final batchStartedAt = DateTime.now();
 
@@ -4240,7 +4298,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Widget _buildDesktopV1FilesBrowser(BuildContext context, {required List<StorageEntry> entries, required bool isRefreshing}) {
+  Widget _buildDesktopV1FilesBrowser(BuildContext context, {required List<StorageEntry> entries}) {
     final items = _v1VisibleItems(entries);
     final selected = powerboardsV1SelectedVisibleItemIds(_selectedSig.value, items);
     final routePreviewFile = _v1PreviewFileFromRoute(items);
@@ -4398,12 +4456,6 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
                   onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
                 ),
-                if (isRefreshing)
-                  const Positioned(
-                    right: 30,
-                    top: 28,
-                    child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-                  ),
                 ValueListenableBuilder<bool>(
                   valueListenable: _v1FilesDropTargetActive,
                   builder: (context, active, child) => Positioned.fill(
@@ -5614,13 +5666,12 @@ class _FileManagerViewState extends State<FileManagerView> {
                       loading: () {
                         final cachedEntries = _v1CachedFolderEntries(_folderSig.value);
                         if (cachedEntries != null) {
-                          return _buildDesktopV1FilesBrowser(context, entries: cachedEntries, isRefreshing: true);
+                          return _buildDesktopV1FilesBrowser(context, entries: cachedEntries);
                         }
                         return const Center(child: CircularProgressIndicator());
                       },
                       error: (e, st) => Center(child: Text("Error loading files: $e")),
-                      ready: (entries) =>
-                          _buildDesktopV1FilesBrowser(context, entries: entries, isRefreshing: storageEntries.state.isRefreshing),
+                      ready: (entries) => _buildDesktopV1FilesBrowser(context, entries: entries),
                     ),
                   ),
                 );
@@ -5678,7 +5729,6 @@ class _FileManagerViewState extends State<FileManagerView> {
                                       entries: entries,
                                       selected: selected,
                                       sort: sort,
-                                      isRefreshing: storageEntries.state.isRefreshing,
                                       forceShowSelect: _forceShowSelect,
                                       displayNameBuilder: _displayNameForEntry,
                                       deleteRevision: PendingStorageDeletes.listenableFor(_deleteScope),
@@ -5721,7 +5771,6 @@ class FileTableView extends StatefulWidget {
   final List<StorageEntry> entries;
   final Set<String> selected;
   final FileSort sort;
-  final bool isRefreshing;
   final bool forceShowSelect;
   final String Function(StorageEntry entry)? displayNameBuilder;
   final ValueListenable<int> deleteRevision;
@@ -5745,7 +5794,6 @@ class FileTableView extends StatefulWidget {
     required this.entries,
     required this.selected,
     required this.sort,
-    required this.isRefreshing,
     required this.forceShowSelect,
     this.displayNameBuilder,
     required this.deleteRevision,
@@ -5991,16 +6039,7 @@ class _FileTableViewState extends State<FileTableView> {
                     ),
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.isRefreshing)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 8),
-                        child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-                      ),
-                  ],
-                ),
+                const SizedBox.shrink(),
               ],
             ),
           ),
@@ -6297,12 +6336,7 @@ class _FileTableViewState extends State<FileTableView> {
                   fixedWidth: modifiedWidth,
                   onSort: (_, ascending) => widget.onSortChanged(FileSort(FileSortField.modified, ascending)),
                 ),
-                DataColumn2(
-                  label: widget.isRefreshing
-                      ? const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))
-                      : const SizedBox.shrink(),
-                  fixedWidth: actionWidth,
-                ),
+                DataColumn2(label: const SizedBox.shrink(), fixedWidth: actionWidth),
               ],
               rows: rows,
             ),
