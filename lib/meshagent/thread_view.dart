@@ -34,6 +34,7 @@ import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
+import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
@@ -434,6 +435,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         createdBy: _currentParticipantDisplayName(),
         attachmentPaths: attachmentPaths,
       ).catchError((Object error, StackTrace stackTrace) {
+        if (powerboardsIsExpectedRoomLifecycleClosure(error, stackTrace)) {
+          return;
+        }
         debugPrint('Failed to record file attachment index: $error');
       }),
     );

@@ -56,6 +56,7 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_m
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/format_date.dart';
 import 'package:powerboards/settings/ui_mode.dart';
@@ -4028,7 +4029,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   Future<void> _downloadSelected() async {
     final useDesktopV1FilesBrowser = _usesDesktopV1FilesBrowser();
     final selected = useDesktopV1FilesBrowser
-        ? powerboardsV1SelectedVisibleItemIds(_selectedSig.value, _v1VisibleItems(storageEntries.state.value ?? const <StorageEntry>[]))
+        ? powerboardsV1SelectedVisibleItemIds(_selectedSig.value, _v1VisibleItems(_storageEntriesSnapshot()))
         : _visibleSelected.value;
     if (selected.isEmpty) return;
 
@@ -5634,6 +5635,86 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  void _retryLoadCurrentFolder() {
+    unawaited(
+      _refreshCurrentFolder().catchError((Object error) {
+        if (!mounted) {
+          return;
+        }
+
+        ShadToaster.of(context).show(
+          powerboardsToast(
+            title: 'Folder still unavailable',
+            description: '$error',
+            destructive: true,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildDesktopV1FilesLoadError(BuildContext context, Object error) {
+    final cachedEntries = _v1CachedFolderEntries(_folderSig.value);
+    if (cachedEntries != null) {
+      return _buildDesktopV1FilesBrowser(context, entries: cachedEntries);
+    }
+
+    return _buildFilesLoadError(context, error);
+  }
+
+  Widget _buildDesktopV1FilesLoading() {
+    return ColoredBox(
+      color: PbColors.surfacePanel,
+      child: Center(
+        child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: PbColors.textSubtle)),
+      ),
+    );
+  }
+
+  Widget _buildFilesLoadError(BuildContext context, Object error) {
+    final currentFolder = _folderSig.value;
+    final canGoToParent = currentFolder.trim().isNotEmpty;
+    final parentFolder = parentPath(currentFolder);
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'Couldn’t load this folder',
+                textAlign: TextAlign.center,
+                style: PowerboardsTypography.h4.copyWith(color: PbColors.textPrimary),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '$error',
+                textAlign: TextAlign.center,
+                style: PowerboardsTypography.p.copyWith(color: PbColors.textMuted),
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  if (canGoToParent)
+                    ShadButton.outline(onPressed: () => _openEntry(parentFolder, true), child: const Text('Back to parent')),
+                  ShadButton(onPressed: _retryLoadCurrentFolder, child: const Text('Retry')),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShadTheme.of(context);
@@ -5668,9 +5749,9 @@ class _FileManagerViewState extends State<FileManagerView> {
                         if (cachedEntries != null) {
                           return _buildDesktopV1FilesBrowser(context, entries: cachedEntries);
                         }
-                        return const Center(child: CircularProgressIndicator());
+                        return _buildDesktopV1FilesLoading();
                       },
-                      error: (e, st) => Center(child: Text("Error loading files: $e")),
+                      error: (e, st) => _buildDesktopV1FilesLoadError(context, e),
                       ready: (entries) => _buildDesktopV1FilesBrowser(context, entries: entries),
                     ),
                   ),
@@ -5719,7 +5800,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                               builder: (context, _) {
                                 return storageEntries.state.when(
                                   loading: () => const Center(child: CircularProgressIndicator()),
-                                  error: (e, st) => Center(child: Text("Error loading files: $e")),
+                                  error: (e, st) => _buildFilesLoadError(context, e),
                                   ready: (_) {
                                     final entries = _visibleSortedEntries.value;
                                     final sort = _sortSig.value;

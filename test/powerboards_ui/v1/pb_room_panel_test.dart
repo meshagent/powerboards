@@ -528,6 +528,36 @@ void main() {
     expect(loadedOtherThreadChip.selected, isFalse);
   });
 
+  test('desktop preview verifies selected thread only after list load', () {
+    const selectedPath = 'dataset://agents/assistant/threads/real';
+    const visiblePaths = ['dataset://agents/assistant/threads/real', 'dataset://agents/assistant/threads/other'];
+
+    expect(
+      powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads(
+        selectedThreadPath: selectedPath,
+        threadPaths: visiblePaths,
+        threadListLoaded: false,
+      ),
+      isNull,
+    );
+    expect(
+      powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads(
+        selectedThreadPath: selectedPath,
+        threadPaths: visiblePaths,
+        threadListLoaded: true,
+      ),
+      selectedPath,
+    );
+    expect(
+      powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads(
+        selectedThreadPath: 'dataset://agents/assistant/threads/missing',
+        threadPaths: visiblePaths,
+        threadListLoaded: true,
+      ),
+      isNull,
+    );
+  });
+
   testWidgets('desktop preview restores visible selected thread', (tester) async {
     final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);

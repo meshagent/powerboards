@@ -47,6 +47,7 @@ import 'package:powerboards/meshagent/loader.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/options_menu.dart';
 import 'package:powerboards/meshagent/path.dart';
+import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:powerboards/meshagent/tool_connection_scope.dart';
@@ -455,6 +456,23 @@ String? powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads({
   }
 
   return null;
+}
+
+@visibleForTesting
+String? powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads({
+  required String? selectedThreadPath,
+  required Iterable<String> threadPaths,
+  required bool threadListLoaded,
+}) {
+  if (!threadListLoaded) {
+    return null;
+  }
+
+  return powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads(
+    selectedThreadPath: selectedThreadPath,
+    threadPaths: threadPaths,
+    threadListLoaded: true,
+  );
 }
 
 const powerboardsDesktopPreviewLoadingThreadTitle = 'Loading thread';
@@ -5345,9 +5363,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       disposeChatClient: false,
       builder: (context, threads, threadListLoaded) {
         final chatContext = _desktopPreviewChatContextForVisibleThreads(rawChatContext, threads, threadListLoaded: threadListLoaded);
+        final verifiedSelectedThreadPath = powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads(
+          selectedThreadPath: rawChatContext?.selectedThreadPath,
+          threadPaths: threads.map((thread) => thread.path),
+          threadListLoaded: threadListLoaded,
+        );
         final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads, threadListLoaded: threadListLoaded);
         final selectedThreadDisplayName = _desktopPreviewSelectedThreadDisplayName(chatContext, threads);
         final selectedThreadTitleResolving = chatContext?.selectedThreadPath != null && !threadListLoaded;
+        final selectedThreadLoading = chatContext?.selectedThreadPath != null && !threadListLoaded;
+        final verifiedSelectedThreadDisplayName = verifiedSelectedThreadPath == null ? null : selectedThreadDisplayName;
         if (selectedThreadDisplayName != null) {
           _syncDesktopPreviewVisibleThreadSelection(chatContext, selectedThreadDisplayName);
         }
@@ -5380,16 +5405,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     },
                   ),
                   Expanded(
-                    child: _buildAgentArea(
-                      context,
-                      const [],
-                      showEmbeddedThreadList: false,
-                      embedMobileChrome: false,
-                      showDesktopThreadListAlternatives: false,
-                      useSelectedThreadOverride: chatContext != null,
-                      selectedThreadPathOverride: chatContext?.selectedThreadPath,
-                      selectedThreadDisplayNameOverride: selectedThreadDisplayName,
-                    ),
+                    child: selectedThreadLoading
+                        ? _buildDesktopPreviewThreadLoading(context)
+                        : _buildAgentArea(
+                            context,
+                            const [],
+                            showEmbeddedThreadList: false,
+                            embedMobileChrome: false,
+                            showDesktopThreadListAlternatives: false,
+                            useSelectedThreadOverride: chatContext != null,
+                            selectedThreadPathOverride: verifiedSelectedThreadPath,
+                            selectedThreadDisplayNameOverride: verifiedSelectedThreadDisplayName,
+                          ),
                   ),
                 ],
               )
@@ -5430,8 +5457,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           client: widget.room,
           enabled: shouldLoadThreadAttachments,
           threads: threads,
-          selectedThreadPath: chatContext?.selectedThreadPath,
-          selectedThreadName: selectedThreadTitle,
+          selectedThreadPath: verifiedSelectedThreadPath,
+          selectedThreadName: verifiedSelectedThreadPath == null ? null : selectedThreadTitle,
           chatClient: threadListChatClient,
           localLinks: _localThreadAttachmentLinks,
           builder: (context, attachments) => LayoutBuilder(
@@ -5469,16 +5496,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                           },
                         ),
                         Expanded(
-                          child: _buildAgentArea(
-                            context,
-                            const [],
-                            showEmbeddedThreadList: false,
-                            embedMobileChrome: false,
-                            showDesktopThreadListAlternatives: false,
-                            useSelectedThreadOverride: chatContext != null,
-                            selectedThreadPathOverride: chatContext?.selectedThreadPath,
-                            selectedThreadDisplayNameOverride: selectedThreadDisplayName,
-                          ),
+                          child: selectedThreadLoading
+                              ? _buildDesktopPreviewThreadLoading(context)
+                              : _buildAgentArea(
+                                  context,
+                                  const [],
+                                  showEmbeddedThreadList: false,
+                                  embedMobileChrome: false,
+                                  showDesktopThreadListAlternatives: false,
+                                  useSelectedThreadOverride: chatContext != null,
+                                  selectedThreadPathOverride: verifiedSelectedThreadPath,
+                                  selectedThreadDisplayNameOverride: verifiedSelectedThreadDisplayName,
+                                ),
                         ),
                       ],
                     )
@@ -6135,6 +6164,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return const SizedBox(height: desktopPaneHeaderToChatViewportOffset);
   }
 
+  Widget _buildDesktopPreviewThreadLoading(BuildContext context) {
+    return ColoredBox(
+      color: PbColors.surfacePanel,
+      child: Center(
+        child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: PbColors.textSubtle)),
+      ),
+    );
+  }
+
   Widget _buildDesktopSecondaryControlSpacer(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     if (isMobile) {
@@ -6394,6 +6432,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         createdBy: normalizedCreatedBy,
         attachmentPaths: normalizedAttachmentPaths,
       ).catchError((Object error, StackTrace stackTrace) {
+        if (powerboardsIsExpectedRoomLifecycleClosure(error, stackTrace)) {
+          return;
+        }
         debugPrint('Failed to record file attachment index: $error');
       }),
     );
