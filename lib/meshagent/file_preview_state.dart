@@ -1,7 +1,7 @@
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 
-const Set<String> _unsupportedPreviewExtensions = {'zip', 'rar', '7z', 'tar', 'gz'};
+const Set<String> _unsupportedPreviewExtensions = {'zip', 'rar', '7z', 'tar', 'gz', 'tgz'};
 const Set<String> _unavailablePreviewExtensions = {'tif', 'tiff', 'heic', 'heif'};
 const Set<String> _documentPanePreviewExtensions = {'transcript', 'srt', 'vtt', 'widget', 'document', 'gallery', 'presentation', 'form'};
 const Set<String> _editableTextPreviewExtensions = {'txt', 'text', 'md', 'markdown', 'mdown', 'mkdn', 'rst', 'log', 'csv', 'tsv'};

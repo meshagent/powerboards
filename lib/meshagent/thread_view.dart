@@ -334,7 +334,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     final freshAttachmentPaths = <String>[];
     for (final attachmentPath in normalizedAttachmentPaths) {
-      if (_reportedAttachmentKeys.add('$normalizedThreadPath\n$attachmentPath')) {
+      final key = '$normalizedThreadPath\n$attachmentPath';
+      if (_reportedAttachmentKeys.add(key)) {
         freshAttachmentPaths.add(attachmentPath);
       }
     }

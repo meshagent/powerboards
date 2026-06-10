@@ -6,6 +6,7 @@ import 'package:meshagent/room_server_client.dart';
 import 'thread_display_name.dart';
 
 const String powerboardsFileAttachmentIndexPath = '.powerboards/file-attachment-index.json';
+Future<void> _powerboardsFileAttachmentLinkWriteQueue = Future<void>.value();
 
 class PowerboardsFileAttachmentLink {
   const PowerboardsFileAttachmentLink({
@@ -152,6 +153,28 @@ Future<void> recordPowerboardsFileAttachmentLinks({
   required String createdBy,
   required Iterable<String> attachmentPaths,
 }) async {
+  final operation = _powerboardsFileAttachmentLinkWriteQueue
+      .catchError((_) {})
+      .then(
+        (_) => _recordPowerboardsFileAttachmentLinks(
+          room: room,
+          threadPath: threadPath,
+          threadName: threadName,
+          createdBy: createdBy,
+          attachmentPaths: attachmentPaths,
+        ),
+      );
+  _powerboardsFileAttachmentLinkWriteQueue = operation.catchError((_) {});
+  await operation;
+}
+
+Future<void> _recordPowerboardsFileAttachmentLinks({
+  required RoomClient room,
+  required String threadPath,
+  required String threadName,
+  required String createdBy,
+  required Iterable<String> attachmentPaths,
+}) async {
   final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
   if (normalizedThreadPath.isEmpty) {
     return;
@@ -169,12 +192,16 @@ Future<void> recordPowerboardsFileAttachmentLinks({
   };
 
   for (final filePath in normalizedAttachments) {
-    linksByKey['$filePath\n${powerboardsThreadAttachmentMatchKey(normalizedThreadPath)}'] = PowerboardsFileAttachmentLink(
+    final key = '$filePath\n${powerboardsThreadAttachmentMatchKey(normalizedThreadPath)}';
+    final existing = linksByKey[key];
+    final normalizedCreatedBy = createdBy.trim();
+
+    linksByKey[key] = PowerboardsFileAttachmentLink(
       filePath: filePath,
       threadPath: normalizedThreadPath,
-      threadName: threadName.trim(),
-      createdBy: createdBy.trim(),
-      createdAt: now,
+      threadName: threadName.trim().isNotEmpty ? threadName.trim() : existing?.threadName ?? '',
+      createdBy: normalizedCreatedBy.isNotEmpty ? normalizedCreatedBy : existing?.createdBy ?? '',
+      createdAt: existing?.createdAt ?? now,
     );
   }
 

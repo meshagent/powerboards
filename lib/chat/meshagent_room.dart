@@ -30,6 +30,7 @@ import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
 import 'package:powerboards/chat/hangup_button.dart';
+import 'package:powerboards/meshagent/archive_extract.dart';
 import 'package:powerboards/livekit/room.dart' as room;
 import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
@@ -62,6 +63,7 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_archive_extract.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
@@ -949,8 +951,9 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       return;
     }
 
+    final agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
     setState(() {
-      _agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
+      _agentThreadAttachments = agentThreadAttachments;
     });
     unawaited(_syncAttachmentEntries());
   }
@@ -1039,10 +1042,12 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       return;
     }
 
+    final threadAttachments = _collectThreadAttachments(threadRefs);
+    final agentThreadAttachments = _collectAgentThreadAttachments(threadRefs);
     setState(() {
       _links = links;
-      _threadAttachments = _collectThreadAttachments(threadRefs);
-      _agentThreadAttachments = _collectAgentThreadAttachments(threadRefs);
+      _threadAttachments = threadAttachments;
+      _agentThreadAttachments = agentThreadAttachments;
     });
     unawaited(_syncAttachmentEntries());
   }
@@ -1092,8 +1097,9 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       return;
     }
 
+    final agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
     setState(() {
-      _agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
+      _agentThreadAttachments = agentThreadAttachments;
     });
     unawaited(_syncAttachmentEntries());
   }
@@ -1156,8 +1162,9 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       return;
     }
 
+    final threadAttachments = _collectThreadAttachments(_threadRefs());
     setState(() {
-      _threadAttachments = _collectThreadAttachments(_threadRefs());
+      _threadAttachments = threadAttachments;
     });
     unawaited(_syncAttachmentEntries());
   }
@@ -1231,6 +1238,11 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     }
 
     return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
+  }
+
+  String _attachmentSizeLabel(String path) {
+    final size = _attachmentEntriesByPath[path]?.size;
+    return size == null ? '' : pbFormatBytes(size);
   }
 
   Set<String> _scopedAttachmentPaths() {
@@ -1353,6 +1365,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
           fileType: metadata.fileType,
           path: normalizedFilePath,
           previewState: powerboardsV1PreviewStateForPath(normalizedFilePath),
+          sizeLabel: _attachmentSizeLabel(normalizedFilePath),
         ),
       );
     }
@@ -4181,26 +4194,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             : null,
         onThreadAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) {
-                if (selectedThreadPath != null) {
-                  _recordLocalThreadAttachments(
-                    threadPath: selectedThreadPath,
-                    threadName: currentThreadLabel,
-                    createdBy: userEmail is String ? userEmail : '',
-                    attachmentPaths: [path],
-                  );
-                  unawaited(
-                    recordPowerboardsFileAttachmentLinks(
-                      room: widget.room,
-                      threadPath: selectedThreadPath,
-                      threadName: currentThreadLabel,
-                      createdBy: userEmail is String ? userEmail : '',
-                      attachmentPaths: [path],
-                    ).catchError((Object error, StackTrace stackTrace) {
-                      debugPrint('Failed to record file attachment index: $error');
-                    }),
-                  );
-                }
-                _openDesktopPreviewAttachment(path, threadName: currentThreadLabel);
+                final effectiveThreadPath = selectedThreadPath ?? documentPath;
+                final effectiveThreadName = currentThreadLabel == 'New thread'
+                    ? defaultThreadDisplayNameFromPath(effectiveThreadPath)
+                    : currentThreadLabel;
+                _recordLocalThreadAttachments(
+                  threadPath: effectiveThreadPath,
+                  threadName: effectiveThreadName,
+                  createdBy: userEmail is String ? userEmail : '',
+                  attachmentPaths: [path],
+                );
+                _openDesktopPreviewAttachment(path, threadName: effectiveThreadName);
               }
             : null,
         fileDropOverlayBuilder: chatDropOverlayBuilder,
@@ -5563,6 +5567,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       _startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey, responsiveHandoff: responsiveOverlay),
                     ),
                     onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
+                    onExtractArchiveFile: (file) => unawaited(_showAttachmentArchiveExtractDialog(file)),
                     onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
                     filePreviewResizing: resizing,
                     borderOnTop: responsiveOverlay,
@@ -6345,17 +6350,33 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     final now = DateTime.now().toUtc();
     var changed = false;
+    final normalizedCreatedBy = createdBy.trim();
+    final normalizedThreadName = threadName.trim();
     for (final filePath in normalizedAttachmentPaths) {
       final key = '$filePath\n$normalizedThreadPath';
-      if (_localThreadAttachmentLinksByKey.containsKey(key)) {
+      final existing = _localThreadAttachmentLinksByKey[key];
+      if (existing != null) {
+        final existingThreadName = existing.threadName.trim();
+        final existingCreatedBy = existing.createdBy.trim();
+        if ((existingThreadName.isEmpty && normalizedThreadName.isNotEmpty) ||
+            (existingCreatedBy.isEmpty && normalizedCreatedBy.isNotEmpty)) {
+          _localThreadAttachmentLinksByKey[key] = PowerboardsFileAttachmentLink(
+            filePath: existing.filePath,
+            threadPath: existing.threadPath,
+            threadName: existingThreadName.isNotEmpty ? existing.threadName : normalizedThreadName,
+            createdBy: existingCreatedBy.isNotEmpty ? existing.createdBy : normalizedCreatedBy,
+            createdAt: existing.createdAt ?? now,
+          );
+          changed = true;
+        }
         continue;
       }
 
       _localThreadAttachmentLinksByKey[key] = PowerboardsFileAttachmentLink(
         filePath: filePath,
         threadPath: normalizedThreadPath,
-        threadName: threadName.trim(),
-        createdBy: createdBy.trim(),
+        threadName: normalizedThreadName,
+        createdBy: normalizedCreatedBy,
         createdAt: now,
       );
       changed = true;
@@ -6364,6 +6385,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (changed && mounted) {
       setState(() {});
     }
+
+    unawaited(
+      recordPowerboardsFileAttachmentLinks(
+        room: widget.room,
+        threadPath: normalizedThreadPath,
+        threadName: threadName,
+        createdBy: normalizedCreatedBy,
+        attachmentPaths: normalizedAttachmentPaths,
+      ).catchError((Object error, StackTrace stackTrace) {
+        debugPrint('Failed to record file attachment index: $error');
+      }),
+    );
   }
 
   PbAttachmentListItemData _attachmentDataForPromptPath(String filePath, {required String threadName}) {
@@ -6379,6 +6412,47 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       path: normalizedPath,
       previewState: powerboardsV1PreviewStateForPath(normalizedPath),
     );
+  }
+
+  String _storageEntrySizeLabel(StorageEntry? entry) {
+    if (entry == null || entry.isFolder) {
+      return '';
+    }
+
+    final size = entry.size;
+    return size == null ? '' : pbFormatBytes(size);
+  }
+
+  Future<void> _refreshDesktopPreviewAttachmentSizeLabel(String normalizedPath) async {
+    StorageEntry? entry;
+    try {
+      entry = await widget.room.storage.stat(normalizedPath);
+    } catch (_) {}
+
+    final sizeLabel = _storageEntrySizeLabel(entry);
+    if (!mounted || sizeLabel.isEmpty) {
+      return;
+    }
+
+    final previewFile = _desktopPreviewFilePreviewFile;
+    if (!_desktopPreviewFilePreviewOpen || powerboardsStorageAttachmentPathFromUrl(previewFile?.path ?? '') != normalizedPath) {
+      return;
+    }
+
+    if (previewFile!.sizeLabel == sizeLabel) {
+      return;
+    }
+
+    setState(() {
+      _desktopPreviewFilePreviewFile = PbAttachmentListItemData(
+        title: previewFile.title,
+        subtitle: previewFile.subtitle,
+        fileType: previewFile.fileType,
+        path: previewFile.path,
+        previewState: previewFile.previewState,
+        sizeLabel: sizeLabel,
+      );
+    });
   }
 
   void _openDesktopPreviewAttachment(String filePath, {required String threadName, bool fromComposerAttachment = false}) {
@@ -6398,6 +6472,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewComposerAttachmentPreviewPath = fromComposerAttachment ? normalizedPath : null;
     });
     setPreviewFilePreviewFullscreen(false);
+    unawaited(_refreshDesktopPreviewAttachmentSizeLabel(normalizedPath));
   }
 
   void _closeDesktopPreviewAttachmentPreviewIfRemoved(String filePath) {
@@ -6647,6 +6722,77 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       preferredAgentKey: agentKey,
       responsiveHandoff: responsiveHandoff,
     );
+  }
+
+  Future<void> _showAttachmentArchiveExtractDialog(PbAttachmentListItemData file) async {
+    final archivePath = _previewAttachmentPath(file);
+    if (archivePath == null || !pbCanExtractArchive(file)) {
+      return;
+    }
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.transparent,
+      transitionDuration: Duration.zero,
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        void closeDialog() {
+          Navigator.of(dialogContext).pop();
+        }
+
+        return Stack(
+          children: [
+            PbArchiveExtractPreviewDialog(
+              file: file,
+              onClose: closeDialog,
+              onInspect: (_) => inspectPowerboardsArchive(
+                room: widget.room,
+                archivePath: archivePath,
+                targetFolderName: pbArchiveExtractFolderName(file.title),
+              ),
+              onConfirm: (inspection) {
+                closeDialog();
+                unawaited(_extractAttachmentArchiveForPreview(file, inspection));
+              },
+              onDownload: () {
+                closeDialog();
+                unawaited(_downloadAttachmentFile(file));
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _extractAttachmentArchiveForPreview(PbAttachmentListItemData file, PbArchiveInspectionResult inspection) async {
+    final archivePath = _previewAttachmentPath(file);
+    if (archivePath == null) {
+      return;
+    }
+
+    if (!mounted || !context.mounted) {
+      return;
+    }
+
+    final archiveFolderPath = parentPath(archivePath);
+
+    setState(() {
+      _desktopPreviewFilePreviewFile = null;
+      _desktopPreviewFilePreviewOpen = false;
+      _desktopPreviewFilePreviewFullscreen = false;
+      _desktopPreviewRoomPanelTab = PbRoomPanelTab.files;
+    });
+    setPreviewFilePreviewFullscreen(false);
+    controller.showFiles();
+    _replaceRoomRouteState(
+      context,
+      pane: _MobileRoomPane.files,
+      rawPath: archiveFolderPath.isEmpty ? '' : '$archiveFolderPath/',
+      clearPreviewOrigin: true,
+    );
+
+    await _filesHeaderController.extractArchiveForPreview(archivePath: archivePath, inspection: inspection);
   }
 
   Future<void> _downloadAttachmentFile(PbAttachmentListItemData file) async {

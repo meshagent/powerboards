@@ -31,6 +31,7 @@ import 'package:meshagent_flutter_shadcn/ui/ui.dart';
 import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
+import 'package:powerboards/meshagent/archive_extract.dart';
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
@@ -43,6 +44,7 @@ import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/meshagent/v1_file_preview_source.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_archive_extract.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
@@ -92,6 +94,8 @@ const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
 const int _v1RecentlyOpenedFilesLimit = 7;
 const Duration _v1DeleteProcessingStep = Duration(milliseconds: 650);
 const Duration _v1SaveProcessingStep = Duration(milliseconds: 850);
+const Duration _v1ArchiveExtractedToastDuration = Duration(seconds: 4);
+const Duration _v1BrowseHintToastDuration = Duration(days: 1);
 const Duration _downloadArchiveCleanupDelay = Duration(minutes: 5);
 const Offset _uploadProgressPopoverOffset = Offset(20, -20);
 
@@ -842,11 +846,27 @@ class _DownloadArchiveItem {
   final bool isFolder;
 }
 
+class _V1ArchiveExtractionBrowseSession {
+  _V1ArchiveExtractionBrowseSession({required this.firstPreviewPath});
+
+  final String? firstPreviewPath;
+  bool browseStarted = false;
+}
+
+class _PendingArchiveExtractRequest {
+  const _PendingArchiveExtractRequest({required this.archivePath, required this.inspection});
+
+  final String archivePath;
+  final PbArchiveInspectionResult inspection;
+}
+
 class FileManagerViewController {
   Future<void> Function()? _createFolderInCurrentLocation;
   void Function()? _createTextFileInCurrentLocation;
   Future<void> Function()? _addFilesInCurrentLocation;
   Future<void> Function()? _shareOpenedFileInCurrentLocation;
+  Future<void> Function(String archivePath, PbArchiveInspectionResult inspection)? _extractArchiveForPreview;
+  _PendingArchiveExtractRequest? _pendingArchiveExtractRequest;
 
   Future<void> createFolderInCurrentLocation() async {
     final action = _createFolderInCurrentLocation;
@@ -874,6 +894,27 @@ class FileManagerViewController {
       return;
     }
     await action();
+  }
+
+  Future<void> extractArchiveForPreview({required String archivePath, required PbArchiveInspectionResult inspection}) async {
+    final action = _extractArchiveForPreview;
+    if (action == null) {
+      _pendingArchiveExtractRequest = _PendingArchiveExtractRequest(archivePath: archivePath, inspection: inspection);
+      return;
+    }
+
+    await action(archivePath, inspection);
+  }
+
+  void _flushPendingArchiveExtractRequest() {
+    final request = _pendingArchiveExtractRequest;
+    final action = _extractArchiveForPreview;
+    if (request == null || action == null) {
+      return;
+    }
+
+    _pendingArchiveExtractRequest = null;
+    unawaited(action(request.archivePath, request.inspection));
   }
 }
 
@@ -965,10 +1006,13 @@ class _FileManagerViewState extends State<FileManagerView> {
   String? _v1PreviewDraftText;
   List<PbFilesItemData> _v1RecentlyOpenedFiles = const <PbFilesItemData>[];
   final Set<String> _v1SavingFileIds = <String>{};
+  final Set<String> _v1ExtractingArchivePaths = <String>{};
+  final Map<String, _V1ArchiveExtractionBrowseSession> _v1ArchiveExtractionBrowseSessions = <String, _V1ArchiveExtractionBrowseSession>{};
   final Map<String, PbFilesItemData> _v1FileStateRowsById = <String, PbFilesItemData>{};
   final Map<String, Future<String>> _v1DownloadUrlFuturesByPath = <String, Future<String>>{};
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
+  Timer? _v1PendingBrowseHintTimer;
 
   PendingStorageDeleteScope get _deleteScope => PendingStorageDeleteScope(projectId: widget.projectId, roomName: widget.client.roomName);
   bool get _effectiveV1FilesRoomPanelCollapsed => widget.v1RoomPanelCollapsed ?? _v1FilesRoomPanelCollapsed;
@@ -1173,6 +1217,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     _v1FilterController.dispose();
     _v1FilesKeyboardFocusNode.dispose();
     _v1FilesDropTargetActive.dispose();
+    _v1PendingBrowseHintTimer?.cancel();
     _collapsedBreadcrumbMenuController.dispose();
     popoverController.dispose();
     _codePreviewController.dispose();
@@ -1218,6 +1263,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     controller._createFolderInCurrentLocation = () => _addFolder(_folderSig.value);
     controller._createTextFileInCurrentLocation = _showNewTextFileDialog;
     controller._addFilesInCurrentLocation = () => _addFiles(_folderSig.value);
+    controller._extractArchiveForPreview = _extractV1ArchiveForPreviewPath;
     controller._shareOpenedFileInCurrentLocation = () async {
       final openedFile = _openedFile;
       if (openedFile == null || !supportsNativeFileShare) {
@@ -1225,6 +1271,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
       await _shareFile(openedFile);
     };
+    controller._flushPendingArchiveExtractRequest();
   }
 
   void _unbindController(FileManagerViewController? controller) {
@@ -1235,6 +1282,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     controller._createFolderInCurrentLocation = null;
     controller._createTextFileInCurrentLocation = null;
     controller._addFilesInCurrentLocation = null;
+    controller._extractArchiveForPreview = null;
     controller._shareOpenedFileInCurrentLocation = null;
   }
 
@@ -1675,6 +1723,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       updatedLabel: updatedLabel,
       updatedSort: updatedSort,
       parentPath: folder,
+      path: fullPath,
       fileTypeKey: powerboardsV1FileTypeKeyForPath(fullPath),
       previewState: powerboardsV1PreviewStateForPath(fullPath),
     );
@@ -1696,6 +1745,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       updatedLabel: '',
       updatedSort: 0,
       parentPath: parentPath(fullPath),
+      path: fullPath,
       fileTypeKey: powerboardsV1FileTypeKeyForPath(fullPath),
       previewState: powerboardsV1PreviewStateForPath(fullPath),
     );
@@ -1895,6 +1945,36 @@ class _FileManagerViewState extends State<FileManagerView> {
     return _FilePathKey.pathFromKey(item.id);
   }
 
+  Set<String> get _v1ExtractingArchiveIds {
+    return {for (final path in _v1ExtractingArchivePaths) _FilePathKey.keyForPath(path, false)};
+  }
+
+  bool _v1ArchiveExtractionInProgress(String archivePath) {
+    return _v1ExtractingArchivePaths.contains(PendingStorageDeletes.normalizePath(archivePath));
+  }
+
+  void _setV1ArchiveExtractionInProgress(String archivePath, bool extracting) {
+    final normalizedPath = PendingStorageDeletes.normalizePath(archivePath);
+    if (normalizedPath.isEmpty || _v1ExtractingArchivePaths.contains(normalizedPath) == extracting) {
+      return;
+    }
+
+    void update() {
+      if (extracting) {
+        _v1ExtractingArchivePaths.add(normalizedPath);
+      } else {
+        _v1ExtractingArchivePaths.remove(normalizedPath);
+      }
+    }
+
+    if (!mounted) {
+      update();
+      return;
+    }
+
+    setState(update);
+  }
+
   String? _v1PreviewDraftTextForItem(PbFilesItemData? item) {
     return item != null && _v1PreviewDraftPath == _v1PathForItem(item) ? _v1PreviewDraftText : null;
   }
@@ -1953,6 +2033,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     _v1KeyboardPreviewFileId = null;
     _v1KeyboardPreviewDirection = 0;
     _v1FilesKeyboardBrowseArmed = false;
+    _v1PendingBrowseHintTimer?.cancel();
+    _v1PendingBrowseHintTimer = null;
   }
 
   void _clearV1KeyboardPreviewNavigation() {
@@ -2002,6 +2084,31 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
     _setV1FilesRoomPanelCollapsed(false);
     setPreviewFilePreviewFullscreen(openFullscreen);
+  }
+
+  void _showV1FilesBrowseHintToast() {
+    ShadToaster.of(context).show(
+      powerboardsToast(
+        title: 'Browse files with arrow keys',
+        description: 'Use your up and down arrow keys to browse files. Press Escape to leave browse mode.',
+        duration: _v1BrowseHintToastDuration,
+      ),
+    );
+  }
+
+  void _scheduleV1FilesBrowseHintAfterCompletion({required String targetFolderPath, required String previewFileId}) {
+    _v1PendingBrowseHintTimer?.cancel();
+    _v1PendingBrowseHintTimer = Timer(_v1ArchiveExtractedToastDuration, () {
+      if (!mounted ||
+          _folderSig.value != targetFolderPath ||
+          !_v1FilesKeyboardBrowseArmed ||
+          _v1PreviewFile?.id != previewFileId ||
+          _v1KeyboardPreviewFileId != previewFileId) {
+        return;
+      }
+
+      _showV1FilesBrowseHintToast();
+    });
   }
 
   void _closeV1Preview() {
@@ -2943,6 +3050,292 @@ class _FileManagerViewState extends State<FileManagerView> {
     await _downloadV1FileWithToast(path);
   }
 
+  PbFilesItemData _v1ItemForArchiveExtractedEntry({required String targetFolderPath, required PowerboardsArchiveExtractedEntry entry}) {
+    final fullPath = joinPaths(targetFolderPath, entry.path);
+    final title = fullPath.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? entry.path;
+    final creator = _creatorNameForPath(fullPath);
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    if (entry.folder) {
+      return PbFilesItemData(
+        id: _FilePathKey.keyForPath(fullPath, true),
+        title: title,
+        type: PbAttachmentFileType.folder.defaultDisplayLabel,
+        sizeLabel: '-',
+        sizeSort: -1,
+        thread: '',
+        creator: creator,
+        creatorInitials: _creatorInitialsForName(creator),
+        updatedLabel: 'Now',
+        updatedSort: now,
+        parentPath: parentPath(fullPath),
+        folderPath: fullPath,
+        fileType: PbAttachmentFileType.folder,
+        kind: PbFilesItemKind.folder,
+      );
+    }
+
+    final linkedThreads = _linkedThreadNamesForPath(fullPath);
+    return PbFilesItemData.fromFileName(
+      id: _FilePathKey.keyForPath(fullPath, false),
+      title: title,
+      thread: linkedThreads.firstOrNull ?? '',
+      linkedThreads: linkedThreads,
+      sizeLabel: _formatFileSizeBytes(entry.sizeBytes),
+      sizeSort: entry.sizeBytes,
+      creator: creator,
+      creatorInitials: _creatorInitialsForName(creator),
+      updatedLabel: 'Now',
+      updatedSort: now,
+      parentPath: parentPath(fullPath),
+      path: fullPath,
+      fileTypeKey: powerboardsV1FileTypeKeyForPath(fullPath),
+      previewState: powerboardsV1PreviewStateForPath(fullPath),
+    );
+  }
+
+  void _markV1ArchiveEntryReady({required String targetFolderPath, required PowerboardsArchiveExtractedEntry entry}) {
+    if (!mounted) {
+      return;
+    }
+
+    final item = _v1ItemForArchiveExtractedEntry(targetFolderPath: targetFolderPath, entry: entry);
+    setState(() {
+      _v1FileStateRowsById[item.id] = item;
+    });
+    _maybeStartV1ArchiveBrowseSession(targetFolderPath: targetFolderPath, entryPath: entry.path, item: item);
+  }
+
+  void _maybeStartV1ArchiveBrowseSession({required String targetFolderPath, required String entryPath, required PbFilesItemData item}) {
+    if (!item.canPreview || _folderSig.value != targetFolderPath) {
+      return;
+    }
+
+    final session = _v1ArchiveExtractionBrowseSessions[PendingStorageDeletes.normalizePath(targetFolderPath)];
+    if (session == null || session.browseStarted) {
+      return;
+    }
+
+    final preferredPath = session.firstPreviewPath?.trim();
+    if (preferredPath != null &&
+        preferredPath.isNotEmpty &&
+        PendingStorageDeletes.normalizePath(preferredPath) != PendingStorageDeletes.normalizePath(entryPath)) {
+      return;
+    }
+
+    session.browseStarted = true;
+    _openV1Preview(item, keyboardDirection: 1);
+  }
+
+  Future<void> _extractV1ArchiveForPreviewPath(String archivePath, PbArchiveInspectionResult inspection) async {
+    if (!_usesDesktopV1FilesBrowser()) {
+      return;
+    }
+
+    final normalizedArchivePath = PendingStorageDeletes.normalizePath(archivePath);
+    if (normalizedArchivePath.isEmpty) {
+      return;
+    }
+
+    final item = _v1ItemForPath(normalizedArchivePath);
+    if (!pbCanExtractArchive(item.toAttachmentData())) {
+      return;
+    }
+
+    await _extractV1ArchiveForPreview(item, inspection);
+  }
+
+  Future<void> _showV1ArchiveExtractDialog(PbFilesItemData item) async {
+    final archivePath = _v1PathForItem(item);
+    final file = item.toAttachmentData();
+    if (!pbCanExtractArchive(file) || _v1ArchiveExtractionInProgress(archivePath)) {
+      return;
+    }
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.transparent,
+      transitionDuration: Duration.zero,
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        void closeDialog() {
+          Navigator.of(dialogContext).pop();
+        }
+
+        return Stack(
+          children: [
+            PbArchiveExtractPreviewDialog(
+              file: file,
+              onClose: closeDialog,
+              onInspect: (_) => inspectPowerboardsArchive(
+                room: widget.client,
+                archivePath: archivePath,
+                targetFolderName: pbArchiveExtractFolderName(file.title),
+              ),
+              onConfirm: (inspection) {
+                closeDialog();
+                unawaited(_extractV1ArchiveForPreview(item, inspection));
+              },
+              onDownload: () {
+                closeDialog();
+                unawaited(_downloadV1Item(item));
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _extractV1ArchiveForPreview(PbFilesItemData item, PbArchiveInspectionResult inspection) async {
+    final archivePath = _v1PathForItem(item);
+    if (_v1ArchiveExtractionInProgress(archivePath)) {
+      return;
+    }
+
+    _setV1ArchiveExtractionInProgress(archivePath, true);
+    final toaster = ShadToaster.of(context);
+    String? targetFolderPath;
+
+    try {
+      targetFolderPath = await resolvePowerboardsArchiveExtractTargetPath(
+        room: widget.client,
+        archivePath: archivePath,
+        targetFolderName: inspection.targetFolderName,
+      );
+      final resolvedTargetFolderPath = targetFolderPath;
+      final targetFolderName = targetFolderPath.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? inspection.targetFolderName;
+      final placeholderPath = joinPaths(targetFolderPath, placeholderFileName);
+      final browseSessionKey = PendingStorageDeletes.normalizePath(targetFolderPath);
+
+      toaster.show(powerboardsToast(title: 'Extracting archive', description: targetFolderName, duration: const Duration(seconds: 5)));
+
+      _setV1FileStateRow(
+        _v1StateRow(
+          id: _FilePathKey.keyForPath(targetFolderPath, true),
+          title: 'Extracting $targetFolderName',
+          path: targetFolderPath,
+          isFolder: true,
+          updatedLabel: 'Extracting',
+          updatedSort: DateTime.now().millisecondsSinceEpoch,
+          kind: PbFilesItemKind.processing,
+        ),
+      );
+
+      await widget.client.storage.uploadStream(placeholderPath, Stream<Uint8List>.empty(), overwrite: true, size: 0);
+      if (!mounted) {
+        return;
+      }
+
+      _v1ArchiveExtractionBrowseSessions[browseSessionKey] = _V1ArchiveExtractionBrowseSession(
+        firstPreviewPath: inspection.firstPreviewPath,
+      );
+      _openEntry(targetFolderPath, true);
+      _showV1ArchiveEntryProcessingRows(targetFolderPath: targetFolderPath, inspection: inspection);
+
+      final result = await extractPowerboardsArchive(
+        room: widget.client,
+        archivePath: archivePath,
+        targetFolderPath: targetFolderPath,
+        onEntryExtracted: (entry) {
+          _markV1ArchiveEntryReady(targetFolderPath: resolvedTargetFolderPath, entry: entry);
+        },
+      );
+      if (!mounted) {
+        return;
+      }
+
+      try {
+        await widget.client.storage.delete(placeholderPath);
+      } catch (_) {}
+
+      _removeV1ArchiveProcessingRows(targetFolderPath);
+      await _refreshCurrentFolder();
+      if (!mounted) {
+        return;
+      }
+
+      final firstPreviewPath = result.firstPreviewPath ?? inspection.entries.firstWhereOrNull((entry) => entry.previewable)?.path;
+      PbFilesItemData? firstPreviewItem;
+      if (firstPreviewPath != null && firstPreviewPath.trim().isNotEmpty) {
+        firstPreviewItem = _v1ItemForPath(joinPaths(targetFolderPath, firstPreviewPath));
+        _v1ArchiveExtractionBrowseSessions[browseSessionKey]?.browseStarted = true;
+        _openV1Preview(firstPreviewItem, keyboardDirection: 1);
+      }
+
+      toaster.show(powerboardsToast(title: 'Archive extracted', description: targetFolderName, duration: _v1ArchiveExtractedToastDuration));
+      if (firstPreviewItem != null) {
+        _scheduleV1FilesBrowseHintAfterCompletion(targetFolderPath: targetFolderPath, previewFileId: firstPreviewItem.id);
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (targetFolderPath != null) {
+        _removeV1ArchiveProcessingRows(targetFolderPath);
+        try {
+          await widget.client.storage.delete(targetFolderPath, recursive: true);
+        } catch (_) {}
+        _removePath(targetFolderPath, isFolder: true);
+      }
+      toaster.show(
+        powerboardsToast(
+          title: 'Extraction failed',
+          description: 'Please download the archive to continue.',
+          destructive: true,
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    } finally {
+      if (targetFolderPath != null) {
+        _v1ArchiveExtractionBrowseSessions.remove(PendingStorageDeletes.normalizePath(targetFolderPath));
+      }
+      _setV1ArchiveExtractionInProgress(archivePath, false);
+    }
+  }
+
+  void _showV1ArchiveEntryProcessingRows({required String targetFolderPath, required PbArchiveInspectionResult inspection}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final visibleEntries = inspection.entries.where((entry) => _archiveEntryParentPath(entry.path).isEmpty).toList(growable: false);
+    if (visibleEntries.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      for (var index = 0; index < visibleEntries.length; index++) {
+        final entry = visibleEntries[index];
+        final path = joinPaths(targetFolderPath, entry.path);
+        _v1FileStateRowsById[_FilePathKey.keyForPath(path, entry.folder)] = _v1StateRow(
+          id: _FilePathKey.keyForPath(path, entry.folder),
+          title: 'Extracting ${entry.title}',
+          path: path,
+          isFolder: entry.folder,
+          updatedLabel: 'Extracting',
+          updatedSort: now + index,
+          kind: PbFilesItemKind.processing,
+        );
+      }
+    });
+  }
+
+  void _removeV1ArchiveProcessingRows(String targetFolderPath) {
+    final normalized = PendingStorageDeletes.normalizePath(targetFolderPath);
+    setState(() {
+      _v1FileStateRowsById.removeWhere((_, item) {
+        final itemPath = PendingStorageDeletes.normalizePath(_v1PathForItem(item));
+        return itemPath == normalized || itemPath.startsWith('$normalized/');
+      });
+    });
+  }
+
+  String _archiveEntryParentPath(String path) {
+    final parts = path.split('/').where((part) => part.isNotEmpty).toList();
+    if (parts.length <= 1) {
+      return '';
+    }
+    return parts.take(parts.length - 1).join('/');
+  }
+
   Future<void> _downloadV1Archive(List<_DownloadArchiveItem> items) async {
     if (items.isEmpty) {
       return;
@@ -3856,6 +4249,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final recentlyOpenedFiles = _v1RecentlyOpenedFilesForSidePane;
     final currentFolder = _folderSig.value;
     final filterEnabled = _v1FilterEnabled(entries);
+    final extractingArchiveIds = _v1ExtractingArchiveIds;
     _clearV1FilterIfUnavailable(filterEnabled);
 
     return IconTheme(
@@ -3929,6 +4323,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   keyboardPreviewFileId: _v1KeyboardPreviewFileId,
                   keyboardPreviewDirection: _v1KeyboardPreviewDirection,
                   savingIds: _v1SavingFileIds,
+                  extractingArchiveIds: extractingArchiveIds,
                   enableDropTarget: false,
                   onBreadcrumbPressed: (path) => _openEntry(path, true),
                   onSortChanged: _setV1Sort,
@@ -3998,6 +4393,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                       cleanupSurfacesAfterHandoff: usesStackedRoomPanel,
                     ),
                   ),
+                  onExtract: (item) => unawaited(_showV1ArchiveExtractDialog(item)),
                   onDownload: (item) => unawaited(_downloadV1Item(item)),
                   onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
                   onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
@@ -4034,6 +4430,7 @@ class _FileManagerViewState extends State<FileManagerView> {
               return PbFilesSidePane(
                 files: recentlyOpenedFiles,
                 previewFile: previewFile,
+                extractingArchiveIds: extractingArchiveIds,
                 fullscreen: filePreviewFullscreen,
                 resizing: resizing,
                 borderOnTop: responsivePanel,
@@ -4054,6 +4451,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                     cleanupSurfacesAfterHandoff: usesStackedRoomPanel,
                   ),
                 ),
+                onExtractArchive: (item) => unawaited(_showV1ArchiveExtractDialog(item)),
                 onDownload: (item) => unawaited(_downloadV1FileWithToast(_v1PathForItem(item))),
                 onSaveRequested: _saveV1PreviewFile,
                 previewDraftText: _v1PreviewDraftTextForItem(previewDraftFile),

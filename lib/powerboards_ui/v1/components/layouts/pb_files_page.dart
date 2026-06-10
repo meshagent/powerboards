@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/pb_attachment_file_metadata.dart';
 import '../../theme/pb_colors.dart';
+import '../files/pb_archive_extract.dart';
 import '../files/pb_files_data.dart';
 import '../files/pb_files_drop_target.dart';
 import '../files/pb_files_header.dart';
@@ -553,6 +554,186 @@ class _PbFilesPageState extends State<PbFilesPage> {
     widget.onLinkedThreadPressed?.call(item, thread);
   }
 
+  void _showMockArchiveExtractDialog(PbFilesItemData item) {
+    final file = item.toAttachmentData();
+    if (!pbCanExtractArchive(file)) {
+      return;
+    }
+
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.transparent,
+      transitionDuration: Duration.zero,
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        void closeDialog() {
+          Navigator.of(dialogContext).pop();
+        }
+
+        return Stack(
+          children: [
+            PbArchiveExtractPreviewDialog(
+              file: file,
+              onClose: closeDialog,
+              onConfirm: (inspection) {
+                closeDialog();
+                _extractMockArchiveForPreview(item, inspection);
+              },
+              onDownload: closeDialog,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _extractMockArchiveForPreview(PbFilesItemData item, PbArchiveInspectionResult inspection) {
+    final targetFolderPath = _uniqueMockExtractFolderPath(parentPath: item.parentPath, folderName: inspection.targetFolderName);
+    final targetFolderName = targetFolderPath.split('/').where((segment) => segment.isNotEmpty).last;
+    final nowSort = DateTime.now().millisecondsSinceEpoch;
+
+    final extractedItems = <PbFilesItemData>[
+      PbFilesItemData(
+        id: 'mock-extracted-folder-$targetFolderPath',
+        title: targetFolderName,
+        type: PbAttachmentFileType.folder.defaultDisplayLabel,
+        thread: item.thread,
+        creator: item.creator,
+        creatorInitials: item.creatorInitials,
+        updatedLabel: 'Now',
+        updatedSort: nowSort,
+        parentPath: item.parentPath,
+        folderPath: targetFolderPath,
+        fileType: PbAttachmentFileType.folder,
+        kind: PbFilesItemKind.folder,
+      ),
+    ];
+
+    for (final entry in inspection.entries) {
+      final entryPath = _joinMockPath(targetFolderPath, entry.path);
+      final entryParentPath = _mockParentPath(entryPath);
+      final entryName = entryPath.split('/').where((segment) => segment.isNotEmpty).last;
+      if (entry.folder) {
+        extractedItems.add(
+          PbFilesItemData(
+            id: 'mock-extracted-folder-$entryPath',
+            title: entryName,
+            type: PbAttachmentFileType.folder.defaultDisplayLabel,
+            thread: item.thread,
+            creator: item.creator,
+            creatorInitials: item.creatorInitials,
+            updatedLabel: 'Now',
+            updatedSort: nowSort - extractedItems.length,
+            parentPath: entryParentPath,
+            folderPath: entryPath,
+            fileType: PbAttachmentFileType.folder,
+            kind: PbFilesItemKind.folder,
+          ),
+        );
+        continue;
+      }
+
+      extractedItems.add(
+        PbFilesItemData.fromFileName(
+          id: 'mock-extracted-file-$entryPath',
+          title: entryName,
+          sizeLabel: _mockSizeLabel(entry.sizeBytes),
+          sizeSort: entry.sizeBytes,
+          thread: item.thread,
+          creator: item.creator,
+          creatorInitials: item.creatorInitials,
+          updatedLabel: 'Now',
+          updatedSort: nowSort - extractedItems.length,
+          parentPath: entryParentPath,
+          fileType: entry.fileType,
+        ),
+      );
+    }
+
+    final firstPreviewItem = _firstMockPreviewItem(extractedItems, targetFolderPath, inspection.firstPreviewPath);
+
+    setState(() {
+      _items.removeWhere(
+        (candidate) => candidate.id.startsWith('mock-extracted-') && _mockPathIsWithin(candidate.parentPath, targetFolderPath),
+      );
+      _items.removeWhere((candidate) => candidate.id == 'mock-extracted-folder-$targetFolderPath');
+      _items.addAll(extractedItems);
+      _currentPath = targetFolderPath;
+      _selectedIds.clear();
+      _keyboardPreviewFileId = firstPreviewItem?.id;
+      _keyboardPreviewDirection = firstPreviewItem == null ? 0 : 1;
+      _filesKeyboardBrowseArmed = firstPreviewItem != null;
+      _previewFile = firstPreviewItem;
+      _filePreviewOpen = firstPreviewItem != null;
+      _collapseRoomPanelAfterPreviewClose = false;
+      if (firstPreviewItem != null) {
+        _recordOpenedFile(firstPreviewItem);
+      }
+    });
+
+    widget.onPreviewFileChanged(firstPreviewItem);
+    widget.onPreviewOpenChanged(firstPreviewItem != null);
+    widget.onRoomPanelCollapsedChanged(false);
+  }
+
+  String _uniqueMockExtractFolderPath({required String parentPath, required String folderName}) {
+    final baseFolderPath = _joinMockPath(parentPath, folderName);
+    var candidate = baseFolderPath;
+    var suffix = 2;
+    while (_items.any((item) => item.kind == PbFilesItemKind.folder && item.folderPath == candidate)) {
+      candidate = '$baseFolderPath $suffix';
+      suffix += 1;
+    }
+    return candidate;
+  }
+
+  PbFilesItemData? _firstMockPreviewItem(List<PbFilesItemData> items, String targetFolderPath, String? firstPreviewPath) {
+    if (firstPreviewPath != null && firstPreviewPath.trim().isNotEmpty) {
+      final firstPreviewItemPath = _joinMockPath(targetFolderPath, firstPreviewPath);
+      for (final item in items) {
+        if (item.kind != PbFilesItemKind.file) {
+          continue;
+        }
+        if (_joinMockPath(item.parentPath, item.title) == firstPreviewItemPath) {
+          return item;
+        }
+      }
+    }
+
+    for (final item in items) {
+      if (item.kind == PbFilesItemKind.file && item.previewState == PbAttachmentPreviewState.none) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  String _joinMockPath(String parentPath, String childPath) {
+    return [parentPath, childPath].expand((path) => path.split('/')).where((segment) => segment.trim().isNotEmpty).join('/');
+  }
+
+  bool _mockPathIsWithin(String path, String folderPath) {
+    return path == folderPath || path.startsWith('$folderPath/');
+  }
+
+  String _mockParentPath(String path) {
+    final segments = path.split('/').where((segment) => segment.trim().isNotEmpty).toList(growable: false);
+    if (segments.length <= 1) {
+      return '';
+    }
+    return segments.take(segments.length - 1).join('/');
+  }
+
+  String _mockSizeLabel(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    if (bytes >= 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '$bytes B';
+  }
+
   Future<void> _savePreviewFile() async {
     final file = _previewFile;
     if (file == null || !file.canPreview) {
@@ -649,6 +830,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
           onBrowseFolder: (item) => _setCurrentPath(item.folderPath, keepPreview: true),
           onRemoveProcessingRow: _removeProcessingRow,
           onLinkedThreadPressed: _openLinkedThread,
+          onExtract: _showMockArchiveExtractDialog,
         );
         final keyboardPanel = Focus(
           focusNode: _filesKeyboardFocusNode,
@@ -674,6 +856,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
             previewDraftDirty: _previewDraftDirtyForFile(previewDraftFile),
             onPreviewDraftChanged: previewDraftFile == null ? null : (text) => _setPreviewDraftText(previewDraftFile, text),
             onPreviewDraftSaved: previewDraftFile == null ? null : () => setState(() => _clearPreviewDraftForFile(previewDraftFile)),
+            onExtractArchive: _showMockArchiveExtractDialog,
           );
         }
 
@@ -755,6 +938,7 @@ class PbFilesMainPanel extends StatelessWidget {
     required this.keyboardPreviewFileId,
     required this.keyboardPreviewDirection,
     required this.savingIds,
+    this.extractingArchiveIds = const <String>{},
     required this.onBreadcrumbPressed,
     required this.onSortChanged,
     required this.onFilterChanged,
@@ -777,6 +961,7 @@ class PbFilesMainPanel extends StatelessWidget {
     this.enableDropTarget = true,
     this.onAskAgent,
     this.onShare,
+    this.onExtract,
     this.onDownload,
     this.onRename,
     this.onDelete,
@@ -797,6 +982,7 @@ class PbFilesMainPanel extends StatelessWidget {
   final String? keyboardPreviewFileId;
   final int keyboardPreviewDirection;
   final Set<String> savingIds;
+  final Set<String> extractingArchiveIds;
   final ValueChanged<String> onBreadcrumbPressed;
   final ValueChanged<PbFilesSortKey> onSortChanged;
   final ValueChanged<String> onFilterChanged;
@@ -819,6 +1005,7 @@ class PbFilesMainPanel extends StatelessWidget {
   final bool enableDropTarget;
   final ValueChanged<PbFilesItemData>? onAskAgent;
   final ValueChanged<PbFilesItemData>? onShare;
+  final ValueChanged<PbFilesItemData>? onExtract;
   final ValueChanged<PbFilesItemData>? onDownload;
   final ValueChanged<PbFilesItemData>? onRename;
   final ValueChanged<PbFilesItemData>? onDelete;
@@ -873,6 +1060,7 @@ class PbFilesMainPanel extends StatelessWidget {
               keyboardPreviewFileId: keyboardPreviewFileId,
               keyboardPreviewDirection: keyboardPreviewDirection,
               savingIds: savingIds,
+              extractingArchiveIds: extractingArchiveIds,
               hasActiveFilter: hasActiveFilter,
               onSortChanged: onSortChanged,
               onToggleSelection: onToggleSelection,
@@ -883,6 +1071,7 @@ class PbFilesMainPanel extends StatelessWidget {
               onLinkedThreadPressed: onLinkedThreadPressed,
               onAskAgent: onAskAgent,
               onShare: onShare,
+              onExtract: onExtract,
               onDownload: onDownload,
               onRename: onRename,
               onDelete: onDelete,
@@ -913,8 +1102,30 @@ final _initialFiles = List<PbFilesItemData>.unmodifiable([
     previewState: PbAttachmentPreviewState.unavailable,
   ),
   PbFilesItemData.fromFileName(
-    id: 'debug-file-preview-not-supported',
-    title: 'File preview not supported.zip',
+    id: 'debug-archive-extract-preview',
+    title: 'Archive extract preview.zip',
+    thread: 'Preview debugging',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291333,
+    parentPath: '',
+    previewState: PbAttachmentPreviewState.unsupported,
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'debug-archive-extract-preview-large',
+    title: 'Archive extract preview large.zip',
+    thread: 'Preview debugging',
+    creator: 'Jesse Park',
+    creatorInitials: 'JP',
+    updatedLabel: 'Now',
+    updatedSort: 202605291332,
+    parentPath: '',
+    previewState: PbAttachmentPreviewState.unsupported,
+  ),
+  PbFilesItemData.fromFileName(
+    id: 'debug-archive-extract-preview-uploaded',
+    title: 'Archive extract preview uploaded.zip',
     thread: 'Preview debugging',
     creator: 'Jesse Park',
     creatorInitials: 'JP',

@@ -35,6 +35,7 @@ class PbFilesItemData {
     required this.updatedLabel,
     required this.updatedSort,
     required this.parentPath,
+    this.path,
     this.folderPath = '',
     required this.fileType,
     this.kind = PbFilesItemKind.file,
@@ -54,6 +55,7 @@ class PbFilesItemData {
     required String updatedLabel,
     required int updatedSort,
     required String parentPath,
+    String? path,
     String folderPath = '',
     PbAttachmentFileType? fileType,
     String? fileTypeKey,
@@ -80,6 +82,7 @@ class PbFilesItemData {
       updatedLabel: updatedLabel,
       updatedSort: updatedSort,
       parentPath: parentPath,
+      path: path,
       folderPath: folderPath,
       fileType: resolved.fileType,
       kind: kind,
@@ -99,6 +102,7 @@ class PbFilesItemData {
   final String updatedLabel;
   final int updatedSort;
   final String parentPath;
+  final String? path;
   final String folderPath;
   final PbAttachmentFileType fileType;
   final PbFilesItemKind kind;
@@ -117,6 +121,7 @@ class PbFilesItemData {
     String? updatedLabel,
     int? updatedSort,
     String? parentPath,
+    String? path,
     String? folderPath,
     PbAttachmentFileType? fileType,
     PbFilesItemKind? kind,
@@ -135,6 +140,7 @@ class PbFilesItemData {
       updatedLabel: updatedLabel ?? this.updatedLabel,
       updatedSort: updatedSort ?? this.updatedSort,
       parentPath: parentPath ?? this.parentPath,
+      path: path ?? this.path,
       folderPath: folderPath ?? this.folderPath,
       fileType: fileType ?? this.fileType,
       kind: kind ?? this.kind,
@@ -207,6 +213,13 @@ class PbFilesItemData {
   }
 
   PbAttachmentListItemData toAttachmentData() {
-    return PbAttachmentListItemData(title: title, subtitle: type.isEmpty ? 'File' : type, fileType: fileType, previewState: previewState);
+    return PbAttachmentListItemData(
+      title: title,
+      subtitle: type.isEmpty ? 'File' : type,
+      fileType: fileType,
+      path: path,
+      previewState: previewState,
+      sizeLabel: sizeLabel,
+    );
   }
 }

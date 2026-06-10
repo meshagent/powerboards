@@ -3,14 +3,16 @@ import 'package:flutter/material.dart';
 import '../menus/pb_menu_divider.dart';
 import '../menus/pb_menu_list.dart';
 import '../menus/pb_menu_option.dart';
+import 'pb_archive_extract.dart';
 import 'pb_files_data.dart';
 
 class PbFileItemMenu extends StatelessWidget {
-  const PbFileItemMenu({super.key, this.onOpen, this.onAskAgent, this.onShare, this.onDownload, this.onDismiss});
+  const PbFileItemMenu({super.key, this.onOpen, this.onAskAgent, this.onShare, this.onExtract, this.onDownload, this.onDismiss});
 
   final VoidCallback? onOpen;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
+  final VoidCallback? onExtract;
   final VoidCallback? onDownload;
   final VoidCallback? onDismiss;
 
@@ -39,6 +41,13 @@ class PbFileItemMenu extends StatelessWidget {
             singleLine: true,
             onPressed: () => _runMenuAction(onShare, onDismiss),
           ),
+        if (onExtract != null)
+          PbMenuOption(
+            title: pbArchiveExtractMenuLabel,
+            leadingIconAssetName: 'folder-archive',
+            singleLine: true,
+            onPressed: () => _runMenuAction(onExtract, onDismiss),
+          ),
         if (onDownload != null)
           PbMenuOption(
             title: 'Download',
@@ -60,6 +69,8 @@ class PbFilesRowMenu extends StatelessWidget {
     this.onRemoveProcessingRow,
     this.onAskAgent,
     this.onShare,
+    this.showExtract,
+    this.onExtract,
     this.onDownload,
     this.onRename,
     this.onDelete,
@@ -72,6 +83,8 @@ class PbFilesRowMenu extends StatelessWidget {
   final VoidCallback? onRemoveProcessingRow;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
+  final bool? showExtract;
+  final VoidCallback? onExtract;
   final VoidCallback? onDownload;
   final VoidCallback? onRename;
   final VoidCallback? onDelete;
@@ -79,6 +92,7 @@ class PbFilesRowMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final extractVisible = showExtract ?? (onExtract != null && pbCanExtractArchive(item.toAttachmentData()));
     return switch (item.kind) {
       PbFilesItemKind.processing => PbMenuList(
         children: [
@@ -158,6 +172,14 @@ class PbFilesRowMenu extends StatelessWidget {
               singleLine: true,
               onPressed: () => _runMenuAction(onShare, onDismiss),
             ),
+          if (extractVisible)
+            PbMenuOption(
+              title: pbArchiveExtractMenuLabel,
+              leadingIconAssetName: 'folder-archive',
+              singleLine: true,
+              state: onExtract == null ? PbMenuOptionVisualState.disabled : null,
+              onPressed: () => _runMenuAction(onExtract, onDismiss),
+            ),
           if (onDownload != null)
             PbMenuOption(
               title: 'Download',
@@ -192,18 +214,22 @@ class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
     super.key,
     this.showAskAgent = true,
     this.showShare = true,
+    this.showExtract = false,
     this.showDownload = true,
     this.onAskAgent,
     this.onShare,
+    this.onExtract,
     this.onDownload,
     this.onDismiss,
   });
 
   final bool showAskAgent;
   final bool showShare;
+  final bool showExtract;
   final bool showDownload;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
+  final VoidCallback? onExtract;
   final VoidCallback? onDownload;
   final VoidCallback? onDismiss;
 
@@ -226,6 +252,14 @@ class PbFilePreviewPaneOptionsMenu extends StatelessWidget {
             singleLine: true,
             state: onShare == null ? PbMenuOptionVisualState.disabled : null,
             onPressed: () => _runMenuAction(onShare, onDismiss),
+          ),
+        if (showExtract)
+          PbMenuOption(
+            title: pbArchiveExtractMenuLabel,
+            leadingIconAssetName: 'folder-archive',
+            singleLine: true,
+            state: onExtract == null ? PbMenuOptionVisualState.disabled : null,
+            onPressed: () => _runMenuAction(onExtract, onDismiss),
           ),
         if (showDownload)
           PbMenuOption(

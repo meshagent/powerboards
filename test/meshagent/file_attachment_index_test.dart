@@ -33,4 +33,19 @@ void main() {
     expect(link.threadPath, 'dataset://agents/assistant/threads/testing-screenshot-upload');
     expect(link.threadDisplayName, 'Testing Screenshot Upload');
   });
+
+  test('attachment index links ignore legacy generated provenance fields', () {
+    final link = PowerboardsFileAttachmentLink.fromJson(const {
+      'file_path': 'archives/archive.zip',
+      'thread_path': 'dataset://agents/assistant/threads/create-image-zip',
+      'thread_name': 'Create Image Zip',
+      'created_by': 'Assistant',
+      'generated_by_agent_name': 'Assistant',
+      'generated_provenance_source': 'thread_claim',
+    });
+
+    expect(link.createdBy, 'Assistant');
+    expect(link.toJson().containsKey('generated_by_agent_name'), isFalse);
+    expect(link.toJson().containsKey('generated_provenance_source'), isFalse);
+  });
 }

@@ -9,6 +9,7 @@ import '../../models/pb_agent_display.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
+import '../files/pb_archive_extract.dart';
 import '../files/pb_file_menus.dart';
 import '../files/pb_file_preview_state_card.dart';
 import '../menus/pb_menu_anchor.dart';
@@ -70,6 +71,7 @@ class PbRoomPanel extends StatefulWidget {
     this.filePreviewSourceBuilder,
     this.onAskFileAgent,
     this.onShareFile,
+    this.onExtractArchiveFile,
     this.onDownloadFile,
     required this.threads,
     this.threadItems,
@@ -111,6 +113,7 @@ class PbRoomPanel extends StatefulWidget {
   final PbFilePreviewSource? Function(PbAttachmentListItemData file)? filePreviewSourceBuilder;
   final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
   final ValueChanged<PbAttachmentListItemData>? onShareFile;
+  final ValueChanged<PbAttachmentListItemData>? onExtractArchiveFile;
   final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
   final List<String> threads;
   final List<PbThreadListItemData>? threadItems;
@@ -344,6 +347,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
                       onPreviewFile: _openFilePreview,
                       onAskFileAgent: widget.onAskFileAgent,
                       onShareFile: widget.onShareFile,
+                      onExtractArchiveFile: widget.onExtractArchiveFile,
                       onDownloadFile: widget.onDownloadFile,
                     ),
             ),
@@ -370,6 +374,9 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
       hideFullscreenToggle: widget.responsiveOverlay,
       onAskAgent: widget.onAskFileAgent == null ? null : () => widget.onAskFileAgent!(_previewFile),
       onShare: widget.onShareFile == null ? null : () => widget.onShareFile!(_previewFile),
+      onExtractArchive: widget.onExtractArchiveFile == null || !pbCanExtractArchive(_previewFile)
+          ? null
+          : () => widget.onExtractArchiveFile!(_previewFile),
       onDownload: widget.onDownloadFile == null ? null : () => widget.onDownloadFile!(_previewFile),
       onToggleFullscreen: () => _setFilePreviewFullscreen(!_filePreviewFullscreen),
       onClose: _closeFilePreview,
@@ -1624,12 +1631,20 @@ class _PbThreadChipState extends State<PbThreadChip> {
 }
 
 class _FilesPanel extends StatelessWidget {
-  const _FilesPanel({required this.attachments, required this.onPreviewFile, this.onAskFileAgent, this.onShareFile, this.onDownloadFile});
+  const _FilesPanel({
+    required this.attachments,
+    required this.onPreviewFile,
+    this.onAskFileAgent,
+    this.onShareFile,
+    this.onExtractArchiveFile,
+    this.onDownloadFile,
+  });
 
   final List<PbAttachmentListItemData> attachments;
   final ValueChanged<PbAttachmentListItemData> onPreviewFile;
   final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
   final ValueChanged<PbAttachmentListItemData>? onShareFile;
+  final ValueChanged<PbAttachmentListItemData>? onExtractArchiveFile;
   final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
 
   @override
@@ -1644,6 +1659,7 @@ class _FilesPanel extends StatelessWidget {
           onPreviewFile: onPreviewFile,
           onAskFileAgent: onAskFileAgent,
           onShareFile: onShareFile,
+          onExtractArchiveFile: onExtractArchiveFile,
           onDownloadFile: onDownloadFile,
         ),
       ],
@@ -1657,6 +1673,7 @@ class _AttachmentList extends StatelessWidget {
     required this.onPreviewFile,
     this.onAskFileAgent,
     this.onShareFile,
+    this.onExtractArchiveFile,
     this.onDownloadFile,
   });
 
@@ -1670,6 +1687,7 @@ class _AttachmentList extends StatelessWidget {
   final ValueChanged<PbAttachmentListItemData> onPreviewFile;
   final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
   final ValueChanged<PbAttachmentListItemData>? onShareFile;
+  final ValueChanged<PbAttachmentListItemData>? onExtractArchiveFile;
   final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
 
   @override
@@ -1694,6 +1712,9 @@ class _AttachmentList extends StatelessWidget {
           onPressed: () => onPreviewFile(attachment),
           onAskAgent: onAskFileAgent == null ? null : () => onAskFileAgent!(attachment),
           onShare: onShareFile == null ? null : () => onShareFile!(attachment),
+          onExtractArchive: onExtractArchiveFile == null || !pbCanExtractArchive(attachment)
+              ? null
+              : () => onExtractArchiveFile!(attachment),
           onDownload: onDownloadFile == null ? null : () => onDownloadFile!(attachment),
         );
       },
@@ -1760,6 +1781,7 @@ class PbAttachmentCard extends StatefulWidget {
     this.onPressed,
     this.onAskAgent,
     this.onShare,
+    this.onExtractArchive,
     this.onDownload,
     this.emptyState = false,
   });
@@ -1768,6 +1790,7 @@ class PbAttachmentCard extends StatefulWidget {
   final VoidCallback? onPressed;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
+  final VoidCallback? onExtractArchive;
   final VoidCallback? onDownload;
   final bool emptyState;
 
@@ -1901,6 +1924,7 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                             panelBuilder: (closeMenu) => PbFileItemMenu(
                               onOpen: widget.onPressed,
                               onAskAgent: widget.onAskAgent,
+                              onExtract: widget.onExtractArchive,
                               onDownload: widget.onDownload,
                               onDismiss: closeMenu,
                             ),
@@ -1995,6 +2019,9 @@ class PbFilePreviewPane extends StatefulWidget {
     this.loadText,
     this.onAskAgent,
     this.onShare,
+    this.showExtractArchive = false,
+    this.extractArchiveDisabled = false,
+    this.onExtractArchive,
     this.onDownload,
     this.onToggleFullscreen,
     this.onClose,
@@ -2018,6 +2045,9 @@ class PbFilePreviewPane extends StatefulWidget {
   final Future<String> Function()? loadText;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
+  final bool showExtractArchive;
+  final bool extractArchiveDisabled;
+  final VoidCallback? onExtractArchive;
   final VoidCallback? onDownload;
   final VoidCallback? onToggleFullscreen;
   final VoidCallback? onClose;
@@ -2142,6 +2172,7 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
                 context,
                 width: constraints.maxWidth,
                 resizing: widget.resizing,
+                hasExtract: widget.showExtractArchive || widget.onExtractArchive != null,
                 reservedWidth: showHeaderSaveAction ? _FilePreviewHeaderSaveAction.width(context) + 6 : 0,
               );
 
@@ -2170,7 +2201,14 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
                       _FilePreviewHeaderSaveAction(enabled: effectiveDirty, saving: _saving, onPressed: _saveEdits),
                       const SizedBox(width: 6),
                     ],
-                    _FilePreviewToolbar(state: toolbarState, onAskAgent: widget.onAskAgent, onDownload: widget.onDownload),
+                    _FilePreviewToolbar(
+                      state: toolbarState,
+                      onAskAgent: widget.onAskAgent,
+                      showExtractArchive: widget.showExtractArchive || widget.onExtractArchive != null,
+                      extractArchiveDisabled: widget.extractArchiveDisabled,
+                      onExtractArchive: widget.onExtractArchive,
+                      onDownload: widget.onDownload,
+                    ),
                     if (!widget.hideFullscreenToggle)
                       _GhostIcon(assetName: fullscreen ? 'minimize-2' : 'maximize-2', size: 40, onPressed: widget.onToggleFullscreen),
                     _GhostIcon(assetName: 'x', size: 40, onPressed: widget.onClose),
@@ -2204,7 +2242,13 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
               child: hasPreviewState
                   ? Align(
                       alignment: _stateAlignment,
-                      child: PbFilePreviewStateCard(file: file, state: previewState),
+                      child: PbFilePreviewStateCard(
+                        file: file,
+                        state: previewState,
+                        showExtractArchive: widget.showExtractArchive || widget.onExtractArchive != null,
+                        extractArchiveDisabled: widget.extractArchiveDisabled,
+                        onExtractArchive: widget.onExtractArchive,
+                      ),
                     )
                   : ClipRRect(
                       borderRadius: BorderRadius.circular(
@@ -4421,6 +4465,7 @@ enum _FilePreviewToolbarStateId { full, downloadIcon, downloadMenu, allMenu }
 
 enum _FilePreviewAction {
   askAgent('Ask agent', 'message-square-plus'),
+  extract(pbArchiveExtractMenuLabel, 'folder-archive'),
   download('Download', 'arrow-down-to-line');
 
   const _FilePreviewAction(this.label, this.iconAssetName);
@@ -4454,7 +4499,7 @@ class _FilePreviewToolbarState {
   static const allMenu = _FilePreviewToolbarState(
     id: _FilePreviewToolbarStateId.allMenu,
     iconOnly: {},
-    inMenu: {_FilePreviewAction.download, _FilePreviewAction.askAgent},
+    inMenu: {_FilePreviewAction.download, _FilePreviewAction.extract, _FilePreviewAction.askAgent},
   );
 
   static const _displayStates = [full, downloadIcon, downloadMenu, allMenu];
@@ -4467,11 +4512,17 @@ class _FilePreviewToolbarState {
   bool isIconOnly(_FilePreviewAction action) => iconOnly.contains(action);
   bool isInMenu(_FilePreviewAction action) => inMenu.contains(action);
 
-  static _FilePreviewToolbarState resolve(BuildContext context, {required double width, required bool resizing, double reservedWidth = 0}) {
+  static _FilePreviewToolbarState resolve(
+    BuildContext context, {
+    required double width,
+    required bool resizing,
+    required bool hasExtract,
+    double reservedWidth = 0,
+  }) {
     final states = resizing ? _displayStates : _stableStates;
 
     for (final state in states) {
-      if (_fits(context, width, state, reservedWidth)) {
+      if (_fits(context, width, state, hasExtract: hasExtract, reservedWidth: reservedWidth)) {
         return state;
       }
     }
@@ -4479,15 +4530,22 @@ class _FilePreviewToolbarState {
     return allMenu;
   }
 
-  static bool _fits(BuildContext context, double width, _FilePreviewToolbarState state, double reservedWidth) {
-    final availableTitleWidth = width - _toolbarWidth(context, state) - _headerGap - reservedWidth;
+  static bool _fits(
+    BuildContext context,
+    double width,
+    _FilePreviewToolbarState state, {
+    required bool hasExtract,
+    required double reservedWidth,
+  }) {
+    final availableTitleWidth = width - _toolbarWidth(context, state, hasExtract: hasExtract) - _headerGap - reservedWidth;
     return availableTitleWidth >= _titleFitWidth;
   }
 
-  static double _toolbarWidth(BuildContext context, _FilePreviewToolbarState state) {
+  static double _toolbarWidth(BuildContext context, _FilePreviewToolbarState state, {required bool hasExtract}) {
     final visibleWidths = <double>[
       for (final action in _FilePreviewAction.values)
-        if (!state.isInMenu(action)) state.isIconOnly(action) ? _iconButtonSize : _buttonWidth(context, action.label),
+        if (action != _FilePreviewAction.extract || hasExtract)
+          if (!state.isInMenu(action)) state.isIconOnly(action) ? _iconButtonSize : _buttonWidth(context, action.label),
       if (state.inMenu.isNotEmpty) _iconButtonSize,
       _iconButtonSize,
       _iconButtonSize,
@@ -4509,22 +4567,38 @@ class _FilePreviewToolbarState {
 }
 
 class _FilePreviewToolbar extends StatelessWidget {
-  const _FilePreviewToolbar({required this.state, this.onAskAgent, this.onDownload});
+  const _FilePreviewToolbar({
+    required this.state,
+    this.onAskAgent,
+    this.showExtractArchive = false,
+    this.extractArchiveDisabled = false,
+    this.onExtractArchive,
+    this.onDownload,
+  });
 
   final _FilePreviewToolbarState state;
   final VoidCallback? onAskAgent;
+  final bool showExtractArchive;
+  final bool extractArchiveDisabled;
+  final VoidCallback? onExtractArchive;
   final VoidCallback? onDownload;
 
   VoidCallback? _handlerFor(_FilePreviewAction action) {
     return switch (action) {
       _FilePreviewAction.askAgent => onAskAgent,
+      _FilePreviewAction.extract => extractArchiveDisabled ? null : onExtractArchive,
       _FilePreviewAction.download => onDownload,
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final visibleActions = _FilePreviewAction.values.where((action) => !state.isInMenu(action)).toList();
+    final availableActions = [
+      _FilePreviewAction.askAgent,
+      if (showExtractArchive || onExtractArchive != null) _FilePreviewAction.extract,
+      _FilePreviewAction.download,
+    ];
+    final visibleActions = availableActions.where((action) => !state.isInMenu(action)).toList();
 
     return AnimatedSize(
       duration: const Duration(milliseconds: 180),
@@ -4548,8 +4622,10 @@ class _FilePreviewToolbar extends StatelessWidget {
               panelBuilder: (closeMenu) => PbFilePreviewPaneOptionsMenu(
                 showAskAgent: state.isInMenu(_FilePreviewAction.askAgent),
                 showShare: false,
+                showExtract: (showExtractArchive || onExtractArchive != null) && state.isInMenu(_FilePreviewAction.extract),
                 showDownload: state.isInMenu(_FilePreviewAction.download),
                 onAskAgent: onAskAgent,
+                onExtract: extractArchiveDisabled ? null : onExtractArchive,
                 onDownload: onDownload,
                 onDismiss: closeMenu,
               ),
