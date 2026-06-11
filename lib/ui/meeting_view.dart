@@ -82,7 +82,7 @@ class _MeetingViewState extends State<MeetingView> {
         iconAssetName: 'video-empty-state',
         title: 'End voice session to meet',
         subtitle: 'Starting a meeting ends the active voice session in chat.',
-        primaryButtonLabel: 'Start meeting',
+        primaryButtonLabel: 'Enable meeting',
         showTranscribeToggle: false,
         onStartSessionPressed: voiceSessionController == null
             ? null

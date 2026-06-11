@@ -1816,6 +1816,8 @@ class _ResolvedAgentSelection {
 }
 
 class MeshagentRoomState extends State<MeshagentRoom> {
+  static const Duration _voiceSessionInstructionToastDuration = Duration(days: 1);
+
   final ResizableSplitViewController _meetingSplitViewController = ResizableSplitViewController();
   final FileManagerViewController _filesHeaderController = FileManagerViewController();
   final PreviewRoomRailMenuBridge _previewRoomRailMenuBridge = PreviewRoomRailMenuBridge();
@@ -3894,7 +3896,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                               : "Connect with this agent using your microphone.",
                                           emptyStateAvailableWidth: constraints.maxWidth,
                                           disconnectedEmptyStateBuilder: _buildDesktopV1VoiceSessionEmptyState,
-                                          connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
+                                          onSessionStarted: _showDesktopV1VoiceSessionStartedToast,
+                                          connectedContentAlignment: const Alignment(0, -0.18),
+                                          connectedControlsBuilder: (context, meeting) =>
+                                              VoiceMeetingControls(controller: meeting, showHelperText: false),
                                         ),
                                       )
                                     : Center(
@@ -3935,6 +3940,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       showTranscribeToggle: state.allowToggleTranscribe && state.onTranscribeChanged != null,
       onStartSessionPressed: () => unawaited(state.onStartSessionPressed()),
       onTranscribeChanged: state.onTranscribeChanged,
+    );
+  }
+
+  Future<void> _showDesktopV1VoiceSessionStartedToast(BuildContext context) async {
+    final toaster = ShadToaster.maybeOf(context);
+    if (toaster == null) {
+      return;
+    }
+
+    toaster.show(
+      powerboardsWidgetToast(
+        title: const Text(VoiceMeetingControls.helperTitle),
+        description: const Text(VoiceMeetingControls.helperDescription),
+        duration: _voiceSessionInstructionToastDuration,
+      ),
     );
   }
 
