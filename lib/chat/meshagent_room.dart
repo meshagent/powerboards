@@ -62,6 +62,7 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_voice_session_empty_state.dart';
+import 'package:powerboards/powerboards_ui/v1/components/dialogs/pb_dialog_shell.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_sidepane_file_list.dart';
@@ -70,11 +71,16 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_m
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_header.dart';
 import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_header.dart';
 import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_transcript_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_anchor.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_switcher_menu.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_empty_state.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:powerboards/settings/selected_room.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
@@ -413,6 +419,14 @@ class _DesktopPreviewMeetPaneData {
 
   final List<PbAttachmentListItemData> transcripts;
   final bool roomHasStoredFiles;
+}
+
+class _FilePromptAgentChoice {
+  const _FilePromptAgentChoice({required this.routeId, required this.agentName, required this.action});
+
+  final String routeId;
+  final String agentName;
+  final ChatFilePromptAction action;
 }
 
 DateTime? _desktopPreviewTranscriptSortDate(StorageEntry entry) {
@@ -1204,6 +1218,208 @@ class _DesktopPreviewVoiceSessionTranscriptsState extends State<_DesktopPreviewV
   @override
   Widget build(BuildContext context) {
     return widget.builder(context, _transcripts);
+  }
+}
+
+class _AskAgentSwitchDialog extends StatefulWidget {
+  const _AskAgentSwitchDialog({required this.currentAgentName, required this.choices, required this.initialChoice});
+
+  final String currentAgentName;
+  final List<_FilePromptAgentChoice> choices;
+  final _FilePromptAgentChoice initialChoice;
+
+  @override
+  State<_AskAgentSwitchDialog> createState() => _AskAgentSwitchDialogState();
+}
+
+class _AskAgentSwitchDialogState extends State<_AskAgentSwitchDialog> {
+  late _FilePromptAgentChoice _selectedChoice = widget.initialChoice;
+  bool _agentMenuOpen = false;
+
+  String get _currentAgentLabel {
+    final trimmed = widget.currentAgentName.trim();
+    return trimmed.isEmpty ? 'the current agent' : trimmed;
+  }
+
+  String get _description {
+    if (_currentAgentLabel.toLowerCase() == 'voice') {
+      return 'This will switch you from your current voice agent to the selected chat-based agent to start a new thread.';
+    }
+
+    return 'This will switch you from $_currentAgentLabel to the selected chat-based agent to start a new thread.';
+  }
+
+  String _displayAgentName(String agentName) {
+    final trimmed = agentName.trim();
+    if (trimmed.isEmpty) {
+      return trimmed;
+    }
+
+    return '${trimmed[0].toUpperCase()}${trimmed.substring(1)}';
+  }
+
+  List<PbSwitcherMenuItem> get _agentItems {
+    return widget.choices
+        .map(
+          (choice) => PbSwitcherMenuItem(title: _displayAgentName(choice.agentName), selected: choice.routeId == _selectedChoice.routeId),
+        )
+        .toList(growable: false);
+  }
+
+  void _selectChoice(String agentName) {
+    final nextChoice = widget.choices.firstWhereOrNull((choice) => _displayAgentName(choice.agentName) == agentName);
+    if (nextChoice == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedChoice = nextChoice;
+      _agentMenuOpen = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const messageTextStyle = PowerboardsTypography.p;
+
+    return PbDialogShell(
+      title: 'Switch to a chat agent',
+      description: 'Ask an agent about this file.',
+      onClose: () => Navigator.of(context).pop(),
+      actions: [
+        PbButton(label: 'Cancel', variant: PbButtonVariant.secondary, onPressed: () => Navigator.of(context).pop()),
+        PbButton(label: 'Continue', variant: PbButtonVariant.primary, onPressed: () => Navigator.of(context).pop(_selectedChoice)),
+      ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.choices.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 4, 0, 16),
+              child: _DialogDropdownField(
+                value: _displayAgentName(_selectedChoice.agentName),
+                menuOpen: _agentMenuOpen,
+                items: _agentItems,
+                emptyLabel: 'No agents found',
+                onMenuOpenChanged: (open) => setState(() => _agentMenuOpen = open),
+                onItemPressed: _selectChoice,
+              ),
+            ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            decoration: BoxDecoration(
+              color: PbColors.surfaceAccentSoft,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: PbColors.borderStateSelected),
+            ),
+            child: Text(_description, style: messageTextStyle),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DialogDropdownField extends StatefulWidget {
+  const _DialogDropdownField({
+    required this.value,
+    required this.menuOpen,
+    required this.items,
+    required this.onMenuOpenChanged,
+    required this.onItemPressed,
+    required this.emptyLabel,
+  });
+
+  final String value;
+  final bool menuOpen;
+  final List<PbSwitcherMenuItem> items;
+  final ValueChanged<bool> onMenuOpenChanged;
+  final ValueChanged<String> onItemPressed;
+  final String emptyLabel;
+
+  @override
+  State<_DialogDropdownField> createState() => _DialogDropdownFieldState();
+}
+
+class _DialogDropdownFieldState extends State<_DialogDropdownField> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedSurface = _pressed || widget.menuOpen;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final menuWidth = constraints.hasBoundedWidth ? constraints.maxWidth : 320.0;
+
+        return PbMenuAnchor(
+          placement: PbMenuAnchorPlacement.bottomLeft,
+          gap: 8,
+          onDismiss: () => widget.onMenuOpenChanged(false),
+          panel: widget.menuOpen
+              ? PbSwitcherMenu(
+                  width: menuWidth,
+                  showFilter: false,
+                  items: widget.items,
+                  emptyLabel: widget.emptyLabel,
+                  onItemPressed: widget.onItemPressed,
+                )
+              : null,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() {
+              _hovered = false;
+              _pressed = false;
+            }),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (_) => setState(() => _pressed = true),
+              onTapUp: (_) {
+                setState(() => _pressed = false);
+                widget.onMenuOpenChanged(!widget.menuOpen);
+              },
+              onTapCancel: () => setState(() => _pressed = false),
+              child: Transform.translate(
+                offset: Offset(0, _hovered && !_pressed && !widget.menuOpen ? -1 : 0),
+                child: Container(
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(PbRadii.small),
+                    border: Border.all(color: selectedSurface ? PbColors.borderStateSelected : PbColors.borderSoft),
+                    color: selectedSurface ? PbColors.surfaceStateSelected : PbColors.surfacePanel,
+                    boxShadow: _hovered && !_pressed && !widget.menuOpen ? PbShadows.stateHover : null,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.value,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: PowerboardsTypography.button.copyWith(color: PbColors.textPrimary),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      AnimatedRotation(
+                        turns: widget.menuOpen ? -0.5 : 0,
+                        duration: PbMotion.chevron,
+                        curve: Curves.easeOutCubic,
+                        child: const PbSvgIcon(assetName: 'chevron-down', size: 16, color: PbColors.customBrandInk),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -2286,6 +2502,147 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       (participant) => isChatOrVoiceBotParticipant(participant) && participantDisplayName(participant) == agentName,
     );
     return developmentParticipant == null ? null : developmentAgentRouteId(agentName);
+  }
+
+  String? _chatCapableDevelopmentAgentNameForRoute(String routeId, List<ServiceSpec> supported) {
+    final developmentAgentName = developmentAgentNameFromRoute(routeId);
+    if (developmentAgentName == null) {
+      return null;
+    }
+
+    final participant = _developmentParticipants(
+      supported,
+    ).firstWhereOrNull((candidate) => participantDisplayName(candidate) == developmentAgentName);
+    if (participant == null || participantConversationDescriptor(participant)?.isChat != true) {
+      return null;
+    }
+
+    return developmentAgentName;
+  }
+
+  List<_FilePromptAgentChoice> _filePromptAgentChoices(String path, {String? preferredAgentKey}) {
+    if (!services.state.isReady) {
+      return const <_FilePromptAgentChoice>[];
+    }
+
+    final supported = _supportedServices(services.state.value!);
+    final resolvedActions = resolveChatFilePromptActions(services: services.state.value!, filePath: path);
+    final actionsByAgentName = <String, ChatFilePromptAction>{};
+    for (final action in resolvedActions) {
+      final agentName = action.agentName.trim();
+      if (agentName.isEmpty || actionsByAgentName.containsKey(agentName)) {
+        continue;
+      }
+      actionsByAgentName[agentName] = action;
+    }
+
+    final choices = <_FilePromptAgentChoice>[];
+    final seenRouteIds = <String>{};
+
+    void addChoice(String routeId, String agentName) {
+      final normalizedRouteId = routeId.trim();
+      final normalizedAgentName = agentName.trim();
+      if (normalizedRouteId.isEmpty || normalizedAgentName.isEmpty || !seenRouteIds.add(normalizedRouteId)) {
+        return;
+      }
+
+      choices.add(
+        _FilePromptAgentChoice(
+          routeId: normalizedRouteId,
+          agentName: normalizedAgentName,
+          action: actionsByAgentName[normalizedAgentName] ?? defaultChatFilePromptAction(agentName: normalizedAgentName),
+        ),
+      );
+    }
+
+    if (preferredAgentKey != null) {
+      final preferredDevelopmentAgentName = _chatCapableDevelopmentAgentNameForRoute(preferredAgentKey, supported);
+      if (preferredDevelopmentAgentName != null) {
+        addChoice(preferredAgentKey, preferredDevelopmentAgentName);
+      }
+
+      for (final service in supported) {
+        if (_serviceId(service) != preferredAgentKey) {
+          continue;
+        }
+
+        final agentName = _chatAgentNameForService(service);
+        if (agentName != null) {
+          addChoice(preferredAgentKey, agentName);
+        }
+      }
+    }
+
+    for (final service in supported) {
+      final agentName = _chatAgentNameForService(service);
+      if (agentName != null) {
+        addChoice(_serviceId(service), agentName);
+      }
+    }
+
+    for (final participant in _developmentParticipants(supported)) {
+      if (participantConversationDescriptor(participant)?.isChat != true) {
+        continue;
+      }
+
+      final agentName = participantDisplayName(participant);
+      if (agentName != null) {
+        addChoice(developmentAgentRouteId(agentName), agentName);
+      }
+    }
+
+    return choices;
+  }
+
+  Future<_FilePromptAgentChoice?> _showAskAgentSwitchDialog({
+    required _MobileChatHeaderContext currentAgent,
+    required List<_FilePromptAgentChoice> choices,
+    required _FilePromptAgentChoice initialChoice,
+  }) {
+    return showGeneralDialog<_FilePromptAgentChoice?>(
+      context: context,
+      barrierDismissible: false,
+      barrierLabel: 'Switch agent to ask',
+      barrierColor: Colors.transparent,
+      pageBuilder: (_, _, _) =>
+          _AskAgentSwitchDialog(currentAgentName: currentAgent.agentName, choices: choices, initialChoice: initialChoice),
+    );
+  }
+
+  Future<ChatFilePromptAction?> _resolveAttachmentPromptAction(
+    ChatFilePromptAction action, {
+    required String filePath,
+    String? preferredAgentKey,
+  }) async {
+    if (!services.state.isReady) {
+      return action;
+    }
+
+    final supported = _supportedServices(services.state.value!);
+    final selected = _resolveSelectedAgent(supported);
+    final currentAgent = _resolveMobileChatHeaderContext(supported, selected);
+    if (currentAgent == null || currentAgent.threadListPath != null) {
+      return action;
+    }
+
+    final choices = _filePromptAgentChoices(filePath, preferredAgentKey: preferredAgentKey);
+    if (choices.isEmpty) {
+      return action;
+    }
+
+    final resolvedTargetRouteId = _agentRouteIdForFilePromptAction(action) ?? preferredAgentKey;
+    final currentRouteId = currentAgent.agentKey;
+    final initialChoice =
+        choices.firstWhereOrNull((choice) => choice.routeId == resolvedTargetRouteId) ??
+        choices.firstWhereOrNull((choice) => choice.routeId != currentRouteId) ??
+        choices.first;
+
+    if (currentRouteId != null && initialChoice.routeId == currentRouteId) {
+      return action;
+    }
+
+    final selectedChoice = await _showAskAgentSwitchDialog(currentAgent: currentAgent, choices: choices, initialChoice: initialChoice);
+    return selectedChoice?.action;
   }
 
   IconData _developmentAgentIcon(RemoteParticipant participant) {
@@ -6068,7 +6425,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final agentKey = _agentRouteIdForFilePromptAction(action) ?? preferredAgentKey;
+    final resolvedAction = await _resolveAttachmentPromptAction(action, filePath: filePath, preferredAgentKey: preferredAgentKey);
+    if (resolvedAction == null || !mounted || !context.mounted) {
+      return;
+    }
+
+    final agentKey = _agentRouteIdForFilePromptAction(resolvedAction) ?? preferredAgentKey;
     if (agentKey == null) {
       await showManageAgents();
       return;
@@ -6191,7 +6553,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     final supported = _supportedServices(services.state.value!);
     if (preferredAgentKey != null) {
-      final developmentAgentName = developmentAgentNameFromRoute(preferredAgentKey);
+      final developmentAgentName = _chatCapableDevelopmentAgentNameForRoute(preferredAgentKey, supported);
       if (developmentAgentName != null) {
         return defaultChatFilePromptAction(agentName: developmentAgentName);
       }
@@ -6216,6 +6578,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     for (final participant in _developmentParticipants(supported)) {
+      if (participantConversationDescriptor(participant)?.isChat != true) {
+        continue;
+      }
+
       final agentName = participantDisplayName(participant);
       if (agentName != null) {
         return defaultChatFilePromptAction(agentName: agentName);
