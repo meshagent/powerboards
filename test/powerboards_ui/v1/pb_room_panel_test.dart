@@ -58,6 +58,31 @@ class _FakeThreadStorageRepository extends agent_sessions.ThreadStorageRepositor
 }
 
 void main() {
+  test('scoped value helper falls back when the local scope is unavailable', () {
+    expect(powerboardsPreferScopedValue<String>(scopedValue: 'scoped', fallbackValue: 'fallback'), 'scoped');
+    expect(powerboardsPreferScopedValue<String>(scopedValue: null, fallbackValue: 'fallback'), 'fallback');
+    expect(powerboardsPreferScopedValue<String>(scopedValue: null, fallbackValue: null), isNull);
+  });
+
+  test('voice session disconnect helper keys off the active session and route change', () {
+    expect(
+      powerboardsShouldDisconnectVoiceSessionForAgentSwitch(voiceSessionConnected: true, currentRouteId: 'voice', nextRouteId: 'assistant'),
+      isTrue,
+    );
+    expect(
+      powerboardsShouldDisconnectVoiceSessionForAgentSwitch(
+        voiceSessionConnected: false,
+        currentRouteId: 'voice',
+        nextRouteId: 'assistant',
+      ),
+      isFalse,
+    );
+    expect(
+      powerboardsShouldDisconnectVoiceSessionForAgentSwitch(voiceSessionConnected: true, currentRouteId: 'voice', nextRouteId: 'voice'),
+      isFalse,
+    );
+  });
+
   Widget buildHarness({
     required List<PbAgentListItemData> agents,
     String? selectedAgentId,

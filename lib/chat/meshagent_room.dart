@@ -429,6 +429,20 @@ class _FilePromptAgentChoice {
   final ChatFilePromptAction action;
 }
 
+@visibleForTesting
+T? powerboardsPreferScopedValue<T>({T? scopedValue, T? fallbackValue}) {
+  return scopedValue ?? fallbackValue;
+}
+
+@visibleForTesting
+bool powerboardsShouldDisconnectVoiceSessionForAgentSwitch({
+  required bool voiceSessionConnected,
+  required String? currentRouteId,
+  required String? nextRouteId,
+}) {
+  return voiceSessionConnected && nextRouteId != null && nextRouteId != currentRouteId;
+}
+
 DateTime? _desktopPreviewTranscriptSortDate(StorageEntry entry) {
   return entry.updatedAt ?? entry.createdAt;
 }
@@ -2208,7 +2222,7 @@ class _ResolvedAgentSelection {
 }
 
 class MeshagentRoomState extends State<MeshagentRoom> {
-  static const Duration _voiceSessionInstructionToastDuration = Duration(days: 1);
+  static const Duration _voiceSessionInstructionToastDuration = Duration(seconds: 5);
 
   final ResizableSplitViewController _meetingSplitViewController = ResizableSplitViewController();
   final FileManagerViewController _filesHeaderController = FileManagerViewController();
@@ -2226,6 +2240,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   static const Duration _roomResourceTimeout = Duration(seconds: 30);
 
   final MeshagentRoomController controller = MeshagentRoomController();
+  MeetingController? _roomMeetingController;
   int _newThreadResetVersion = 0;
   int _composerAttachmentSeedRevision = 0;
   String _lastRoomStatusText = "Connecting to room";
@@ -2458,6 +2473,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       ..remove(filePreviewOriginQueryParameter);
     var nextPath = currentUri.path;
     if (agentKey != null) {
+      _persistSelectedRoomAgentRouteId(agentKey);
       final pid = fromUUID(widget.projectId);
       nextPath = _isBaseRouteId(agentKey) ? '/p/$pid/r/${widget.room.roomName}' : '/p/$pid/r/${widget.room.roomName}/a/$agentKey';
     }
@@ -2642,7 +2658,52 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final selectedChoice = await _showAskAgentSwitchDialog(currentAgent: currentAgent, choices: choices, initialChoice: initialChoice);
-    return selectedChoice?.action;
+    if (selectedChoice == null) {
+      return null;
+    }
+
+    final didDisconnect = await _disconnectVoiceSessionForAgentSwitch(currentRouteId: currentRouteId, nextRouteId: selectedChoice.routeId);
+    if (!didDisconnect) {
+      return null;
+    }
+
+    return selectedChoice.action;
+  }
+
+  MeetingController? _voiceSessionControllerForAgentSwitch({BuildContext? sourceContext}) {
+    final scopedController = sourceContext != null && sourceContext.mounted ? MeetingController.maybeOf(sourceContext) : null;
+    return powerboardsPreferScopedValue(scopedValue: scopedController, fallbackValue: _roomMeetingController);
+  }
+
+  Future<bool> _disconnectVoiceSessionForAgentSwitch({
+    BuildContext? sourceContext,
+    required String? currentRouteId,
+    required String? nextRouteId,
+  }) async {
+    final voiceSessionController = _voiceSessionControllerForAgentSwitch(sourceContext: sourceContext);
+    final shouldDisconnect = powerboardsShouldDisconnectVoiceSessionForAgentSwitch(
+      voiceSessionConnected: voiceSessionController?.isConnected == true,
+      currentRouteId: currentRouteId,
+      nextRouteId: nextRouteId,
+    );
+    if (!shouldDisconnect) {
+      return true;
+    }
+
+    final toaster = sourceContext != null && sourceContext.mounted ? ShadToaster.maybeOf(sourceContext) : ShadToaster.maybeOf(context);
+    try {
+      await voiceSessionController!.disconnect();
+      return true;
+    } catch (_) {
+      toaster?.show(
+        powerboardsToast(
+          title: 'Unable to switch agents',
+          description: 'End the active voice session before switching agents.',
+          destructive: true,
+        ),
+      );
+      return false;
+    }
   }
 
   IconData _developmentAgentIcon(RemoteParticipant participant) {
@@ -2972,11 +3033,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   String? _preferredMobileAgentRouteId(BuildContext context) {
-    if (!_usesMobileRoomLayout(context)) {
-      return widget.service;
+    final explicitRouteId = widget.service;
+    if (explicitRouteId != null) {
+      return explicitRouteId;
     }
 
-    return widget.service ?? _persistedSelectedRoomAgentRouteId();
+    if (_usesMobileRoomLayout(context) || powerboardsUsesDesktopUiPreview(context)) {
+      return _persistedSelectedRoomAgentRouteId();
+    }
+
+    return null;
   }
 
   List<_MobileRoomContextAgentOption> _mobileRoomContextAgentOptions(List<ServiceSpec> supported) {
@@ -5216,13 +5282,31 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
-  void _selectDesktopPreviewAgent(PbAgentListItemData agent) {
+  Future<void> _selectDesktopPreviewAgent(
+    PbAgentListItemData agent, {
+    required BuildContext sourceContext,
+    required String? currentRouteId,
+  }) async {
     final routeId = agent.id;
     if (routeId == null || routeId.isEmpty) {
       return;
     }
 
-    _navigateToAgentRoute(context, routeId);
+    final didDisconnect = await _disconnectVoiceSessionForAgentSwitch(
+      sourceContext: sourceContext,
+      currentRouteId: currentRouteId,
+      nextRouteId: routeId,
+    );
+    if (!didDisconnect) {
+      return;
+    }
+
+    if (!mounted || !sourceContext.mounted) {
+      return;
+    }
+
+    _persistSelectedRoomAgentRouteId(routeId);
+    _navigateToAgentRoute(sourceContext, routeId);
   }
 
   void _closeDesktopPreviewRoomPanelOverlay() {
@@ -5442,7 +5526,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     agents: agentItems,
                     selectedAgentId: selected.routeId,
                     selectedAgentTitle: agentName,
-                    onAgentItemSelected: _selectDesktopPreviewAgent,
+                    onAgentItemSelected: (agent) =>
+                        unawaited(_selectDesktopPreviewAgent(agent, sourceContext: context, currentRouteId: selected.routeId)),
                     onManageAgents: isOwner.state.value == true ? showManageAgents : null,
                     agentsExpanded: _desktopPreviewAgentsExpanded,
                     onAgentsExpandedChanged: (expanded) {
@@ -6722,6 +6807,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   child: ControllerBuilder(
                     controller: controller,
                     builder: (context) {
+                      _roomMeetingController = meeting;
                       return ChangeNotifierBuilder(
                         source: widget.room.messaging,
                         builder: (context) {
