@@ -64,6 +64,7 @@ import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_voice_session_empty_state.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_sidepane_file_list.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_header.dart';
@@ -100,7 +101,8 @@ const double _meetingToolbarPreferredExpandedWidth = 640;
 const double _meetingToolbarPreferredCompactWidth = _meetingToolbarCompactThreshold;
 const double _mobileRoomHeaderGap = 8;
 const String _roomPaneQueryParameter = 'pane';
-const String _meetingTranscriptFolder = 'transcripts/meetings';
+const String _transcriptRootFolder = 'transcripts';
+const String _meetingTranscriptFolder = '$_transcriptRootFolder/meetings';
 
 enum _MobileRoomPane { chat, files, meeting }
 
@@ -411,6 +413,55 @@ class _DesktopPreviewMeetPaneData {
 
   final List<PbAttachmentListItemData> transcripts;
   final bool roomHasStoredFiles;
+}
+
+DateTime? _desktopPreviewTranscriptSortDate(StorageEntry entry) {
+  return entry.updatedAt ?? entry.createdAt;
+}
+
+PbAttachmentListItemData _desktopPreviewTranscriptItem({required String path, required String fileName}) {
+  final displayTitle = formatTranscriptFileNameForDisplay(fileName).trim();
+
+  return PbAttachmentListItemData.fromFileName(
+    title: displayTitle.isEmpty ? fileName : displayTitle,
+    subtitle: 'Transcript',
+    path: path,
+    fileType: PbAttachmentFileType.transcript,
+  );
+}
+
+List<PbAttachmentListItemData> _selectDesktopPreviewRecentTranscripts(Iterable<_DesktopPreviewTranscriptRecord> records) {
+  final sorted = records.toList(growable: false)
+    ..sort((left, right) {
+      final leftDate = left.sortDate;
+      final rightDate = right.sortDate;
+      if (leftDate == null && rightDate == null) {
+        return left.data.title.compareTo(right.data.title);
+      }
+      if (leftDate == null) {
+        return 1;
+      }
+      if (rightDate == null) {
+        return -1;
+      }
+      return rightDate.compareTo(leftDate);
+    });
+
+  final now = DateTime.now();
+  final recentCutoff = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
+  final recent = sorted
+      .where((record) {
+        final sortDate = record.sortDate;
+        return sortDate != null && !sortDate.isBefore(recentCutoff);
+      })
+      .toList(growable: false);
+  final selected = recent.isNotEmpty ? recent : sorted.take(7);
+
+  return [for (final record in selected) record.data];
+}
+
+bool _isTranscriptFileName(String fileName) {
+  return fileName.toLowerCase().endsWith(transcriptFileExtension);
 }
 
 String? _agentThreadListPath(String? path) {
@@ -1028,6 +1079,131 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   @override
   Widget build(BuildContext context) {
     return widget.builder(context, _attachments());
+  }
+}
+
+class _DesktopPreviewVoiceSessionTranscripts extends StatefulWidget {
+  const _DesktopPreviewVoiceSessionTranscripts({required this.client, required this.agentName, required this.builder});
+
+  final RoomClient client;
+  final String agentName;
+  final Widget Function(BuildContext context, List<PbAttachmentListItemData> transcripts) builder;
+
+  @override
+  State<_DesktopPreviewVoiceSessionTranscripts> createState() => _DesktopPreviewVoiceSessionTranscriptsState();
+}
+
+class _DesktopPreviewVoiceSessionTranscriptsState extends State<_DesktopPreviewVoiceSessionTranscripts> {
+  StreamSubscription<RoomEvent>? _roomSubscription;
+  List<PbAttachmentListItemData> _transcripts = const <PbAttachmentListItemData>[];
+  int _loadGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _bindRoom();
+    unawaited(_loadTranscripts());
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopPreviewVoiceSessionTranscripts oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.client != widget.client) {
+      _bindRoom();
+      unawaited(_loadTranscripts());
+      return;
+    }
+
+    if (oldWidget.agentName != widget.agentName) {
+      unawaited(_loadTranscripts());
+    }
+  }
+
+  @override
+  void dispose() {
+    _roomSubscription?.cancel();
+    _roomSubscription = null;
+    super.dispose();
+  }
+
+  void _bindRoom() {
+    _roomSubscription?.cancel();
+    _roomSubscription = widget.client.listen(_onRoomEvent);
+  }
+
+  void _onRoomEvent(RoomEvent event) {
+    final path = switch (event) {
+      FileUpdatedEvent() => normalizePowerboardsAttachmentPath(event.path),
+      FileDeletedEvent() => normalizePowerboardsAttachmentPath(event.path),
+      _ => null,
+    };
+
+    final agentFolder = _agentTranscriptFolder;
+    if (path == null || agentFolder.isEmpty) {
+      return;
+    }
+
+    if (path == agentFolder || path.startsWith('$agentFolder/')) {
+      unawaited(_loadTranscripts());
+    }
+  }
+
+  String get _agentTranscriptFolder {
+    return normalizePowerboardsAttachmentPath(joinPaths(_transcriptRootFolder, widget.agentName.trim()));
+  }
+
+  Future<void> _loadTranscripts() async {
+    final generation = ++_loadGeneration;
+    final agentFolder = _agentTranscriptFolder;
+    final records = agentFolder.isEmpty ? const <_DesktopPreviewTranscriptRecord>[] : await _collectTranscriptRecords(agentFolder);
+
+    if (!mounted || generation != _loadGeneration) {
+      return;
+    }
+
+    setState(() {
+      _transcripts = _selectDesktopPreviewRecentTranscripts(records);
+    });
+  }
+
+  Future<List<_DesktopPreviewTranscriptRecord>> _collectTranscriptRecords(String folderPath) async {
+    List<StorageEntry> entries;
+    try {
+      entries = await widget.client.storage.list(folderPath);
+    } catch (_) {
+      return const <_DesktopPreviewTranscriptRecord>[];
+    }
+
+    final records = <_DesktopPreviewTranscriptRecord>[];
+    for (final entry in entries) {
+      if (entry.name.startsWith('.')) {
+        continue;
+      }
+
+      final fullPath = joinPaths(folderPath, entry.name);
+      if (entry.isFolder) {
+        records.addAll(await _collectTranscriptRecords(fullPath));
+        continue;
+      }
+
+      if (!_isTranscriptFileName(entry.name)) {
+        continue;
+      }
+
+      records.add(
+        _DesktopPreviewTranscriptRecord(
+          data: _desktopPreviewTranscriptItem(path: fullPath, fileName: entry.name),
+          sortDate: _desktopPreviewTranscriptSortDate(entry),
+        ),
+      );
+    }
+
+    return records;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(context, _transcripts);
   }
 }
 
@@ -4069,55 +4245,25 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   DateTime? _desktopPreviewMeetTranscriptSortDate(StorageEntry entry) {
-    return entry.updatedAt ?? entry.createdAt;
+    return _desktopPreviewTranscriptSortDate(entry);
   }
 
   PbAttachmentListItemData _desktopPreviewMeetTranscriptItem(StorageEntry entry) {
-    final path = joinPaths(_meetingTranscriptFolder, entry.name);
-    final displayTitle = formatTranscriptFileNameForDisplay(entry.name).trim();
-
-    return PbAttachmentListItemData.fromFileName(
-      title: displayTitle.isEmpty ? entry.name : displayTitle,
-      subtitle: 'Transcript',
-      path: path,
-      fileType: PbAttachmentFileType.transcript,
-    );
+    return _desktopPreviewTranscriptItem(path: joinPaths(_meetingTranscriptFolder, entry.name), fileName: entry.name);
   }
 
   Future<List<PbAttachmentListItemData>> _loadDesktopPreviewMeetTranscripts() async {
     final entries = await widget.room.storage.list(_meetingTranscriptFolder);
-    final records =
-        <_DesktopPreviewTranscriptRecord>[
-          for (final entry in entries)
-            if (!entry.isFolder)
-              _DesktopPreviewTranscriptRecord(
-                data: _desktopPreviewMeetTranscriptItem(entry),
-                sortDate: _desktopPreviewMeetTranscriptSortDate(entry),
-              ),
-        ]..sort((left, right) {
-          final leftDate = left.sortDate;
-          final rightDate = right.sortDate;
-          if (leftDate == null && rightDate == null) {
-            return left.data.title.compareTo(right.data.title);
-          }
-          if (leftDate == null) {
-            return 1;
-          }
-          if (rightDate == null) {
-            return -1;
-          }
-          return rightDate.compareTo(leftDate);
-        });
+    final records = <_DesktopPreviewTranscriptRecord>[
+      for (final entry in entries)
+        if (!entry.isFolder)
+          _DesktopPreviewTranscriptRecord(
+            data: _desktopPreviewMeetTranscriptItem(entry),
+            sortDate: _desktopPreviewMeetTranscriptSortDate(entry),
+          ),
+    ];
 
-    final now = DateTime.now();
-    final recentCutoff = DateTime(now.year, now.month, now.day).subtract(const Duration(days: 7));
-    final recent = records.where((record) {
-      final sortDate = record.sortDate;
-      return sortDate != null && !sortDate.isBefore(recentCutoff);
-    }).toList();
-    final selected = recent.isNotEmpty ? recent : records.take(7).toList();
-
-    return [for (final record in selected) record.data];
+    return _selectDesktopPreviewRecentTranscripts(records);
   }
 
   bool _desktopPreviewMeetRootEntryIsRoomFileContent(StorageEntry entry) {
@@ -4779,6 +4925,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final threadListPath = chatContext?.threadListPath;
     final agentItems = _desktopPreviewAgentItems(supported, selected);
     final hasVisibleAgents = _hasVisibleAgents(supported);
+    final voiceOnlyAgent = chatContext?.isVoiceOnly == true;
 
     return _DesktopPreviewThreadList(
       client: widget.room,
@@ -4850,13 +4997,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 },
               );
 
-        return _DesktopPreviewThreadAttachments(
-          client: widget.room,
-          threads: threads,
-          selectedThreadPath: chatContext?.selectedThreadPath,
-          selectedThreadName: selectedThreadTitle,
-          localLinks: _localThreadAttachmentLinks,
-          builder: (context, attachments) => LayoutBuilder(
+        Widget buildRoomWorkspace(
+          List<PbAttachmentListItemData> sidePanelItems, {
+          required String filesTabLabel,
+          required String filesPanelDescription,
+          required PbSidepaneFileEmptyStateData filesEmptyState,
+        }) {
+          return LayoutBuilder(
             builder: (context, constraints) {
               final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_desktopPreviewFilePreviewFullscreen;
               final roomPanelExpanded = responsivePanel ? false : !_desktopPreviewRoomPanelCollapsed;
@@ -4948,6 +5095,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     },
                     showThreadsSection: threadListPath != null,
                     showFilesTab: true,
+                    filesTabLabel: filesTabLabel,
+                    filesPanelDescription: filesPanelDescription,
+                    filesEmptyState: filesEmptyState,
                     threads: [for (final thread in threads) thread.name],
                     threadItems: threadItems,
                     selectedThreadId: chatContext?.selectedThreadPath,
@@ -4967,7 +5117,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       }
                     },
                     onCreateThread: () => selectThreadFromRoomPanel(null),
-                    attachments: attachments,
+                    attachments: sidePanelItems,
                     initialPreviewFile: _desktopPreviewFilePreviewFile,
                     initialFilePreviewOpen: _desktopPreviewFilePreviewOpen,
                     openFilePreviewAsFullscreen: responsiveOverlay || _desktopPreviewFilePreviewFullscreen,
@@ -5063,6 +5213,38 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 ),
               );
             },
+          );
+        }
+
+        if (voiceOnlyAgent) {
+          return _DesktopPreviewVoiceSessionTranscripts(
+            client: widget.room,
+            agentName: agentName,
+            builder: (context, transcripts) => buildRoomWorkspace(
+              transcripts,
+              filesTabLabel: 'Sessions',
+              filesPanelDescription: 'Transcripts of recent audio sessions.',
+              filesEmptyState: const PbSidepaneFileEmptyStateData(
+                title: 'No transcripts yet',
+                subtitle: 'Transcripts will show up here.',
+                fileType: PbAttachmentFileType.transcript,
+                iconAssetName: 'file',
+              ),
+            ),
+          );
+        }
+
+        return _DesktopPreviewThreadAttachments(
+          client: widget.room,
+          threads: threads,
+          selectedThreadPath: chatContext?.selectedThreadPath,
+          selectedThreadName: selectedThreadTitle,
+          localLinks: _localThreadAttachmentLinks,
+          builder: (context, attachments) => buildRoomWorkspace(
+            attachments,
+            filesTabLabel: 'Files',
+            filesPanelDescription: 'Browse attachments by selected agent.',
+            filesEmptyState: const PbSidepaneFileEmptyStateData(title: 'No files here yet', subtitle: 'Files attached will show up here.'),
           ),
         );
       },

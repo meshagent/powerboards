@@ -9,6 +9,7 @@ import '../../models/pb_agent_display.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
+import '../files/pb_sidepane_file_list.dart';
 import '../files/pb_file_preview_state_card.dart';
 import '../menus/pb_menu_anchor.dart';
 import '../menus/pb_menu_card.dart';
@@ -61,6 +62,9 @@ class PbRoomPanel extends StatefulWidget {
     this.onAgentsExpandedChanged,
     this.showThreadsSection = true,
     this.showFilesTab = true,
+    this.filesTabLabel = 'Files',
+    this.filesPanelDescription = 'Browse attachments by selected agent.',
+    this.filesEmptyState = const PbSidepaneFileEmptyStateData(title: 'No files here yet', subtitle: 'Files attached will show up here.'),
     this.attachments,
     this.filePreviewBuilder,
     this.filePreviewSourceBuilder,
@@ -102,6 +106,9 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<bool>? onAgentsExpandedChanged;
   final bool showThreadsSection;
   final bool showFilesTab;
+  final String filesTabLabel;
+  final String filesPanelDescription;
+  final PbSidepaneFileEmptyStateData filesEmptyState;
   final List<PbAttachmentListItemData>? attachments;
   final Widget Function(PbAttachmentListItemData file)? filePreviewBuilder;
   final PbFilePreviewSource? Function(PbAttachmentListItemData file)? filePreviewSourceBuilder;
@@ -266,7 +273,12 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          PbRoomTabs(selectedTab: _activeTab, showFilesTab: widget.showFilesTab, onTabSelected: _selectTab),
+          PbRoomTabs(
+            selectedTab: _activeTab,
+            showFilesTab: widget.showFilesTab,
+            filesTabLabel: widget.filesTabLabel,
+            onTabSelected: _selectTab,
+          ),
           const SizedBox(height: 20),
           Expanded(
             child: _activeTab == PbRoomPanelTab.agents
@@ -292,6 +304,8 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
                   )
                 : _FilesPanel(
                     attachments: widget.attachments ?? _attachments,
+                    description: widget.filesPanelDescription,
+                    emptyState: widget.filesEmptyState,
                     onPreviewFile: _openFilePreview,
                     onAskFileAgent: widget.onAskFileAgent,
                     onShareFile: widget.onShareFile,
@@ -450,10 +464,17 @@ class PbResponsiveRoomPanelOverlayFrame extends StatelessWidget {
 }
 
 class PbRoomTabs extends StatefulWidget {
-  const PbRoomTabs({super.key, required this.selectedTab, this.showFilesTab = true, required this.onTabSelected});
+  const PbRoomTabs({
+    super.key,
+    required this.selectedTab,
+    this.showFilesTab = true,
+    this.filesTabLabel = 'Files',
+    required this.onTabSelected,
+  });
 
   final PbRoomPanelTab selectedTab;
   final bool showFilesTab;
+  final String filesTabLabel;
   final ValueChanged<PbRoomPanelTab> onTabSelected;
 
   @override
@@ -493,7 +514,7 @@ class _PbRoomTabsState extends State<PbRoomTabs> {
               if (widget.showFilesTab) ...[
                 const SizedBox(width: 24),
                 _RoomTab(
-                  label: 'Files',
+                  label: widget.filesTabLabel,
                   selected: widget.selectedTab == PbRoomPanelTab.files,
                   hovered: _hoveredTab == PbRoomPanelTab.files,
                   selectedSuppressed: _hoveredTab != null && _hoveredTab != PbRoomPanelTab.files,
@@ -832,11 +853,13 @@ class _AgentsFixedSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final description = showDivider ? 'Browse threads by selected agent.' : 'Browse agents in this room.';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _RoomPanelDescription('Browse threads by selected agent.'),
+        _RoomPanelDescription(description),
         SizedBox(height: _sidepaneDescriptionToListGap + (compactLayout ? _sidepaneListTopHoverClearance : 0)),
         _AgentGroup(
           agents: agents,
@@ -1562,9 +1585,19 @@ class _PbThreadChipState extends State<PbThreadChip> {
 }
 
 class _FilesPanel extends StatelessWidget {
-  const _FilesPanel({required this.attachments, required this.onPreviewFile, this.onAskFileAgent, this.onShareFile, this.onDownloadFile});
+  const _FilesPanel({
+    required this.attachments,
+    required this.description,
+    required this.emptyState,
+    required this.onPreviewFile,
+    this.onAskFileAgent,
+    this.onShareFile,
+    this.onDownloadFile,
+  });
 
   final List<PbAttachmentListItemData> attachments;
+  final String description;
+  final PbSidepaneFileEmptyStateData emptyState;
   final ValueChanged<PbAttachmentListItemData> onPreviewFile;
   final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
   final ValueChanged<PbAttachmentListItemData>? onShareFile;
@@ -1575,10 +1608,11 @@ class _FilesPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _RoomPanelDescription('Browse attachments by selected agent.'),
+        _RoomPanelDescription(description),
         const SizedBox(height: 20),
         _AttachmentList(
           attachments: attachments,
+          emptyState: emptyState,
           onPreviewFile: onPreviewFile,
           onAskFileAgent: onAskFileAgent,
           onShareFile: onShareFile,
@@ -1592,19 +1626,15 @@ class _FilesPanel extends StatelessWidget {
 class _AttachmentList extends StatelessWidget {
   const _AttachmentList({
     required this.attachments,
+    required this.emptyState,
     required this.onPreviewFile,
     this.onAskFileAgent,
     this.onShareFile,
     this.onDownloadFile,
   });
 
-  static const _emptyAttachment = PbAttachmentListItemData(
-    title: 'No files here yet',
-    subtitle: 'Files attached will show up here.',
-    fileType: PbAttachmentFileType.generic,
-  );
-
   final List<PbAttachmentListItemData> attachments;
+  final PbSidepaneFileEmptyStateData emptyState;
   final ValueChanged<PbAttachmentListItemData> onPreviewFile;
   final ValueChanged<PbAttachmentListItemData>? onAskFileAgent;
   final ValueChanged<PbAttachmentListItemData>? onShareFile;
@@ -1612,29 +1642,20 @@ class _AttachmentList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (attachments.isEmpty) {
-      return _SidepaneScrollViewport.separated(
-        itemCount: 1,
-        gap: 10,
-        topPadding: _sidepaneListTopHoverClearance,
-        itemBuilder: (context, index) => const PbAttachmentCard(data: _emptyAttachment, emptyState: true),
-      );
-    }
-
-    return _SidepaneScrollViewport.separated(
-      itemCount: attachments.length,
+    return PbSidepaneFileList(
+      files: [
+        for (final attachment in attachments)
+          PbSidepaneFileListItem(
+            data: attachment,
+            onPressed: () => onPreviewFile(attachment),
+            onAskAgent: onAskFileAgent == null ? null : () => onAskFileAgent!(attachment),
+            onShare: onShareFile == null ? null : () => onShareFile!(attachment),
+            onDownload: onDownloadFile == null ? null : () => onDownloadFile!(attachment),
+          ),
+      ],
+      emptyState: emptyState,
       gap: 10,
       topPadding: _sidepaneListTopHoverClearance,
-      itemBuilder: (context, index) {
-        final attachment = attachments[index];
-        return PbAttachmentCard(
-          data: attachment,
-          onPressed: () => onPreviewFile(attachment),
-          onAskAgent: onAskFileAgent == null ? null : () => onAskFileAgent!(attachment),
-          onShare: onShareFile == null ? null : () => onShareFile!(attachment),
-          onDownload: onDownloadFile == null ? null : () => onDownloadFile!(attachment),
-        );
-      },
     );
   }
 }
