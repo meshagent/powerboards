@@ -38,6 +38,7 @@ import 'ui/powerboards_toast_theme.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
 import 'updates/powerboards_desktop_update_banner.dart';
+import 'settings/shared_profiles.dart';
 import 'settings/ui_mode.dart';
 
 final uiRoot = GlobalKey();
@@ -185,6 +186,11 @@ Future<void> startApp() async {
   );
 
   MeshagentConfig.current = MeshagentConfig.fromEnvironment();
+  await applySharedProfileConfigIfSupported();
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.windows)) {
+    MeshagentConfig.current = await MeshagentConfig.current!.withDeploymentConfig();
+  }
+  await hydrateSharedProfileAuthIfSupported();
 
   final initialLink = kIsWeb ? null : await appLinks.getInitialLink();
   final uri = initialLink != null && isShareMediaUri(initialLink) ? null : initialLink;

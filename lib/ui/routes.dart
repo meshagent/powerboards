@@ -21,6 +21,7 @@ import 'package:powerboards/meshagent/rooms_list_builder.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/settings/selected_room.dart';
+import 'package:powerboards/settings/shared_profiles.dart';
 import 'package:powerboards/theme/theme.dart';
 
 import 'empty_states.dart';
@@ -305,6 +306,7 @@ Widget loginRequiredBuilder(BuildContext context, WidgetBuilder builder, Uri cur
     builder: builder,
     scope: fullOAuthScope,
     extraQueryParams: {"state": state.encode()},
+    preferEphemeralAuthSession: !kIsWeb && {TargetPlatform.macOS, TargetPlatform.windows}.contains(defaultTargetPlatform),
   );
 }
 
@@ -359,7 +361,11 @@ final routes = [
         callbackUrl: config.oauthCallbackUrl,
         oauthClientId: config.oauthClientId,
         authorizationCode: code!,
-        onAuthSuccess: () {
+        onAuthSuccess: () async {
+          await syncPowerboardsAuthToSharedProfile();
+          if (!context.mounted) {
+            return;
+          }
           context.go(redirectUri);
         },
       );

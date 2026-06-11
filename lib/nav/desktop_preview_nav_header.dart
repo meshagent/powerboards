@@ -6,6 +6,8 @@ import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_upda
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/nav/nav_rooms.dart';
 import 'package:powerboards/powerboards_ui/active.dart';
+import 'package:powerboards/settings/shared_profiles.dart';
+import 'package:powerboards/settings/shared_profiles_dialog.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 
 class DesktopPreviewNavHeader extends StatefulWidget {
@@ -240,6 +242,7 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
       email: widget.avatarEmail,
       projectLabel: 'Browsing project: ${currentProject?.name ?? 'No project selected'}',
       onSelectProjectPressed: () => _closeMenuAndRun(_openProjectDialog),
+      onSwitchProfilePressed: isSharedProfilesSupported ? () => _closeMenuAndRun(() => showPowerboardsSharedProfilesDialog(context)) : null,
       onManageAccountPressed: widget.onManageAccountPressed,
       previewTitle: canPreviewNewUi ? (currentUiMode == PowerboardsUiMode.v1 ? 'Old Theme' : 'New Theme') : null,
       previewIconAssetName: currentUiMode == PowerboardsUiMode.v1 ? 'rotate-ccw' : 'eye',
