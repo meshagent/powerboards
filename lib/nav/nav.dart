@@ -850,6 +850,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                           destinationsEnabled: destinationsEnabled,
                           showMore: showMore,
                           moreEnabled: moreEnabled,
+                          chatActive: false,
                           meetActive: false,
                           selectedDestination: switch (previewPane) {
                             'files' => PbSideRailDestination.files,
@@ -885,6 +886,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                             destinationsEnabled: destinationsEnabled,
                             showMore: showMore,
                             moreEnabled: moreEnabled,
+                            chatActive: bridge.chatActive,
                             meetActive: bridge.meetActive,
                             selectedDestination: switch (previewPane) {
                               'files' => PbSideRailDestination.files,

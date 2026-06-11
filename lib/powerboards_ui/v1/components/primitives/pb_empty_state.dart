@@ -6,6 +6,10 @@ import '../../theme/pb_colors.dart';
 import '../../theme/pb_typography.dart';
 import 'pb_svg_icon.dart';
 
+const double pbEmptyStateReferenceTopFactor = 0.334;
+const double pbEmptyStateReferenceHeaderHeight = 76.0;
+const double pbEmptyStateReferenceTopOffset = -pbEmptyStateReferenceHeaderHeight * (1 - pbEmptyStateReferenceTopFactor);
+
 class PbEmptyState extends StatelessWidget {
   const PbEmptyState({
     super.key,

@@ -20,6 +20,7 @@ import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_voice_session_empty_state.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
@@ -75,7 +76,26 @@ class MeetingView extends StatefulWidget {
 class _MeetingViewState extends State<MeetingView> {
   final expandParticipantController = ExpandParticipantController();
 
-  Widget _voiceSessionMeetingBlockedState() {
+  Widget _voiceSessionMeetingBlockedState(MeetingController? voiceSessionController) {
+    if (powerboardsUsesDesktopUiPreview(context)) {
+      return PbVoiceSessionEmptyState(
+        iconAssetName: 'video-empty-state',
+        title: 'End voice session to meet',
+        subtitle: 'Starting a meeting ends the active voice session in chat.',
+        primaryButtonLabel: 'Start meeting',
+        showTranscribeToggle: false,
+        onStartSessionPressed: voiceSessionController == null
+            ? null
+            : () => unawaited(() async {
+                await voiceSessionController.disconnect();
+                if (!mounted) {
+                  return;
+                }
+                widget.joinMeeting();
+              }()),
+      );
+    }
+
     return const PaneEmptyState(title: "End voice session to meet", titleScaleOverride: 0.72, verticalOffset: -28);
   }
 
@@ -133,7 +153,7 @@ class _MeetingViewState extends State<MeetingView> {
 
       if (inPreview) {
         if (voiceSessionActive) {
-          return _voiceSessionMeetingBlockedState();
+          return _voiceSessionMeetingBlockedState(voiceSessionController);
         }
 
         final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);

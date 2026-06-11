@@ -61,6 +61,7 @@ import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_voice_session_empty_state.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
@@ -2665,6 +2666,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return meetingViewController.state == MeetingViewState.joined && videoRoom != null;
   }
 
+  bool _isVoiceSessionActive(BuildContext context) {
+    final voiceSessionController = MeetingController.maybeOf(context);
+    return voiceSessionController?.isConnected == true && !_isMeetingSessionActive(context);
+  }
+
   Widget _buildAudioAgentEmptyState({
     required String title,
     required String description,
@@ -2876,7 +2882,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
-  void _syncPreviewRoomRailMenuBridge(BuildContext context, {bool? meetingSessionActive}) {
+  void _syncPreviewRoomRailMenuBridge(BuildContext context, {bool? meetingSessionActive, bool? voiceSessionActive}) {
     final shouldExpose = powerboardsUsesDesktopUiPreview(context);
     if (!shouldExpose) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2891,6 +2897,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final resolvedMeetActive = meetingSessionActive ?? _isMeetingSessionActive(context);
+    final resolvedChatActive = voiceSessionActive ?? _isVoiceSessionActive(context);
     final canShowManageAgents = isOwner.state.value == true;
     final showConsoleToggle = canViewDeveloperLogs.state.value == true;
     final showShutdown = isOwner.state.value == true;
@@ -2901,6 +2908,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
 
       _previewRoomRailMenuBridge.configure(
+        chatActive: resolvedChatActive,
         showDestinations: true,
         showMore: true,
         showRename: true,
@@ -3832,12 +3840,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Widget _buildVoiceArea(BuildContext context, String agentName, List<Widget> actions, {bool embedMobileChrome = true}) {
     final meetingSessionActive = _isMeetingSessionActive(context);
     final isMobile = _usesMobileRoomLayout(context);
+    final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
+    final showVoiceChrome = embedMobileChrome;
 
     return Column(
       children: [
-        if (!isMobile || embedMobileChrome) ActionsRow(actions: actions),
-        if (!isMobile || embedMobileChrome) _buildDesktopChatViewportCutoffSpacer(context),
-        if (!isMobile || embedMobileChrome) _buildAgentsActionRow(context),
+        if (showVoiceChrome) ActionsRow(actions: actions),
+        if (showVoiceChrome) _buildDesktopChatViewportCutoffSpacer(context),
+        if (showVoiceChrome) _buildAgentsActionRow(context),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) => WaitForAgentParticipantBuilder(
@@ -3871,23 +3881,41 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                     ),
                                   ),
                                 )
-                              : Center(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
-                                    child: VoiceAgentCaller(
-                                      meeting: MeetingController.of(context),
-                                      participant: participant,
-                                      showDisconnectedAction: !meetingSessionActive,
-                                      allowToggleTranscribe: !meetingSessionActive,
-                                      emptyStateTitle: meetingSessionActive ? "This voice agent is private" : "Start an audio session",
-                                      emptyStateDescription: meetingSessionActive
-                                          ? "Start an audio session after this meeting to ask questions, or get hands free help."
-                                          : "Connect with this agent using your microphone.",
-                                      emptyStateAvailableWidth: constraints.maxWidth,
-                                      connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
-                                    ),
-                                  ),
-                                )),
+                              : (useDesktopUiPreview
+                                    ? SizedBox.expand(
+                                        child: VoiceAgentCaller(
+                                          meeting: MeetingController.of(context),
+                                          participant: participant,
+                                          showDisconnectedAction: !meetingSessionActive,
+                                          allowToggleTranscribe: !meetingSessionActive,
+                                          emptyStateTitle: meetingSessionActive ? "This voice agent is private" : "Start an audio session",
+                                          emptyStateDescription: meetingSessionActive
+                                              ? "Start an audio session after this meeting to ask questions, or get hands free help."
+                                              : "Connect with this agent using your microphone.",
+                                          emptyStateAvailableWidth: constraints.maxWidth,
+                                          disconnectedEmptyStateBuilder: _buildDesktopV1VoiceSessionEmptyState,
+                                          connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
+                                        ),
+                                      )
+                                    : Center(
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 560),
+                                          child: VoiceAgentCaller(
+                                            meeting: MeetingController.of(context),
+                                            participant: participant,
+                                            showDisconnectedAction: !meetingSessionActive,
+                                            allowToggleTranscribe: !meetingSessionActive,
+                                            emptyStateTitle: meetingSessionActive
+                                                ? "This voice agent is private"
+                                                : "Start an audio session",
+                                            emptyStateDescription: meetingSessionActive
+                                                ? "Start an audio session after this meeting to ask questions, or get hands free help."
+                                                : "Connect with this agent using your microphone.",
+                                            emptyStateAvailableWidth: constraints.maxWidth,
+                                            connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
+                                          ),
+                                        ),
+                                      ))),
                   ),
                 ],
               ),
@@ -3895,6 +3923,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDesktopV1VoiceSessionEmptyState(BuildContext context, VoiceAgentDisconnectedState state) {
+    return PbVoiceSessionEmptyState(
+      title: state.title,
+      subtitle: state.description,
+      transcribe: state.transcribe,
+      showStartSessionButton: state.showDisconnectedAction,
+      showTranscribeToggle: state.allowToggleTranscribe && state.onTranscribeChanged != null,
+      onStartSessionPressed: () => unawaited(state.onStartSessionPressed()),
+      onTranscribeChanged: state.onTranscribeChanged,
     );
   }
 
@@ -4496,7 +4536,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   String _desktopPreviewAgentIconAssetForService(ServiceSpec service) {
     final type = _serviceType(service);
     return switch (type) {
-      'VoiceBot' => 'video',
+      'VoiceBot' => 'audio-lines',
       'Shell' => 'terminal',
       _ => 'bot',
     };
@@ -4562,7 +4602,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             id: developmentAgentRouteId(name),
             title: name,
             status: 'Available',
-            icon: _developmentAgentIcon(participant) == LucideIcons.audioWaveform ? 'video' : 'bot',
+            icon: _developmentAgentIcon(participant) == LucideIcons.audioWaveform ? 'audio-lines' : 'bot',
             statusTone: PbAgentStatusTone.online,
             selected: selected.developmentParticipant == participant,
           ),
@@ -6063,133 +6103,103 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       builder: (context, participants) {
         return MeetingScope(
           client: widget.room,
-          builder: (context, meeting) => SignalBuilder(
-            builder: (context, _) {
-              if (!services.state.isReady) {
-                if (services.state.hasError) {
-                  return _buildRoomInitializationError(context, title: "Unable to load room services", error: services.state.error);
-                }
+          builder: (context, meeting) => ListenableBuilder(
+            listenable: meeting,
+            builder: (context, _) => SignalBuilder(
+              builder: (context, _) {
+                if (!services.state.isReady) {
+                  if (services.state.hasError) {
+                    return _buildRoomInitializationError(context, title: "Unable to load room services", error: services.state.error);
+                  }
 
-                final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
-                final actions = _emptyRoomHeaderActions(isMobile: isMobile);
-                final cs = ShadTheme.of(context).colorScheme;
-                if (isMobile) {
-                  return PowerboardsMobileOverlayScaffold(
-                    leading: _buildMobileRoomLeadingAction(context, filesVisible: false),
-                    titleBuilder: (context, _) => _buildMobileRoomNameHeaderTitle(context),
-                    trailingActions: const [],
-                    titleAlignment: Alignment.centerLeft,
-                    backgroundColor: cs.card,
-                    scrollIdentity: "room-loading",
-                    body: _buildRoomLoading(context, title: "Loading room services"),
-                  );
-                }
+                  final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
+                  final actions = _emptyRoomHeaderActions(isMobile: isMobile);
+                  final cs = ShadTheme.of(context).colorScheme;
+                  if (isMobile) {
+                    return PowerboardsMobileOverlayScaffold(
+                      leading: _buildMobileRoomLeadingAction(context, filesVisible: false),
+                      titleBuilder: (context, _) => _buildMobileRoomNameHeaderTitle(context),
+                      trailingActions: const [],
+                      titleAlignment: Alignment.centerLeft,
+                      backgroundColor: cs.card,
+                      scrollIdentity: "room-loading",
+                      body: _buildRoomLoading(context, title: "Loading room services"),
+                    );
+                  }
 
-                if (useDesktopUiPreview) {
+                  if (useDesktopUiPreview) {
+                    return SafeArea(
+                      child: ColoredBox(
+                        color: cs.card,
+                        child: _buildRoomLoading(context, title: "Loading room services"),
+                      ),
+                    );
+                  }
+
                   return SafeArea(
                     child: ColoredBox(
                       color: cs.card,
-                      child: _buildRoomLoading(context, title: "Loading room services"),
+                      child: Column(
+                        children: [
+                          ActionsRow(actions: actions),
+                          Expanded(child: _buildRoomLoading(context, title: "Loading room services")),
+                        ],
+                      ),
                     ),
                   );
                 }
 
-                return SafeArea(
-                  child: ColoredBox(
-                    color: cs.card,
-                    child: Column(
-                      children: [
-                        ActionsRow(actions: actions),
-                        Expanded(child: _buildRoomLoading(context, title: "Loading room services")),
-                      ],
-                    ),
-                  ),
-                );
-              }
+                return room.VideoChatConnection(
+                  key: videoChatKey,
+                  child: ControllerBuilder(
+                    controller: controller,
+                    builder: (context) {
+                      return ChangeNotifierBuilder(
+                        source: widget.room.messaging,
+                        builder: (context) {
+                          return SignalBuilder(
+                            builder: (context, _) {
+                              final canViewStorageAllowed = canViewStorage.state.value == true;
+                              final filesVisible = canViewStorageAllowed && controller.isFilesShown;
+                              final supported = _supportedServices(services.state.value!);
+                              final selected = _resolveSelectedAgent(supported, requestedRouteId: _preferredMobileAgentRouteId(context));
+                              if (isMobile) {
+                                _persistSelectedRoomAgentRouteId(selected.routeId);
+                              }
+                              final roomCreateChatContext = _resolveMobileChatHeaderContext(supported, selected);
+                              final meetingSessionActive = _isMeetingSessionActive(context);
+                              final voiceSessionActive = meeting.isConnected && !meetingSessionActive;
+                              _syncPreviewRoomRailMenuBridge(
+                                context,
+                                meetingSessionActive: meetingSessionActive,
+                                voiceSessionActive: voiceSessionActive,
+                              );
+                              final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;
+                              final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
+                              final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
 
-              return room.VideoChatConnection(
-                key: videoChatKey,
-                child: ControllerBuilder(
-                  controller: controller,
-                  builder: (context) {
-                    return ChangeNotifierBuilder(
-                      source: widget.room.messaging,
-                      builder: (context) {
-                        return SignalBuilder(
-                          builder: (context, _) {
-                            final canViewStorageAllowed = canViewStorage.state.value == true;
-                            final filesVisible = canViewStorageAllowed && controller.isFilesShown;
-                            final supported = _supportedServices(services.state.value!);
-                            final selected = _resolveSelectedAgent(supported, requestedRouteId: _preferredMobileAgentRouteId(context));
-                            if (isMobile) {
-                              _persistSelectedRoomAgentRouteId(selected.routeId);
-                            }
-                            final roomCreateChatContext = _resolveMobileChatHeaderContext(supported, selected);
-                            final meetingSessionActive = _isMeetingSessionActive(context);
-                            _syncPreviewRoomRailMenuBridge(context, meetingSessionActive: meetingSessionActive);
-                            final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;
-                            final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
-                            final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
+                              if (!_hasVisibleAgents(supported) && !(useDesktopUiPreview && !isMobile)) {
+                                final actions = _emptyRoomHeaderActions(isMobile: isMobile);
+                                final cs = ShadTheme.of(context).colorScheme;
+                                final emptyStateBody = SignalBuilder(
+                                  builder: (context, _) {
+                                    final ownerResolved = isOwner.state.isReady || isOwner.state.hasError;
+                                    final canInstallAgent = isOwner.state.value == true;
 
-                            if (!_hasVisibleAgents(supported) && !(useDesktopUiPreview && !isMobile)) {
-                              final actions = _emptyRoomHeaderActions(isMobile: isMobile);
-                              final cs = ShadTheme.of(context).colorScheme;
-                              final emptyStateBody = SignalBuilder(
-                                builder: (context, _) {
-                                  final ownerResolved = isOwner.state.isReady || isOwner.state.hasError;
-                                  final canInstallAgent = isOwner.state.value == true;
+                                    if (!ownerResolved) {
+                                      return _buildRoomLoading(context, title: "Loading room permissions");
+                                    }
 
-                                  if (!ownerResolved) {
-                                    return _buildRoomLoading(context, title: "Loading room permissions");
-                                  }
-
-                                  if (isMobile) {
-                                    return PaneEmptyState(
-                                      title: "Welcome to your room",
-                                      description: canInstallAgent ? "Install an agent in this room to get started" : null,
-                                      showActionOnMobile: canInstallAgent,
-                                      pinActionToMobileFooterOnMobile: canInstallAgent,
-                                      action: !canInstallAgent
-                                          ? null
-                                          : ShadButton(
-                                              height: powerboardsFooterActionButtonHeight,
-                                              onPressed: () async {
-                                                await showManageAgentsSurface(
-                                                  context: context,
-                                                  room: widget.room,
-                                                  projectId: widget.projectId,
-                                                  onServiceChanged: () {
-                                                    services.refresh();
-                                                  },
-                                                );
-                                              },
-                                              child: Text("Install an Agent"),
-                                            ),
-                                    );
-                                  }
-
-                                  return Center(
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(maxWidth: 520),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(16),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              "Welcome to your room",
-                                              style: ShadTheme.of(context).textTheme.h1,
-                                              textAlign: TextAlign.center,
-                                            ),
-                                            if (canInstallAgent) ...[
-                                              SizedBox(height: 8),
-                                              Text(
-                                                "Install an agent in this room to get started",
-                                                style: ShadTheme.of(context).textTheme.p,
-                                                textAlign: TextAlign.center,
-                                              ),
-                                              SizedBox(height: 20),
-                                              ShadButton(
+                                    if (isMobile) {
+                                      return PaneEmptyState(
+                                        title: "Welcome to your room",
+                                        description: canInstallAgent ? "Install an agent in this room to get started" : null,
+                                        showActionOnMobile: canInstallAgent,
+                                        pinActionToMobileFooterOnMobile: canInstallAgent,
+                                        action: !canInstallAgent
+                                            ? null
+                                            : ShadButton(
+                                                height: powerboardsFooterActionButtonHeight,
                                                 onPressed: () async {
                                                   await showManageAgentsSurface(
                                                     context: context,
@@ -6202,242 +6212,280 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                 },
                                                 child: Text("Install an Agent"),
                                               ),
+                                      );
+                                    }
+
+                                    return Center(
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 520),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(16),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                "Welcome to your room",
+                                                style: ShadTheme.of(context).textTheme.h1,
+                                                textAlign: TextAlign.center,
+                                              ),
+                                              if (canInstallAgent) ...[
+                                                SizedBox(height: 8),
+                                                Text(
+                                                  "Install an agent in this room to get started",
+                                                  style: ShadTheme.of(context).textTheme.p,
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                                SizedBox(height: 20),
+                                                ShadButton(
+                                                  onPressed: () async {
+                                                    await showManageAgentsSurface(
+                                                      context: context,
+                                                      room: widget.room,
+                                                      projectId: widget.projectId,
+                                                      onServiceChanged: () {
+                                                        services.refresh();
+                                                      },
+                                                    );
+                                                  },
+                                                  child: Text("Install an Agent"),
+                                                ),
+                                              ],
                                             ],
-                                          ],
+                                          ),
                                         ),
                                       ),
+                                    );
+                                  },
+                                );
+
+                                if (isMobile) {
+                                  return PowerboardsMobileOverlayScaffold(
+                                    leading: _buildMobileRoomLeadingAction(context, filesVisible: false),
+                                    titleBuilder: (context, _) => _buildMobileRoomNameHeaderTitle(context),
+                                    trailingActions: _buildMobileEmptyRoomHeaderActions(
+                                      context,
+                                      canViewStorageAllowed: canViewStorageAllowed,
+                                    ),
+                                    titleAlignment: Alignment.centerLeft,
+                                    backgroundColor: cs.card,
+                                    scrollIdentity: "room-empty",
+                                    body: emptyStateBody,
+                                  );
+                                }
+
+                                return SafeArea(
+                                  child: ColoredBox(
+                                    color: cs.card,
+                                    child: Column(
+                                      children: [
+                                        ActionsRow(actions: actions),
+                                        Expanded(child: emptyStateBody),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              return ToolConnectionScope(
+                                room: widget.room,
+                                tools: [UIToolkit(context: context)],
+                                builder: (context, error) {
+                                  final cs = ShadTheme.of(context).colorScheme;
+
+                                  if (isMobile) {
+                                    final activePane = _mobileActivePane(filesVisible: filesVisible);
+                                    final useMobileMeetingHeaderControls =
+                                        activePane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
+                                    final mobileBody = controller.inMeeting
+                                        ? _buildMeeting(context, null, const [], embedMobileChrome: false)
+                                        : filesVisible
+                                        ? _buildFilesArea(context, const [], embedMobileChrome: false)
+                                        : _buildAgentArea(context, const [], embedMobileChrome: false);
+
+                                    if (activePane == _MobileRoomPane.meeting) {
+                                      final theme = ShadTheme.of(context);
+                                      final headerTitle = useMobileMeetingHeaderControls
+                                          ? _buildMobileMeetingHeaderTitle(context)
+                                          : Text(
+                                              "Get ready to meet",
+                                              style: powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground),
+                                            );
+
+                                      return _buildMobileRoomScaffold(
+                                        context,
+                                        leadingAction: useMobileMeetingHeaderControls
+                                            ? const SizedBox.shrink()
+                                            : _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
+                                        title: headerTitle,
+                                        trailingActions: _buildLegacyMobileMeetingHeaderActions(
+                                          context,
+                                          canViewStorageAllowed: canViewStorageAllowed,
+                                        ),
+                                        titleAlignment: !useMobileMeetingHeaderControls ? Alignment.center : Alignment.centerLeft,
+                                        body: mobileBody,
+                                        bottomActions: useMobileMeetingHeaderControls
+                                            ? const []
+                                            : (controller.inMeeting && meetingSessionActive ? meetingActions(context) : const []),
+                                      );
+                                    }
+
+                                    final filesLocation = activePane == _MobileRoomPane.files ? _mobileFilesLocation(context) : null;
+                                    final chatHeaderContext = activePane == _MobileRoomPane.chat
+                                        ? _resolveMobileChatHeaderContext(supported, selected)
+                                        : null;
+
+                                    return PowerboardsMobileOverlayScaffold(
+                                      leading: _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
+                                      titleAlignment: Alignment.centerLeft,
+                                      collapseBodyWithHeader: true,
+                                      bodyTopPaddingOffset: 0,
+                                      restoreChromeAtMaxScrollExtent: activePane == _MobileRoomPane.chat,
+                                      collapseBottomSafeAreaWithHeader: activePane != _MobileRoomPane.chat,
+                                      titleBuilder: (context, collapseProgress) {
+                                        if (activePane == _MobileRoomPane.files && filesLocation != null) {
+                                          return _buildMobileFilesContextHeaderTitle(
+                                            context,
+                                            filesLocation: filesLocation,
+                                            collapseProgress: collapseProgress,
+                                          );
+                                        }
+
+                                        if (chatHeaderContext != null) {
+                                          return _buildMobileRoomContextHeaderTitle(
+                                            context,
+                                            supported: supported,
+                                            chatContext: chatHeaderContext,
+                                            collapseProgress: collapseProgress,
+                                          );
+                                        }
+
+                                        return const SizedBox.shrink();
+                                      },
+                                      trailingActions: _buildMobileRoomHeaderActions(
+                                        context,
+                                        activePane: activePane,
+                                        canViewStorageAllowed: canViewStorageAllowed,
+                                        chatContext: roomCreateChatContext,
+                                        filesLocation: filesLocation,
+                                      ),
+                                      backgroundColor: cs.card,
+                                      scrollIdentity: switch (activePane) {
+                                        _MobileRoomPane.chat =>
+                                          "chat:${chatHeaderContext?.agentKey ?? "none"}:${chatHeaderContext?.selectedThreadPath ?? "new"}",
+                                        _MobileRoomPane.files => "files:${filesLocation?.folder ?? ""}:${filesLocation?.openedFile ?? ""}",
+                                        _MobileRoomPane.meeting => "meeting",
+                                      },
+                                      body: mobileBody,
+                                    );
+                                  }
+
+                                  final actions = useDesktopUiPreview
+                                      ? const <Widget>[]
+                                      : _meetingPaneActions(context, canViewStorageAllowed: canViewStorageAllowed);
+
+                                  return RoomDeveloperLogsListener(
+                                    events: events,
+                                    client: widget.room,
+                                    child: ShadResizablePanelGroup(
+                                      axis: .vertical,
+                                      showHandle: true,
+                                      children: [
+                                        ShadResizablePanel(
+                                          id: "top",
+                                          defaultSize: 1 - defaultDebugSize,
+                                          child: useDesktopUiPreview
+                                              ? _buildDesktopPreviewRoomSection(
+                                                  context,
+                                                  supported: supported,
+                                                  selected: selected,
+                                                  participants: participants,
+                                                  canViewStorageAllowed: canViewStorageAllowed,
+                                                  isAdaptiveWebapp: isAdaptiveWebapp,
+                                                )
+                                              : ResizableSplitView(
+                                                  allowCollapse: meetingSessionActive,
+                                                  minArea1Width: meetingSessionActive ? 58 : 360,
+                                                  minArea2Width: 440,
+                                                  preferredArea2Fraction: meetingSessionActive ? 0.75 : null,
+                                                  minArea2Fraction: meetingSessionActive ? 0.5 : null,
+                                                  maxArea2Fraction: null,
+                                                  collapseArea1Width: meetingSessionActive ? 300 : null,
+                                                  controller: _meetingSplitViewController,
+                                                  onCollapsedChanged: (_) {
+                                                    if (!mounted) {
+                                                      return;
+                                                    }
+
+                                                    setState(() {});
+                                                  },
+                                                  split: split,
+                                                  area1: useLandscapePhoneMeetingPane
+                                                      ? _buildMeeting(context, null, actions)
+                                                      : ColoredBox(
+                                                          color: cs.card,
+                                                          child: _buildAgentArea(context, [
+                                                            if (isMobile) BackButton(projectId: widget.projectId),
+
+                                                            AgentsDropdown(
+                                                              projectId: widget.projectId,
+                                                              room: widget.room,
+                                                              roomDisplayNameOverride: _roomDisplayName,
+                                                              roomBreadcrumbMaxWidth: split || isAdaptiveWebapp ? 96 : null,
+                                                              roomBreadcrumbEllipsisOnly: split || isAdaptiveWebapp,
+                                                              showAdaptiveWebappNavOpener: isAdaptiveWebapp,
+                                                              onRoomPressed: () => _showChatPane(context),
+                                                              selectedService: selected.service,
+                                                              selectedAgentRouteId: selected.routeId,
+                                                              services: supported,
+                                                              onOpen: services.refresh,
+                                                              onManageAgents: isOwner.state.value != true ? null : showManageAgents,
+                                                              showRoomBreadcrumb: true,
+                                                            ),
+
+                                                            ParticipantsButton(
+                                                              participants: participants,
+                                                              localParticipant: widget.room.localParticipant,
+                                                            ),
+
+                                                            if (!split) ...actions,
+                                                          ], showEmbeddedThreadList: !split),
+                                                        ),
+                                                  area2: !split
+                                                      ? Container()
+                                                      : filesVisible
+                                                      ? _buildFilesArea(context, actions, showDesktopSidetrayToggle: false)
+                                                      : controller.inMeeting
+                                                      ? _buildMeeting(context, null, actions, showDesktopSidetrayToggle: false)
+                                                      : _buildAgentArea(context, actions, showEmbeddedThreadList: false),
+                                                ),
+                                        ),
+
+                                        if (controller.isDebugShown)
+                                          ShadResizablePanel(
+                                            id: "bottom",
+                                            defaultSize: defaultDebugSize,
+                                            minSize: 0,
+                                            child: RoomDeveloperConsole(
+                                              pricing: null,
+                                              events: events,
+                                              room: widget.room,
+                                              shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}",
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   );
                                 },
                               );
-
-                              if (isMobile) {
-                                return PowerboardsMobileOverlayScaffold(
-                                  leading: _buildMobileRoomLeadingAction(context, filesVisible: false),
-                                  titleBuilder: (context, _) => _buildMobileRoomNameHeaderTitle(context),
-                                  trailingActions: _buildMobileEmptyRoomHeaderActions(
-                                    context,
-                                    canViewStorageAllowed: canViewStorageAllowed,
-                                  ),
-                                  titleAlignment: Alignment.centerLeft,
-                                  backgroundColor: cs.card,
-                                  scrollIdentity: "room-empty",
-                                  body: emptyStateBody,
-                                );
-                              }
-
-                              return SafeArea(
-                                child: ColoredBox(
-                                  color: cs.card,
-                                  child: Column(
-                                    children: [
-                                      ActionsRow(actions: actions),
-                                      Expanded(child: emptyStateBody),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }
-
-                            return ToolConnectionScope(
-                              room: widget.room,
-                              tools: [UIToolkit(context: context)],
-                              builder: (context, error) {
-                                final cs = ShadTheme.of(context).colorScheme;
-
-                                if (isMobile) {
-                                  final activePane = _mobileActivePane(filesVisible: filesVisible);
-                                  final useMobileMeetingHeaderControls =
-                                      activePane == _MobileRoomPane.meeting && _isMeetingSessionActive(context);
-                                  final mobileBody = controller.inMeeting
-                                      ? _buildMeeting(context, null, const [], embedMobileChrome: false)
-                                      : filesVisible
-                                      ? _buildFilesArea(context, const [], embedMobileChrome: false)
-                                      : _buildAgentArea(context, const [], embedMobileChrome: false);
-
-                                  if (activePane == _MobileRoomPane.meeting) {
-                                    final theme = ShadTheme.of(context);
-                                    final headerTitle = useMobileMeetingHeaderControls
-                                        ? _buildMobileMeetingHeaderTitle(context)
-                                        : Text(
-                                            "Get ready to meet",
-                                            style: powerboardsMobileHeaderPrimaryTextStyle(color: theme.colorScheme.foreground),
-                                          );
-
-                                    return _buildMobileRoomScaffold(
-                                      context,
-                                      leadingAction: useMobileMeetingHeaderControls
-                                          ? const SizedBox.shrink()
-                                          : _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
-                                      title: headerTitle,
-                                      trailingActions: _buildLegacyMobileMeetingHeaderActions(
-                                        context,
-                                        canViewStorageAllowed: canViewStorageAllowed,
-                                      ),
-                                      titleAlignment: !useMobileMeetingHeaderControls ? Alignment.center : Alignment.centerLeft,
-                                      body: mobileBody,
-                                      bottomActions: useMobileMeetingHeaderControls
-                                          ? const []
-                                          : (controller.inMeeting && meetingSessionActive ? meetingActions(context) : const []),
-                                    );
-                                  }
-
-                                  final filesLocation = activePane == _MobileRoomPane.files ? _mobileFilesLocation(context) : null;
-                                  final chatHeaderContext = activePane == _MobileRoomPane.chat
-                                      ? _resolveMobileChatHeaderContext(supported, selected)
-                                      : null;
-
-                                  return PowerboardsMobileOverlayScaffold(
-                                    leading: _buildMobileRoomLeadingAction(context, filesVisible: filesVisible),
-                                    titleAlignment: Alignment.centerLeft,
-                                    collapseBodyWithHeader: true,
-                                    bodyTopPaddingOffset: 0,
-                                    restoreChromeAtMaxScrollExtent: activePane == _MobileRoomPane.chat,
-                                    collapseBottomSafeAreaWithHeader: activePane != _MobileRoomPane.chat,
-                                    titleBuilder: (context, collapseProgress) {
-                                      if (activePane == _MobileRoomPane.files && filesLocation != null) {
-                                        return _buildMobileFilesContextHeaderTitle(
-                                          context,
-                                          filesLocation: filesLocation,
-                                          collapseProgress: collapseProgress,
-                                        );
-                                      }
-
-                                      if (chatHeaderContext != null) {
-                                        return _buildMobileRoomContextHeaderTitle(
-                                          context,
-                                          supported: supported,
-                                          chatContext: chatHeaderContext,
-                                          collapseProgress: collapseProgress,
-                                        );
-                                      }
-
-                                      return const SizedBox.shrink();
-                                    },
-                                    trailingActions: _buildMobileRoomHeaderActions(
-                                      context,
-                                      activePane: activePane,
-                                      canViewStorageAllowed: canViewStorageAllowed,
-                                      chatContext: roomCreateChatContext,
-                                      filesLocation: filesLocation,
-                                    ),
-                                    backgroundColor: cs.card,
-                                    scrollIdentity: switch (activePane) {
-                                      _MobileRoomPane.chat =>
-                                        "chat:${chatHeaderContext?.agentKey ?? "none"}:${chatHeaderContext?.selectedThreadPath ?? "new"}",
-                                      _MobileRoomPane.files => "files:${filesLocation?.folder ?? ""}:${filesLocation?.openedFile ?? ""}",
-                                      _MobileRoomPane.meeting => "meeting",
-                                    },
-                                    body: mobileBody,
-                                  );
-                                }
-
-                                final actions = useDesktopUiPreview
-                                    ? const <Widget>[]
-                                    : _meetingPaneActions(context, canViewStorageAllowed: canViewStorageAllowed);
-
-                                return RoomDeveloperLogsListener(
-                                  events: events,
-                                  client: widget.room,
-                                  child: ShadResizablePanelGroup(
-                                    axis: .vertical,
-                                    showHandle: true,
-                                    children: [
-                                      ShadResizablePanel(
-                                        id: "top",
-                                        defaultSize: 1 - defaultDebugSize,
-                                        child: useDesktopUiPreview
-                                            ? _buildDesktopPreviewRoomSection(
-                                                context,
-                                                supported: supported,
-                                                selected: selected,
-                                                participants: participants,
-                                                canViewStorageAllowed: canViewStorageAllowed,
-                                                isAdaptiveWebapp: isAdaptiveWebapp,
-                                              )
-                                            : ResizableSplitView(
-                                                allowCollapse: meetingSessionActive,
-                                                minArea1Width: meetingSessionActive ? 58 : 360,
-                                                minArea2Width: 440,
-                                                preferredArea2Fraction: meetingSessionActive ? 0.75 : null,
-                                                minArea2Fraction: meetingSessionActive ? 0.5 : null,
-                                                maxArea2Fraction: null,
-                                                collapseArea1Width: meetingSessionActive ? 300 : null,
-                                                controller: _meetingSplitViewController,
-                                                onCollapsedChanged: (_) {
-                                                  if (!mounted) {
-                                                    return;
-                                                  }
-
-                                                  setState(() {});
-                                                },
-                                                split: split,
-                                                area1: useLandscapePhoneMeetingPane
-                                                    ? _buildMeeting(context, null, actions)
-                                                    : ColoredBox(
-                                                        color: cs.card,
-                                                        child: _buildAgentArea(context, [
-                                                          if (isMobile) BackButton(projectId: widget.projectId),
-
-                                                          AgentsDropdown(
-                                                            projectId: widget.projectId,
-                                                            room: widget.room,
-                                                            roomDisplayNameOverride: _roomDisplayName,
-                                                            roomBreadcrumbMaxWidth: split || isAdaptiveWebapp ? 96 : null,
-                                                            roomBreadcrumbEllipsisOnly: split || isAdaptiveWebapp,
-                                                            showAdaptiveWebappNavOpener: isAdaptiveWebapp,
-                                                            onRoomPressed: () => _showChatPane(context),
-                                                            selectedService: selected.service,
-                                                            selectedAgentRouteId: selected.routeId,
-                                                            services: supported,
-                                                            onOpen: services.refresh,
-                                                            onManageAgents: isOwner.state.value != true ? null : showManageAgents,
-                                                            showRoomBreadcrumb: true,
-                                                          ),
-
-                                                          ParticipantsButton(
-                                                            participants: participants,
-                                                            localParticipant: widget.room.localParticipant,
-                                                          ),
-
-                                                          if (!split) ...actions,
-                                                        ], showEmbeddedThreadList: !split),
-                                                      ),
-                                                area2: !split
-                                                    ? Container()
-                                                    : filesVisible
-                                                    ? _buildFilesArea(context, actions, showDesktopSidetrayToggle: false)
-                                                    : controller.inMeeting
-                                                    ? _buildMeeting(context, null, actions, showDesktopSidetrayToggle: false)
-                                                    : _buildAgentArea(context, actions, showEmbeddedThreadList: false),
-                                              ),
-                                      ),
-
-                                      if (controller.isDebugShown)
-                                        ShadResizablePanel(
-                                          id: "bottom",
-                                          defaultSize: defaultDebugSize,
-                                          minSize: 0,
-                                          child: RoomDeveloperConsole(
-                                            pricing: null,
-                                            events: events,
-                                            room: widget.room,
-                                            shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}",
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        );
-                      },
-                    );
-                  },
-                ),
-              );
-            },
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
           ),
         );
       },
