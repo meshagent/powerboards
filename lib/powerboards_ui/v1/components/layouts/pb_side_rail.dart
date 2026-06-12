@@ -12,7 +12,7 @@ enum PbSideRailDestination { recent, chat, files, meet }
 class PbSideRail extends StatelessWidget {
   const PbSideRail({
     super.key,
-    this.showRecent = true,
+    this.showRecent = false,
     this.showDestinations = true,
     this.destinationsEnabled = true,
     this.showMore = true,
@@ -29,6 +29,7 @@ class PbSideRail extends StatelessWidget {
     this.onMorePressed,
     this.onMoreDismissRequested,
     this.accountSelected = false,
+    this.accountInitials = 'JP',
     this.accountMenu,
     this.onAccountPressed,
     this.onAccountDismissRequested,
@@ -51,6 +52,7 @@ class PbSideRail extends StatelessWidget {
   final VoidCallback? onMorePressed;
   final VoidCallback? onMoreDismissRequested;
   final bool accountSelected;
+  final String accountInitials;
   final Widget? accountMenu;
   final VoidCallback? onAccountPressed;
   final VoidCallback? onAccountDismissRequested;
@@ -90,6 +92,7 @@ class PbSideRail extends StatelessWidget {
                   onMorePressed: onMorePressed,
                   onMoreDismissRequested: onMoreDismissRequested,
                   accountSelected: accountSelected,
+                  accountInitials: accountInitials,
                   accountMenu: accountMenu,
                   onAccountPressed: onAccountPressed,
                   onAccountDismissRequested: onAccountDismissRequested,
@@ -187,7 +190,8 @@ class _DesktopRail extends StatelessWidget {
 }
 
 class _MobileRail extends StatelessWidget {
-  static const double _sideSlotWidth = 68;
+  static const double _brandSlotWidth = 68;
+  static const double _accountSlotWidth = 88;
 
   const _MobileRail({
     required this.showRecent,
@@ -207,6 +211,7 @@ class _MobileRail extends StatelessWidget {
     required this.onMorePressed,
     required this.onMoreDismissRequested,
     required this.accountSelected,
+    required this.accountInitials,
     required this.accountMenu,
     required this.onAccountPressed,
     required this.onAccountDismissRequested,
@@ -229,6 +234,7 @@ class _MobileRail extends StatelessWidget {
   final VoidCallback? onMorePressed;
   final VoidCallback? onMoreDismissRequested;
   final bool accountSelected;
+  final String accountInitials;
   final Widget? accountMenu;
   final VoidCallback? onAccountPressed;
   final VoidCallback? onAccountDismissRequested;
@@ -238,7 +244,7 @@ class _MobileRail extends StatelessWidget {
     return Row(
       children: [
         const SizedBox(
-          width: _sideSlotWidth,
+          width: _brandSlotWidth,
           child: Align(alignment: Alignment.centerLeft, child: _BrandMark(size: 48)),
         ),
         Expanded(
@@ -264,7 +270,7 @@ class _MobileRail extends StatelessWidget {
           ),
         ),
         SizedBox(
-          width: _sideSlotWidth,
+          width: _accountSlotWidth,
           child: Align(
             alignment: Alignment.centerRight,
             child: PbMenuAnchor(
@@ -274,7 +280,7 @@ class _MobileRail extends StatelessWidget {
               panel: accountMenu,
               onDismissRequested: onAccountDismissRequested,
               child: PbAvatarButton(
-                initials: 'JP',
+                initials: accountInitials,
                 avatarSize: 48,
                 selected: accountSelected,
                 idleBorderColor: const Color.fromARGB(56, 248, 250, 252),

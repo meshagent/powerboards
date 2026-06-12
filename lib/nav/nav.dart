@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -9,6 +10,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:meshagent_flutter_auth/meshagent_auth.dart';
+import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/desktop_sidetray_toggle.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -25,7 +27,9 @@ import 'package:powerboards/settings/mobile_room_list_intent.dart';
 import 'package:powerboards/settings/selected_room.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
+import 'package:powerboards/powerboards_ui/v1/components/dialogs/pb_project_select_dialog.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_side_rail.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_account_menu.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_room_options_menu.dart';
 import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
@@ -187,6 +191,9 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   bool _mobileRoomListScrollCollapsed = false;
   int _mobileRoomListInstance = 0;
   bool _previewRailMoreMenuOpen = false;
+  bool _previewRailAccountMenuOpen = false;
+  late final TextEditingController _previewProjectFilterController;
+  final OverlayPortalController _previewProjectDialogController = OverlayPortalController();
   String? _selectedRoomDisplayNameOverrideProjectId;
   String? _selectedRoomDisplayNameOverrideRoomName;
   String? _selectedRoomDisplayNameOverride;
@@ -504,7 +511,8 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       _selectedRoomDisplayNameOverrideProjectId = null;
       _selectedRoomDisplayNameOverrideRoomName = null;
       _selectedRoomDisplayNameOverride = null;
-      _closePreviewRailMoreMenu();
+      _closePreviewRailMenus();
+      _closePreviewProjectDialog();
       exposePreviewRoomRailMenuBridge(null);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
@@ -622,9 +630,42 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     await showUpdateRoomPermsDialog(context, projectId: projectId, room: room);
   }
 
+  Project? _currentPreviewProject(List<Project> projectItems) {
+    for (final project in projectItems) {
+      if (project.id == widget.projectId) {
+        return project;
+      }
+    }
+
+    return null;
+  }
+
+  List<Project> _filteredPreviewProjects(List<Project> projectItems) {
+    final query = _previewProjectFilterController.text.trim().toLowerCase();
+    if (query.isEmpty) {
+      return projectItems;
+    }
+
+    return projectItems.where((project) => project.name.toLowerCase().contains(query)).toList();
+  }
+
   void _togglePreviewRailMoreMenu() {
     setState(() {
-      _previewRailMoreMenuOpen = !_previewRailMoreMenuOpen;
+      final nextOpen = !_previewRailMoreMenuOpen;
+      _previewRailMoreMenuOpen = nextOpen;
+      if (nextOpen) {
+        _previewRailAccountMenuOpen = false;
+      }
+    });
+  }
+
+  void _togglePreviewRailAccountMenu() {
+    setState(() {
+      final nextOpen = !_previewRailAccountMenuOpen;
+      _previewRailAccountMenuOpen = nextOpen;
+      if (nextOpen) {
+        _previewRailMoreMenuOpen = false;
+      }
     });
   }
 
@@ -636,6 +677,127 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
     setState(() {
       _previewRailMoreMenuOpen = false;
     });
+  }
+
+  void _closePreviewRailAccountMenu() {
+    if (!_previewRailAccountMenuOpen) {
+      return;
+    }
+
+    setState(() {
+      _previewRailAccountMenuOpen = false;
+    });
+  }
+
+  void _closePreviewRailMenus() {
+    if (!_previewRailMoreMenuOpen && !_previewRailAccountMenuOpen) {
+      return;
+    }
+
+    setState(() {
+      _previewRailMoreMenuOpen = false;
+      _previewRailAccountMenuOpen = false;
+    });
+  }
+
+  void _closePreviewRailMenusAndRun(VoidCallback? action) {
+    if (action == null) {
+      return;
+    }
+
+    final hadOpenMenu = _previewRailMoreMenuOpen || _previewRailAccountMenuOpen;
+    _closePreviewRailMenus();
+
+    if (!hadOpenMenu) {
+      scheduleMicrotask(action);
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        action();
+      }
+    });
+  }
+
+  void _openPreviewProjectDialog() {
+    _previewProjectFilterController.clear();
+    _closePreviewRailMenus();
+    _previewProjectDialogController.show();
+  }
+
+  void _closePreviewProjectDialog() {
+    if (_previewProjectDialogController.isShowing) {
+      _previewProjectDialogController.hide();
+    }
+  }
+
+  void _selectPreviewProjectFromDialog(List<Project> projectItems, String projectName) {
+    Project? selectedProject;
+    for (final project in projectItems) {
+      if (project.name == projectName) {
+        selectedProject = project;
+        break;
+      }
+    }
+
+    if (selectedProject == null) {
+      return;
+    }
+
+    _closePreviewProjectDialog();
+    localStorage.setItem("lastProjectId", selectedProject.id);
+    context.go("/p/${fromUUID(selectedProject.id)}");
+  }
+
+  void _createPreviewProjectFromDialog() {
+    _closePreviewProjectDialog();
+    unawaited(onCreateProject());
+  }
+
+  Widget _buildPreviewProjectSelectDialog(List<Project> projectItems) {
+    final currentProject = _currentPreviewProject(projectItems);
+
+    return PbProjectSelectDialog(
+      projects: _filteredPreviewProjects(projectItems).map((project) => project.name).toList(),
+      selectedProject: currentProject?.name ?? '',
+      filterController: _previewProjectFilterController,
+      onFilterChanged: (_) => setState(() {}),
+      onProjectSelected: (projectName) => _selectPreviewProjectFromDialog(projectItems, projectName),
+      onCreateProjectPressed: _createPreviewProjectFromDialog,
+      onClose: _closePreviewProjectDialog,
+    );
+  }
+
+  Widget _buildPreviewRailAccountMenu({
+    required List<Project> projectItems,
+    required ProjectRole? userRole,
+    required String avatarInitials,
+    required String avatarEmail,
+  }) {
+    final canPreviewNewUi = emailCanPreviewPowerboardsUiMode(avatarEmail);
+    final currentUiMode = powerboardsUiModeSignal.value;
+    final currentProject = _currentPreviewProject(projectItems);
+    final desktopUpdateController = DesktopUpdateControllerScope.maybeOf(context);
+
+    return PbAccountMenu(
+      initials: avatarInitials,
+      email: avatarEmail,
+      projectLabel: 'Browsing project: ${currentProject?.name ?? 'No project selected'}',
+      onSelectProjectPressed: () => _closePreviewRailMenusAndRun(_openPreviewProjectDialog),
+      onManageAccountPressed: kIsWeb && userRole == ProjectRole.admin
+          ? () => _closePreviewRailMenusAndRun(_goToAccountsFromPreviewHeader)
+          : null,
+      previewTitle: canPreviewNewUi ? (currentUiMode == PowerboardsUiMode.v1 ? 'Old Theme' : 'New Theme') : null,
+      previewIconAssetName: currentUiMode == PowerboardsUiMode.v1 ? 'rotate-ccw' : 'eye',
+      onPreviewPressed: canPreviewNewUi ? () => _closePreviewRailMenusAndRun(_toggleUiModeFromPreviewHeader) : null,
+      onCheckForUpdatesPressed: desktopUpdateController == null
+          ? null
+          : () => _closePreviewRailMenusAndRun(
+              () => showDesktopUpdateCheckDialog(context: context, controller: desktopUpdateController, appName: 'Powerboards'),
+            ),
+      onLogoutPressed: () => _closePreviewRailMenusAndRun(_signOutFromPreviewHeader),
+    );
   }
 
   String _currentPreviewRoomPane(BuildContext context) {
@@ -708,6 +870,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _previewProjectFilterController = TextEditingController();
     syncPowerboardsUiModeFromStorage();
     rooms = _createRoomsResource(widget.projectId);
     registerPreviewRoomListRefreshCallback(() => rooms.refresh());
@@ -751,9 +914,13 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
+    if (_previewProjectDialogController.isShowing) {
+      _previewProjectDialogController.hide();
+    }
     registerPreviewRoomListRefreshCallback(null);
     registerPreviewRoomDisplayNameOverrideCallback(null);
     _mobileRoomListCloseAnimationController.dispose();
+    _previewProjectFilterController.dispose();
     _mobileRoomListProjectId.dispose();
     _mobileRoomListSelectedRoom.dispose();
     projects.dispose();
@@ -799,13 +966,15 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       final user = MeshagentAuth.current.getUser();
       final avatarInitials = userAvatarInitialsFromEmail((user?['email'] as String?) ?? '');
       final avatarEmail = ((user?['email'] as String?) ?? '').trim();
+      final projectItems = projects.state.value ?? const <Project>[];
       final roomItems = _roomsResourceProjectId == widget.projectId ? (rooms.state.value ?? const <Room>[]) : const <Room>[];
       final selectedRoomDisplayNameOverride = _effectiveSelectedRoomDisplayNameOverride;
       final hasSelectedRoom = (widget.selectedRoom?.trim().isNotEmpty) ?? false;
       final showPreviewRail = widget.projectId != null;
       final previewPane = _currentPreviewRoomPane(context);
-      const railWidth = 64.0;
+      const railWidth = PbSizes.primaryRailWidth;
       const headerHeight = PbSizes.workspaceTopbarHeight;
+      const topRailHeight = 84.0;
 
       if (selectedRoomDisplayNameOverride != null) {
         final selectedRoom = roomItems.firstWhereOrNull((room) => room.name == widget.selectedRoom);
@@ -823,143 +992,185 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
         builder: (context, filePreviewFullscreen, _) {
           final showPreviewChrome = !filePreviewFullscreen;
 
-          return Row(
-            key: const ValueKey('desktop-ui-preview-v1'),
-            children: [
-              if (showPreviewChrome && showPreviewRail)
-                SizedBox(
-                  width: railWidth,
-                  child: ValueListenableBuilder<PreviewRoomRailMenuBridge?>(
-                    valueListenable: previewRoomRailMenuBridgeListenable,
-                    builder: (context, bridge, _) {
-                      if (bridge == null) {
-                        final showDestinations = hasSelectedRoom;
-                        final showMore = hasSelectedRoom;
-                        final destinationsEnabled = showDestinations && !balanceLow;
-                        final moreEnabled = showMore && !balanceLow && bridge != null;
-                        if (!moreEnabled && _previewRailMoreMenuOpen) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) {
-                              _closePreviewRailMoreMenu();
-                            }
-                          });
-                        }
-                        return PbSideRail(
-                          showRecent: false,
-                          showDestinations: showDestinations,
-                          destinationsEnabled: destinationsEnabled,
-                          showMore: showMore,
-                          moreEnabled: moreEnabled,
-                          chatActive: false,
-                          meetActive: false,
-                          selectedDestination: switch (previewPane) {
-                            'files' => PbSideRailDestination.files,
-                            'meeting' => PbSideRailDestination.meet,
-                            _ => PbSideRailDestination.chat,
-                          },
-                          onChatPressed: () => _goToPreviewRoomPane(context, 'chat'),
-                          onFilesPressed: () => _goToPreviewRoomPane(context, 'files'),
-                          onMeetPressed: () => _goToPreviewRoomPane(context, 'meeting'),
-                          moreSelected: false,
-                          onMoreDismissRequested: _closePreviewRailMoreMenu,
-                        );
+          Widget buildPreviewRail({required bool topRail}) {
+            if (!topRail && _previewRailAccountMenuOpen) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  _closePreviewRailAccountMenu();
+                }
+              });
+            }
+
+            final selectedDestination = switch (previewPane) {
+              'files' => PbSideRailDestination.files,
+              'meeting' => PbSideRailDestination.meet,
+              _ => PbSideRailDestination.chat,
+            };
+            final accountMenu = topRail && _previewRailAccountMenuOpen
+                ? _buildPreviewRailAccountMenu(
+                    projectItems: projectItems,
+                    userRole: userRole,
+                    avatarInitials: avatarInitials,
+                    avatarEmail: avatarEmail,
+                  )
+                : null;
+
+            return ValueListenableBuilder<PreviewRoomRailMenuBridge?>(
+              valueListenable: previewRoomRailMenuBridgeListenable,
+              builder: (context, bridge, _) {
+                if (bridge == null) {
+                  final showDestinations = hasSelectedRoom;
+                  final showMore = hasSelectedRoom;
+                  const moreEnabled = false;
+                  if (!moreEnabled && _previewRailMoreMenuOpen) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _closePreviewRailMoreMenu();
                       }
+                    });
+                  }
+                  return PbSideRail(
+                    showRecent: false,
+                    showDestinations: showDestinations,
+                    destinationsEnabled: showDestinations && !balanceLow,
+                    showMore: showMore,
+                    moreEnabled: moreEnabled,
+                    chatActive: false,
+                    meetActive: false,
+                    selectedDestination: selectedDestination,
+                    onChatPressed: () => _goToPreviewRoomPane(context, 'chat'),
+                    onFilesPressed: () => _goToPreviewRoomPane(context, 'files'),
+                    onMeetPressed: () => _goToPreviewRoomPane(context, 'meeting'),
+                    moreSelected: false,
+                    onMoreDismissRequested: _closePreviewRailMoreMenu,
+                    accountSelected: topRail && _previewRailAccountMenuOpen,
+                    accountInitials: avatarInitials,
+                    accountMenu: accountMenu,
+                    onAccountPressed: topRail ? _togglePreviewRailAccountMenu : null,
+                    onAccountDismissRequested: _closePreviewRailAccountMenu,
+                  );
+                }
 
-                      return ListenableBuilder(
-                        listenable: bridge,
-                        builder: (context, _) {
-                          final showDestinations = balanceLow ? hasSelectedRoom : bridge.showDestinations;
-                          final showMore = balanceLow ? hasSelectedRoom : bridge.showMore;
-                          final destinationsEnabled = showDestinations && !balanceLow;
-                          final moreEnabled = showMore && !balanceLow;
-                          if (!moreEnabled && _previewRailMoreMenuOpen) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) {
-                                _closePreviewRailMoreMenu();
-                              }
-                            });
-                          }
+                return ListenableBuilder(
+                  listenable: bridge,
+                  builder: (context, _) {
+                    final showDestinations = balanceLow ? hasSelectedRoom : bridge.showDestinations;
+                    final showMore = balanceLow ? hasSelectedRoom : bridge.showMore;
+                    final destinationsEnabled = showDestinations && !balanceLow;
+                    final moreEnabled = showMore && !balanceLow;
+                    if (!moreEnabled && _previewRailMoreMenuOpen) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          _closePreviewRailMoreMenu();
+                        }
+                      });
+                    }
 
-                          return PbSideRail(
-                            showRecent: false,
-                            showDestinations: showDestinations,
-                            destinationsEnabled: destinationsEnabled,
-                            showMore: showMore,
-                            moreEnabled: moreEnabled,
-                            chatActive: bridge.chatActive,
-                            meetActive: bridge.meetActive,
-                            selectedDestination: switch (previewPane) {
-                              'files' => PbSideRailDestination.files,
-                              'meeting' => PbSideRailDestination.meet,
-                              _ => PbSideRailDestination.chat,
-                            },
-                            onChatPressed: () => _goToPreviewRoomPane(context, 'chat'),
-                            onFilesPressed: () => _goToPreviewRoomPane(context, 'files'),
-                            onMeetPressed: () => _goToPreviewRoomPane(context, 'meeting'),
-                            moreSelected: moreEnabled && _previewRailMoreMenuOpen,
-                            moreMenu: moreEnabled && _previewRailMoreMenuOpen ? _buildPreviewRailMenu(bridge) : null,
-                            onMorePressed: moreEnabled ? _togglePreviewRailMoreMenu : null,
-                            onMoreDismissRequested: _closePreviewRailMoreMenu,
-                          );
-                        },
-                      );
+                    return PbSideRail(
+                      showRecent: false,
+                      showDestinations: showDestinations,
+                      destinationsEnabled: destinationsEnabled,
+                      showMore: showMore,
+                      moreEnabled: moreEnabled,
+                      chatActive: bridge.chatActive,
+                      meetActive: bridge.meetActive,
+                      selectedDestination: selectedDestination,
+                      onChatPressed: () => _goToPreviewRoomPane(context, 'chat'),
+                      onFilesPressed: () => _goToPreviewRoomPane(context, 'files'),
+                      onMeetPressed: () => _goToPreviewRoomPane(context, 'meeting'),
+                      moreSelected: moreEnabled && _previewRailMoreMenuOpen,
+                      moreMenu: moreEnabled && _previewRailMoreMenuOpen ? _buildPreviewRailMenu(bridge) : null,
+                      onMorePressed: moreEnabled ? _togglePreviewRailMoreMenu : null,
+                      onMoreDismissRequested: _closePreviewRailMoreMenu,
+                      accountSelected: topRail && _previewRailAccountMenuOpen,
+                      accountInitials: avatarInitials,
+                      accountMenu: accountMenu,
+                      onAccountPressed: topRail ? _togglePreviewRailAccountMenu : null,
+                      onAccountDismissRequested: _closePreviewRailAccountMenu,
+                    );
+                  },
+                );
+              },
+            );
+          }
+
+          Widget buildHeader({required bool shellMobile, required bool shellIconOnly}) {
+            return DesktopPreviewNavHeader(
+              key: ValueKey('desktop-preview-header-${widget.projectId}-${widget.selectedRoom}-$shellMobile'),
+              projects: projectItems,
+              rooms: roomItems,
+              projectId: widget.projectId,
+              selectedRoom: widget.selectedRoom,
+              canCreateRooms: canCreateRooms,
+              shellMobile: shellMobile,
+              shellIconOnly: shellIconOnly,
+              selectedRoomDisplayNameOverride: selectedRoomDisplayNameOverride,
+              avatarInitials: avatarInitials,
+              avatarEmail: avatarEmail,
+              onCreateProject: onCreateProject,
+              onSelectProject: (project) {
+                localStorage.setItem("lastProjectId", project.id);
+                context.go("/p/${fromUUID(project.id)}");
+              },
+              onSelectRoom: (room) {
+                final projectId = widget.projectId;
+                if (projectId == null) {
+                  return;
+                }
+
+                context.go("/p/${fromUUID(projectId)}/r/${room.name}");
+              },
+              onCreateRoom: widget.projectId == null || !canCreateRooms ? null : () => _createRoomFromPreviewHeader(widget.projectId!),
+              onManageAccountPressed: kIsWeb && userRole == ProjectRole.admin ? _goToAccountsFromPreviewHeader : null,
+              onSharePressed: shellMobile || widget.projectId == null || widget.selectedRoom == null
+                  ? null
+                  : () {
+                      _openInviteFromPreviewHeader();
                     },
-                  ),
-                ),
-              Expanded(
-                child: Stack(
+              onPreviewTogglePressed: _toggleUiModeFromPreviewHeader,
+              onLogoutPressed: _signOutFromPreviewHeader,
+            );
+          }
+
+          return OverlayPortal(
+            controller: _previewProjectDialogController,
+            overlayChildBuilder: (context) => _buildPreviewProjectSelectDialog(projectItems),
+            child: LayoutBuilder(
+              key: const ValueKey('desktop-ui-preview-v1'),
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final shellMobile = width <= PbBreakpoints.shellMobile;
+                final shellIconOnly = !shellMobile && width <= PbBreakpoints.shellCompact;
+
+                final railVisible = showPreviewChrome && showPreviewRail;
+                final topRailVisible = shellMobile && railVisible;
+                final bodyLeftInset = !shellMobile && railVisible ? railWidth : 0.0;
+                final headerTopInset = topRailVisible ? topRailHeight : 0.0;
+                final bodyTopInset = showPreviewChrome ? headerHeight + headerTopInset : 0.0;
+
+                return Stack(
                   children: [
                     Positioned.fill(
                       child: Padding(
-                        padding: EdgeInsets.only(top: showPreviewChrome ? headerHeight : 0),
+                        padding: EdgeInsets.only(left: bodyLeftInset, top: bodyTopInset),
                         child: desktopBody(context, userRole, balanceLow, canCreateRooms),
                       ),
                     ),
+                    if (!shellMobile && railVisible)
+                      Positioned(top: 0, bottom: 0, left: 0, width: railWidth, child: buildPreviewRail(topRail: false)),
+                    if (topRailVisible)
+                      Positioned(top: 0, left: 0, right: 0, height: topRailHeight, child: buildPreviewRail(topRail: true)),
                     if (showPreviewChrome)
                       Positioned(
-                        top: 0,
-                        left: 0,
+                        top: headerTopInset,
+                        left: bodyLeftInset,
                         right: 0,
-                        child: DesktopPreviewNavHeader(
-                          key: ValueKey('desktop-preview-header-${widget.projectId}-${widget.selectedRoom}'),
-                          projects: projects.state.value ?? const <Project>[],
-                          rooms: roomItems,
-                          projectId: widget.projectId,
-                          selectedRoom: widget.selectedRoom,
-                          canCreateRooms: canCreateRooms,
-                          selectedRoomDisplayNameOverride: selectedRoomDisplayNameOverride,
-                          avatarInitials: avatarInitials,
-                          avatarEmail: avatarEmail,
-                          onCreateProject: onCreateProject,
-                          onSelectProject: (project) {
-                            localStorage.setItem("lastProjectId", project.id);
-                            context.go("/p/${fromUUID(project.id)}");
-                          },
-                          onSelectRoom: (room) {
-                            final projectId = widget.projectId;
-                            if (projectId == null) {
-                              return;
-                            }
-
-                            context.go("/p/${fromUUID(projectId)}/r/${room.name}");
-                          },
-                          onCreateRoom: widget.projectId == null || !canCreateRooms
-                              ? null
-                              : () => _createRoomFromPreviewHeader(widget.projectId!),
-                          onManageAccountPressed: kIsWeb && userRole == ProjectRole.admin ? _goToAccountsFromPreviewHeader : null,
-                          onSharePressed: widget.projectId == null || widget.selectedRoom == null
-                              ? null
-                              : () {
-                                  _openInviteFromPreviewHeader();
-                                },
-                          onPreviewTogglePressed: _toggleUiModeFromPreviewHeader,
-                          onLogoutPressed: _signOutFromPreviewHeader,
-                        ),
+                        child: buildHeader(shellMobile: shellMobile, shellIconOnly: shellIconOnly),
                       ),
                   ],
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           );
         },
       );

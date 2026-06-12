@@ -39,7 +39,11 @@ class PbFileSelectionCheckbox extends StatelessWidget {
                 width: 14,
                 height: 14,
                 decoration: BoxDecoration(
-                  color: active ? PbColors.surfaceActionPrimary : (enabled ? PbColors.surfacePanel : PbColors.borderFaint),
+                  color: active
+                      ? PbColors.surfaceActionPrimary
+                      : enabled
+                      ? PbColors.surfacePanel
+                      : PbColors.borderFaint,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: active ? PbColors.surfaceActionPrimary : PbColors.customGray),
                 ),

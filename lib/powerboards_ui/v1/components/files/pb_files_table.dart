@@ -13,6 +13,7 @@ import '../menus/pb_sidepane_item_menu.dart';
 import '../primitives/pb_empty_state.dart';
 import '../primitives/pb_spinning_icon.dart';
 import '../primitives/pb_svg_icon.dart';
+import 'pb_archive_extract.dart';
 import 'pb_file_menus.dart';
 import 'pb_files_data.dart';
 import 'pb_files_layout_values.dart';
@@ -52,6 +53,7 @@ class PbFilesTable extends StatefulWidget {
     required this.keyboardPreviewFileId,
     required this.keyboardPreviewDirection,
     this.savingIds = const {},
+    this.extractingArchiveIds = const <String>{},
     required this.hasActiveFilter,
     required this.onSortChanged,
     required this.onToggleSelection,
@@ -62,6 +64,7 @@ class PbFilesTable extends StatefulWidget {
     required this.onLinkedThreadPressed,
     this.onAskAgent,
     this.onShare,
+    this.onExtract,
     this.onDownload,
     this.onRename,
     this.onDelete,
@@ -76,6 +79,7 @@ class PbFilesTable extends StatefulWidget {
   final String? keyboardPreviewFileId;
   final int keyboardPreviewDirection;
   final Set<String> savingIds;
+  final Set<String> extractingArchiveIds;
   final bool hasActiveFilter;
   final ValueChanged<PbFilesSortKey> onSortChanged;
   final ValueChanged<String> onToggleSelection;
@@ -86,6 +90,7 @@ class PbFilesTable extends StatefulWidget {
   final PbFilesLinkedThreadHandler onLinkedThreadPressed;
   final ValueChanged<PbFilesItemData>? onAskAgent;
   final ValueChanged<PbFilesItemData>? onShare;
+  final ValueChanged<PbFilesItemData>? onExtract;
   final ValueChanged<PbFilesItemData>? onDownload;
   final ValueChanged<PbFilesItemData>? onRename;
   final ValueChanged<PbFilesItemData>? onDelete;
@@ -172,6 +177,8 @@ class _FilesTableState extends State<PbFilesTable> {
                               _isSelectableRow(widget.items[index + 1]) &&
                               widget.selectedIds.contains(widget.items[index + 1].id);
                           final nextStateful = index < widget.items.length - 1 && _isStatefulRow(widget.items[index + 1]);
+                          final extractDisabled = widget.extractingArchiveIds.contains(item.id);
+                          final showExtract = widget.onExtract != null && pbCanExtractArchive(item.toAttachmentData());
 
                           return Padding(
                             padding: contentPadding,
@@ -189,6 +196,8 @@ class _FilesTableState extends State<PbFilesTable> {
                               nextSelected: nextSelected,
                               beforeStateRow: nextStateful,
                               last: index == widget.items.length - 1,
+                              showExtract: showExtract,
+                              extractDisabled: extractDisabled,
                               onPressed: () => widget.onItemPressed(item),
                               onToggleSelection: selectable ? () => widget.onToggleSelection(item.id) : () {},
                               onBrowseFolder: () => widget.onBrowseFolder(item),
@@ -196,6 +205,7 @@ class _FilesTableState extends State<PbFilesTable> {
                               onLinkedThreadPressed: (thread) => widget.onLinkedThreadPressed(item, thread),
                               onAskAgent: widget.onAskAgent == null ? null : () => widget.onAskAgent!(item),
                               onShare: widget.onShare == null ? null : () => widget.onShare!(item),
+                              onExtract: widget.onExtract == null || extractDisabled ? null : () => widget.onExtract!(item),
                               onDownload: widget.onDownload == null ? null : () => widget.onDownload!(item),
                               onRename: widget.onRename == null ? null : () => widget.onRename!(item),
                               onDelete: widget.onDelete == null ? null : () => widget.onDelete!(item),
@@ -689,6 +699,8 @@ class _PbFilesTableRow extends StatefulWidget {
     required this.nextSelected,
     required this.beforeStateRow,
     required this.last,
+    required this.showExtract,
+    required this.extractDisabled,
     required this.onPressed,
     required this.onToggleSelection,
     required this.onBrowseFolder,
@@ -696,6 +708,7 @@ class _PbFilesTableRow extends StatefulWidget {
     required this.onLinkedThreadPressed,
     this.onAskAgent,
     this.onShare,
+    this.onExtract,
     this.onDownload,
     this.onRename,
     this.onDelete,
@@ -717,6 +730,8 @@ class _PbFilesTableRow extends StatefulWidget {
   final bool nextSelected;
   final bool beforeStateRow;
   final bool last;
+  final bool showExtract;
+  final bool extractDisabled;
   final VoidCallback onPressed;
   final VoidCallback onToggleSelection;
   final VoidCallback onBrowseFolder;
@@ -724,6 +739,7 @@ class _PbFilesTableRow extends StatefulWidget {
   final ValueChanged<String> onLinkedThreadPressed;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
+  final VoidCallback? onExtract;
   final VoidCallback? onDownload;
   final VoidCallback? onRename;
   final VoidCallback? onDelete;
@@ -850,6 +866,7 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
         'Open',
         if (widget.onAskAgent != null) 'Ask agent',
         if (widget.onShare != null) 'Share',
+        if (widget.showExtract) pbArchiveExtractMenuLabel,
         if (widget.onDownload != null) 'Download',
         if (widget.onRename != null) 'Rename',
         if (widget.onDelete != null) 'Delete',
@@ -957,6 +974,8 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
                                 onRemoveProcessingRow: widget.onRemoveProcessingRow,
                                 onAskAgent: widget.item.kind == PbFilesItemKind.file ? widget.onAskAgent : null,
                                 onShare: widget.item.kind == PbFilesItemKind.file ? widget.onShare : null,
+                                showExtract: widget.item.kind == PbFilesItemKind.file && widget.showExtract,
+                                onExtract: widget.item.kind == PbFilesItemKind.file ? widget.onExtract : null,
                                 onDownload: widget.item.kind == PbFilesItemKind.file || widget.item.kind == PbFilesItemKind.folder
                                     ? widget.onDownload
                                     : null,

@@ -34,6 +34,7 @@ import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
+import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
@@ -45,6 +46,19 @@ typedef PowerboardsThreadAttachmentsChanged =
       required String createdBy,
       required Iterable<String> attachmentPaths,
     });
+
+@visibleForTesting
+bool powerboardsComposerAttachmentSeedMatchesAttachmentPaths({
+  required Iterable<String> seedPaths,
+  required Iterable<String> attachmentPaths,
+}) {
+  final normalizedSeedPaths = seedPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toSet();
+  if (normalizedSeedPaths.isEmpty) {
+    return false;
+  }
+
+  return attachmentPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).any(normalizedSeedPaths.contains);
+}
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
   MeshagentRoomChatThreadController({required super.room});
@@ -106,7 +120,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.onThreadAttachmentsChanged,
     this.composerAttachmentSeedVersion = 0,
     this.composerAttachmentPaths = const [],
-    this.onComposerAttachmentSeedApplied,
+    this.onComposerAttachmentSeedCleared,
     this.onComposerAttachmentOpen,
     this.onComposerAttachmentRemoved,
     this.onThreadAttachmentOpen,
@@ -141,7 +155,7 @@ class MeshagentThreadView extends StatefulWidget {
   final PowerboardsThreadAttachmentsChanged? onThreadAttachmentsChanged;
   final int composerAttachmentSeedVersion;
   final List<String> composerAttachmentPaths;
-  final VoidCallback? onComposerAttachmentSeedApplied;
+  final VoidCallback? onComposerAttachmentSeedCleared;
   final ValueChanged<String>? onComposerAttachmentOpen;
   final ValueChanged<String>? onComposerAttachmentRemoved;
   final ValueChanged<String>? onThreadAttachmentOpen;
@@ -306,14 +320,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   void _notifyThreadAttachments({required String threadPath, required String threadName, required Iterable<String> attachmentPaths}) {
-    final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+    final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
     if (normalizedThreadPath.isEmpty) {
       return;
     }
 
     final normalizedAttachmentPaths = attachmentPaths
-        .where(isPowerboardsStorageAttachmentPath)
-        .map(normalizePowerboardsAttachmentPath)
+        .map(powerboardsStorageAttachmentPathFromUrl)
         .where((path) => path.isNotEmpty)
         .toList(growable: false);
     if (normalizedAttachmentPaths.isEmpty) {
@@ -322,7 +335,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     final freshAttachmentPaths = <String>[];
     for (final attachmentPath in normalizedAttachmentPaths) {
-      if (_reportedAttachmentKeys.add('$normalizedThreadPath\n$attachmentPath')) {
+      final key = '$normalizedThreadPath\n$attachmentPath';
+      if (_reportedAttachmentKeys.add(key)) {
         freshAttachmentPaths.add(attachmentPath);
       }
     }
@@ -345,7 +359,19 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         threadName: _currentThreadNameForAttachmentIndex(message.threadPath),
         attachmentPaths: message.attachments.map((attachment) => attachment.url),
       );
+      _clearComposerAttachmentSeedIfAttachmentsMatch(message.attachments.map((attachment) => attachment.url));
     }
+  }
+
+  void _clearComposerAttachmentSeedIfAttachmentsMatch(Iterable<String> attachmentPaths) {
+    if (!powerboardsComposerAttachmentSeedMatchesAttachmentPaths(
+      seedPaths: widget.composerAttachmentPaths,
+      attachmentPaths: attachmentPaths,
+    )) {
+      return;
+    }
+
+    widget.onComposerAttachmentSeedCleared?.call();
   }
 
   String _composerAttachmentDisplayName(String path) {
@@ -373,7 +399,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       final seen = <String>{};
       final paths = <String>[];
       for (final path in widget.composerAttachmentPaths) {
-        final normalizedPath = normalizePowerboardsAttachmentPath(path);
+        final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
         if (normalizedPath.isNotEmpty && seen.add(normalizedPath)) {
           paths.add(normalizedPath);
         }
@@ -386,7 +412,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       for (final path in paths) {
         _chatController.attachFile(path, displayName: _composerAttachmentDisplayName(path));
       }
-      widget.onComposerAttachmentSeedApplied?.call();
     });
   }
 
@@ -410,9 +435,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         createdBy: _currentParticipantDisplayName(),
         attachmentPaths: attachmentPaths,
       ).catchError((Object error, StackTrace stackTrace) {
+        if (powerboardsIsExpectedRoomLifecycleClosure(error, stackTrace)) {
+          return;
+        }
         debugPrint('Failed to record file attachment index: $error');
       }),
     );
+    _clearComposerAttachmentSeedIfAttachmentsMatch(attachmentPaths);
   }
 
   Uri? _currentRouteUriOrNull() {
@@ -555,7 +584,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       documentPath: widget.documentPath,
       controller: _chatController,
       onAttachmentOpen: _openComposerAttachment,
-      onAttachmentRemoved: (attachment) => widget.onComposerAttachmentRemoved?.call(attachment.path),
+      onAttachmentRemoved: (attachment) {
+        widget.onComposerAttachmentRemoved?.call(attachment.path);
+        _clearComposerAttachmentSeedIfAttachmentsMatch([attachment.path]);
+      },
       selectedThreadPath: widget.selectedThreadPath,
       selectedThreadDisplayName: widget.selectedThreadDisplayName,
       onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
