@@ -553,6 +553,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   Widget build(BuildContext context) {
     final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
+    final usesCenteredDesktopPreviewComposer =
+        usesDesktopUiPreview && widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer && widget.emptyState == null;
     final usesMobileLayout = _usesMobileThreadLayout(context);
     final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
     final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
@@ -620,7 +622,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
       mobileStorageSaveSurfacePresenter: usesMobileLayout ? showPowerboardsThreadStorageSaveSurface : null,
       mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
-      centerComposer: false,
+      centerComposer: usesCenteredDesktopPreviewComposer,
+      showCenteredComposerTitle: !usesCenteredDesktopPreviewComposer,
       hideChatInput: widget.hideChatInput,
       showThreadList: false,
     );
