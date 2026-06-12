@@ -166,6 +166,12 @@ void main() {
     );
   });
 
+  test('preview rail keeps voice session inactive while a disconnect is still settling', () {
+    expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: true, pendingVoiceSessionDisconnect: true), isFalse);
+    expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: false, pendingVoiceSessionDisconnect: true), isFalse);
+    expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: true, pendingVoiceSessionDisconnect: false), isTrue);
+  });
+
   test('desktop preview does not derive loading thread title from stale path slugs', () {
     final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
       selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',

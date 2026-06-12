@@ -459,6 +459,17 @@ bool powerboardsShouldDisconnectVoiceSessionForAgentSwitch({
   return voiceSessionConnected && nextRouteId != null && nextRouteId != currentRouteId;
 }
 
+@visibleForTesting
+bool powerboardsResolvePreviewRailVoiceSessionActive({
+  required bool actualVoiceSessionActive,
+  required bool pendingVoiceSessionDisconnect,
+}) {
+  if (pendingVoiceSessionDisconnect && actualVoiceSessionActive) {
+    return false;
+  }
+  return actualVoiceSessionActive;
+}
+
 DateTime? _desktopPreviewTranscriptSortDate(StorageEntry entry) {
   return entry.updatedAt ?? entry.createdAt;
 }
@@ -2712,6 +2723,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   bool _desktopPreviewMeetingFullscreen = false;
   bool _desktopPreviewAgentsExpanded = true;
   bool _didNormalizeInitialDesktopPane = false;
+  bool _pendingPreviewRailVoiceSessionDisconnect = false;
   _MobileMeetingOrigin? _mobileMeetingOrigin;
   StreamSubscription<RoomStatusEvent>? _roomStatusSubscription;
 
@@ -3150,6 +3162,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final toaster = sourceContext != null && sourceContext.mounted ? ShadToaster.maybeOf(sourceContext) : ShadToaster.maybeOf(context);
     try {
       await voiceSessionController!.disconnect();
+      _pendingPreviewRailVoiceSessionDisconnect = true;
       final syncContext = sourceContext != null && sourceContext.mounted ? sourceContext : context;
       if (mounted && syncContext.mounted) {
         _syncPreviewRoomRailMenuBridge(syncContext, meetingSessionActive: _isMeetingSessionActive(syncContext), voiceSessionActive: false);
@@ -3781,6 +3794,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return voiceSessionController?.isConnected == true && !_isMeetingSessionActive(context);
   }
 
+  bool _previewRailVoiceSessionActive(BuildContext context, {bool? actualVoiceSessionActive}) {
+    final resolvedActualVoiceSessionActive = actualVoiceSessionActive ?? _isVoiceSessionActive(context);
+    final resolvedPreviewRailVoiceSessionActive = powerboardsResolvePreviewRailVoiceSessionActive(
+      actualVoiceSessionActive: resolvedActualVoiceSessionActive,
+      pendingVoiceSessionDisconnect: _pendingPreviewRailVoiceSessionDisconnect,
+    );
+    if (_pendingPreviewRailVoiceSessionDisconnect && !resolvedActualVoiceSessionActive) {
+      _pendingPreviewRailVoiceSessionDisconnect = false;
+    }
+    return resolvedPreviewRailVoiceSessionActive;
+  }
+
   Widget _buildAudioAgentEmptyState({
     required String title,
     required String description,
@@ -4007,7 +4032,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final resolvedMeetActive = meetingSessionActive ?? _isMeetingSessionActive(context);
-    final resolvedChatActive = voiceSessionActive ?? _isVoiceSessionActive(context);
+    final resolvedChatActive = _previewRailVoiceSessionActive(context, actualVoiceSessionActive: voiceSessionActive);
     final canShowManageAgents = isOwner.state.value == true;
     final showConsoleToggle = canViewDeveloperLogs.state.value == true;
     final showShutdown = isOwner.state.value == true;
