@@ -6071,6 +6071,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         if (selectedThreadDisplayName != null) {
           _syncDesktopPreviewVisibleThreadSelection(chatContext, selectedThreadDisplayName);
         }
+        final agentContextLabel = chatContext?.isVoiceOnly == true ? 'Session with' : 'Thread with';
         final threadItems = powerboardsDesktopPreviewThreadItemsForVisibleThreads(
           selectedThreadPath: chatContext?.selectedThreadPath,
           selectedThreadTitle: selectedThreadDisplayName ?? selectedThreadTitle,
@@ -6084,6 +6085,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   PbThreadHeader(
                     title: selectedThreadTitle,
                     agentName: agentName,
+                    agentContextLabel: agentContextLabel,
                     selectedThreadTitle: selectedThreadTitle,
                     titleResolving: selectedThreadTitleResolving,
                     roomPanelExpanded: !_desktopPreviewRoomPanelCollapsed,
@@ -6165,6 +6167,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                         PbThreadHeader(
                           title: selectedThreadTitle,
                           agentName: agentName,
+                          agentContextLabel: agentContextLabel,
                           selectedThreadTitle: selectedThreadTitle,
                           titleResolving: selectedThreadTitleResolving,
                           roomPanelExpanded: roomPanelExpanded,

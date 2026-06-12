@@ -10,6 +10,7 @@ class PbThreadHeader extends StatelessWidget {
     super.key,
     this.title = 'Launch planning',
     this.agentName = 'Assistant',
+    this.agentContextLabel = 'Thread with',
     this.selectedThreadTitle,
     this.titleResolving = false,
     this.roomPanelExpanded = true,
@@ -21,6 +22,7 @@ class PbThreadHeader extends StatelessWidget {
 
   final String title;
   final String agentName;
+  final String agentContextLabel;
   final String? selectedThreadTitle;
   final bool titleResolving;
   final bool roomPanelExpanded;
@@ -50,7 +52,12 @@ class PbThreadHeader extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final stacked = constraints.maxWidth < 560;
-          final titleGroup = _ThreadTitleGroup(titleButton: threadTitleButton, agentName: agentName, stacked: stacked);
+          final titleGroup = _ThreadTitleGroup(
+            titleButton: threadTitleButton,
+            agentName: agentName,
+            agentContextLabel: agentContextLabel,
+            stacked: stacked,
+          );
           final actions = _ThreadHeaderActions(
             roomPanelExpanded: roomPanelExpanded,
             onRoomPanelToggle: onRoomPanelToggle,
@@ -103,15 +110,16 @@ class _BlankRoomTitle extends StatelessWidget {
 }
 
 class _ThreadTitleGroup extends StatelessWidget {
-  const _ThreadTitleGroup({required this.titleButton, required this.agentName, required this.stacked});
+  const _ThreadTitleGroup({required this.titleButton, required this.agentName, required this.agentContextLabel, required this.stacked});
 
   final Widget titleButton;
   final String agentName;
+  final String agentContextLabel;
   final bool stacked;
 
   @override
   Widget build(BuildContext context) {
-    final meta = _ThreadMeta(agentName: agentName);
+    final meta = _ThreadMeta(agentName: agentName, agentContextLabel: agentContextLabel);
 
     if (stacked) {
       return Column(
@@ -243,9 +251,10 @@ class _ThreadTitleButtonState extends State<_ThreadTitleButton> with SingleTicke
 }
 
 class _ThreadMeta extends StatelessWidget {
-  const _ThreadMeta({required this.agentName});
+  const _ThreadMeta({required this.agentName, required this.agentContextLabel});
 
   final String agentName;
+  final String agentContextLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -266,7 +275,7 @@ class _ThreadMeta extends StatelessWidget {
           children: [
             Flexible(
               child: Text(
-                'Thread with',
+                agentContextLabel,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 softWrap: false,
