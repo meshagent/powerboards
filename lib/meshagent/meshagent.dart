@@ -6,8 +6,9 @@ import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 
 import 'package:powerboards/nav/add_room_dialog.dart';
 import 'package:powerboards/nav/new_project_dialog.dart';
-
+import "package:http/http.dart";
 import 'slug.dart';
+import "dart:convert";
 
 bool hasAgentMetadata(ServiceSpec service) => service.agents.isNotEmpty;
 
@@ -28,6 +29,9 @@ class MeshagentConfig {
     required this.billingUrl,
     required this.oauthCallbackUrl,
     required this.oauthClientId,
+    required this.sentryEnabled,
+    required this.sentryRelease,
+    required this.sentryEnvironment,
     required this.imageTagPrefix,
     required this.domains,
     required this.meshagentMailDomain,
@@ -38,6 +42,9 @@ class MeshagentConfig {
   final Uri billingUrl;
   final Uri oauthCallbackUrl;
   final String oauthClientId;
+  final bool sentryEnabled;
+  final String sentryRelease;
+  final String sentryEnvironment;
   final String imageTagPrefix;
   final List<String> domains;
   final String meshagentMailDomain;
@@ -59,6 +66,9 @@ class MeshagentConfig {
         oauthCallbackUrl: Uri.parse(const String.fromEnvironment("OAUTH_CALLBACK_URL")),
         oauthClientId: const String.fromEnvironment("OAUTH_CLIENT_ID"),
         billingUrl: Uri.parse(const String.fromEnvironment("BILLING_URL")),
+        sentryEnabled: const bool.fromEnvironment("SENTRY_ENABLED", defaultValue: false),
+        sentryRelease: const String.fromEnvironment("SENTRY_RELEASE"),
+        sentryEnvironment: const String.fromEnvironment("SENTRY_ENVIRONMENT"),
         imageTagPrefix: const String.fromEnvironment("IMAGE_TAG_PREFIX"),
         domains: domains,
         meshagentMailDomain: const String.fromEnvironment("MESHAGENT_MAIL_DOMAIN"),
@@ -71,9 +81,31 @@ class MeshagentConfig {
       oauthCallbackUrl: Uri.parse(const String.fromEnvironment("OAUTH_MOBILE_CALLBACK_URL")),
       oauthClientId: const String.fromEnvironment("OAUTH_MOBILE_CLIENT_ID"),
       billingUrl: Uri.parse(const String.fromEnvironment("BILLING_URL")),
+      sentryEnabled: const bool.fromEnvironment("SENTRY_ENABLED", defaultValue: false),
+      sentryRelease: const String.fromEnvironment("SENTRY_RELEASE"),
+      sentryEnvironment: const String.fromEnvironment("SENTRY_ENVIRONMENT"),
       imageTagPrefix: const String.fromEnvironment("IMAGE_TAG_PREFIX"),
       domains: domains,
       meshagentMailDomain: const String.fromEnvironment("MESHAGENT_MAIL_DOMAIN"),
+    );
+  }
+
+  static Future<MeshagentConfig> fromUri(Uri uri) async {
+    final res = await get(uri);
+    final data = jsonDecode(res.body);
+
+    return MeshagentConfig(
+      serverUrl: Uri.parse(data["SERVER_URL"]),
+      appUrl: Uri.parse(data["APP_URL"]),
+      oauthCallbackUrl: Uri.parse(data["OAUTH_CALLBACK_URL"]),
+      oauthClientId: data["OAUTH_CLIENT_ID"],
+      billingUrl: Uri.parse(data["BILLING_URL"]),
+      sentryEnabled: _parseEnvBool(data["SENTRY_ENABLED"]),
+      sentryRelease: data["SENTRY_RELEASE"] ?? "",
+      sentryEnvironment: data["SENTRY_ENVIRONMENT"] ?? "",
+      imageTagPrefix: data["IMAGE_TAG_PREFIX"],
+      domains: _parseEnvList(data["DOMAINS"]),
+      meshagentMailDomain: data["MESHAGENT_MAIL_DOMAIN"],
     );
   }
 
@@ -82,6 +114,14 @@ class MeshagentConfig {
 
 List<String> _parseEnvList(String raw) {
   return raw.split(",").map((entry) => entry.trim()).where((entry) => entry.isNotEmpty).toList();
+}
+
+bool _parseEnvBool(dynamic raw) {
+  if (raw is bool) {
+    return raw;
+  }
+
+  return raw.toString().toLowerCase() == "true";
 }
 
 Meshagent getMeshagentClient() {

@@ -384,7 +384,12 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
   });
 
   late final availableAgents = Resource(() async {
-    final res = await http.get(Uri.parse(const String.fromEnvironment("SERVER_URL")).resolve("/directory"));
+    final serverUrl = MeshagentConfig.current?.serverUrl;
+    if (serverUrl == null) {
+      throw StateError("MeshagentConfig.current.serverUrl is not set");
+    }
+
+    final res = await http.get(serverUrl.resolve("/directory"));
     final json = jsonDecode(res.body);
     return ServiceDirectoryPage.fromJson(json);
   });

@@ -27,8 +27,6 @@ import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
 import 'package:powerboards/ui/main_wrapper.dart';
 
-const String meshagentDomain = String.fromEnvironment('MESHAGENT_DOMAIN');
-
 class MeshagentConnectionResponse {
   MeshagentConnectionResponse({required this.url, required this.token, required this.roomType});
 
