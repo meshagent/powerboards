@@ -141,6 +141,37 @@ RuntimeDocument _threadDocumentWithJson(List<Map<String, dynamic>> children) {
 }
 
 void main() {
+  test('scoped value helper falls back when the local scope is unavailable', () {
+    expect(powerboardsPreferScopedValue<String>(scopedValue: 'scoped', fallbackValue: 'fallback'), 'scoped');
+    expect(powerboardsPreferScopedValue<String>(scopedValue: null, fallbackValue: 'fallback'), 'fallback');
+    expect(powerboardsPreferScopedValue<String>(scopedValue: null, fallbackValue: null), isNull);
+  });
+
+  test('voice session disconnect helper keys off the active session and route change', () {
+    expect(
+      powerboardsShouldDisconnectVoiceSessionForAgentSwitch(voiceSessionConnected: true, currentRouteId: 'voice', nextRouteId: 'assistant'),
+      isTrue,
+    );
+    expect(
+      powerboardsShouldDisconnectVoiceSessionForAgentSwitch(
+        voiceSessionConnected: false,
+        currentRouteId: 'voice',
+        nextRouteId: 'assistant',
+      ),
+      isFalse,
+    );
+    expect(
+      powerboardsShouldDisconnectVoiceSessionForAgentSwitch(voiceSessionConnected: true, currentRouteId: 'voice', nextRouteId: 'voice'),
+      isFalse,
+    );
+  });
+
+  test('preview rail keeps voice session inactive while a disconnect is still settling', () {
+    expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: true, pendingVoiceSessionDisconnect: true), isFalse);
+    expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: false, pendingVoiceSessionDisconnect: true), isFalse);
+    expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: true, pendingVoiceSessionDisconnect: false), isTrue);
+  });
+
   test('desktop preview does not derive loading thread title from stale path slugs', () {
     final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
       selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',

@@ -12,13 +12,21 @@ import "dart:convert";
 
 bool hasAgentMetadata(ServiceSpec service) => service.agents.isNotEmpty;
 
+String? serviceAgentType(ServiceSpec service) => service.agents.firstOrNull?.annotations["meshagent.agent.type"];
+
+String? serviceTemplateAgentType(ServiceTemplateSpec template) => template.agents.firstOrNull?.annotations["meshagent.agent.type"];
+
+bool serviceUsesVoiceAgent(ServiceSpec service) => serviceAgentType(service) == "VoiceBot";
+
+bool serviceTemplateUsesVoiceAgent(ServiceTemplateSpec template) => serviceTemplateAgentType(template) == "VoiceBot";
+
 bool isSupportedServiceType(ServiceSpec service) {
-  final type = service.agents.firstOrNull?.annotations["meshagent.agent.type"];
+  final type = serviceAgentType(service);
   return type == "ChatBot" || type == "VoiceBot" || type == "MeetingTranscriber" || type == "Shell";
 }
 
 bool hasMessagingParticipant(ServiceSpec service) {
-  final type = service.agents.firstOrNull?.annotations["meshagent.agent.type"];
+  final type = serviceAgentType(service);
   return type == "ChatBot" || type == "VoiceBot";
 }
 

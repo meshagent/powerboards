@@ -6,6 +6,8 @@ import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/theme/colors.dart';
 import 'package:powerboards/livekit/change_device_button.dart';
 import 'package:powerboards/livekit/room.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_menu_row.dart';
 import 'package:powerboards/ui/powerboards_toasts.dart';
@@ -21,12 +23,16 @@ lk.LocalTrackPublication<lk.LocalVideoTrack>? _voiceCameraPublication(lk.LocalPa
 }
 
 class VoiceMeetingControls extends StatelessWidget {
-  const VoiceMeetingControls({super.key, required this.controller, this.spacing = 8});
+  const VoiceMeetingControls({super.key, required this.controller, this.spacing = 8, this.showHelperText = true});
 
   static const double _compactControlSize = powerboardsFooterActionButtonHeight;
+  static const double _desktopV1SessionButtonWidth = 196;
+  static const String helperTitle = 'Speak with this agent privately';
+  static const String helperDescription = 'Talk through ideas and get help hands-free.';
 
   final MeetingController controller;
   final double spacing;
+  final bool showHelperText;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +40,7 @@ class VoiceMeetingControls extends StatelessWidget {
       builder: (context, constraints) => ListenableBuilder(
         listenable: controller.livekitRoom,
         builder: (context, _) {
+          final useDesktopV1Style = powerboardsUsesDesktopUiPreview(context);
           final isCompact = constraints.maxWidth < 420;
           final compactSpacing = constraints.maxWidth < 340 ? 6.0 : spacing;
           final horizontalPadding = isCompact ? (constraints.maxWidth < 340 ? 8.0 : 16.0) : 12.0;
@@ -46,60 +53,80 @@ class VoiceMeetingControls extends StatelessWidget {
           final descriptionStyle = powerboardsMenuRowDescriptionStyle().copyWith(fontWeight: FontWeight.w400, height: 1.45);
 
           if (controller.livekitRoom.localParticipant == null) {
-            return _VoiceConnectionButton(controller: controller, compact: isCompact);
+            return _VoiceConnectionButton(controller: controller, compact: isCompact, useDesktopV1Style: useDesktopV1Style);
           }
+
+          final controls = useDesktopV1Style
+              ? Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    _VoiceChangeSettings(controller: controller, useDesktopV1Style: true),
+                    _VoiceMicToggle(controller: controller, useDesktopV1Style: true),
+                    _VoiceCameraToggle(controller: controller, useDesktopV1Style: true),
+                    _VoiceConnectionButton(controller: controller, compact: false, useDesktopV1Style: true),
+                  ],
+                )
+              : (isCompact
+                    ? Row(
+                        children: [
+                          Expanded(
+                            child: _VoiceConnectionButton(
+                              controller: controller,
+                              compact: true,
+                              compactLabelWidth: compactButtonLabelWidth,
+                            ),
+                          ),
+                          SizedBox(width: compactSpacing),
+                          SizedBox.square(
+                            dimension: _compactControlSize,
+                            child: _VoiceMicToggle(controller: controller),
+                          ),
+                          SizedBox(width: compactSpacing),
+                          SizedBox.square(
+                            dimension: _compactControlSize,
+                            child: _VoiceCameraToggle(controller: controller),
+                          ),
+                          SizedBox(width: compactSpacing),
+                          SizedBox.square(
+                            dimension: _compactControlSize,
+                            child: _VoiceChangeSettings(controller: controller),
+                          ),
+                        ],
+                      )
+                    : Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: spacing,
+                        runSpacing: spacing,
+                        children: [
+                          _VoiceConnectionButton(controller: controller, compact: false),
+                          _VoiceMicToggle(controller: controller),
+                          _VoiceCameraToggle(controller: controller),
+                          _VoiceChangeSettings(controller: controller),
+                        ],
+                      ));
 
           return Padding(
             padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (isCompact)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _VoiceConnectionButton(controller: controller, compact: true, compactLabelWidth: compactButtonLabelWidth),
-                      ),
-                      SizedBox(width: compactSpacing),
-                      SizedBox.square(
-                        dimension: _compactControlSize,
-                        child: _VoiceMicToggle(controller: controller),
-                      ),
-                      SizedBox(width: compactSpacing),
-                      SizedBox.square(
-                        dimension: _compactControlSize,
-                        child: _VoiceCameraToggle(controller: controller),
-                      ),
-                      SizedBox(width: compactSpacing),
-                      SizedBox.square(
-                        dimension: _compactControlSize,
-                        child: _VoiceChangeSettings(controller: controller),
-                      ),
-                    ],
-                  )
-                else
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: spacing,
-                    runSpacing: spacing,
-                    children: [
-                      _VoiceConnectionButton(controller: controller, compact: false),
-                      _VoiceMicToggle(controller: controller),
-                      _VoiceCameraToggle(controller: controller),
-                      _VoiceChangeSettings(controller: controller),
-                    ],
+                controls,
+                if (showHelperText) ...[
+                  const SizedBox(height: 20),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: helperMaxWidth),
+                    child: Text(helperTitle, style: titleStyle, textAlign: TextAlign.center),
                   ),
-                const SizedBox(height: 20),
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: helperMaxWidth),
-                  child: Text("Speak with this agent privately", style: titleStyle, textAlign: TextAlign.center),
-                ),
-                const SizedBox(height: 8),
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: helperMaxWidth),
-                  child: Text("Talk through ideas and get help hands-free.", style: descriptionStyle, textAlign: TextAlign.center),
-                ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: helperMaxWidth),
+                    child: Text(helperDescription, style: descriptionStyle, textAlign: TextAlign.center),
+                  ),
+                ],
               ],
             ),
           );
@@ -110,32 +137,51 @@ class VoiceMeetingControls extends StatelessWidget {
 }
 
 class _VoiceConnectionButton extends StatelessWidget {
-  const _VoiceConnectionButton({required this.controller, this.compact = false, this.compactLabelWidth});
+  const _VoiceConnectionButton({required this.controller, this.compact = false, this.compactLabelWidth, this.useDesktopV1Style = false});
 
   final MeetingController controller;
   final bool compact;
   final double? compactLabelWidth;
+  final bool useDesktopV1Style;
 
   @override
   Widget build(BuildContext context) {
     final room = controller.livekitRoom;
+    final pendingLocalMedia = controller.pendingLocalMedia;
 
-    return ListenableBuilder(
-      listenable: room,
+    return AnimatedBuilder(
+      animation: Listenable.merge([room, pendingLocalMedia]),
       builder: (context, _) {
+        final localParticipant = room.localParticipant;
+        final microphoneActive = (localParticipant?.isMicrophoneEnabled() ?? false) || pendingLocalMedia.microphonePending;
+        final cameraActive = (localParticipant?.isCameraEnabled() ?? false) || pendingLocalMedia.cameraPending;
+        final sessionControlsActive = microphoneActive || cameraActive;
+
         return switch (room.connectionState) {
-          lk.ConnectionState.connected => ShadButton.destructive(
-            width: compact ? double.infinity : null,
-            height: powerboardsFooterActionButtonHeight,
-            padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 20),
-            onPressed: () => unawaited(controller.disconnect()),
-            child: compact
-                ? SizedBox(
-                    width: compactLabelWidth,
-                    child: const Text("End session", maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
+          lk.ConnectionState.connected =>
+            useDesktopV1Style
+                ? MeetV1ToolbarButton(
+                    label: 'End session',
+                    tooltip: 'End session',
+                    compact: false,
+                    width: VoiceMeetingControls._desktopV1SessionButtonWidth,
+                    onPressed: () => unawaited(controller.disconnect()),
+                    backgroundColor: sessionControlsActive ? PbColors.meetControlAvailable : PbColors.meetControlUnavailable,
+                    foregroundColor: PbColors.textInverse,
+                    borderColor: sessionControlsActive ? PbColors.meetControlAvailable : PbColors.meetControlUnavailable,
                   )
-                : const Text("End session"),
-          ),
+                : ShadButton.destructive(
+                    width: compact ? double.infinity : null,
+                    height: powerboardsFooterActionButtonHeight,
+                    padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 20),
+                    onPressed: () => unawaited(controller.disconnect()),
+                    child: compact
+                        ? SizedBox(
+                            width: compactLabelWidth,
+                            child: const Text("End session", maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false),
+                          )
+                        : const Text("End session"),
+                  ),
           lk.ConnectionState.disconnected => RoomToolbarButton(
             text: "Connect",
             on: false,
@@ -163,9 +209,10 @@ class _VoiceConnectionButton extends StatelessWidget {
 }
 
 class _VoiceMicToggle extends StatefulWidget {
-  const _VoiceMicToggle({required this.controller});
+  const _VoiceMicToggle({required this.controller, this.useDesktopV1Style = false});
 
   final MeetingController controller;
+  final bool useDesktopV1Style;
 
   @override
   State<_VoiceMicToggle> createState() => _VoiceMicToggleState();
@@ -324,19 +371,22 @@ class _VoiceMicToggleState extends State<_VoiceMicToggle> {
       offColor: toggleColor,
       offForeground: toggleForeground,
       icon: showEnabled ? LucideIcons.mic : LucideIcons.micOff,
+      iconAssetName: showEnabled ? "mic" : "mic-off",
       width: VoiceMeetingControls._compactControlSize,
       height: VoiceMeetingControls._compactControlSize,
       iconSize: 20,
       loading: _pending,
       onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleMicrophone(local, !_microphoneEnabled)),
+      desktopV1Style: widget.useDesktopV1Style,
     );
   }
 }
 
 class _VoiceCameraToggle extends StatefulWidget {
-  const _VoiceCameraToggle({required this.controller});
+  const _VoiceCameraToggle({required this.controller, this.useDesktopV1Style = false});
 
   final MeetingController controller;
+  final bool useDesktopV1Style;
 
   @override
   State<_VoiceCameraToggle> createState() => _VoiceCameraToggleState();
@@ -495,21 +545,24 @@ class _VoiceCameraToggleState extends State<_VoiceCameraToggle> {
       offColor: toggleColor,
       offForeground: toggleForeground,
       icon: showEnabled ? LucideIcons.video : LucideIcons.videoOff,
+      iconAssetName: showEnabled ? "video" : "video-off",
       width: VoiceMeetingControls._compactControlSize,
       height: VoiceMeetingControls._compactControlSize,
       iconSize: 20,
       loading: _pending,
       onPressed: local == null || _processing || _pending ? null : () => unawaited(_toggleCamera(local, !_cameraEnabled)),
+      desktopV1Style: widget.useDesktopV1Style,
     );
   }
 }
 
 class _VoiceChangeSettings extends StatelessWidget {
-  const _VoiceChangeSettings({required this.controller});
+  const _VoiceChangeSettings({required this.controller, this.useDesktopV1Style = false});
 
   static const Duration _minimumPendingDuration = Duration(milliseconds: 350);
 
   final MeetingController controller;
+  final bool useDesktopV1Style;
 
   Future<void> _runWithMinimumPendingDuration(Future<void> Function() action) async {
     final startedAt = DateTime.now();
@@ -574,22 +627,25 @@ class _VoiceChangeSettings extends StatelessWidget {
       onChangeVideoInput: _selectVideoInput,
       onChangeAudioInput: _selectAudioInput,
       onChangeAudioOutput: _selectAudioOutput,
+      desktopV1Style: useDesktopV1Style,
       selectedVideoInputDeviceId: () => controller.livekitRoom.selectedVideoInputDeviceId,
       selectedAudioInputDeviceId: () => controller.livekitRoom.selectedAudioInputDeviceId,
       selectedAudioOutputDeviceId: () => controller.livekitRoom.selectedAudioOutputDeviceId,
       cameraUnavailable: controller.pendingLocalMedia.cameraUnavailable,
       microphoneUnavailable: controller.pendingLocalMedia.microphoneUnavailable,
-      renderButton: (onPressed) => Tooltip(
-        message: "Device settings",
-        child: ShadIconButton.outline(
-          onPressed: onPressed,
-          width: VoiceMeetingControls._compactControlSize,
-          height: VoiceMeetingControls._compactControlSize,
-          iconSize: 20,
-          decoration: powerboardsAdaptiveMeetingControlButtonDecoration(context),
-          icon: const Icon(LucideIcons.settings),
-        ),
-      ),
+      renderButton: (onPressed) => useDesktopV1Style
+          ? MeetV1ToolbarButton.secondary(label: "Device settings", iconAssetName: "settings", compact: true, onPressed: onPressed)
+          : Tooltip(
+              message: "Device settings",
+              child: ShadIconButton.outline(
+                onPressed: onPressed,
+                width: VoiceMeetingControls._compactControlSize,
+                height: VoiceMeetingControls._compactControlSize,
+                iconSize: 20,
+                decoration: powerboardsAdaptiveMeetingControlButtonDecoration(context),
+                icon: const Icon(LucideIcons.settings),
+              ),
+            ),
     );
   }
 }

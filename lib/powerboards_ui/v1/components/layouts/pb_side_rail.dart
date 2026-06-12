@@ -17,6 +17,7 @@ class PbSideRail extends StatelessWidget {
     this.destinationsEnabled = true,
     this.showMore = true,
     this.moreEnabled = true,
+    this.chatActive = false,
     this.meetActive = false,
     this.selectedDestination = PbSideRailDestination.chat,
     this.onRecentPressed,
@@ -39,6 +40,7 @@ class PbSideRail extends StatelessWidget {
   final bool destinationsEnabled;
   final bool showMore;
   final bool moreEnabled;
+  final bool chatActive;
   final bool meetActive;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
@@ -78,6 +80,7 @@ class PbSideRail extends StatelessWidget {
                   destinationsEnabled: destinationsEnabled,
                   showMore: showMore,
                   moreEnabled: moreEnabled,
+                  chatActive: chatActive,
                   meetActive: meetActive,
                   selectedDestination: selectedDestination,
                   onRecentPressed: onRecentPressed,
@@ -100,6 +103,7 @@ class PbSideRail extends StatelessWidget {
                   destinationsEnabled: destinationsEnabled,
                   showMore: showMore,
                   moreEnabled: moreEnabled,
+                  chatActive: chatActive,
                   meetActive: meetActive,
                   selectedDestination: selectedDestination,
                   onRecentPressed: onRecentPressed,
@@ -124,6 +128,7 @@ class _DesktopRail extends StatelessWidget {
     required this.destinationsEnabled,
     required this.showMore,
     required this.moreEnabled,
+    required this.chatActive,
     required this.meetActive,
     required this.selectedDestination,
     required this.onRecentPressed,
@@ -141,6 +146,7 @@ class _DesktopRail extends StatelessWidget {
   final bool destinationsEnabled;
   final bool showMore;
   final bool moreEnabled;
+  final bool chatActive;
   final bool meetActive;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
@@ -166,6 +172,7 @@ class _DesktopRail extends StatelessWidget {
           destinationsEnabled: destinationsEnabled,
           showMore: showMore,
           moreEnabled: moreEnabled,
+          chatActive: chatActive,
           meetActive: meetActive,
           selectedDestination: selectedDestination,
           onRecentPressed: onRecentPressed,
@@ -192,6 +199,7 @@ class _MobileRail extends StatelessWidget {
     required this.destinationsEnabled,
     required this.showMore,
     required this.moreEnabled,
+    required this.chatActive,
     required this.meetActive,
     required this.selectedDestination,
     required this.onRecentPressed,
@@ -214,6 +222,7 @@ class _MobileRail extends StatelessWidget {
   final bool destinationsEnabled;
   final bool showMore;
   final bool moreEnabled;
+  final bool chatActive;
   final bool meetActive;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
@@ -247,6 +256,7 @@ class _MobileRail extends StatelessWidget {
             destinationsEnabled: destinationsEnabled,
             showMore: showMore,
             moreEnabled: moreEnabled,
+            chatActive: chatActive,
             meetActive: meetActive,
             selectedDestination: selectedDestination,
             onRecentPressed: onRecentPressed,
@@ -314,6 +324,7 @@ class _RailNav extends StatelessWidget {
     required this.destinationsEnabled,
     required this.showMore,
     required this.moreEnabled,
+    required this.chatActive,
     required this.meetActive,
     required this.selectedDestination,
     this.onRecentPressed,
@@ -333,6 +344,7 @@ class _RailNav extends StatelessWidget {
   final bool destinationsEnabled;
   final bool showMore;
   final bool moreEnabled;
+  final bool chatActive;
   final bool meetActive;
   final PbSideRailDestination selectedDestination;
   final VoidCallback? onRecentPressed;
@@ -359,9 +371,10 @@ class _RailNav extends StatelessWidget {
       if (showDestinations)
         _RailItemData(
           label: 'Chat',
-          iconAssetName: 'messages-square',
+          iconAssetName: chatActive ? 'circle-dot' : 'messages-square',
           destination: PbSideRailDestination.chat,
           active: destinationsEnabled && selectedDestination == PbSideRailDestination.chat,
+          attention: destinationsEnabled && chatActive,
           enabled: destinationsEnabled,
           onPressed: destinationsEnabled ? onChatPressed : null,
         ),

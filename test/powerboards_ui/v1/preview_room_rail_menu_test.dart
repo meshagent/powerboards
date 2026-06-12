@@ -21,6 +21,7 @@ void main() {
             Builder(
               builder: (context) {
                 bridge.configure(
+                  chatActive: false,
                   showDestinations: true,
                   showMore: true,
                   showRename: true,

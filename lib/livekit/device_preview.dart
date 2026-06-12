@@ -492,8 +492,9 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
         final unavailableToggleColor = ShadTheme.of(context).colorScheme.destructive;
         final unavailableToggleForeground = ShadTheme.of(context).colorScheme.destructiveForeground;
         final meetNowPending = audioPending || videoPending;
-        final meetNowButtonColor = microphoneAvailable ? availableToggleColor : unavailableToggleColor;
-        final meetNowButtonForeground = microphoneAvailable ? availableToggleForeground : unavailableToggleForeground;
+        final meetControlsActive = audioOn || videoOn || meetNowPending;
+        final meetNowButtonColor = meetControlsActive ? availableToggleColor : unavailableToggleColor;
+        final meetNowButtonForeground = meetControlsActive ? availableToggleForeground : unavailableToggleForeground;
 
         Widget buildMeetNowButtonChild() {
           if (!meetNowPending) {
@@ -590,7 +591,7 @@ class _DeviceSettingsState extends State<_DeviceSettings> {
           if (widget.onJoin != null)
             _V1MeetNowButton(
               loading: meetNowPending,
-              available: microphoneAvailable,
+              available: meetControlsActive,
               onPressed: meetNowPending
                   ? null
                   : () {
