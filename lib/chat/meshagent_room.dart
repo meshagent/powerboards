@@ -2693,6 +2693,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final toaster = sourceContext != null && sourceContext.mounted ? ShadToaster.maybeOf(sourceContext) : ShadToaster.maybeOf(context);
     try {
       await voiceSessionController!.disconnect();
+      final syncContext = sourceContext != null && sourceContext.mounted ? sourceContext : context;
+      if (mounted && syncContext.mounted) {
+        _syncPreviewRoomRailMenuBridge(syncContext, meetingSessionActive: _isMeetingSessionActive(syncContext), voiceSessionActive: false);
+      }
       return true;
     } catch (_) {
       toaster?.show(
