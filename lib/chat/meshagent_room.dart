@@ -22,6 +22,7 @@ import 'package:meshagent_flutter_dev/developer_console.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/conversation_descriptor.dart' as ma;
 import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
+import 'package:meshagent_flutter_shadcn/meetings/audio_visualization.dart';
 import 'package:meshagent_flutter_shadcn/meetings/meetings.dart';
 import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
 import 'package:meshagent_flutter_shadcn/secrets/keychain_dialog.dart';
@@ -5070,6 +5071,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                 : "Connect with this agent using your microphone.",
                                             emptyStateAvailableWidth: constraints.maxWidth,
                                             connectedControlsBuilder: (context, meeting) => VoiceMeetingControls(controller: meeting),
+                                            connectedVisualizationStyle: AudioWaveStyle.legacy,
                                           ),
                                         ),
                                       ))),
