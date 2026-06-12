@@ -11,6 +11,7 @@ class PbThreadHeader extends StatelessWidget {
     this.title = 'Launch planning',
     this.agentName = 'Assistant',
     this.selectedThreadTitle,
+    this.titleResolving = false,
     this.roomPanelExpanded = true,
     this.blankRoom = false,
     this.onTitlePressed,
@@ -21,6 +22,7 @@ class PbThreadHeader extends StatelessWidget {
   final String title;
   final String agentName;
   final String? selectedThreadTitle;
+  final bool titleResolving;
   final bool roomPanelExpanded;
   final bool blankRoom;
   final VoidCallback? onTitlePressed;
@@ -40,7 +42,7 @@ class PbThreadHeader extends StatelessWidget {
       );
     }
 
-    final threadTitleButton = _ThreadTitleButton(title: _selectedThreadTitle, onPressed: _titleAction);
+    final threadTitleButton = _ThreadTitleButton(title: _selectedThreadTitle, resolving: titleResolving, onPressed: _titleAction);
 
     return Container(
       constraints: const BoxConstraints(minHeight: 76),
@@ -131,23 +133,80 @@ class _ThreadTitleGroup extends StatelessWidget {
 }
 
 class _ThreadTitleButton extends StatefulWidget {
-  const _ThreadTitleButton({required this.title, this.onPressed});
+  const _ThreadTitleButton({required this.title, this.resolving = false, this.onPressed});
 
   final String title;
+  final bool resolving;
   final VoidCallback? onPressed;
 
   @override
   State<_ThreadTitleButton> createState() => _ThreadTitleButtonState();
 }
 
-class _ThreadTitleButtonState extends State<_ThreadTitleButton> {
+class _ThreadTitleButtonState extends State<_ThreadTitleButton> with SingleTickerProviderStateMixin {
+  late final AnimationController _resolvingController;
   bool _hovered = false;
   bool _pressed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolvingController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+    _syncResolvingAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ThreadTitleButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.resolving != widget.resolving) {
+      _syncResolvingAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _resolvingController.dispose();
+    super.dispose();
+  }
+
+  void _syncResolvingAnimation() {
+    if (widget.resolving) {
+      _resolvingController.repeat();
+      return;
+    }
+
+    _resolvingController
+      ..stop()
+      ..value = 0;
+  }
 
   @override
   Widget build(BuildContext context) {
     final interactive = widget.onPressed != null;
     final lifted = interactive && _hovered && !_pressed;
+    final title = Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: PowerboardsTypography.h2);
+    final resolvingIdleColor = PbColors.customBrandInk.withValues(alpha: 0.62);
+    final resolvingSweepColor = PbColors.customBrandInk.withValues(alpha: 0.3);
+    final resolvingPeakColor = PbColors.customBrandInk.withValues(alpha: 0.86);
+    final titleContent = widget.resolving
+        ? AnimatedBuilder(
+            animation: _resolvingController,
+            child: title,
+            builder: (context, child) => ShaderMask(
+              blendMode: BlendMode.srcIn,
+              shaderCallback: (bounds) {
+                final width = bounds.width.isFinite && bounds.width > 0 ? bounds.width : 160.0;
+                final shimmerWidth = width * 0.72;
+                final left = -shimmerWidth + (width + shimmerWidth * 2) * _resolvingController.value;
+                return LinearGradient(
+                  colors: [resolvingIdleColor, resolvingSweepColor, resolvingPeakColor, resolvingSweepColor, resolvingIdleColor],
+                  stops: const [0, 0.35, 0.5, 0.65, 1],
+                ).createShader(Rect.fromLTWH(left, 0, shimmerWidth, bounds.height));
+              },
+              child: child,
+            ),
+          )
+        : title;
 
     return MouseRegion(
       cursor: interactive ? SystemMouseCursors.click : MouseCursor.defer,
@@ -175,11 +234,7 @@ class _ThreadTitleButtonState extends State<_ThreadTitleButton> {
           constraints: const BoxConstraints(minHeight: 38),
           child: Row(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis, softWrap: false, style: PowerboardsTypography.h2),
-              ),
-            ],
+            children: [Flexible(child: titleContent)],
           ),
         ),
       ),

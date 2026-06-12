@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter/foundation.dart';
 
+bool get _shouldUsePowerboardsWakeLock => kReleaseMode;
+
 class WakeLock extends StatefulWidget {
   const WakeLock({super.key, required this.child});
 
@@ -20,7 +22,7 @@ class WakeLockState extends State<WakeLock> {
     super.initState();
     _wakeLockTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       try {
-        if (kReleaseMode) {
+        if (_shouldUsePowerboardsWakeLock) {
           await WakelockPlus.enable();
         }
       } catch (err) {
@@ -32,7 +34,9 @@ class WakeLockState extends State<WakeLock> {
   @override
   void dispose() {
     _wakeLockTimer.cancel();
-    WakelockPlus.disable();
+    if (_shouldUsePowerboardsWakeLock) {
+      WakelockPlus.disable();
+    }
     super.dispose();
   }
 

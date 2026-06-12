@@ -60,8 +60,19 @@ class PbResolvedAttachmentMetadata {
   String get iconAssetName => fileType.iconAssetName;
   Color get iconColor => fileType.iconColor;
 
-  PbAttachmentListItemData toListItemData({String? path, PbAttachmentPreviewState previewState = PbAttachmentPreviewState.none}) {
-    return PbAttachmentListItemData(title: displayTitle, subtitle: displayType, fileType: fileType, path: path, previewState: previewState);
+  PbAttachmentListItemData toListItemData({
+    String? path,
+    PbAttachmentPreviewState previewState = PbAttachmentPreviewState.none,
+    String sizeLabel = '',
+  }) {
+    return PbAttachmentListItemData(
+      title: displayTitle,
+      subtitle: displayType,
+      fileType: fileType,
+      path: path,
+      previewState: previewState,
+      sizeLabel: sizeLabel,
+    );
   }
 }
 
@@ -133,7 +144,7 @@ extension PbAttachmentFileTypeRules on PbAttachmentFileType {
       return PbAttachmentFileType.document;
     }
 
-    if (['zip', 'rar', '7z', 'tar', 'gz'].contains(extension)) {
+    if (['zip', 'rar', '7z', 'tar', 'gz', 'tgz'].contains(extension)) {
       return PbAttachmentFileType.archive;
     }
 
@@ -381,6 +392,7 @@ class PbAttachmentListItemData {
     required this.fileType,
     this.path,
     this.previewState = PbAttachmentPreviewState.none,
+    this.sizeLabel = '',
   });
 
   factory PbAttachmentListItemData.fromFileName({
@@ -390,13 +402,14 @@ class PbAttachmentListItemData {
     PbAttachmentFileType? fileType,
     String? fileTypeKey,
     PbAttachmentPreviewState previewState = PbAttachmentPreviewState.none,
+    String sizeLabel = '',
   }) {
     return PbResolvedAttachmentMetadata.resolve(
       title: title,
       descriptor: subtitle,
       explicitFileType: fileType,
       explicitFileTypeKey: fileTypeKey,
-    ).toListItemData(path: path, previewState: previewState);
+    ).toListItemData(path: path, previewState: previewState, sizeLabel: sizeLabel);
   }
 
   final String title;
@@ -404,6 +417,7 @@ class PbAttachmentListItemData {
   final PbAttachmentFileType fileType;
   final String? path;
   final PbAttachmentPreviewState previewState;
+  final String sizeLabel;
 
   PbAttachmentCategory get category => fileType.category;
 
@@ -441,7 +455,7 @@ String? _displayTypeFromExtension(String extension) {
     'rtf' => 'Rich text',
     'csv' || 'xls' || 'xlsx' || 'numbers' => 'Spreadsheet',
     'pdf' => 'PDF',
-    'zip' || 'rar' || '7z' || 'tar' || 'gz' => 'Archive',
+    'zip' || 'rar' || '7z' || 'tar' || 'gz' || 'tgz' => 'Archive',
     'png' || 'jpg' || 'jpeg' || 'gif' || 'webp' || 'svg' || 'heic' => 'Image',
     'mov' || 'mp4' || 'webm' || 'avi' || 'mkv' => 'Video',
     'm4a' || 'wav' || 'aac' || 'ogg' => 'Audio',

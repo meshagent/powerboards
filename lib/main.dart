@@ -25,6 +25,7 @@ import 'powerboards_controller/powerboards_controller.dart';
 import 'firebase.dart';
 import 'logical_keyboard_monitor/logical_keyboard_monitor.dart';
 import 'meshagent/meshagent.dart';
+import 'meshagent/room_lifecycle_errors.dart';
 import 'nav/chrome_visibility.dart';
 import 'nav/nav.dart';
 import 'theme/theme.dart';
@@ -108,11 +109,7 @@ bool _isExpectedWebHotRestartViewDispose(Object error, [StackTrace? stackTrace])
 }
 
 bool _isExpectedRoomClientDisposed(Object error, [StackTrace? stackTrace]) {
-  final errorText = '$error';
-  final stackText = stackTrace?.toString() ?? '';
-  return errorText.contains('room client disposed') ||
-      errorText.contains('room connection closed before request completed') ||
-      stackText.contains('room client disposed');
+  return powerboardsIsExpectedRoomLifecycleClosure(error, stackTrace);
 }
 
 void main() async {

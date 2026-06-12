@@ -4,7 +4,12 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_thread_heade
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 
 void main() {
-  Widget buildHarness({String agentName = 'voice', VoidCallback? onTitlePressed, VoidCallback? onOpenAllAgentsAndThreads}) {
+  Widget buildHarness({
+    String agentName = 'voice',
+    bool titleResolving = false,
+    VoidCallback? onTitlePressed,
+    VoidCallback? onOpenAllAgentsAndThreads,
+  }) {
     return MaterialApp(
       home: Scaffold(
         body: SizedBox(
@@ -13,6 +18,7 @@ void main() {
             title: 'Audio session',
             agentName: agentName,
             selectedThreadTitle: 'Audio session',
+            titleResolving: titleResolving,
             onTitlePressed: onTitlePressed,
             onOpenAllAgentsAndThreads: onOpenAllAgentsAndThreads,
           ),
@@ -64,5 +70,13 @@ void main() {
     expect(find.text('Thread with'), findsOneWidget);
     expect(find.text('Research Assistant'), findsOneWidget);
     expect(find.text('research assistant'), findsNothing);
+  });
+
+  testWidgets('resolving thread title keeps title text in place', (tester) async {
+    await tester.pumpWidget(buildHarness(titleResolving: true));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Audio session'), findsOneWidget);
+    expect(find.text('Thread with'), findsOneWidget);
   });
 }

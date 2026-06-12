@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:http/http.dart';
 import 'package:powerboards/meshagent/project.dart';
@@ -30,6 +31,8 @@ import 'package:meshagent_flutter_shadcn/viewers/builder.dart';
 import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 
 import 'package:powerboards/chat/hangup_button.dart';
+import 'package:powerboards/meshagent/archive_extract.dart';
+import 'package:powerboards/meshagent/archive_extract_toast.dart';
 import 'package:powerboards/livekit/room.dart' as room;
 import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
@@ -46,6 +49,7 @@ import 'package:powerboards/meshagent/loader.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/options_menu.dart';
 import 'package:powerboards/meshagent/path.dart';
+import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:powerboards/meshagent/tool_connection_scope.dart';
@@ -62,6 +66,7 @@ import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_archive_extract.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
@@ -203,6 +208,17 @@ class _MobileChatHeaderContext {
   final bool isVoiceOnly;
 
   bool get canOpenContextSwitcher => threadListPath != null || agentKey != null;
+
+  _MobileChatHeaderContext withThreadSelection({required String currentThreadLabel, required String? selectedThreadPath}) {
+    return _MobileChatHeaderContext(
+      agentName: agentName,
+      agentKey: agentKey,
+      currentThreadLabel: currentThreadLabel,
+      selectedThreadPath: selectedThreadPath,
+      threadListPath: threadListPath,
+      isVoiceOnly: isVoiceOnly,
+    );
+  }
 }
 
 enum _MobileRoomContextSwitcherState { threads, agents }
@@ -420,6 +436,214 @@ String? _agentThreadListPath(String? path) {
   return "agent://threads";
 }
 
+@visibleForTesting
+String? powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads({
+  required String? selectedThreadPath,
+  required Iterable<String> threadPaths,
+  required bool threadListLoaded,
+}) {
+  final normalizedSelectedThreadPath = selectedThreadPath?.trim();
+  if (normalizedSelectedThreadPath == null || normalizedSelectedThreadPath.isEmpty) {
+    return null;
+  }
+
+  if (!threadListLoaded) {
+    return normalizedSelectedThreadPath;
+  }
+
+  for (final threadPath in threadPaths) {
+    if (threadPath.trim() == normalizedSelectedThreadPath) {
+      return normalizedSelectedThreadPath;
+    }
+  }
+
+  return null;
+}
+
+@visibleForTesting
+String? powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads({
+  required String? selectedThreadPath,
+  required Iterable<String> threadPaths,
+  required bool threadListLoaded,
+}) {
+  if (!threadListLoaded) {
+    return null;
+  }
+
+  return powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads(
+    selectedThreadPath: selectedThreadPath,
+    threadPaths: threadPaths,
+    threadListLoaded: true,
+  );
+}
+
+const powerboardsDesktopPreviewLoadingThreadTitle = 'Loading thread';
+
+@visibleForTesting
+bool powerboardsDesktopPreviewThreadTitleIsGenericFallback(String? title) {
+  final normalized = title?.trim().toLowerCase();
+  if (normalized == null || normalized.isEmpty) {
+    return true;
+  }
+
+  return normalized == 'new chat' || normalized == 'new thread' || normalized == powerboardsDesktopPreviewLoadingThreadTitle.toLowerCase();
+}
+
+@visibleForTesting
+List<MeshElement> powerboardsDesktopPreviewThreadMessageElements(RuntimeDocument document) {
+  final rootChildren = document.root.getChildren().whereType<MeshElement>().toList(growable: false);
+  for (final child in rootChildren) {
+    if (child.tagName == 'messages') {
+      return child.getChildren().whereType<MeshElement>().toList(growable: false);
+    }
+  }
+
+  return rootChildren.where(powerboardsDesktopPreviewIsThreadMessageElement).toList(growable: false);
+}
+
+@visibleForTesting
+bool powerboardsDesktopPreviewIsThreadMessageElement(MeshElement element) {
+  return switch (element.tagName) {
+    'message' || 'reasoning' || 'exec' || 'event' => true,
+    _ => false,
+  };
+}
+
+@visibleForTesting
+String powerboardsDesktopPreviewThreadAttachmentPath(MeshElement attachment) {
+  if (attachment.tagName != 'file' && attachment.tagName != 'image') {
+    return '';
+  }
+
+  for (final attributeName in const ['path', 'url', 'src', 'title', 'name', 'alt']) {
+    final rawPath = attachment.getAttribute(attributeName);
+    if (rawPath is! String) {
+      continue;
+    }
+
+    final filePath = powerboardsStorageAttachmentPathFromUrl(rawPath);
+    if (filePath.isNotEmpty) {
+      return filePath;
+    }
+  }
+
+  return '';
+}
+
+@visibleForTesting
+List<String> powerboardsDesktopPreviewAgentMessageAttachmentPaths(agent_sessions.AgentMessage message) {
+  Iterable<Object?> content = const <Object?>[];
+  if (message is agent_sessions.StartThread) {
+    content = message.content ?? const <Object?>[];
+  } else if (message is agent_sessions.TurnStart) {
+    content = message.content;
+  } else if (message is agent_sessions.TurnSteer) {
+    content = message.content;
+  } else if (message is agent_sessions.TurnStartAccepted) {
+    content = message.content;
+  }
+
+  final paths = <String>[];
+  final seen = <String>{};
+  for (final attachment in content.whereType<agent_sessions.AgentFileContent>()) {
+    final path = powerboardsStorageAttachmentPathFromUrl(attachment.url);
+    if (path.isNotEmpty && seen.add(path)) {
+      paths.add(path);
+    }
+  }
+  return paths;
+}
+
+@visibleForTesting
+List<String> powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(String? selectedThreadPath) {
+  final normalizedPath = normalizePowerboardsThreadAttachmentPath(selectedThreadPath ?? '');
+  if (normalizedPath.isEmpty || powerboardsThreadAttachmentMatchKey(normalizedPath).isEmpty) {
+    return const <String>[];
+  }
+
+  return <String>[normalizedPath];
+}
+
+@visibleForTesting
+String powerboardsDesktopPreviewAttachmentThreadScopeSignature({required String? selectedThreadPath, required String? selectedThreadName}) {
+  final paths = powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(selectedThreadPath);
+  if (paths.isEmpty) {
+    return '';
+  }
+
+  return '${paths.single}\u{1d}${selectedThreadName?.trim() ?? ''}';
+}
+
+@visibleForTesting
+bool powerboardsDesktopPreviewShouldLoadThreadAttachments({required PbRoomPanelTab selectedTab, required bool filePreviewOpen}) {
+  return selectedTab == PbRoomPanelTab.files || filePreviewOpen;
+}
+
+@visibleForTesting
+String powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads({
+  required String? selectedThreadPath,
+  required String? currentThreadLabel,
+  required bool currentThreadLabelTrusted,
+  required Map<String, String> threadNamesByPath,
+  required bool threadListLoaded,
+}) {
+  final normalizedSelectedThreadPath = selectedThreadPath?.trim();
+  if (normalizedSelectedThreadPath == null || normalizedSelectedThreadPath.isEmpty) {
+    final normalizedCurrentThreadLabel = currentThreadLabel?.trim();
+    return normalizedCurrentThreadLabel == null || normalizedCurrentThreadLabel.isEmpty ? 'New thread' : normalizedCurrentThreadLabel;
+  }
+
+  for (final entry in threadNamesByPath.entries) {
+    if (entry.key.trim() != normalizedSelectedThreadPath) {
+      continue;
+    }
+    final normalizedThreadName = entry.value.trim();
+    return normalizedThreadName.isEmpty ? defaultThreadDisplayNameFromPath(normalizedSelectedThreadPath) : normalizedThreadName;
+  }
+
+  final normalizedCurrentThreadLabel = currentThreadLabel?.trim();
+  if (currentThreadLabelTrusted &&
+      normalizedCurrentThreadLabel != null &&
+      normalizedCurrentThreadLabel.isNotEmpty &&
+      !powerboardsDesktopPreviewThreadTitleIsGenericFallback(normalizedCurrentThreadLabel) &&
+      !shouldBackfillThreadDisplayName(normalizedCurrentThreadLabel)) {
+    return normalizedCurrentThreadLabel;
+  }
+
+  final fallbackThreadLabel = defaultThreadDisplayNameFromPath(normalizedSelectedThreadPath);
+  return threadListLoaded ? fallbackThreadLabel : powerboardsDesktopPreviewLoadingThreadTitle;
+}
+
+@visibleForTesting
+List<PbThreadListItemData> powerboardsDesktopPreviewThreadItemsForVisibleThreads({
+  required String? selectedThreadPath,
+  required String? selectedThreadTitle,
+  required Iterable<PbThreadListItemData> threadItems,
+  required bool threadListLoaded,
+}) {
+  final items = threadItems.toList(growable: true);
+  if (threadListLoaded) {
+    return items;
+  }
+
+  final normalizedSelectedThreadPath = selectedThreadPath?.trim();
+  if (normalizedSelectedThreadPath == null || normalizedSelectedThreadPath.isEmpty) {
+    return items;
+  }
+
+  if (items.any((thread) => thread.id.trim() == normalizedSelectedThreadPath)) {
+    return items;
+  }
+
+  final trimmedTitle = selectedThreadTitle?.trim();
+  final fallbackTitle = defaultThreadDisplayNameFromPath(normalizedSelectedThreadPath);
+  final title = trimmedTitle == null || trimmedTitle.isEmpty || trimmedTitle == powerboardsDesktopPreviewLoadingThreadTitle
+      ? fallbackTitle
+      : trimmedTitle;
+
+  return <PbThreadListItemData>[PbThreadListItemData(id: normalizedSelectedThreadPath, title: title, actionsEnabled: false), ...items];
+}
+
 class _DesktopPreviewThreadList extends StatefulWidget {
   const _DesktopPreviewThreadList({
     required this.client,
@@ -434,7 +658,7 @@ class _DesktopPreviewThreadList extends StatefulWidget {
   final RoomClient client;
   final String? agentName;
   final String? threadListPath;
-  final Widget Function(BuildContext context, List<_DesktopPreviewThreadEntry> threads) builder;
+  final Widget Function(BuildContext context, List<_DesktopPreviewThreadEntry> threads, bool threadListLoaded) builder;
   final PowerboardsDesktopPreviewChatClientFactory? chatClientFactory;
   final PowerboardsDesktopPreviewThreadStorageFactory? threadStorageFactory;
   final bool disposeChatClient;
@@ -590,23 +814,27 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(context, _entries());
+  Widget build(BuildContext context) => widget.builder(context, _entries(), _storage != null || _normalizedThreadListPath() == null);
 }
 
 class _DesktopPreviewThreadAttachments extends StatefulWidget {
   const _DesktopPreviewThreadAttachments({
     required this.client,
+    required this.enabled,
     required this.threads,
     required this.selectedThreadPath,
     required this.selectedThreadName,
+    required this.chatClient,
     required this.localLinks,
     required this.builder,
   });
 
   final RoomClient client;
+  final bool enabled;
   final List<_DesktopPreviewThreadEntry> threads;
   final String? selectedThreadPath;
   final String? selectedThreadName;
+  final agent_sessions.BaseChatClient? chatClient;
   final List<PowerboardsFileAttachmentLink> localLinks;
   final Widget Function(BuildContext context, List<PbAttachmentListItemData> attachments) builder;
 
@@ -632,25 +860,62 @@ class _DesktopPreviewThreadAttachmentRecord {
 class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadAttachments> {
   StreamSubscription<RoomEvent>? _roomSubscription;
   final Map<String, MeshDocument> _threadDocuments = <String, MeshDocument>{};
+  final Map<String, agent_sessions.ChatThreadSession> _agentThreadSessions = <String, agent_sessions.ChatThreadSession>{};
   final Map<String, StorageEntry> _attachmentEntriesByPath = <String, StorageEntry>{};
   List<PowerboardsFileAttachmentLink> _links = const <PowerboardsFileAttachmentLink>[];
   List<_DesktopPreviewThreadAttachmentRecord> _threadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
+  List<_DesktopPreviewThreadAttachmentRecord> _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
   int _loadGeneration = 0;
   int _attachmentEntryGeneration = 0;
+  Future<void> _pendingThreadDocumentClose = Future<void>.value();
+  bool _agentThreadAttachmentUpdateQueued = false;
 
   @override
   void initState() {
     super.initState();
+    if (!widget.enabled) {
+      return;
+    }
     _bindRoom();
+    _bindAgentChatClient();
     unawaited(_loadAttachments());
   }
 
   @override
   void didUpdateWidget(covariant _DesktopPreviewThreadAttachments oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!oldWidget.enabled && widget.enabled) {
+      _bindRoom();
+      _bindAgentChatClient();
+      unawaited(_loadAttachments());
+      return;
+    }
+
+    if (oldWidget.enabled && !widget.enabled) {
+      _deactivateAttachmentLoading(oldWidget: oldWidget);
+      return;
+    }
+
+    if (!widget.enabled) {
+      return;
+    }
+
     if (oldWidget.client != widget.client) {
+      if (oldWidget.chatClient != widget.chatClient) {
+        _unbindAgentChatClient(oldWidget: oldWidget);
+        _unbindAgentThreadSessions();
+        _bindAgentChatClient();
+      }
       unawaited(_closeThreadDocuments(client: oldWidget.client));
       _bindRoom();
+      unawaited(_loadAttachments());
+      return;
+    }
+
+    if (oldWidget.chatClient != widget.chatClient) {
+      _unbindAgentChatClient(oldWidget: oldWidget);
+      _unbindAgentThreadSessions();
+      _bindAgentChatClient();
       unawaited(_loadAttachments());
       return;
     }
@@ -669,13 +934,41 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   void dispose() {
     _roomSubscription?.cancel();
     _roomSubscription = null;
+    _unbindAgentThreadSessions();
+    _unbindAgentChatClient(oldWidget: widget);
     unawaited(_closeThreadDocuments(client: widget.client));
     super.dispose();
+  }
+
+  void _deactivateAttachmentLoading({required _DesktopPreviewThreadAttachments oldWidget}) {
+    _loadGeneration++;
+    _attachmentEntryGeneration++;
+    _roomSubscription?.cancel();
+    _roomSubscription = null;
+    _unbindAgentChatClient(oldWidget: oldWidget);
+    _unbindAgentThreadSessions();
+    _pendingThreadDocumentClose = _closeThreadDocuments(client: oldWidget.client);
+    _attachmentEntriesByPath.clear();
+    _links = const <PowerboardsFileAttachmentLink>[];
+    _threadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
+    _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
   }
 
   void _bindRoom() {
     _roomSubscription?.cancel();
     _roomSubscription = widget.client.listen(_onRoomEvent);
+  }
+
+  void _bindAgentChatClient() {
+    widget.chatClient?.addListener(_onAgentChatClientChanged);
+  }
+
+  void _unbindAgentChatClient({required _DesktopPreviewThreadAttachments oldWidget}) {
+    oldWidget.chatClient?.removeListener(_onAgentChatClientChanged);
+  }
+
+  void _onAgentChatClientChanged() {
+    _scheduleAgentThreadAttachmentUpdate();
   }
 
   void _onRoomEvent(RoomEvent event) {
@@ -711,10 +1004,10 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   }
 
   String _threadSignature(_DesktopPreviewThreadAttachments widget) {
-    final threadPaths = widget.threads
-        .map((thread) => '${thread.path}\u{1f}${thread.name}\u{1f}${thread.createdAt}\u{1f}${thread.modifiedAt}')
-        .join('\u{1e}');
-    return '$threadPaths\u{1d}${widget.selectedThreadPath ?? ''}\u{1d}${widget.selectedThreadName ?? ''}';
+    return powerboardsDesktopPreviewAttachmentThreadScopeSignature(
+      selectedThreadPath: widget.selectedThreadPath,
+      selectedThreadName: widget.selectedThreadName,
+    );
   }
 
   String _localLinksSignature(List<PowerboardsFileAttachmentLink> links) {
@@ -726,8 +1019,9 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     final refs = <_DesktopPreviewAttachmentThreadRef>[];
 
     void addRef(String path, String name) {
-      final normalizedPath = normalizePowerboardsAttachmentPath(path);
-      if (normalizedPath.isEmpty || !seen.add(normalizedPath)) {
+      final normalizedPath = normalizePowerboardsThreadAttachmentPath(path);
+      final matchKey = powerboardsThreadAttachmentMatchKey(normalizedPath);
+      if (normalizedPath.isEmpty || matchKey.isEmpty || !seen.add(matchKey)) {
         return;
       }
 
@@ -740,13 +1034,8 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       );
     }
 
-    for (final thread in widget.threads) {
-      addRef(thread.path, thread.name);
-    }
-
-    final selectedThreadPath = widget.selectedThreadPath;
-    if (selectedThreadPath != null && selectedThreadPath.trim().isNotEmpty) {
-      addRef(selectedThreadPath, widget.selectedThreadName ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
+    for (final threadPath in powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(widget.selectedThreadPath)) {
+      addRef(threadPath, widget.selectedThreadName ?? defaultThreadDisplayNameFromPath(threadPath));
     }
 
     return refs;
@@ -755,17 +1044,98 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   Future<void> _loadAttachments() async {
     final generation = ++_loadGeneration;
     final threadRefs = _threadRefs();
+    _syncAgentThreadSessions(threadRefs);
     final links = await loadPowerboardsFileAttachmentLinks(widget.client);
+    await _pendingThreadDocumentClose;
+    if (!mounted || generation != _loadGeneration) {
+      return;
+    }
     await _syncThreadDocuments(threadRefs, generation: generation);
     if (!mounted || generation != _loadGeneration) {
       return;
     }
 
+    final threadAttachments = _collectThreadAttachments(threadRefs);
+    final agentThreadAttachments = _collectAgentThreadAttachments(threadRefs);
     setState(() {
       _links = links;
-      _threadAttachments = _collectThreadAttachments(threadRefs);
+      _threadAttachments = threadAttachments;
+      _agentThreadAttachments = agentThreadAttachments;
     });
     unawaited(_syncAttachmentEntries());
+  }
+
+  void _syncAgentThreadSessions(List<_DesktopPreviewAttachmentThreadRef> threads) {
+    final chatClient = widget.chatClient;
+    final desiredPaths = threads.map((thread) => thread.path).toSet();
+
+    for (final path in _agentThreadSessions.keys.toList()) {
+      if (desiredPaths.contains(path)) {
+        continue;
+      }
+      final session = _agentThreadSessions.remove(path);
+      session?.removeListener(_onAgentThreadSessionChanged);
+    }
+
+    if (chatClient == null) {
+      for (final session in _agentThreadSessions.values) {
+        session.removeListener(_onAgentThreadSessionChanged);
+      }
+      _agentThreadSessions.clear();
+      _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
+      return;
+    }
+
+    for (final thread in threads) {
+      if (_agentThreadSessions.containsKey(thread.path)) {
+        continue;
+      }
+
+      final session = chatClient.openThread(thread.path);
+      session.addListener(_onAgentThreadSessionChanged);
+      _agentThreadSessions[thread.path] = session;
+    }
+  }
+
+  void _unbindAgentThreadSessions() {
+    for (final session in _agentThreadSessions.values) {
+      session.removeListener(_onAgentThreadSessionChanged);
+    }
+    _agentThreadSessions.clear();
+    _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
+  }
+
+  void _onAgentThreadSessionChanged() {
+    _scheduleAgentThreadAttachmentUpdate();
+  }
+
+  void _scheduleAgentThreadAttachmentUpdate() {
+    if (!mounted || !widget.enabled || _agentThreadAttachmentUpdateQueued) {
+      return;
+    }
+
+    void applyUpdate() {
+      _agentThreadAttachmentUpdateQueued = false;
+      if (!mounted || !widget.enabled) {
+        return;
+      }
+
+      final agentThreadAttachments = _collectAgentThreadAttachments(_threadRefs());
+      setState(() {
+        _agentThreadAttachments = agentThreadAttachments;
+      });
+      unawaited(_syncAttachmentEntries());
+    }
+
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+      applyUpdate();
+      return;
+    }
+
+    _agentThreadAttachmentUpdateQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      applyUpdate();
+    });
   }
 
   Future<void> _syncThreadDocuments(List<_DesktopPreviewAttachmentThreadRef> threads, {required int generation}) async {
@@ -826,8 +1196,9 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       return;
     }
 
+    final threadAttachments = _collectThreadAttachments(_threadRefs());
     setState(() {
-      _threadAttachments = _collectThreadAttachments(_threadRefs());
+      _threadAttachments = threadAttachments;
     });
     unawaited(_syncAttachmentEntries());
   }
@@ -842,22 +1213,12 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
         continue;
       }
 
-      final messages = entry.value.root.getChildren().whereType<MeshElement>().firstWhereOrNull((node) => node.tagName == 'messages');
-      final messageElements = messages?.getChildren().whereType<MeshElement>() ?? const Iterable<MeshElement>.empty();
+      final messageElements = powerboardsDesktopPreviewThreadMessageElements(entry.value);
       final seenAttachments = <String>{};
 
       for (final message in messageElements) {
         for (final attachment in message.getChildren().whereType<MeshElement>()) {
-          if (attachment.tagName != 'file' && attachment.tagName != 'image') {
-            continue;
-          }
-
-          final rawPath = attachment.getAttribute('path');
-          if (rawPath is! String || !isPowerboardsStorageAttachmentPath(rawPath)) {
-            continue;
-          }
-
-          final filePath = normalizePowerboardsAttachmentPath(rawPath);
+          final filePath = powerboardsDesktopPreviewThreadAttachmentPath(attachment);
           if (filePath.isEmpty) {
             continue;
           }
@@ -873,6 +1234,37 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     return attachments;
   }
 
+  List<_DesktopPreviewThreadAttachmentRecord> _collectAgentThreadAttachments(List<_DesktopPreviewAttachmentThreadRef> threads) {
+    final attachments = <_DesktopPreviewThreadAttachmentRecord>[];
+    final threadNamesByPath = {for (final thread in threads) thread.path: thread.name};
+
+    for (final entry in _agentThreadSessions.entries) {
+      final threadName = threadNamesByPath[entry.key];
+      if (threadName == null) {
+        continue;
+      }
+
+      final seenAttachments = <String>{};
+      void addFromMessage(agent_sessions.AgentMessage message) {
+        for (final filePath in powerboardsDesktopPreviewAgentMessageAttachmentPaths(message)) {
+          if (!seenAttachments.add('$filePath\n${entry.key}')) {
+            continue;
+          }
+          attachments.add(_DesktopPreviewThreadAttachmentRecord(filePath: filePath, threadPath: entry.key, threadName: threadName));
+        }
+      }
+
+      for (final event in entry.value.messages) {
+        addFromMessage(event.message);
+      }
+      for (final input in entry.value.pendingInputs) {
+        addFromMessage(input.payload);
+      }
+    }
+
+    return attachments;
+  }
+
   String _attachmentTitle(String path) {
     final storageName = _attachmentEntriesByPath[path]?.name.trim();
     if (storageName != null && storageName.isNotEmpty) {
@@ -882,25 +1274,48 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
   }
 
+  String _attachmentSizeLabel(String path) {
+    final size = _attachmentEntriesByPath[path]?.size;
+    return size == null ? '' : pbFormatBytes(size);
+  }
+
   Set<String> _scopedAttachmentPaths() {
-    final threadPaths = _threadRefs().map((thread) => thread.path).toSet();
+    final threadPathKeys = _threadRefs().map((thread) => powerboardsThreadAttachmentMatchKey(thread.path)).toSet();
     final paths = <String>{};
 
     for (final link in widget.localLinks) {
-      if (threadPaths.contains(link.threadPath) && link.filePath.isNotEmpty) {
-        paths.add(link.filePath);
+      if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(link.threadPath)) && link.filePath.isNotEmpty) {
+        final filePath = powerboardsStorageAttachmentPathFromUrl(link.filePath);
+        if (filePath.isNotEmpty) {
+          paths.add(filePath);
+        }
       }
     }
 
     for (final attachment in _threadAttachments) {
-      if (threadPaths.contains(attachment.threadPath) && attachment.filePath.isNotEmpty) {
-        paths.add(attachment.filePath);
+      if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(attachment.threadPath)) && attachment.filePath.isNotEmpty) {
+        final filePath = powerboardsStorageAttachmentPathFromUrl(attachment.filePath);
+        if (filePath.isNotEmpty) {
+          paths.add(filePath);
+        }
+      }
+    }
+
+    for (final attachment in _agentThreadAttachments) {
+      if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(attachment.threadPath)) && attachment.filePath.isNotEmpty) {
+        final filePath = powerboardsStorageAttachmentPathFromUrl(attachment.filePath);
+        if (filePath.isNotEmpty) {
+          paths.add(filePath);
+        }
       }
     }
 
     for (final link in _links) {
-      if (threadPaths.contains(link.threadPath) && link.filePath.isNotEmpty) {
-        paths.add(link.filePath);
+      if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(link.threadPath)) && link.filePath.isNotEmpty) {
+        final filePath = powerboardsStorageAttachmentPathFromUrl(link.filePath);
+        if (filePath.isNotEmpty) {
+          paths.add(filePath);
+        }
       }
     }
 
@@ -958,14 +1373,13 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
 
   List<PbAttachmentListItemData> _attachments() {
     final threadRefs = _threadRefs();
-    final threadNamesByPath = {for (final thread in threadRefs) thread.path: thread.name};
-    final threadPaths = threadNamesByPath.keys.toSet();
+    final threadNamesByMatchKey = {for (final thread in threadRefs) powerboardsThreadAttachmentMatchKey(thread.path): thread.name};
     final seenAttachments = <String>{};
     final attachments = <PbAttachmentListItemData>[];
 
     void addAttachment({required String filePath, required String threadPath, required String threadName}) {
-      final normalizedFilePath = normalizePowerboardsAttachmentPath(filePath);
-      final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+      final normalizedFilePath = powerboardsStorageAttachmentPathFromUrl(filePath);
+      final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
       if (normalizedFilePath.isEmpty || normalizedThreadPath.isEmpty) {
         return;
       }
@@ -985,24 +1399,34 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
           fileType: metadata.fileType,
           path: normalizedFilePath,
           previewState: powerboardsV1PreviewStateForPath(normalizedFilePath),
+          sizeLabel: _attachmentSizeLabel(normalizedFilePath),
         ),
       );
     }
 
     for (final link in widget.localLinks) {
-      if (!threadPaths.contains(link.threadPath)) {
+      final threadName = threadNamesByMatchKey[powerboardsThreadAttachmentMatchKey(link.threadPath)];
+      if (threadName == null) {
         continue;
       }
 
       addAttachment(
         filePath: link.filePath,
         threadPath: link.threadPath,
-        threadName: threadNamesByPath[link.threadPath] ?? link.threadDisplayName,
+        threadName: threadName.isNotEmpty ? threadName : link.threadDisplayName,
       );
     }
 
     for (final attachment in _threadAttachments) {
-      if (!threadPaths.contains(attachment.threadPath)) {
+      if (!threadNamesByMatchKey.containsKey(powerboardsThreadAttachmentMatchKey(attachment.threadPath))) {
+        continue;
+      }
+
+      addAttachment(filePath: attachment.filePath, threadPath: attachment.threadPath, threadName: attachment.threadName);
+    }
+
+    for (final attachment in _agentThreadAttachments) {
+      if (!threadNamesByMatchKey.containsKey(powerboardsThreadAttachmentMatchKey(attachment.threadPath))) {
         continue;
       }
 
@@ -1010,14 +1434,15 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     }
 
     for (final link in _links) {
-      if (!threadPaths.contains(link.threadPath)) {
+      final threadName = threadNamesByMatchKey[powerboardsThreadAttachmentMatchKey(link.threadPath)];
+      if (threadName == null) {
         continue;
       }
 
       addAttachment(
         filePath: link.filePath,
         threadPath: link.threadPath,
-        threadName: threadNamesByPath[link.threadPath] ?? link.threadDisplayName,
+        threadName: threadName.isNotEmpty ? threadName : link.threadDisplayName,
       );
     }
 
@@ -1026,6 +1451,10 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.enabled) {
+      return widget.builder(context, const <PbAttachmentListItemData>[]);
+    }
+
     return widget.builder(context, _attachments());
   }
 }
@@ -1040,6 +1469,8 @@ class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
     this.threadStorageFactory,
     this.disposeChatClient,
     this.agentName = 'assistant',
+    this.selectedThreadPath,
+    this.selectedThreadName,
   });
 
   final RoomClient client;
@@ -1048,6 +1479,8 @@ class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
   final PowerboardsDesktopPreviewChatClientFactory? chatClientFactory;
   final PowerboardsDesktopPreviewThreadStorageFactory? threadStorageFactory;
   final bool? disposeChatClient;
+  final String? selectedThreadPath;
+  final String? selectedThreadName;
 
   @override
   Widget build(BuildContext context) {
@@ -1058,8 +1491,22 @@ class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
       chatClientFactory: chatClientFactory,
       threadStorageFactory: threadStorageFactory,
       disposeChatClient: disposeChatClient ?? chatClientFactory == null,
-      builder: (context, threads) {
-        final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
+      builder: (context, threads, threadListLoaded) {
+        final visibleSelectedThreadPath = powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads(
+          selectedThreadPath: selectedThreadPath,
+          threadPaths: threads.map((thread) => thread.path),
+          threadListLoaded: threadListLoaded,
+        );
+        final selectedThread = visibleSelectedThreadPath == null
+            ? null
+            : threads.firstWhereOrNull((thread) => thread.path.trim() == visibleSelectedThreadPath);
+        final selectedThreadTitle = visibleSelectedThreadPath == null ? null : selectedThread?.name ?? selectedThreadName;
+        final threadItems = powerboardsDesktopPreviewThreadItemsForVisibleThreads(
+          selectedThreadPath: visibleSelectedThreadPath,
+          selectedThreadTitle: selectedThreadTitle,
+          threadItems: [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)],
+          threadListLoaded: threadListLoaded,
+        );
         return PbRoomPanel(
           agents: const [PbAgentListItemData(id: 'assistant', title: 'Assistant', status: 'Available', icon: 'bot', selected: true)],
           selectedAgentId: 'assistant',
@@ -1067,7 +1514,8 @@ class PowerboardsDesktopPreviewThreadListHarness extends StatelessWidget {
           showFilesTab: false,
           threads: [for (final thread in threads) thread.name],
           threadItems: threadItems,
-          selectedThreadTitle: null,
+          selectedThreadId: visibleSelectedThreadPath,
+          selectedThreadTitle: selectedThreadTitle,
           onThreadSelected: (_) {},
           onCreateThread: () {},
         );
@@ -1897,6 +2345,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     if (oldWidget.projectId != widget.projectId || oldWidget.room.roomName != widget.room.roomName) {
       _resolvedRoomDisplayName = null;
+      _clearRoomScopedThreadSelectionState();
       unawaited(_loadRoomDisplayName());
     }
     if (oldWidget.room != widget.room) {
@@ -1905,6 +2354,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
       _agentChatClients.clear();
     }
+  }
+
+  void _clearRoomScopedThreadSelectionState() {
+    _selectedThreadPathByAgentKey.clear();
+    _selectedThreadLabelByAgentKey.clear();
+    _composerAttachmentPathsByAgentKey.clear();
+    _composerAttachmentSeedVersionByAgentKey.clear();
+    _newThreadResetVersion++;
   }
 
   @override
@@ -2225,6 +2682,29 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return trimmed.isEmpty ? null : trimmed;
   }
 
+  String? _persistedSelectedThreadLabelForAgentKey(String? agentKey, {String? selectedThreadPath}) {
+    final roomName = _roomNameForSelectionPersistence;
+    if (roomName == null || agentKey == null) {
+      return null;
+    }
+
+    final normalizedSelectedThreadPath = selectedThreadPath?.trim();
+    if (normalizedSelectedThreadPath != null && normalizedSelectedThreadPath.isNotEmpty) {
+      final persistedPath = _persistedSelectedThreadPathForAgentKey(agentKey);
+      if (persistedPath != normalizedSelectedThreadPath) {
+        return null;
+      }
+    }
+
+    final stored = getLastSelectedRoomThreadTitle(widget.projectId, roomName, agentKey);
+    if (stored == null) {
+      return null;
+    }
+
+    final trimmed = stored.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   _ResolvedAgentSelection _resolveSelectedAgent(List<ServiceSpec> supported, {String? requestedRouteId}) {
     final resolvedRouteId = requestedRouteId ?? widget.service;
     if (resolvedRouteId != null) {
@@ -2300,7 +2780,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   // ignore: unused_element
-  String? _selectedThreadLabelForAgentKey(String? agentKey) {
+  String? _selectedThreadLabelForAgentKey(String? agentKey, {bool includePersistedSelectionLabel = false, String? selectedThreadPath}) {
     if (agentKey == null) {
       return null;
     }
@@ -2309,7 +2789,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (stored != null && stored.trim().isNotEmpty) {
       return stored;
     }
-    return null;
+    if (!includePersistedSelectionLabel) {
+      return null;
+    }
+
+    return _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: selectedThreadPath);
   }
 
   void _setSelectedThreadPath(String? agentKey, String? path, {String? displayName}) {
@@ -2323,9 +2807,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final resolvedDisplayName = normalizedName == null || normalizedName.isEmpty ? null : normalizedName;
     final previousPath = _selectedThreadPathByAgentKey[agentKey];
     final previousDisplayName = _selectedThreadLabelByAgentKey[agentKey];
-    final effectiveDisplayName = resolvedPath == previousPath && resolvedDisplayName == null ? previousDisplayName : resolvedDisplayName;
+    final persistedDisplayName = resolvedPath == null
+        ? null
+        : _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: resolvedPath);
+    final effectiveDisplayName = resolvedDisplayName ?? (resolvedPath == previousPath ? previousDisplayName : null) ?? persistedDisplayName;
 
-    if (resolvedPath == previousPath && effectiveDisplayName == previousDisplayName) {
+    final roomName = _roomNameForSelectionPersistence;
+    final persistedPath = _persistedSelectedThreadPathForAgentKey(agentKey);
+    final persistedSelectionMatches =
+        roomName == null ||
+        (resolvedPath == null
+            ? persistedPath == null
+            : persistedPath == resolvedPath &&
+                  _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: resolvedPath) == effectiveDisplayName);
+
+    if (resolvedPath == previousPath && effectiveDisplayName == previousDisplayName && persistedSelectionMatches) {
       return;
     }
 
@@ -2344,7 +2840,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
     });
 
-    final roomName = _roomNameForSelectionPersistence;
     if (roomName == null) {
       return;
     }
@@ -2354,14 +2849,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    setLastSelectedRoomThread(widget.projectId, roomName, agentKey, resolvedPath);
+    setLastSelectedRoomThread(widget.projectId, roomName, agentKey, resolvedPath, threadTitle: effectiveDisplayName);
   }
 
   void _setComposerAttachmentSeed(String agentKey, Iterable<String> paths) {
-    final normalizedPaths = paths
-        .map((path) => normalizePowerboardsAttachmentPath(path))
-        .where((path) => path.isNotEmpty)
-        .toList(growable: false);
+    final normalizedPaths = paths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toList(growable: false);
     if (normalizedPaths.isEmpty) {
       return;
     }
@@ -2541,7 +3033,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  _MobileChatHeaderContext? _resolveMobileChatHeaderContext(List<ServiceSpec> supported, _ResolvedAgentSelection selection) {
+  _MobileChatHeaderContext? _resolveMobileChatHeaderContext(
+    List<ServiceSpec> supported,
+    _ResolvedAgentSelection selection, {
+    bool includePersistedThreadSelection = true,
+    bool includePersistedThreadLabel = false,
+  }) {
     String? agentName;
     String? threadListPath;
     var currentThreadLabel = "New thread";
@@ -2586,9 +3083,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final agentKey = selection.routeId;
-    final selectedThreadPath = supportsThreads ? _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: true) : null;
+    final selectedThreadPath = supportsThreads
+        ? _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: includePersistedThreadSelection)
+        : null;
     if (supportsThreads && selectedThreadPath != null) {
-      currentThreadLabel = _selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath);
+      currentThreadLabel =
+          _selectedThreadLabelForAgentKey(
+            agentKey,
+            includePersistedSelectionLabel: includePersistedThreadLabel,
+            selectedThreadPath: selectedThreadPath,
+          ) ??
+          defaultThreadDisplayNameFromPath(selectedThreadPath);
     }
 
     return _MobileChatHeaderContext(
@@ -3623,6 +4128,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     String? threadDir,
     String? threadPath,
     String? selectedThreadPath,
+    String? selectedThreadDisplayName,
     ValueChanged<String?>? onSelectedThreadPathChanged,
     Widget? emptyState,
     bool hideChatInput = false,
@@ -3657,9 +4163,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final agentKey = selectedAgentRouteId;
     final composerAttachmentPaths = agentKey == null ? const <String>[] : _composerAttachmentPathsByAgentKey[agentKey] ?? const <String>[];
     final composerAttachmentSeedVersion = agentKey == null ? 0 : _composerAttachmentSeedVersionByAgentKey[agentKey] ?? 0;
+    final normalizedSelectedThreadDisplayName = selectedThreadDisplayName?.trim();
+    final resolvedSelectedThreadDisplayName = normalizedSelectedThreadDisplayName == null || normalizedSelectedThreadDisplayName.isEmpty
+        ? null
+        : normalizedSelectedThreadDisplayName;
     final currentThreadLabel = selectedThreadPath == null
         ? "New thread"
-        : (_selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath));
+        : (resolvedSelectedThreadDisplayName ??
+              _selectedThreadLabelForAgentKey(agentKey) ??
+              defaultThreadDisplayNameFromPath(selectedThreadPath));
     final chatDropOverlayBuilder = !isMobile && powerboardsUsesDesktopUiPreview(context)
         ? (BuildContext context, bool dragging) => PbFilesDropTargetOverlayLayer(
             active: dragging,
@@ -3681,7 +4193,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         client: widget.room,
         documentPath: documentPath,
         selectedThreadPath: selectedThreadPath,
-        selectedThreadDisplayName: _selectedThreadLabelForAgentKey(agentKey),
+        selectedThreadDisplayName: resolvedSelectedThreadDisplayName ?? _selectedThreadLabelForAgentKey(agentKey),
         onSelectedThreadPathChanged: onSelectedThreadPathChanged,
         onSelectedThreadResolved: (path, displayName) => _setSelectedThreadPath(agentKey, path, displayName: displayName),
         participantNames: [
@@ -3707,7 +4219,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         onThreadAttachmentsChanged: _recordLocalThreadAttachments,
         composerAttachmentPaths: composerAttachmentPaths,
         composerAttachmentSeedVersion: composerAttachmentSeedVersion,
-        onComposerAttachmentSeedApplied: agentKey == null ? null : () => _clearComposerAttachmentSeed(agentKey),
+        onComposerAttachmentSeedCleared: agentKey == null ? null : () => _clearComposerAttachmentSeed(agentKey),
         onComposerAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel, fromComposerAttachment: true)
             : null,
@@ -3715,7 +4227,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             ? _closeDesktopPreviewAttachmentPreviewIfRemoved
             : null,
         onThreadAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
-            ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel)
+            ? (path) {
+                final effectiveThreadPath = selectedThreadPath ?? documentPath;
+                final effectiveThreadName = currentThreadLabel == 'New thread'
+                    ? defaultThreadDisplayNameFromPath(effectiveThreadPath)
+                    : currentThreadLabel;
+                _recordLocalThreadAttachments(
+                  threadPath: effectiveThreadPath,
+                  threadName: effectiveThreadName,
+                  createdBy: userEmail is String ? userEmail : '',
+                  attachmentPaths: [path],
+                );
+                _openDesktopPreviewAttachment(path, threadName: effectiveThreadName);
+              }
             : null,
         fileDropOverlayBuilder: chatDropOverlayBuilder,
         projectId: widget.projectId,
@@ -3993,11 +4517,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 v1RoomPanelWidth: usesDesktopUiPreview ? _desktopPreviewRoomPanelWidth : null,
                 onV1RoomPanelWidthChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelWidth : null,
                 onV1FilePromptRequested: usesDesktopUiPreview
-                    ? (action, filePath, {showThreadAfterPrompt = false}) => _handleDesktopPreviewFilePromptRequested(
+                    ? (action, filePath, {required responsiveHandoff}) => _handleDesktopPreviewFilePromptRequested(
                         context,
                         action: action,
                         filePath: filePath,
-                        showThreadAfterPrompt: showThreadAfterPrompt,
+                        responsiveHandoff: responsiveHandoff,
                       )
                     : null,
               ),
@@ -4175,6 +4699,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           return LayoutBuilder(
             builder: (context, constraints) {
               final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !transcriptPreviewFullscreen;
+              final responsiveOverlayMobile = constraints.maxWidth <= pbShellMobileBreakpoint;
               final roomPanelCollapsed = !transcriptSidePaneAvailable || _desktopPreviewRoomPanelCollapsed;
               final roomPanelExpanded = responsivePanel ? false : !roomPanelCollapsed;
 
@@ -4250,10 +4775,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   emptyTranscripts: transcripts.isEmpty,
                   initialPreviewFile: transcriptPreviewFile,
                   initialFilePreviewOpen: transcriptPreviewOpen,
-                  openFilePreviewAsFullscreen: responsiveOverlay || transcriptPreviewFullscreen,
+                  openFilePreviewAsFullscreen: transcriptPreviewFullscreen || (responsiveOverlay && responsiveOverlayMobile),
                   filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
                   filePreviewSourceBuilder: _buildAttachmentPreviewSource,
-                  onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, showThreadAfterPrompt: responsiveOverlay)),
+                  onAskFileAgent: (file) => unawaited(_startDefaultAttachmentFilePrompt(file, responsiveHandoff: responsiveOverlay)),
                   onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
                   onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
                   onFilePreviewSelected: (file) {
@@ -4282,7 +4807,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   filePreviewResizing: resizing,
                   borderOnTop: responsiveOverlay,
                   responsiveOverlay: responsiveOverlay,
-                  responsiveOverlayMobile: false,
+                  responsiveOverlayMobile: responsiveOverlayMobile,
                   onResponsiveOverlayClose: _closeDesktopPreviewRoomPanelOverlay,
                 );
               }
@@ -4569,10 +5094,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     ];
   }
 
-  String _desktopPreviewSelectedThreadTitle(_MobileChatHeaderContext? chatContext, List<_DesktopPreviewThreadEntry> threads) {
+  String? _desktopPreviewSelectedThreadDisplayName(_MobileChatHeaderContext? chatContext, List<_DesktopPreviewThreadEntry> threads) {
     final selectedThreadPath = chatContext?.selectedThreadPath;
     if (selectedThreadPath == null) {
-      return chatContext?.currentThreadLabel ?? 'New thread';
+      return null;
     }
 
     for (final thread in threads) {
@@ -4581,7 +5106,126 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
     }
 
-    return chatContext?.currentThreadLabel ?? defaultThreadDisplayNameFromPath(selectedThreadPath);
+    return _selectedThreadLabelForAgentKey(
+      chatContext?.agentKey,
+      includePersistedSelectionLabel: true,
+      selectedThreadPath: selectedThreadPath,
+    );
+  }
+
+  String _desktopPreviewSelectedThreadTitle(
+    _MobileChatHeaderContext? chatContext,
+    List<_DesktopPreviewThreadEntry> threads, {
+    required bool threadListLoaded,
+  }) {
+    final selectedThreadPath = chatContext?.selectedThreadPath;
+    final currentThreadLabelTrusted =
+        selectedThreadPath != null &&
+        _selectedThreadLabelForAgentKey(
+              chatContext?.agentKey,
+              includePersistedSelectionLabel: true,
+              selectedThreadPath: selectedThreadPath,
+            ) !=
+            null;
+
+    return powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+      selectedThreadPath: selectedThreadPath,
+      currentThreadLabel: chatContext?.currentThreadLabel,
+      currentThreadLabelTrusted: currentThreadLabelTrusted,
+      threadNamesByPath: {for (final thread in threads) thread.path: thread.name},
+      threadListLoaded: threadListLoaded,
+    );
+  }
+
+  _MobileChatHeaderContext? _desktopPreviewChatContextForVisibleThreads(
+    _MobileChatHeaderContext? chatContext,
+    List<_DesktopPreviewThreadEntry> threads, {
+    required bool threadListLoaded,
+  }) {
+    if (chatContext == null) {
+      return null;
+    }
+
+    final selectedThreadPath = chatContext.selectedThreadPath;
+    final visibleSelectedThreadPath = powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads(
+      selectedThreadPath: selectedThreadPath,
+      threadPaths: threads.map((thread) => thread.path),
+      threadListLoaded: threadListLoaded,
+    );
+
+    if (selectedThreadPath == visibleSelectedThreadPath) {
+      return chatContext;
+    }
+
+    final trimmedSelectedThreadPath = selectedThreadPath?.trim();
+    if (threadListLoaded &&
+        visibleSelectedThreadPath == null &&
+        trimmedSelectedThreadPath != null &&
+        trimmedSelectedThreadPath.isNotEmpty) {
+      _clearMissingDesktopPreviewThreadSelection(chatContext, trimmedSelectedThreadPath);
+    }
+
+    return chatContext.withThreadSelection(currentThreadLabel: 'New thread', selectedThreadPath: visibleSelectedThreadPath);
+  }
+
+  void _clearMissingDesktopPreviewThreadSelection(_MobileChatHeaderContext chatContext, String selectedThreadPath) {
+    final agentKey = chatContext.agentKey;
+    if (agentKey == null) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      final inMemoryPath = _selectedThreadPathByAgentKey[agentKey]?.trim();
+      final persistedPath = _persistedSelectedThreadPathForAgentKey(agentKey);
+      if (inMemoryPath != selectedThreadPath && persistedPath != selectedThreadPath) {
+        return;
+      }
+
+      if (inMemoryPath == selectedThreadPath) {
+        _setSelectedThreadPath(agentKey, null);
+        return;
+      }
+
+      if (_roomNameForSelectionPersistence case final roomName?) {
+        clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
+      }
+    });
+  }
+
+  void _syncDesktopPreviewVisibleThreadSelection(_MobileChatHeaderContext? chatContext, String selectedThreadTitle) {
+    final agentKey = chatContext?.agentKey;
+    final selectedThreadPath = chatContext?.selectedThreadPath;
+    if (agentKey == null || selectedThreadPath == null) {
+      return;
+    }
+
+    final normalizedTitle = selectedThreadTitle.trim();
+    final resolvedTitle = normalizedTitle.isEmpty ? null : normalizedTitle;
+    final persistedTitle = _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: selectedThreadPath);
+    if (_selectedThreadPathByAgentKey[agentKey] == selectedThreadPath &&
+        (resolvedTitle == null || _selectedThreadLabelByAgentKey[agentKey] == resolvedTitle) &&
+        (resolvedTitle == null || persistedTitle == resolvedTitle)) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      final nextPersistedTitle = _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: selectedThreadPath);
+      if (_selectedThreadPathByAgentKey[agentKey] == selectedThreadPath &&
+          (resolvedTitle == null || _selectedThreadLabelByAgentKey[agentKey] == resolvedTitle) &&
+          (resolvedTitle == null || nextPersistedTitle == resolvedTitle)) {
+        return;
+      }
+
+      _setSelectedThreadPath(agentKey, selectedThreadPath, displayName: resolvedTitle);
+    });
   }
 
   void _selectDesktopPreviewThread(_MobileChatHeaderContext? chatContext, String? path, {String? displayName}) {
@@ -4714,22 +5358,46 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       );
     }
 
-    final showFilesWorkspace = canViewStorageAllowed && controller.isFilesShown;
-    final chatContext = _resolveMobileChatHeaderContext(supported, selected);
-    final threadListPath = chatContext?.threadListPath;
+    if (canViewStorageAllowed && controller.isFilesShown) {
+      return _buildFilesArea(context, const [], showDesktopSidetrayToggle: false);
+    }
+
+    final rawChatContext = _resolveMobileChatHeaderContext(supported, selected, includePersistedThreadLabel: true);
+    final threadListPath = rawChatContext?.threadListPath;
+    final threadListChatClient = _agentChatClientFor(rawChatContext?.agentName);
     final agentItems = _desktopPreviewAgentItems(supported, selected);
     final hasVisibleAgents = _hasVisibleAgents(supported);
 
     return _DesktopPreviewThreadList(
       client: widget.room,
-      agentName: chatContext?.agentName,
+      agentName: rawChatContext?.agentName,
       threadListPath: threadListPath,
       chatClientFactory: (_, agentName) =>
-          _agentChatClientFor(agentName) ?? agent_sessions.MessagingChatClient(room: widget.room, agentName: agentName),
+          _agentChatClientFor(agentName) ??
+          threadListChatClient ??
+          agent_sessions.MessagingChatClient(room: widget.room, agentName: agentName),
       disposeChatClient: false,
-      builder: (context, threads) {
-        final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads);
-        final threadItems = [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)];
+      builder: (context, threads, threadListLoaded) {
+        final chatContext = _desktopPreviewChatContextForVisibleThreads(rawChatContext, threads, threadListLoaded: threadListLoaded);
+        final verifiedSelectedThreadPath = powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads(
+          selectedThreadPath: rawChatContext?.selectedThreadPath,
+          threadPaths: threads.map((thread) => thread.path),
+          threadListLoaded: threadListLoaded,
+        );
+        final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads, threadListLoaded: threadListLoaded);
+        final selectedThreadDisplayName = _desktopPreviewSelectedThreadDisplayName(chatContext, threads);
+        final selectedThreadTitleResolving = chatContext?.selectedThreadPath != null && !threadListLoaded;
+        final selectedThreadLoading = chatContext?.selectedThreadPath != null && !threadListLoaded;
+        final verifiedSelectedThreadDisplayName = verifiedSelectedThreadPath == null ? null : selectedThreadDisplayName;
+        if (selectedThreadDisplayName != null) {
+          _syncDesktopPreviewVisibleThreadSelection(chatContext, selectedThreadDisplayName);
+        }
+        final threadItems = powerboardsDesktopPreviewThreadItemsForVisibleThreads(
+          selectedThreadPath: chatContext?.selectedThreadPath,
+          selectedThreadTitle: selectedThreadDisplayName ?? selectedThreadTitle,
+          threadItems: [for (final thread in threads) PbThreadListItemData(id: thread.path, title: thread.name)],
+          threadListLoaded: threadListLoaded,
+        );
         final agentName = chatContext?.agentName ?? selected.service?.agents.firstOrNull?.name ?? 'Assistant';
         final threadPanel = hasVisibleAgents
             ? Column(
@@ -4738,6 +5406,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     title: selectedThreadTitle,
                     agentName: agentName,
                     selectedThreadTitle: selectedThreadTitle,
+                    titleResolving: selectedThreadTitleResolving,
                     roomPanelExpanded: !_desktopPreviewRoomPanelCollapsed,
                     onRoomPanelToggle: () {
                       setState(() {
@@ -4752,13 +5421,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     },
                   ),
                   Expanded(
-                    child: _buildAgentArea(
-                      context,
-                      const [],
-                      showEmbeddedThreadList: false,
-                      embedMobileChrome: false,
-                      showDesktopThreadListAlternatives: false,
-                    ),
+                    child: selectedThreadLoading
+                        ? _buildDesktopPreviewThreadLoading(context)
+                        : _buildAgentArea(
+                            context,
+                            const [],
+                            showEmbeddedThreadList: false,
+                            embedMobileChrome: false,
+                            showDesktopThreadListAlternatives: false,
+                            useSelectedThreadOverride: chatContext != null,
+                            selectedThreadPathOverride: verifiedSelectedThreadPath,
+                            selectedThreadDisplayNameOverride: verifiedSelectedThreadDisplayName,
+                          ),
                   ),
                 ],
               )
@@ -4790,34 +5464,24 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 },
               );
 
+        final shouldLoadThreadAttachments = powerboardsDesktopPreviewShouldLoadThreadAttachments(
+          selectedTab: _desktopPreviewRoomPanelTab,
+          filePreviewOpen: _desktopPreviewFilePreviewOpen,
+        );
+
         return _DesktopPreviewThreadAttachments(
           client: widget.room,
+          enabled: shouldLoadThreadAttachments,
           threads: threads,
-          selectedThreadPath: chatContext?.selectedThreadPath,
-          selectedThreadName: selectedThreadTitle,
+          selectedThreadPath: verifiedSelectedThreadPath,
+          selectedThreadName: verifiedSelectedThreadPath == null ? null : selectedThreadTitle,
+          chatClient: threadListChatClient,
           localLinks: _localThreadAttachmentLinks,
           builder: (context, attachments) => LayoutBuilder(
             builder: (context, constraints) {
               final responsivePanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint && !_desktopPreviewFilePreviewFullscreen;
+              final responsiveOverlayMobile = constraints.maxWidth <= pbShellMobileBreakpoint;
               final roomPanelExpanded = responsivePanel ? false : !_desktopPreviewRoomPanelCollapsed;
-              Widget preserveWorkspaceSwitch(Widget threadWorkspace) {
-                if (!canViewStorageAllowed) {
-                  return threadWorkspace;
-                }
-
-                return IndexedStack(
-                  index: showFilesWorkspace ? 1 : 0,
-                  sizing: StackFit.expand,
-                  children: [
-                    KeyedSubtree(key: const ValueKey("desktop-preview-thread-workspace"), child: threadWorkspace),
-                    KeyedSubtree(
-                      key: const ValueKey("desktop-preview-files-workspace"),
-                      child: _buildFilesArea(context, const [], showDesktopSidetrayToggle: false),
-                    ),
-                  ],
-                );
-              }
-
               final effectiveThreadPanel = hasVisibleAgents
                   ? Column(
                       children: [
@@ -4825,6 +5489,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                           title: selectedThreadTitle,
                           agentName: agentName,
                           selectedThreadTitle: selectedThreadTitle,
+                          titleResolving: selectedThreadTitleResolving,
                           roomPanelExpanded: roomPanelExpanded,
                           onRoomPanelToggle: () {
                             setState(() {
@@ -4847,13 +5512,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                           },
                         ),
                         Expanded(
-                          child: _buildAgentArea(
-                            context,
-                            const [],
-                            showEmbeddedThreadList: false,
-                            embedMobileChrome: false,
-                            showDesktopThreadListAlternatives: false,
-                          ),
+                          child: selectedThreadLoading
+                              ? _buildDesktopPreviewThreadLoading(context)
+                              : _buildAgentArea(
+                                  context,
+                                  const [],
+                                  showEmbeddedThreadList: false,
+                                  embedMobileChrome: false,
+                                  showDesktopThreadListAlternatives: false,
+                                  useSelectedThreadOverride: chatContext != null,
+                                  selectedThreadPathOverride: verifiedSelectedThreadPath,
+                                  selectedThreadDisplayNameOverride: verifiedSelectedThreadDisplayName,
+                                ),
                         ),
                       ],
                     )
@@ -4868,10 +5538,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 }
 
                 return StatefulBuilder(
-                  builder: (context, setRoomPanelState) => PbRoomPanel(
+                  builder: (context, _) => PbRoomPanel(
                     selectedTab: _desktopPreviewRoomPanelTab,
                     onTabSelected: (tab) {
-                      setRoomPanelState(() {
+                      if (_desktopPreviewRoomPanelTab == tab) {
+                        return;
+                      }
+                      setState(() {
                         _desktopPreviewRoomPanelTab = tab;
                       });
                     },
@@ -4910,7 +5583,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     attachments: attachments,
                     initialPreviewFile: _desktopPreviewFilePreviewFile,
                     initialFilePreviewOpen: _desktopPreviewFilePreviewOpen,
-                    openFilePreviewAsFullscreen: responsiveOverlay || _desktopPreviewFilePreviewFullscreen,
+                    openFilePreviewAsFullscreen: _desktopPreviewFilePreviewFullscreen || (responsiveOverlay && responsiveOverlayMobile),
                     onFilePreviewSelected: (file) {
                       setState(() {
                         _desktopPreviewFilePreviewFile = file;
@@ -4936,25 +5609,24 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     filePreviewBuilder: _buildAttachmentPreviewFallbackContent,
                     filePreviewSourceBuilder: _buildAttachmentPreviewSource,
                     onAskFileAgent: (file) => unawaited(
-                      _startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey, showThreadAfterPrompt: responsiveOverlay),
+                      _startDefaultAttachmentFilePrompt(file, agentKey: chatContext?.agentKey, responsiveHandoff: responsiveOverlay),
                     ),
                     onShareFile: supportsNativeFileShare ? (file) => unawaited(_shareAttachmentFile(file)) : null,
+                    onExtractArchiveFile: (file) => unawaited(_showAttachmentArchiveExtractDialog(file)),
                     onDownloadFile: (file) => unawaited(_downloadAttachmentFile(file)),
                     filePreviewResizing: resizing,
                     borderOnTop: responsiveOverlay,
                     responsiveOverlay: responsiveOverlay,
-                    responsiveOverlayMobile: false,
+                    responsiveOverlayMobile: responsiveOverlayMobile,
                     onResponsiveOverlayClose: _closeDesktopPreviewRoomPanelOverlay,
                   ),
                 );
               }
 
               if (!hasVisibleAgents) {
-                return preserveWorkspaceSwitch(
-                  ColoredBox(
-                    color: ShadTheme.of(context).colorScheme.card,
-                    child: SizedBox.expand(child: effectiveThreadPanel),
-                  ),
+                return ColoredBox(
+                  color: ShadTheme.of(context).colorScheme.card,
+                  child: SizedBox.expand(child: effectiveThreadPanel),
                 );
               }
 
@@ -4967,12 +5639,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   });
                 }
 
-                return preserveWorkspaceSwitch(
-                  OverlayPortal(
-                    controller: _desktopPreviewRoomPanelOverlayController,
-                    overlayChildBuilder: (context) => Positioned.fill(child: buildRoomPanel(responsiveOverlay: true)),
-                    child: ColoredBox(color: ShadTheme.of(context).colorScheme.card, child: effectiveThreadPanel),
-                  ),
+                return OverlayPortal(
+                  controller: _desktopPreviewRoomPanelOverlayController,
+                  overlayChildBuilder: (context) => Positioned.fill(child: buildRoomPanel(responsiveOverlay: true)),
+                  child: ColoredBox(color: ShadTheme.of(context).colorScheme.card, child: effectiveThreadPanel),
                 );
               }
 
@@ -4987,19 +5657,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 });
               }
 
-              return preserveWorkspaceSwitch(
-                ColoredBox(
-                  color: ShadTheme.of(context).colorScheme.card,
-                  child: PbRoomPanelMount(
-                    activeTab: _desktopPreviewRoomPanelTab,
-                    filePreviewOpen: _desktopPreviewFilePreviewOpen,
-                    filePreviewFullscreen: _desktopPreviewFilePreviewFullscreen,
-                    roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
-                    panelWidth: _desktopPreviewRoomPanelWidth,
-                    onPanelWidthChanged: _setDesktopPreviewRoomPanelWidth,
-                    threadPanel: effectiveThreadPanel,
-                    roomPanelBuilder: (context, resizing) => buildRoomPanel(resizing: resizing),
-                  ),
+              return ColoredBox(
+                color: ShadTheme.of(context).colorScheme.card,
+                child: PbRoomPanelMount(
+                  activeTab: _desktopPreviewRoomPanelTab,
+                  filePreviewOpen: _desktopPreviewFilePreviewOpen,
+                  filePreviewFullscreen: _desktopPreviewFilePreviewFullscreen,
+                  roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
+                  panelWidth: _desktopPreviewRoomPanelWidth,
+                  onPanelWidthChanged: _setDesktopPreviewRoomPanelWidth,
+                  threadPanel: effectiveThreadPanel,
+                  roomPanelBuilder: (context, resizing) => buildRoomPanel(resizing: resizing),
                 ),
               );
             },
@@ -5512,6 +6180,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return const SizedBox(height: desktopPaneHeaderToChatViewportOffset);
   }
 
+  Widget _buildDesktopPreviewThreadLoading(BuildContext context) {
+    return ColoredBox(
+      color: PbColors.surfacePanel,
+      child: Center(
+        child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: PbColors.textSubtle)),
+      ),
+    );
+  }
+
   Widget _buildDesktopSecondaryControlSpacer(BuildContext context) {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     if (isMobile) {
@@ -5527,6 +6204,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     bool showEmbeddedThreadList = true,
     bool embedMobileChrome = true,
     bool showDesktopThreadListAlternatives = true,
+    bool useSelectedThreadOverride = false,
+    String? selectedThreadPathOverride,
+    String? selectedThreadDisplayNameOverride,
   }) {
     final cs = ShadTheme.of(context).colorScheme;
     final isMobile = _usesMobileRoomLayout(context);
@@ -5590,6 +6270,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               }
 
               if (descriptor?.isChat == true) {
+                final selectedThreadPath = useSelectedThreadOverride
+                    ? selectedThreadPathOverride
+                    : _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile);
                 return _buildChatArea(
                   context,
                   name,
@@ -5600,7 +6283,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                   threadDir: descriptor.threadDir,
                   threadListPath: descriptor.threadListPath,
                   threadPath: descriptor.threadPath,
-                  selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
+                  selectedThreadPath: selectedThreadPath,
+                  selectedThreadDisplayName: useSelectedThreadOverride && selectedThreadPath != null
+                      ? selectedThreadDisplayNameOverride
+                      : null,
                   onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                   embedMobileChrome: embedMobileChrome,
                   showDesktopThreadListAlternatives: showDesktopThreadListAlternatives,
@@ -5619,6 +6305,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             final type = _serviceType(service);
             final agentKey = selected.routeId;
             if (descriptor?.isChat == true) {
+              final selectedThreadPath = useSelectedThreadOverride
+                  ? selectedThreadPathOverride
+                  : _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile);
               return _buildChatArea(
                 context,
                 service.agents[0].name,
@@ -5629,7 +6318,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 threadDir: descriptor.threadDir,
                 threadListPath: descriptor.threadListPath,
                 threadPath: descriptor.threadPath,
-                selectedThreadPath: _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile),
+                selectedThreadPath: selectedThreadPath,
+                selectedThreadDisplayName: useSelectedThreadOverride && selectedThreadPath != null
+                    ? selectedThreadDisplayNameOverride
+                    : null,
                 onSelectedThreadPathChanged: (path) => _setSelectedThreadPath(agentKey, path),
                 embedMobileChrome: embedMobileChrome,
                 showDesktopThreadListAlternatives: showDesktopThreadListAlternatives,
@@ -5700,33 +6392,45 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required String createdBy,
     required Iterable<String> attachmentPaths,
   }) {
-    final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+    final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
     if (normalizedThreadPath.isEmpty) {
       return;
     }
 
-    final normalizedAttachmentPaths = attachmentPaths
-        .where(isPowerboardsStorageAttachmentPath)
-        .map(normalizePowerboardsAttachmentPath)
-        .where((path) => path.isNotEmpty)
-        .toSet();
+    final normalizedAttachmentPaths = attachmentPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toSet();
     if (normalizedAttachmentPaths.isEmpty) {
       return;
     }
 
     final now = DateTime.now().toUtc();
     var changed = false;
+    final normalizedCreatedBy = createdBy.trim();
+    final normalizedThreadName = threadName.trim();
     for (final filePath in normalizedAttachmentPaths) {
       final key = '$filePath\n$normalizedThreadPath';
-      if (_localThreadAttachmentLinksByKey.containsKey(key)) {
+      final existing = _localThreadAttachmentLinksByKey[key];
+      if (existing != null) {
+        final existingThreadName = existing.threadName.trim();
+        final existingCreatedBy = existing.createdBy.trim();
+        if ((existingThreadName.isEmpty && normalizedThreadName.isNotEmpty) ||
+            (existingCreatedBy.isEmpty && normalizedCreatedBy.isNotEmpty)) {
+          _localThreadAttachmentLinksByKey[key] = PowerboardsFileAttachmentLink(
+            filePath: existing.filePath,
+            threadPath: existing.threadPath,
+            threadName: existingThreadName.isNotEmpty ? existing.threadName : normalizedThreadName,
+            createdBy: existingCreatedBy.isNotEmpty ? existing.createdBy : normalizedCreatedBy,
+            createdAt: existing.createdAt ?? now,
+          );
+          changed = true;
+        }
         continue;
       }
 
       _localThreadAttachmentLinksByKey[key] = PowerboardsFileAttachmentLink(
         filePath: filePath,
         threadPath: normalizedThreadPath,
-        threadName: threadName.trim(),
-        createdBy: createdBy.trim(),
+        threadName: normalizedThreadName,
+        createdBy: normalizedCreatedBy,
         createdAt: now,
       );
       changed = true;
@@ -5735,10 +6439,25 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (changed && mounted) {
       setState(() {});
     }
+
+    unawaited(
+      recordPowerboardsFileAttachmentLinks(
+        room: widget.room,
+        threadPath: normalizedThreadPath,
+        threadName: threadName,
+        createdBy: normalizedCreatedBy,
+        attachmentPaths: normalizedAttachmentPaths,
+      ).catchError((Object error, StackTrace stackTrace) {
+        if (powerboardsIsExpectedRoomLifecycleClosure(error, stackTrace)) {
+          return;
+        }
+        debugPrint('Failed to record file attachment index: $error');
+      }),
+    );
   }
 
   PbAttachmentListItemData _attachmentDataForPromptPath(String filePath, {required String threadName}) {
-    final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     final title = normalizedPath.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? normalizedPath;
     final metadata = PbResolvedAttachmentMetadata.resolve(title: title);
     final displayThreadName = threadName.trim();
@@ -5752,8 +6471,49 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
+  String _storageEntrySizeLabel(StorageEntry? entry) {
+    if (entry == null || entry.isFolder) {
+      return '';
+    }
+
+    final size = entry.size;
+    return size == null ? '' : pbFormatBytes(size);
+  }
+
+  Future<void> _refreshDesktopPreviewAttachmentSizeLabel(String normalizedPath) async {
+    StorageEntry? entry;
+    try {
+      entry = await widget.room.storage.stat(normalizedPath);
+    } catch (_) {}
+
+    final sizeLabel = _storageEntrySizeLabel(entry);
+    if (!mounted || sizeLabel.isEmpty) {
+      return;
+    }
+
+    final previewFile = _desktopPreviewFilePreviewFile;
+    if (!_desktopPreviewFilePreviewOpen || powerboardsStorageAttachmentPathFromUrl(previewFile?.path ?? '') != normalizedPath) {
+      return;
+    }
+
+    if (previewFile!.sizeLabel == sizeLabel) {
+      return;
+    }
+
+    setState(() {
+      _desktopPreviewFilePreviewFile = PbAttachmentListItemData(
+        title: previewFile.title,
+        subtitle: previewFile.subtitle,
+        fileType: previewFile.fileType,
+        path: previewFile.path,
+        previewState: previewFile.previewState,
+        sizeLabel: sizeLabel,
+      );
+    });
+  }
+
   void _openDesktopPreviewAttachment(String filePath, {required String threadName, bool fromComposerAttachment = false}) {
-    final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     if (normalizedPath.isEmpty) {
       return;
     }
@@ -5769,6 +6529,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewComposerAttachmentPreviewPath = fromComposerAttachment ? normalizedPath : null;
     });
     setPreviewFilePreviewFullscreen(false);
+    unawaited(_refreshDesktopPreviewAttachmentSizeLabel(normalizedPath));
   }
 
   void _closeDesktopPreviewAttachmentPreviewIfRemoved(String filePath) {
@@ -5776,7 +6537,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final normalizedRemovedPath = normalizePowerboardsAttachmentPath(filePath);
+    final normalizedRemovedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     if (!_desktopPreviewRemovedAttachmentMatchesPreview(normalizedRemovedPath)) {
       return;
     }
@@ -5795,12 +6556,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return false;
     }
 
-    final normalizedPreviewPath = normalizePowerboardsAttachmentPath(_desktopPreviewFilePreviewFile?.path ?? '');
+    final normalizedPreviewPath = powerboardsStorageAttachmentPathFromUrl(_desktopPreviewFilePreviewFile?.path ?? '');
     if (normalizedRemovedPath == normalizedPreviewPath) {
       return true;
     }
 
-    final normalizedComposerPreviewPath = normalizePowerboardsAttachmentPath(_desktopPreviewComposerAttachmentPreviewPath ?? '');
+    final normalizedComposerPreviewPath = powerboardsStorageAttachmentPathFromUrl(_desktopPreviewComposerAttachmentPreviewPath ?? '');
     if (normalizedComposerPreviewPath.isEmpty) {
       return false;
     }
@@ -5820,7 +6581,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required ChatFilePromptAction action,
     required String filePath,
     String? preferredAgentKey,
-    bool showThreadAfterPrompt = false,
+    bool responsiveHandoff = false,
   }) async {
     if (!mounted || !context.mounted) {
       return;
@@ -5832,8 +6593,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    if (showThreadAfterPrompt) {
-      _openDesktopPreviewThreadComposerWithAttachment(context, agentKey: agentKey, filePath: filePath);
+    if (responsiveHandoff) {
+      _handoffResponsiveDesktopPreviewFilePrompt(context, agentKey: agentKey, filePath: filePath);
       return;
     }
 
@@ -5848,7 +6609,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewFilePreviewFile = previewFile;
       _desktopPreviewFilePreviewOpen = true;
       _desktopPreviewFilePreviewFullscreen = false;
-      _desktopPreviewComposerAttachmentPreviewPath = normalizePowerboardsAttachmentPath(filePath);
+      _desktopPreviewComposerAttachmentPreviewPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     });
     if (_roomNameForSelectionPersistence case final roomName?) {
       clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
@@ -5862,18 +6623,34 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _showDesktopPreviewChatPane(context, agentKey: agentKey);
   }
 
-  void _openDesktopPreviewThreadComposerWithAttachment(BuildContext context, {required String agentKey, required String filePath}) {
-    final normalizedPath = normalizePowerboardsAttachmentPath(filePath);
+  void _handoffResponsiveDesktopPreviewFilePrompt(BuildContext context, {required String agentKey, required String filePath}) {
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     if (normalizedPath.isEmpty) {
       return;
     }
 
-    _desktopPreviewRoomPanelOverlayController.hide();
     setState(() {
       _selectedThreadPathByAgentKey.remove(agentKey);
       _selectedThreadLabelByAgentKey.remove(agentKey);
       _newThreadResetVersion++;
+    });
+    if (_roomNameForSelectionPersistence case final roomName?) {
+      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
+    }
+    _setComposerAttachmentSeed(agentKey, [normalizedPath]);
+
+    if (!mounted || !context.mounted) {
+      return;
+    }
+    _showDesktopPreviewChatPane(context, agentKey: agentKey);
+    _closeResponsiveDesktopPreviewFilePromptSurfaces();
+  }
+
+  void _closeResponsiveDesktopPreviewFilePromptSurfaces() {
+    _desktopPreviewRoomPanelOverlayController.hide();
+    setState(() {
       _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
+      _desktopPreviewRoomPanelCollapsed = true;
       _desktopPreviewRoomPanelOverlayOpen = false;
       _desktopPreviewFilePreviewFile = null;
       _desktopPreviewFilePreviewOpen = false;
@@ -5884,21 +6661,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewMeetTranscriptPreviewFullscreen = false;
       _desktopPreviewRestoreTranscriptOverlayOnPreviewClose = false;
     });
-    if (_roomNameForSelectionPersistence case final roomName?) {
-      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
-    }
     setPreviewFilePreviewFullscreen(false);
-
-    if (!mounted || !context.mounted) {
-      return;
-    }
-    _showDesktopPreviewChatPane(context, agentKey: agentKey);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      _setComposerAttachmentSeed(agentKey, [normalizedPath]);
-    });
   }
 
   String? _previewAttachmentPath(PbAttachmentListItemData file) {
@@ -5997,11 +6760,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return fallback == null ? const <ChatFilePromptAction>[] : [fallback];
   }
 
-  Future<void> _startDefaultAttachmentFilePrompt(
-    PbAttachmentListItemData file, {
-    String? agentKey,
-    bool showThreadAfterPrompt = false,
-  }) async {
+  Future<void> _startDefaultAttachmentFilePrompt(PbAttachmentListItemData file, {String? agentKey, bool responsiveHandoff = false}) async {
     final path = _previewAttachmentPath(file);
     if (path == null) {
       return;
@@ -6018,8 +6777,89 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       action: action,
       filePath: path,
       preferredAgentKey: agentKey,
-      showThreadAfterPrompt: showThreadAfterPrompt,
+      responsiveHandoff: responsiveHandoff,
     );
+  }
+
+  Future<void> _showAttachmentArchiveExtractDialog(PbAttachmentListItemData file) async {
+    final archivePath = _previewAttachmentPath(file);
+    if (archivePath == null || !pbCanExtractArchive(file)) {
+      return;
+    }
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.transparent,
+      transitionDuration: Duration.zero,
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        void closeDialog() {
+          Navigator.of(dialogContext).pop();
+        }
+
+        return Stack(
+          children: [
+            PbArchiveExtractPreviewDialog(
+              file: file,
+              onClose: closeDialog,
+              onInspect: (_) => inspectPowerboardsArchive(
+                room: widget.room,
+                archivePath: archivePath,
+                targetFolderName: pbArchiveExtractFolderName(file.title),
+              ),
+              onConfirm: (inspection) {
+                closeDialog();
+                unawaited(_extractAttachmentArchiveForPreview(file, inspection));
+              },
+              onDownload: () {
+                closeDialog();
+                unawaited(_downloadAttachmentFile(file));
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _extractAttachmentArchiveForPreview(PbAttachmentListItemData file, PbArchiveInspectionResult inspection) async {
+    final archivePath = _previewAttachmentPath(file);
+    if (archivePath == null) {
+      return;
+    }
+
+    if (!mounted || !context.mounted) {
+      return;
+    }
+
+    await startPowerboardsArchiveExtractionWithToast(
+      context: context,
+      room: widget.room,
+      archivePath: archivePath,
+      inspection: inspection,
+      onOpenResult: _openExtractedAttachmentArchiveForPreview,
+    );
+  }
+
+  void _openExtractedAttachmentArchiveForPreview(PowerboardsArchiveExtractionOpenTarget target) {
+    if (!mounted || !context.mounted) {
+      return;
+    }
+
+    final previewPath = target.previewPath;
+    final rawPath = previewPath ?? (target.targetFolderPath.isEmpty ? '' : '${target.targetFolderPath}/');
+
+    setState(() {
+      _desktopPreviewFilePreviewFile = null;
+      _desktopPreviewFilePreviewOpen = false;
+      _desktopPreviewFilePreviewFullscreen = false;
+      _desktopPreviewRoomPanelTab = PbRoomPanelTab.files;
+    });
+    setPreviewFilePreviewFullscreen(false);
+    controller.showFiles();
+    _replaceRoomRouteState(context, pane: _MobileRoomPane.files, rawPath: rawPath, clearPreviewOrigin: true);
+
+    _filesHeaderController.openExtractedArchiveForPreview(target);
   }
 
   Future<void> _downloadAttachmentFile(PbAttachmentListItemData file) async {

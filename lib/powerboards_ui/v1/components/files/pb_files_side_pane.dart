@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/pb_attachment_file_metadata.dart';
 import '../../theme/pb_colors.dart';
 import '../layouts/pb_room_panel.dart';
+import 'pb_archive_extract.dart';
 import 'pb_files_data.dart';
 import 'pb_sidepane_file_list.dart';
 
@@ -21,8 +22,14 @@ class PbFilesSidePane extends StatelessWidget {
     this.previewSourceBuilder,
     this.onAskAgent,
     this.onShare,
+    this.extractingArchiveIds = const <String>{},
+    this.onExtractArchive,
     this.onDownload,
     this.onSaveRequested,
+    this.previewDraftText,
+    this.previewDraftDirty,
+    this.onPreviewDraftChanged,
+    this.onPreviewDraftSaved,
     required this.onToggleFullscreen,
     required this.onClosePreview,
   });
@@ -45,8 +52,14 @@ class PbFilesSidePane extends StatelessWidget {
   final PbFilePreviewSource? Function(PbFilesItemData file)? previewSourceBuilder;
   final ValueChanged<PbFilesItemData>? onAskAgent;
   final ValueChanged<PbFilesItemData>? onShare;
+  final Set<String> extractingArchiveIds;
+  final ValueChanged<PbFilesItemData>? onExtractArchive;
   final ValueChanged<PbFilesItemData>? onDownload;
   final Future<void> Function(PbFilesItemData file)? onSaveRequested;
+  final String? previewDraftText;
+  final bool? previewDraftDirty;
+  final ValueChanged<String>? onPreviewDraftChanged;
+  final VoidCallback? onPreviewDraftSaved;
   final VoidCallback onToggleFullscreen;
   final VoidCallback onClosePreview;
 
@@ -54,6 +67,8 @@ class PbFilesSidePane extends StatelessWidget {
   Widget build(BuildContext context) {
     final preview = previewFile;
     if (preview != null) {
+      final previewExtractable = onExtractArchive != null && pbCanExtractArchive(preview.toAttachmentData());
+      final previewExtracting = previewExtractable && extractingArchiveIds.contains(preview.id);
       final previewSource = preview.previewState == PbAttachmentPreviewState.none ? previewSourceBuilder?.call(preview) : null;
       final previewContentChild = previewSource?.buildChild(fullscreen);
       return PbFilePreviewPane(
@@ -65,6 +80,9 @@ class PbFilesSidePane extends StatelessWidget {
         hideFullscreenToggle: responsiveOverlayMobile,
         onAskAgent: onAskAgent == null ? null : () => onAskAgent!(preview),
         onShare: onShare == null ? null : () => onShare!(preview),
+        showExtractArchive: previewExtractable,
+        extractArchiveDisabled: previewExtracting,
+        onExtractArchive: !previewExtractable || previewExtracting ? null : () => onExtractArchive!(preview),
         onDownload: onDownload == null ? null : () => onDownload!(preview),
         onToggleFullscreen: onToggleFullscreen,
         onClose: onClosePreview,
@@ -73,6 +91,10 @@ class PbFilesSidePane extends StatelessWidget {
         loadText: previewSource?.loadText,
         onSaveTextRequested: previewSource?.saveText,
         sourceKey: previewSource?.sourceKey,
+        draftText: previewDraftText,
+        draftDirty: previewDraftDirty,
+        onDraftTextChanged: onPreviewDraftChanged,
+        onDraftSaved: onPreviewDraftSaved,
         child: preview.previewState == PbAttachmentPreviewState.none ? previewBuilder?.call(preview) : null,
       );
     }
@@ -104,6 +126,10 @@ class PbFilesSidePane extends StatelessWidget {
                   onPressed: () => onPreviewFile(file),
                   onAskAgent: onAskAgent == null ? null : () => onAskAgent!(file),
                   onShare: onShare == null ? null : () => onShare!(file),
+                  onExtract:
+                      onExtractArchive == null || !pbCanExtractArchive(file.toAttachmentData()) || extractingArchiveIds.contains(file.id)
+                      ? null
+                      : () => onExtractArchive!(file),
                   onDownload: onDownload == null ? null : () => onDownload!(file),
                 ),
             ],
