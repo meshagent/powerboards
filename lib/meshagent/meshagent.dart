@@ -1,14 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:http/http.dart' as http;
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
 
 import 'package:powerboards/nav/add_room_dialog.dart';
 import 'package:powerboards/nav/new_project_dialog.dart';
-import "package:http/http.dart";
 import 'slug.dart';
-import "dart:convert";
+
+const meshagentDeploymentConfigFetchTimeout = Duration(seconds: 5);
 
 bool hasAgentMetadata(ServiceSpec service) => service.agents.isNotEmpty;
 
@@ -43,6 +45,7 @@ class MeshagentConfig {
     required this.imageTagPrefix,
     required this.domains,
     required this.meshagentMailDomain,
+    this.registryHost,
   });
 
   final Uri serverUrl;
@@ -56,8 +59,58 @@ class MeshagentConfig {
   final String imageTagPrefix;
   final List<String> domains;
   final String meshagentMailDomain;
+  final String? registryHost;
 
   Uri get oauth2CallbackUrl => oauthCallbackUrl.replace(path: "/oauth2/callback");
+
+  MeshagentConfig copyWith({
+    Uri? serverUrl,
+    Uri? appUrl,
+    Uri? billingUrl,
+    Uri? oauthCallbackUrl,
+    String? oauthClientId,
+    bool? sentryEnabled,
+    String? sentryRelease,
+    String? sentryEnvironment,
+    String? imageTagPrefix,
+    List<String>? domains,
+    String? meshagentMailDomain,
+    Object? registryHost = _unchanged,
+  }) {
+    return MeshagentConfig(
+      serverUrl: serverUrl ?? this.serverUrl,
+      appUrl: appUrl ?? this.appUrl,
+      billingUrl: billingUrl ?? this.billingUrl,
+      oauthCallbackUrl: oauthCallbackUrl ?? this.oauthCallbackUrl,
+      oauthClientId: oauthClientId ?? this.oauthClientId,
+      sentryEnabled: sentryEnabled ?? this.sentryEnabled,
+      sentryRelease: sentryRelease ?? this.sentryRelease,
+      sentryEnvironment: sentryEnvironment ?? this.sentryEnvironment,
+      imageTagPrefix: imageTagPrefix ?? this.imageTagPrefix,
+      domains: domains ?? this.domains,
+      meshagentMailDomain: meshagentMailDomain ?? this.meshagentMailDomain,
+      registryHost: identical(registryHost, _unchanged) ? this.registryHost : registryHost as String?,
+    );
+  }
+
+  MeshagentConfig withApiUrlOverride(String apiUrl) {
+    final normalizedApiUrl = _normalizeUrl(apiUrl);
+    final serverUri = Uri.parse(normalizedApiUrl);
+    return copyWith(serverUrl: serverUri);
+  }
+
+  Future<MeshagentConfig> withDeploymentConfig({http.Client? client}) async {
+    final deploymentConfig = await _fetchDeploymentConfig(serverUrl: serverUrl, client: client);
+
+    return copyWith(
+      serverUrl: deploymentConfig.apiUrl ?? serverUrl,
+      appUrl: deploymentConfig.powerboardsUrl ?? appUrl,
+      billingUrl: deploymentConfig.accountsUrl ?? billingUrl,
+      domains: deploymentConfig.pagesDomain == null ? domains : [deploymentConfig.pagesDomain!],
+      meshagentMailDomain: deploymentConfig.mailDomain ?? meshagentMailDomain,
+      registryHost: deploymentConfig.registryHost ?? registryHost,
+    );
+  }
 
   Uri getWsUrl(String roomName) {
     final scheme = serverUrl.scheme == "http" ? "ws" : "wss";
@@ -99,7 +152,7 @@ class MeshagentConfig {
   }
 
   static Future<MeshagentConfig> fromUri(Uri uri) async {
-    final res = await get(uri);
+    final res = await http.get(uri);
     final data = jsonDecode(res.body);
 
     return MeshagentConfig(
@@ -118,7 +171,62 @@ class MeshagentConfig {
   }
 
   static MeshagentConfig? current;
+
+  static Future<_DeploymentConfig> _fetchDeploymentConfig({required Uri serverUrl, http.Client? client}) async {
+    final httpClient = client ?? http.Client();
+    try {
+      final response = await httpClient.get(serverUrl.replace(path: '/config')).timeout(meshagentDeploymentConfigFetchTimeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return const _DeploymentConfig();
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        return const _DeploymentConfig();
+      }
+
+      final domains = decoded['domains'];
+      if (domains is! Map<String, dynamic>) {
+        return const _DeploymentConfig();
+      }
+
+      final accounts = domains['accounts'];
+      final api = domains['api'];
+      final mail = domains['mail'];
+      final pages = domains['pages'];
+      final powerboards = domains['powerboards'];
+      final registry = domains['registry'];
+
+      return _DeploymentConfig(
+        accountsUrl: accounts is String && accounts.trim().isNotEmpty ? _httpsUrlForDomain(accounts.trim()) : null,
+        apiUrl: api is String && api.trim().isNotEmpty ? _httpsUrlForDomain(api.trim()) : null,
+        mailDomain: mail is String && mail.trim().isNotEmpty ? mail.trim() : null,
+        pagesDomain: pages is String && pages.trim().isNotEmpty ? pages.trim() : null,
+        powerboardsUrl: powerboards is String && powerboards.trim().isNotEmpty ? _httpsUrlForDomain(powerboards.trim()) : null,
+        registryHost: registry is String && registry.trim().isNotEmpty ? registry.trim() : null,
+      );
+    } catch (_) {
+      return const _DeploymentConfig();
+    } finally {
+      if (client == null) {
+        httpClient.close();
+      }
+    }
+  }
 }
+
+class _DeploymentConfig {
+  const _DeploymentConfig({this.accountsUrl, this.apiUrl, this.mailDomain, this.pagesDomain, this.powerboardsUrl, this.registryHost});
+
+  final Uri? accountsUrl;
+  final Uri? apiUrl;
+  final String? mailDomain;
+  final String? pagesDomain;
+  final Uri? powerboardsUrl;
+  final String? registryHost;
+}
+
+const _unchanged = Object();
 
 List<String> _parseEnvList(String raw) {
   return raw.split(",").map((entry) => entry.trim()).where((entry) => entry.isNotEmpty).toList();
@@ -130,6 +238,21 @@ bool _parseEnvBool(dynamic raw) {
   }
 
   return raw.toString().toLowerCase() == "true";
+}
+
+String _normalizeUrl(String url) {
+  final normalized = url.trim();
+  if (normalized.endsWith("/")) {
+    return normalized.substring(0, normalized.length - 1);
+  }
+  return normalized;
+}
+
+Uri _httpsUrlForDomain(String domain) {
+  if (domain.startsWith('http://') || domain.startsWith('https://')) {
+    return Uri.parse(domain);
+  }
+  return Uri.parse('https://$domain');
 }
 
 Meshagent getMeshagentClient() {
