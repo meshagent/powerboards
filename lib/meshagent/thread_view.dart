@@ -29,7 +29,6 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
-import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -46,6 +45,47 @@ typedef PowerboardsThreadAttachmentsChanged =
       required String createdBy,
       required Iterable<String> attachmentPaths,
     });
+
+const String _threadTextFontFamily = 'Inter';
+
+TextStyle _threadAssetTextStyle({
+  TextStyle? textStyle,
+  Color? color,
+  FontWeight? fontWeight,
+  double? fontSize,
+  double? height,
+  double? letterSpacing,
+}) {
+  return (textStyle ?? const TextStyle()).copyWith(
+    fontFamily: _threadTextFontFamily,
+    color: color,
+    fontWeight: fontWeight,
+    fontSize: fontSize,
+    height: height,
+    letterSpacing: letterSpacing,
+  );
+}
+
+TextStyle _threadSectionTitleStyle({Color color = shadForeground, double? height}) {
+  return _threadAssetTextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: color, height: height);
+}
+
+TextStyle _threadMetaTextStyle({required Color color, FontWeight fontWeight = FontWeight.w500, double? height}) {
+  return _threadAssetTextStyle(fontSize: 13, fontWeight: fontWeight, color: color, height: height);
+}
+
+Widget _buildThreadCurrentPill() {
+  return DecoratedBox(
+    decoration: const BoxDecoration(color: Colors.black, borderRadius: BorderRadius.all(Radius.circular(999))),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      child: Text(
+        "Current",
+        style: _threadAssetTextStyle(fontSize: 11, fontWeight: FontWeight.w700, height: 1, color: Colors.white),
+      ),
+    ),
+  );
+}
 
 @visibleForTesting
 bool powerboardsComposerAttachmentSeedMatchesAttachmentPaths({
@@ -204,7 +244,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       child: compact
           ? ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
-              child: Text(title, textAlign: TextAlign.center, style: powerboardsSectionTitleStyle()),
+              child: Text(title, textAlign: TextAlign.center, style: _threadSectionTitleStyle()),
             )
           : ChatThreadEmptyStateContent(title: title, description: description),
     );
@@ -221,7 +261,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     const horizontalInset = powerboardsMobileShellHorizontalInset;
     final theme = ShadTheme.of(context);
     final inactivePillColor = theme.colorScheme.foreground;
-    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
+    final pillTextStyle = _threadAssetTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
     final items = <PowerboardsMobileActionPillItem>[
       const PowerboardsMobileActionPillItem(label: "Chat", selected: true),
       if (widget.onOpenFiles != null) PowerboardsMobileActionPillItem(label: "Share files", onPressed: widget.onOpenFiles),
@@ -553,6 +593,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   Widget build(BuildContext context) {
     final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
+    final materialTheme = Theme.of(context);
+    final shadTheme = ShadTheme.of(context);
     final usesCenteredDesktopPreviewComposer =
         usesDesktopUiPreview && widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer && widget.emptyState == null;
     final usesMobileLayout = _usesMobileThreadLayout(context);
@@ -628,10 +670,24 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       showThreadList: false,
     );
 
-    return IconTheme(
-      data: const IconThemeData(size: 14),
-      child: usesDesktopUiPreview ? ChatContextLayoutOverride(useMobileLayout: false, child: chatBotView) : chatBotView,
-    );
+    final scopedChatBotView = usesDesktopUiPreview
+        ? ma.ThreadTypographyOverride(
+            textFontFamily: 'Inter',
+            codeFontFamily: 'DM Mono',
+            child: ShadTheme.merge(
+              data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
+              child: Theme(
+                data: materialTheme.copyWith(textTheme: ma.threadTypographyMaterialTextTheme(materialTheme.textTheme, 'Inter')),
+                child: DefaultTextStyle.merge(
+                  style: const TextStyle(fontFamily: 'Inter'),
+                  child: ChatContextLayoutOverride(useMobileLayout: false, child: chatBotView),
+                ),
+              ),
+            ),
+          )
+        : chatBotView;
+
+    return IconTheme(data: const IconThemeData(size: 14), child: scopedChatBotView);
   }
 }
 
@@ -783,12 +839,12 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
 class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   static TextStyle threadNameStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w400, Color? color}) {
     final theme = ShadTheme.of(context);
-    return powerboardsMetaTextStyle(color: color ?? theme.colorScheme.mutedForeground, fontWeight: fontWeight);
+    return _threadMetaTextStyle(color: color ?? theme.colorScheme.mutedForeground, fontWeight: fontWeight);
   }
 
   static TextStyle createActionStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w700}) {
     final theme = ShadTheme.of(context);
-    return powerboardsInterTextStyle(
+    return _threadAssetTextStyle(
       fontSize: chatBubbleMarkdownBaseFontSize(context),
       fontWeight: fontWeight,
       color: theme.colorScheme.foreground,
@@ -1196,14 +1252,14 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
             if (icon != null) ...[Icon(icon, size: 44, color: shadMutedForeground), const SizedBox(height: 16)],
             Text(
               title,
-              style: powerboardsInterTextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
+              style: _threadAssetTextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
             ),
             if (description != null) ...[
               const SizedBox(height: 8),
               Text(
                 description,
                 textAlign: TextAlign.center,
-                style: powerboardsSecondaryTextStyle(color: shadMutedForeground),
+                style: _threadAssetTextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: shadMutedForeground),
               ),
             ],
           ],
@@ -1348,7 +1404,7 @@ class _ThreadListEmptyHint extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(leadingInset, isMobile ? 4 : 8, 0, 0),
-      child: Text("Add and manage multiple threads.", style: powerboardsMetaTextStyle(color: shadMutedForeground, height: 1.4)),
+      child: Text("Add and manage multiple threads.", style: _threadMetaTextStyle(color: shadMutedForeground, height: 1.4)),
     );
   }
 }
@@ -1420,7 +1476,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
         final selected = widget.selected;
         final leadingWidth = _leadingWidth(isMobile);
         final textStyle = isMobile && widget.mobileUseDialogListStyle
-            ? powerboardsFileListTitleStyle().copyWith(fontWeight: selected ? FontWeight.w700 : FontWeight.w400)
+            ? _threadAssetTextStyle(fontSize: 14, fontWeight: selected ? FontWeight.w700 : FontWeight.w400, color: shadForeground)
             : _MeshagentThreadListPaneState.threadNameStyle(
                 context,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
@@ -1493,7 +1549,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                                     ),
                                     if (selected && isMobile && widget.mobileUseDialogListStyle) ...[
                                       const SizedBox(width: 12),
-                                      buildPowerboardsCurrentPill(),
+                                      _buildThreadCurrentPill(),
                                     ],
                                   ],
                                 ),
@@ -1596,7 +1652,7 @@ class _DraftThreadListItem extends StatelessWidget {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final leadingWidth = _leadingWidth(isMobile);
     final textStyle = mobileUseDialogListStyle
-        ? TextStyle(inherit: true, fontWeight: FontWeight.w700, color: shadForeground)
+        ? _threadAssetTextStyle(textStyle: const TextStyle(inherit: true), fontWeight: FontWeight.w700, color: shadForeground)
         : _MeshagentThreadListPaneState.threadNameStyle(context, fontWeight: FontWeight.w700, color: shadForeground);
 
     return DecoratedBox(
