@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater.dart';
 import 'package:powerboards/meshagent/project.dart';
@@ -34,7 +35,7 @@ class DesktopPreviewNavHeader extends StatefulWidget {
   });
 
   final List<Project> projects;
-  final List<Room> rooms;
+  final Resource<List<Room>> rooms;
   final String? projectId;
   final String? selectedRoom;
   final bool canCreateRooms;
@@ -156,6 +157,8 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
     return null;
   }
 
+  List<Room> get _rooms => widget.rooms.state.value ?? const <Room>[];
+
   List<Project> get _filteredProjects {
     if (_projectQuery.isEmpty) {
       return widget.projects;
@@ -166,10 +169,10 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
 
   List<Room> get _filteredRooms {
     if (_roomQuery.isEmpty) {
-      return widget.rooms;
+      return _rooms;
     }
 
-    return widget.rooms.where((room) => _roomDisplayName(room).toLowerCase().contains(_roomQuery)).toList();
+    return _rooms.where((room) => _roomDisplayName(room).toLowerCase().contains(_roomQuery)).toList();
   }
 
   String _roomDisplayName(Room room) {
@@ -187,7 +190,7 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
       return null;
     }
 
-    final hasSelectedRoom = widget.rooms.any((room) => room.name == selectedRoomName);
+    final hasSelectedRoom = _rooms.any((room) => room.name == selectedRoomName);
     return hasSelectedRoom ? null : (_selectedRoomDisplayNameOverride ?? selectedRoomName);
   }
 
@@ -304,9 +307,6 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
   @override
   Widget build(BuildContext context) {
     final currentProject = _currentProject;
-    final currentRoom = widget.rooms.where((room) => room.name == widget.selectedRoom).firstOrNull;
-    final resolvedRoomValue = currentRoom != null ? _roomDisplayName(currentRoom) : (_selectedRoomFallbackLabel ?? 'Select room');
-    final showRoomSwitcher = widget.rooms.isNotEmpty || ((widget.selectedRoom?.trim().isNotEmpty) ?? false);
 
     return OverlayPortal(
       controller: _projectDialogController,
@@ -319,21 +319,30 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
         onCreateProjectPressed: _createProjectFromDialog,
         onClose: _closeProjectDialog,
       ),
-      child: PbPrimaryHeader(
-        shellMobile: widget.shellMobile,
-        shellIconOnly: widget.shellIconOnly,
-        showRoomSwitcher: showRoomSwitcher,
-        roomValue: resolvedRoomValue,
-        roomSelected: _openMenu == _DesktopPreviewNavMenu.room,
-        avatarSelected: _openMenu == _DesktopPreviewNavMenu.account,
-        avatarInitials: widget.avatarInitials,
-        roomMenu: showRoomSwitcher && _openMenu == _DesktopPreviewNavMenu.room ? _buildRoomMenu() : null,
-        avatarMenu: _openMenu == _DesktopPreviewNavMenu.account ? _buildAccountMenu() : null,
-        onRoomPressed: showRoomSwitcher ? () => _toggleMenu(_DesktopPreviewNavMenu.room) : null,
-        onAvatarPressed: () => _toggleMenu(_DesktopPreviewNavMenu.account),
-        onRoomDismissRequested: _closeMenu,
-        onAvatarDismissRequested: _closeMenu,
-        onSharePressed: widget.onSharePressed,
+      child: SignalBuilder(
+        builder: (context, _) {
+          final rooms = _rooms;
+          final currentRoom = rooms.where((room) => room.name == widget.selectedRoom).firstOrNull;
+          final resolvedRoomValue = currentRoom != null ? _roomDisplayName(currentRoom) : (_selectedRoomFallbackLabel ?? 'Select room');
+          final showRoomSwitcher = rooms.isNotEmpty || ((widget.selectedRoom?.trim().isNotEmpty) ?? false);
+
+          return PbPrimaryHeader(
+            shellMobile: widget.shellMobile,
+            shellIconOnly: widget.shellIconOnly,
+            showRoomSwitcher: showRoomSwitcher,
+            roomValue: resolvedRoomValue,
+            roomSelected: _openMenu == _DesktopPreviewNavMenu.room,
+            avatarSelected: _openMenu == _DesktopPreviewNavMenu.account,
+            avatarInitials: widget.avatarInitials,
+            roomMenu: showRoomSwitcher && _openMenu == _DesktopPreviewNavMenu.room ? _buildRoomMenu() : null,
+            avatarMenu: _openMenu == _DesktopPreviewNavMenu.account ? _buildAccountMenu() : null,
+            onRoomPressed: showRoomSwitcher ? () => _toggleMenu(_DesktopPreviewNavMenu.room) : null,
+            onAvatarPressed: () => _toggleMenu(_DesktopPreviewNavMenu.account),
+            onRoomDismissRequested: _closeMenu,
+            onAvatarDismissRequested: _closeMenu,
+            onSharePressed: widget.onSharePressed,
+          );
+        },
       ),
     );
   }
