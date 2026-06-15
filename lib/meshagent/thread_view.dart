@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
@@ -674,6 +675,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         ? ma.ThreadTypographyOverride(
             textFontFamily: 'Inter',
             codeFontFamily: 'DM Mono',
+            mineBubbleColor: PbColors.surfaceAccentSoft,
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(
