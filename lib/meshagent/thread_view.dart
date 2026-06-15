@@ -51,6 +51,55 @@ typedef PowerboardsThreadAttachmentsChanged =
     });
 
 const String _threadTextFontFamily = 'Inter';
+const Color _desktopV1ThreadCodePlainColor = Color(0xFFE6EDF7);
+const Color _desktopV1ThreadCodeKeywordColor = Color(0xFFC084FC);
+const Color _desktopV1ThreadCodeTypeColor = Color(0xFF7DD3FC);
+const Color _desktopV1ThreadCodeStringColor = Color(0xFFA7F3D0);
+const Color _desktopV1ThreadCodeLiteralColor = Color(0xFFFDBA74);
+const Color _desktopV1ThreadCodeNumberColor = Color(0xFFF0ABFC);
+const Color _desktopV1ThreadCodeAttributeColor = Color(0xFF93C5FD);
+const Color _desktopV1ThreadCodeCommentColor = Color(0xFF6B7280);
+const Color _desktopV1ThreadCodeCommandColor = Color(0xFFFDE68A);
+const Color _desktopV1ThreadSelectionColor = Color(0x665EA2FF);
+const Color _desktopV1ThreadSelectionHandleColor = Color(0xFF5EA2FF);
+const Map<String, TextStyle> _desktopV1ThreadCodeHighlightTheme = {
+  'root': TextStyle(backgroundColor: PbColors.customCodeSurface, color: _desktopV1ThreadCodePlainColor),
+  'tag': TextStyle(color: _desktopV1ThreadCodePlainColor),
+  'subst': TextStyle(color: _desktopV1ThreadCodePlainColor),
+  'strong': TextStyle(color: _desktopV1ThreadCodePlainColor, fontWeight: FontWeight.bold),
+  'emphasis': TextStyle(color: _desktopV1ThreadCodePlainColor, fontStyle: FontStyle.italic),
+  'bullet': TextStyle(color: _desktopV1ThreadCodeCommandColor),
+  'quote': TextStyle(color: _desktopV1ThreadCodeCommandColor),
+  'number': TextStyle(color: _desktopV1ThreadCodeNumberColor),
+  'regexp': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'literal': TextStyle(color: _desktopV1ThreadCodeLiteralColor),
+  'link': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'code': TextStyle(color: _desktopV1ThreadCodeCommandColor),
+  'title': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'section': TextStyle(color: _desktopV1ThreadCodeCommandColor),
+  'selector-class': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'keyword': TextStyle(color: _desktopV1ThreadCodeKeywordColor),
+  'selector-tag': TextStyle(color: _desktopV1ThreadCodeKeywordColor),
+  'name': TextStyle(color: _desktopV1ThreadCodeKeywordColor),
+  'attr': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'symbol': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'attribute': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'params': TextStyle(color: _desktopV1ThreadCodePlainColor),
+  'title.class_': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'class-title': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'string': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'type': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'built_in': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'selector-id': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'selector-attr': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'selector-pseudo': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'addition': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'variable': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'template-variable': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'comment': TextStyle(color: _desktopV1ThreadCodeCommentColor),
+  'deletion': TextStyle(color: _desktopV1ThreadCodeCommentColor),
+  'meta': TextStyle(color: _desktopV1ThreadCodeCommentColor),
+};
 
 TextStyle _threadAssetTextStyle({
   TextStyle? textStyle,
@@ -706,13 +755,34 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             alignAttachmentEdgesWithBubbles: true,
             attachmentIconBuilder: _buildDesktopV1ThreadAttachmentIcon,
             attachmentActionIconBuilder: _buildDesktopV1ThreadAttachmentActionIcon,
+            codeBlockSurfaceColor: PbColors.customCodeSurface,
+            codeBlockHeaderSurfaceColor: PbColors.customCodeSurface,
+            codeBlockBorderColor: PbColors.customCodeSurface,
+            codeBlockTextColor: _desktopV1ThreadCodePlainColor,
+            codeBlockHeaderTextColor: _desktopV1ThreadCodeCommentColor,
+            codeBlockHighlightTheme: _desktopV1ThreadCodeHighlightTheme,
+            codeBlockUseTextFontSize: true,
+            codeBlockWrapLines: true,
+            codeBlockHeaderFontSize: 13,
+            codeBlockActionIconSize: 17,
+            codeBlockActionButtonSize: 24,
+            inlineCodeTextColor: PbColors.customCodeInlineText,
+            inlineCodeBackgroundColor: PbColors.surfaceAccentSoft,
+            inlineCodeHorizontalPadding: true,
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(
                 data: materialTheme.copyWith(textTheme: ma.threadTypographyMaterialTextTheme(materialTheme.textTheme, 'Inter')),
                 child: DefaultTextStyle.merge(
                   style: const TextStyle(fontFamily: 'Inter'),
-                  child: ChatContextLayoutOverride(useMobileLayout: false, child: chatBotView),
+                  child: TextSelectionTheme(
+                    data: const TextSelectionThemeData(
+                      cursorColor: PbColors.surfaceRailSelected,
+                      selectionColor: _desktopV1ThreadSelectionColor,
+                      selectionHandleColor: _desktopV1ThreadSelectionHandleColor,
+                    ),
+                    child: ChatContextLayoutOverride(useMobileLayout: false, child: chatBotView),
+                  ),
                 ),
               ),
             ),
