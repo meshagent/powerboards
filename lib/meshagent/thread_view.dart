@@ -5,7 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
@@ -86,6 +89,21 @@ Widget _buildThreadCurrentPill() {
       ),
     ),
   );
+}
+
+Widget _buildDesktopV1ThreadAttachmentIcon(
+  BuildContext context, {
+  required String fileName,
+  required IconData fallbackIcon,
+  required Color? color,
+  required bool hovered,
+}) {
+  final metadata = PbResolvedAttachmentMetadata.resolve(title: fileName);
+  return PbSvgIcon(assetName: metadata.iconAssetName, size: 24, color: metadata.iconColor);
+}
+
+Widget _buildDesktopV1ThreadAttachmentActionIcon(BuildContext context, {required Color? color, required bool hovered}) {
+  return PbSvgIcon(assetName: 'arrow-up-right', size: 17, color: color ?? PbColors.customBrandInk);
 }
 
 @visibleForTesting
@@ -679,6 +697,15 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             agentBubbleColor: PbColors.surfacePanel,
             agentBubbleBorderColor: PbColors.borderFaint,
             linkColor: PbColors.surfaceRailSelected,
+            attachmentSurfaceColor: PbColors.surfacePanel,
+            attachmentBorderColor: PbColors.borderSoft,
+            attachmentIconColor: PbColors.surfaceRailSelected,
+            attachmentActionColor: PbColors.customBrandInk,
+            attachmentHoverSurfaceColor: Color.lerp(PbColors.surfacePanelSoft, PbColors.surfacePanel, 0.56),
+            attachmentHoverShadows: PbShadows.stateHover,
+            alignAttachmentEdgesWithBubbles: true,
+            attachmentIconBuilder: _buildDesktopV1ThreadAttachmentIcon,
+            attachmentActionIconBuilder: _buildDesktopV1ThreadAttachmentActionIcon,
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(
