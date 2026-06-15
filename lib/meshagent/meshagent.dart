@@ -40,6 +40,7 @@ class MeshagentConfig {
     required this.oauthCallbackUrl,
     required this.oauthClientId,
     required this.sentryEnabled,
+    required this.sentryDsn,
     required this.sentryRelease,
     required this.sentryEnvironment,
     required this.imageTagPrefix,
@@ -54,6 +55,7 @@ class MeshagentConfig {
   final Uri oauthCallbackUrl;
   final String oauthClientId;
   final bool sentryEnabled;
+  final String sentryDsn;
   final String sentryRelease;
   final String sentryEnvironment;
   final String imageTagPrefix;
@@ -70,6 +72,7 @@ class MeshagentConfig {
     Uri? oauthCallbackUrl,
     String? oauthClientId,
     bool? sentryEnabled,
+    String? sentryDsn,
     String? sentryRelease,
     String? sentryEnvironment,
     String? imageTagPrefix,
@@ -84,6 +87,7 @@ class MeshagentConfig {
       oauthCallbackUrl: oauthCallbackUrl ?? this.oauthCallbackUrl,
       oauthClientId: oauthClientId ?? this.oauthClientId,
       sentryEnabled: sentryEnabled ?? this.sentryEnabled,
+      sentryDsn: sentryDsn ?? this.sentryDsn,
       sentryRelease: sentryRelease ?? this.sentryRelease,
       sentryEnvironment: sentryEnvironment ?? this.sentryEnvironment,
       imageTagPrefix: imageTagPrefix ?? this.imageTagPrefix,
@@ -128,6 +132,7 @@ class MeshagentConfig {
         oauthClientId: const String.fromEnvironment("OAUTH_CLIENT_ID"),
         billingUrl: Uri.parse(const String.fromEnvironment("BILLING_URL")),
         sentryEnabled: const bool.fromEnvironment("SENTRY_ENABLED", defaultValue: false),
+        sentryDsn: const String.fromEnvironment("SENTRY_DSN"),
         sentryRelease: const String.fromEnvironment("SENTRY_RELEASE"),
         sentryEnvironment: const String.fromEnvironment("SENTRY_ENVIRONMENT"),
         imageTagPrefix: const String.fromEnvironment("IMAGE_TAG_PREFIX"),
@@ -143,6 +148,7 @@ class MeshagentConfig {
       oauthClientId: const String.fromEnvironment("OAUTH_MOBILE_CLIENT_ID"),
       billingUrl: Uri.parse(const String.fromEnvironment("BILLING_URL")),
       sentryEnabled: const bool.fromEnvironment("SENTRY_ENABLED", defaultValue: false),
+      sentryDsn: const String.fromEnvironment("SENTRY_DSN"),
       sentryRelease: const String.fromEnvironment("SENTRY_RELEASE"),
       sentryEnvironment: const String.fromEnvironment("SENTRY_ENVIRONMENT"),
       imageTagPrefix: const String.fromEnvironment("IMAGE_TAG_PREFIX"),
@@ -162,6 +168,7 @@ class MeshagentConfig {
       oauthClientId: data["OAUTH_CLIENT_ID"],
       billingUrl: Uri.parse(data["BILLING_URL"]),
       sentryEnabled: _parseEnvBool(data["SENTRY_ENABLED"]),
+      sentryDsn: data["SENTRY_DSN"] ?? "",
       sentryRelease: data["SENTRY_RELEASE"] ?? "",
       sentryEnvironment: data["SENTRY_ENVIRONMENT"] ?? "",
       imageTagPrefix: data["IMAGE_TAG_PREFIX"],
