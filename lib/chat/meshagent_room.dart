@@ -6309,7 +6309,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
               if (!hasVisibleAgents) {
                 return ColoredBox(
-                  color: ShadTheme.of(context).colorScheme.card,
+                  color: PbColors.surfacePanelWash,
                   child: SizedBox.expand(child: effectiveThreadPanel),
                 );
               }
@@ -6326,7 +6326,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 return OverlayPortal(
                   controller: _desktopPreviewRoomPanelOverlayController,
                   overlayChildBuilder: (context) => Positioned.fill(child: buildRoomPanel(responsiveOverlay: true)),
-                  child: ColoredBox(color: ShadTheme.of(context).colorScheme.card, child: effectiveThreadPanel),
+                  child: ColoredBox(color: PbColors.surfacePanelWash, child: effectiveThreadPanel),
                 );
               }
 
@@ -6342,7 +6342,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               }
 
               return ColoredBox(
-                color: ShadTheme.of(context).colorScheme.card,
+                color: PbColors.surfacePanelWash,
                 child: PbRoomPanelMount(
                   activeTab: _desktopPreviewRoomPanelTab,
                   filePreviewOpen: _desktopPreviewFilePreviewOpen,
