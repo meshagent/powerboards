@@ -101,6 +101,27 @@ const Map<String, TextStyle> _desktopV1ThreadCodeHighlightTheme = {
   'meta': TextStyle(color: _desktopV1ThreadCodeCommentColor),
 };
 
+EdgeInsets? _desktopV1ThreadMarkdownHeadingPadding(String tag) {
+  return switch (tag) {
+    'h1' => const EdgeInsets.only(top: 12, bottom: 2),
+    'h2' => const EdgeInsets.only(top: 10, bottom: 2),
+    'h3' => const EdgeInsets.only(top: 8, bottom: 1),
+    _ => null,
+  };
+}
+
+TextStyle? _desktopV1ThreadMarkdownHeadingStyle(String tag, TextStyle defaultStyle) {
+  return switch (tag) {
+    'h1' => defaultStyle.copyWith(fontSize: 18, height: 1.28, fontWeight: FontWeight.w800),
+    'h2' => defaultStyle.copyWith(fontSize: 17, height: 1.3, fontWeight: FontWeight.w800),
+    'h3' => defaultStyle.copyWith(fontSize: 16, height: 1.35, fontWeight: FontWeight.w700),
+    'h4' => defaultStyle.copyWith(fontSize: 16, height: 1.35, fontWeight: FontWeight.w700),
+    'h5' => defaultStyle.copyWith(fontSize: 16, height: 1.35, fontWeight: FontWeight.w700),
+    'h6' => defaultStyle.copyWith(fontSize: 16, height: 1.35, fontWeight: FontWeight.w500),
+    _ => null,
+  };
+}
+
 TextStyle _threadAssetTextStyle({
   TextStyle? textStyle,
   Color? color,
@@ -769,6 +790,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             inlineCodeTextColor: PbColors.customCodeInlineText,
             inlineCodeBackgroundColor: PbColors.surfaceAccentSoft,
             inlineCodeHorizontalPadding: true,
+            markdownHorizontalRuleColor: PbColors.borderSoft,
+            markdownBlockquoteSideColor: PbColors.customBlue,
+            markdownBlockquoteBackgroundColor: PbColors.surfaceAccentSoft,
+            markdownSuppressHeadingDividers: true,
+            markdownHeadingPaddingResolver: _desktopV1ThreadMarkdownHeadingPadding,
+            markdownHeadingStyleResolver: _desktopV1ThreadMarkdownHeadingStyle,
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(
