@@ -678,6 +678,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             mineBubbleColor: PbColors.surfaceAccentSoft,
             agentBubbleColor: PbColors.surfacePanel,
             agentBubbleBorderColor: PbColors.borderFaint,
+            linkColor: PbColors.surfaceRailSelected,
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(
