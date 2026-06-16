@@ -790,6 +790,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             inlineCodeTextColor: PbColors.customCodeInlineText,
             inlineCodeBackgroundColor: PbColors.surfaceAccentSoft,
             inlineCodeHorizontalPadding: true,
+            threadErrorSurfaceColor: PbColors.customAlertSoft,
+            threadErrorTextColor: Color.lerp(PbColors.customAlert, PbColors.textBody, 0.18),
             markdownHorizontalRuleColor: PbColors.borderSoft,
             markdownBlockquoteSideColor: PbColors.customBlue,
             markdownBlockquoteBackgroundColor: PbColors.surfaceAccentSoft,
