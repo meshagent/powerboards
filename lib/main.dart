@@ -130,6 +130,7 @@ void main() async {
 
   if (config.sentryEnabled) {
     await SentryFlutter.init((options) {
+      options.dsn = config.sentryDsn;
       if (config.sentryRelease.isNotEmpty) {
         options.release = config.sentryRelease;
       }

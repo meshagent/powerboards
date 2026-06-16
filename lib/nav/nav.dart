@@ -1098,7 +1098,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
             return DesktopPreviewNavHeader(
               key: ValueKey('desktop-preview-header-${widget.projectId}-${widget.selectedRoom}-$shellMobile'),
               projects: projectItems,
-              rooms: roomItems,
+              rooms: rooms,
               projectId: widget.projectId,
               selectedRoom: widget.selectedRoom,
               canCreateRooms: canCreateRooms,

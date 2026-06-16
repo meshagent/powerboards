@@ -17,6 +17,7 @@ void main() {
       oauthCallbackUrl: Uri.parse('powerboards:/mauth/callback'),
       oauthClientId: 'com-native-client',
       sentryEnabled: false,
+      sentryDsn: '',
       sentryRelease: '',
       sentryEnvironment: '',
       imageTagPrefix: 'us-central1-docker.pkg.dev/meshagent-public/images/',
