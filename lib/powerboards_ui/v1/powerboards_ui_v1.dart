@@ -6,6 +6,7 @@ export 'components/primitives/pb_icon_button.dart';
 export 'components/primitives/pb_spinning_icon.dart';
 export 'components/primitives/pb_svg_icon.dart';
 export 'components/primitives/pb_switcher_field.dart';
+export 'components/chat/pb_comment_box.dart';
 export 'components/dialogs/pb_project_select_dialog.dart';
 export 'components/files/pb_file_menus.dart';
 export 'components/files/pb_files_data.dart';
