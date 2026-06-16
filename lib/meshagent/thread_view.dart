@@ -763,6 +763,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         ? ma.ThreadTypographyOverride(
             textFontFamily: 'Inter',
             codeFontFamily: 'DM Mono',
+            narrowDesktopParagraphBaseFontSize: 14,
+            useDesktopAuthorHeaderAtNarrowWidths: true,
             mineBubbleColor: PbColors.customBlue,
             mineBubbleTextColor: PbColors.surfacePanel,
             otherHumanBubbleColor: PbColors.surfaceAccentSoft,
