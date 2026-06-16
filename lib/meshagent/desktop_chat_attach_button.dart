@@ -376,7 +376,7 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
       onDismiss: () => _setV1MenuOpen(false),
       panel: _v1MenuOpen
           ? PbMenuCard(
-              width: 352,
+              width: 240,
               child: PbMenuList(
                 children: <Widget>[
                   PbMenuOption(

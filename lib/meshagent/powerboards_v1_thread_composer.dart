@@ -46,19 +46,16 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
   late final FocusNode _focusNode = FocusNode(onKeyEvent: _onKeyEvent);
   bool _sending = false;
 
-  String get _placeholderText {
-    final placeholder = widget.config.placeholder;
-    if (placeholder is Text) {
-      final data = placeholder.data?.trim();
-      if (data != null && data.isNotEmpty) {
-        return data;
-      }
-    }
+  String get _displayAgentName {
     final normalizedAgentName = widget.agentName?.trim();
     if (normalizedAgentName == null || normalizedAgentName.isEmpty) {
-      return 'Message...';
+      return 'Assistant';
     }
-    return 'Message $normalizedAgentName...';
+    return normalizedAgentName[0].toUpperCase() + normalizedAgentName.substring(1);
+  }
+
+  String get _placeholderText {
+    return 'Ask $_displayAgentName...';
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {

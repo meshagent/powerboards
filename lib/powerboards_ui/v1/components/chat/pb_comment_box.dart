@@ -52,8 +52,6 @@ class PbCommentBox extends StatefulWidget {
 }
 
 class _PbCommentBoxState extends State<PbCommentBox> {
-  bool _hovered = false;
-
   @override
   void initState() {
     super.initState();
@@ -102,74 +100,65 @@ class _PbCommentBoxState extends State<PbCommentBox> {
       foregroundPainter: widget.dropActive
           ? const _DashedRoundRectPainter(color: PbColors.borderStateSelected, radius: PbRadii.medium)
           : null,
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: Container(
-          key: const ValueKey('comment-box'),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(PbRadii.medium),
-            border: Border.all(color: focused ? PbColors.borderStateSelected : PbColors.borderSoft),
-            gradient: LinearGradient(
-              colors: widget.dropActive
-                  ? const <Color>[PbColors.surfaceStateSelected, PbColors.surfaceStateSelected]
-                  : const <Color>[PbColors.surfacePanel, PbColors.surfacePanelSoft],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-            boxShadow: focused
-                ? const <BoxShadow>[
-                    BoxShadow(color: Color.fromRGBO(199, 216, 255, 0.36), blurRadius: 0, spreadRadius: 3),
-                    ...PbShadows.card,
-                  ]
-                : _hovered
-                ? PbShadows.stateHover
-                : PbShadows.card,
+      child: Container(
+        key: const ValueKey('comment-box'),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(PbRadii.medium),
+          border: Border.all(color: focused ? PbColors.borderStateSelected : PbColors.borderSoft),
+          gradient: LinearGradient(
+            colors: widget.dropActive
+                ? const <Color>[PbColors.surfaceStateSelected, PbColors.surfaceStateSelected]
+                : const <Color>[PbColors.surfacePanel, PbColors.surfacePanelSoft],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              if (widget.attachmentChips.isNotEmpty) ...<Widget>[
-                Wrap(spacing: 12, runSpacing: 10, children: widget.attachmentChips),
-                const SizedBox(height: 14),
-              ],
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 28, maxHeight: 168),
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: TextField(
-                    key: const ValueKey('comment-box-input'),
-                    controller: widget.controller,
-                    focusNode: widget.focusNode,
-                    minLines: 1,
-                    maxLines: 6,
-                    readOnly: widget.readOnly || widget.dropActive,
-                    keyboardType: TextInputType.multiline,
-                    textInputAction: TextInputAction.newline,
-                    cursorColor: PbColors.customBrandInk,
-                    style: PowerboardsTypography.p.copyWith(color: PbColors.textBody),
-                    decoration: InputDecoration.collapsed(
-                      hintText: placeholder,
-                      hintStyle: PowerboardsTypography.p.copyWith(color: PbColors.textMuted),
-                    ),
-                    onChanged: widget.onChanged,
+          boxShadow: focused
+              ? const <BoxShadow>[BoxShadow(color: Color.fromRGBO(199, 216, 255, 0.36), blurRadius: 0, spreadRadius: 3), ...PbShadows.card]
+              : PbShadows.card,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            if (widget.attachmentChips.isNotEmpty) ...<Widget>[
+              Wrap(spacing: 12, runSpacing: 10, children: widget.attachmentChips),
+              const SizedBox(height: 14),
+            ],
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 28, maxHeight: 168),
+              child: Material(
+                type: MaterialType.transparency,
+                child: TextField(
+                  key: const ValueKey('comment-box-input'),
+                  controller: widget.controller,
+                  focusNode: widget.focusNode,
+                  minLines: 1,
+                  maxLines: 6,
+                  readOnly: widget.readOnly || widget.dropActive,
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  cursorColor: PbColors.customBrandInk,
+                  style: PowerboardsTypography.p.copyWith(color: PbColors.textBody),
+                  decoration: InputDecoration.collapsed(
+                    hintText: placeholder,
+                    hintStyle: PowerboardsTypography.p.copyWith(color: PbColors.textMuted),
                   ),
+                  onChanged: widget.onChanged,
                 ),
               ),
-              const SizedBox(height: 14),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: <Widget>[
-                  ...widget.leadingControls,
-                  if (widget.trailingControl != null) const Spacer(),
-                  if (widget.trailingControl != null) widget.trailingControl!,
-                ],
-              ),
-              if (widget.status != null) ...<Widget>[const SizedBox(height: 12), widget.status!],
-            ],
-          ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                ...widget.leadingControls,
+                if (widget.trailingControl != null) const Spacer(),
+                if (widget.trailingControl != null) widget.trailingControl!,
+              ],
+            ),
+            if (widget.status != null) ...<Widget>[const SizedBox(height: 12), widget.status!],
+          ],
         ),
       ),
     );
