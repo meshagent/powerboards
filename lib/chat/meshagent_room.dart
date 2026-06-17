@@ -6283,7 +6283,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           builder: (context, attachments) => buildRoomWorkspace(
             attachments,
             filesTabLabel: 'Files',
-            filesPanelDescription: 'Browse attachments by selected agent.',
+            filesPanelDescription: 'Browse attachments by selected thread.',
             filesEmptyState: const PbSidepaneFileEmptyStateData(title: 'No files here yet', subtitle: 'Files attached will show up here.'),
           ),
         );

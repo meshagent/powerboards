@@ -68,7 +68,7 @@ class PbRoomPanel extends StatefulWidget {
     this.showThreadsSection = true,
     this.showFilesTab = true,
     this.filesTabLabel = 'Files',
-    this.filesPanelDescription = 'Browse attachments by selected agent.',
+    this.filesPanelDescription = 'Browse attachments by selected thread.',
     this.filesEmptyState = const PbSidepaneFileEmptyStateData(title: 'No files here yet', subtitle: 'Files attached will show up here.'),
     this.attachments,
     this.filePreviewBuilder,
