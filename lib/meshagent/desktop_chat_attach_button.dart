@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +9,10 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
 import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_anchor.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_list.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_option.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -39,6 +44,9 @@ class PowerboardsDesktopChatAttachButton extends StatefulWidget {
     this.connectRoomClient,
     this.agentName,
     this.showMcpConnectors = false,
+    this.showMcpMenuItem = true,
+    this.useV1Menu = false,
+    this.triggerBuilder,
   });
 
   final bool? alwaysShowAttachFiles;
@@ -47,6 +55,9 @@ class PowerboardsDesktopChatAttachButton extends StatefulWidget {
   final Future<RoomClient> Function(String roomName)? connectRoomClient;
   final String? agentName;
   final bool showMcpConnectors;
+  final bool showMcpMenuItem;
+  final bool useV1Menu;
+  final Widget Function(BuildContext context, VoidCallback onPressed)? triggerBuilder;
 
   @override
   State<PowerboardsDesktopChatAttachButton> createState() => _PowerboardsDesktopChatAttachButtonState();
@@ -54,6 +65,7 @@ class PowerboardsDesktopChatAttachButton extends StatefulWidget {
 
 class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopChatAttachButton> {
   final ShadPopoverController popoverController = ShadPopoverController();
+  bool _v1MenuOpen = false;
 
   bool get _canShowMcpConnectors {
     final normalizedAgentName = widget.agentName?.trim();
@@ -290,10 +302,17 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
     }
   }
 
+  void _setV1MenuOpen(bool open) {
+    if (_v1MenuOpen == open) {
+      return;
+    }
+    setState(() => _v1MenuOpen = open);
+  }
+
   Widget _buildAttachButton(BuildContext context) {
     final showPhotoUpload = FileUploadHelper.supportsPhotoUploadPicker;
     final attachMenuItemCount = (showPhotoUpload ? 2 : 1) + 1;
-    final showMcpMenuItem = _canShowMcpConnectors;
+    final showMcpMenuItem = widget.showMcpMenuItem && _canShowMcpConnectors;
     final attachMenuHeight = (attachMenuItemCount + (showMcpMenuItem ? 1 : 0)) * 40.0;
 
     return ListenableBuilder(
@@ -333,17 +352,67 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
               ),
           ],
           controller: popoverController,
-          child: ShadIconButton.ghost(
+          child:
+              widget.triggerBuilder?.call(context, popoverController.toggle) ??
+              ShadIconButton.ghost(
+                hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
+                decoration: const ShadDecoration(shape: BoxShape.circle),
+                onPressed: popoverController.toggle,
+                iconSize: 16,
+                width: 32,
+                height: 32,
+                icon: const Icon(LucideIcons.plus),
+              ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildV1AttachButton(BuildContext context) {
+    return PbMenuAnchor(
+      placement: PbMenuAnchorPlacement.bottomLeft,
+      gap: 10,
+      preferAboveWhenOverflow: true,
+      onDismiss: () => _setV1MenuOpen(false),
+      panel: _v1MenuOpen
+          ? PbMenuCard(
+              width: 240,
+              child: PbMenuList(
+                children: <Widget>[
+                  PbMenuOption(
+                    title: 'Upload a file...',
+                    leadingIconAssetName: 'paperclip',
+                    singleLine: true,
+                    onPressed: () {
+                      _setV1MenuOpen(false);
+                      unawaited(_onSelectAttachment());
+                    },
+                  ),
+                  if (widget.controller.room != null)
+                    PbMenuOption(
+                      title: 'Add from room...',
+                      leadingIconAssetName: 'folder-plus',
+                      singleLine: true,
+                      onPressed: () {
+                        _setV1MenuOpen(false);
+                        unawaited(_onBrowseFiles());
+                      },
+                    ),
+                ],
+              ),
+            )
+          : null,
+      child:
+          widget.triggerBuilder?.call(context, () => _setV1MenuOpen(!_v1MenuOpen)) ??
+          ShadIconButton.ghost(
             hoverBackgroundColor: ShadTheme.of(context).colorScheme.background,
             decoration: const ShadDecoration(shape: BoxShape.circle),
-            onPressed: popoverController.toggle,
+            onPressed: () => _setV1MenuOpen(!_v1MenuOpen),
             iconSize: 16,
             width: 32,
             height: 32,
             icon: const Icon(LucideIcons.plus),
           ),
-        ),
-      ),
     );
   }
 
@@ -359,6 +428,10 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
 
     if (!showAttachFiles && !_canShowMcpConnectors) {
       return const SizedBox(width: 0, height: 22);
+    }
+
+    if (widget.useV1Menu) {
+      return _buildV1AttachButton(context);
     }
 
     return _buildAttachButton(context);

@@ -37,6 +37,7 @@ import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
+import 'package:powerboards/meshagent/powerboards_v1_thread_composer.dart';
 import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
@@ -739,6 +740,15 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       openFile: _openThreadAttachment,
       fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
       chatInputBoxBuilder: usesMobileLayout ? (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox) : null,
+      customInputBuilder: usesDesktopUiPreview && !usesMobileLayout
+          ? (context, config, defaultInput) => PowerboardsV1ThreadComposer(
+              projectId: widget.projectId,
+              room: widget.client,
+              agentName: widget.agentName,
+              config: config,
+              defaultInput: defaultInput,
+            )
+          : null,
       toolsBuilder: (context, controller, snapshot) =>
           buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
       inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
