@@ -3282,44 +3282,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _lastPersistedMobileAgentRouteId = routeId;
   }
 
-  String? _persistedSelectedThreadPathForAgentKey(String? agentKey) {
-    final roomName = _roomNameForSelectionPersistence;
-    if (roomName == null || agentKey == null) {
-      return null;
-    }
-
-    final stored = getLastSelectedRoomThread(widget.projectId, roomName, agentKey);
-    if (stored == null) {
-      return null;
-    }
-
-    final trimmed = stored.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
-  String? _persistedSelectedThreadLabelForAgentKey(String? agentKey, {String? selectedThreadPath}) {
-    final roomName = _roomNameForSelectionPersistence;
-    if (roomName == null || agentKey == null) {
-      return null;
-    }
-
-    final normalizedSelectedThreadPath = selectedThreadPath?.trim();
-    if (normalizedSelectedThreadPath != null && normalizedSelectedThreadPath.isNotEmpty) {
-      final persistedPath = _persistedSelectedThreadPathForAgentKey(agentKey);
-      if (persistedPath != normalizedSelectedThreadPath) {
-        return null;
-      }
-    }
-
-    final stored = getLastSelectedRoomThreadTitle(widget.projectId, roomName, agentKey);
-    if (stored == null) {
-      return null;
-    }
-
-    final trimmed = stored.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
   _ResolvedAgentSelection _resolveSelectedAgent(List<ServiceSpec> supported, {String? requestedRouteId}) {
     final resolvedRouteId = requestedRouteId ?? widget.service;
     if (resolvedRouteId != null) {
@@ -3377,7 +3339,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return const _ResolvedAgentSelection(routeId: null, service: null, developmentParticipant: null);
   }
 
-  String? _selectedThreadPathForAgentKey(String? agentKey, {bool includePersistedMobileSelection = false}) {
+  String? _selectedThreadPathForAgentKey(String? agentKey) {
     if (agentKey == null) {
       return null;
     }
@@ -3387,15 +3349,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return inMemory;
     }
 
-    if (!includePersistedMobileSelection) {
-      return null;
-    }
-
-    return _persistedSelectedThreadPathForAgentKey(agentKey);
+    return null;
   }
 
   // ignore: unused_element
-  String? _selectedThreadLabelForAgentKey(String? agentKey, {bool includePersistedSelectionLabel = false, String? selectedThreadPath}) {
+  String? _selectedThreadLabelForAgentKey(String? agentKey) {
     if (agentKey == null) {
       return null;
     }
@@ -3404,11 +3362,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     if (stored != null && stored.trim().isNotEmpty) {
       return stored;
     }
-    if (!includePersistedSelectionLabel) {
-      return null;
-    }
 
-    return _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: selectedThreadPath);
+    return null;
   }
 
   void _setSelectedThreadPath(String? agentKey, String? path, {String? displayName}) {
@@ -3422,21 +3377,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final resolvedDisplayName = normalizedName == null || normalizedName.isEmpty ? null : normalizedName;
     final previousPath = _selectedThreadPathByAgentKey[agentKey];
     final previousDisplayName = _selectedThreadLabelByAgentKey[agentKey];
-    final persistedDisplayName = resolvedPath == null
-        ? null
-        : _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: resolvedPath);
-    final effectiveDisplayName = resolvedDisplayName ?? (resolvedPath == previousPath ? previousDisplayName : null) ?? persistedDisplayName;
+    final effectiveDisplayName = resolvedDisplayName ?? (resolvedPath == previousPath ? previousDisplayName : null);
 
-    final roomName = _roomNameForSelectionPersistence;
-    final persistedPath = _persistedSelectedThreadPathForAgentKey(agentKey);
-    final persistedSelectionMatches =
-        roomName == null ||
-        (resolvedPath == null
-            ? persistedPath == null
-            : persistedPath == resolvedPath &&
-                  _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: resolvedPath) == effectiveDisplayName);
-
-    if (resolvedPath == previousPath && effectiveDisplayName == previousDisplayName && persistedSelectionMatches) {
+    if (resolvedPath == previousPath && effectiveDisplayName == previousDisplayName) {
       return;
     }
 
@@ -3454,17 +3397,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         }
       }
     });
-
-    if (roomName == null) {
-      return;
-    }
-
-    if (resolvedPath == null) {
-      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
-      return;
-    }
-
-    setLastSelectedRoomThread(widget.projectId, roomName, agentKey, resolvedPath, threadTitle: effectiveDisplayName);
   }
 
   void _setComposerAttachmentSeed(String agentKey, Iterable<String> paths) {
@@ -3653,12 +3585,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  _MobileChatHeaderContext? _resolveMobileChatHeaderContext(
-    List<ServiceSpec> supported,
-    _ResolvedAgentSelection selection, {
-    bool includePersistedThreadSelection = true,
-    bool includePersistedThreadLabel = false,
-  }) {
+  _MobileChatHeaderContext? _resolveMobileChatHeaderContext(List<ServiceSpec> supported, _ResolvedAgentSelection selection) {
     String? agentName;
     String? threadListPath;
     var currentThreadLabel = "New thread";
@@ -3703,17 +3630,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final agentKey = selection.routeId;
-    final selectedThreadPath = supportsThreads
-        ? _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: includePersistedThreadSelection)
-        : null;
+    final selectedThreadPath = supportsThreads ? _selectedThreadPathForAgentKey(agentKey) : null;
     if (supportsThreads && selectedThreadPath != null) {
-      currentThreadLabel =
-          _selectedThreadLabelForAgentKey(
-            agentKey,
-            includePersistedSelectionLabel: includePersistedThreadLabel,
-            selectedThreadPath: selectedThreadPath,
-          ) ??
-          defaultThreadDisplayNameFromPath(selectedThreadPath);
+      currentThreadLabel = _selectedThreadLabelForAgentKey(agentKey) ?? defaultThreadDisplayNameFromPath(selectedThreadPath);
     }
 
     return _MobileChatHeaderContext(
@@ -5766,11 +5685,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
     }
 
-    return _selectedThreadLabelForAgentKey(
-      chatContext?.agentKey,
-      includePersistedSelectionLabel: true,
-      selectedThreadPath: selectedThreadPath,
-    );
+    return _selectedThreadLabelForAgentKey(chatContext?.agentKey);
   }
 
   String _desktopPreviewSelectedThreadTitle(
@@ -5779,14 +5694,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required bool threadListLoaded,
   }) {
     final selectedThreadPath = chatContext?.selectedThreadPath;
-    final currentThreadLabelTrusted =
-        selectedThreadPath != null &&
-        _selectedThreadLabelForAgentKey(
-              chatContext?.agentKey,
-              includePersistedSelectionLabel: true,
-              selectedThreadPath: selectedThreadPath,
-            ) !=
-            null;
+    final currentThreadLabelTrusted = selectedThreadPath != null && _selectedThreadLabelForAgentKey(chatContext?.agentKey) != null;
 
     return powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
       selectedThreadPath: selectedThreadPath,
@@ -5840,19 +5748,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
 
       final inMemoryPath = _selectedThreadPathByAgentKey[agentKey]?.trim();
-      final persistedPath = _persistedSelectedThreadPathForAgentKey(agentKey);
-      if (inMemoryPath != selectedThreadPath && persistedPath != selectedThreadPath) {
+      if (inMemoryPath != selectedThreadPath) {
         return;
       }
 
-      if (inMemoryPath == selectedThreadPath) {
-        _setSelectedThreadPath(agentKey, null);
-        return;
-      }
-
-      if (_roomNameForSelectionPersistence case final roomName?) {
-        clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
-      }
+      _setSelectedThreadPath(agentKey, null);
     });
   }
 
@@ -5865,10 +5765,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     final normalizedTitle = selectedThreadTitle.trim();
     final resolvedTitle = normalizedTitle.isEmpty ? null : normalizedTitle;
-    final persistedTitle = _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: selectedThreadPath);
     if (_selectedThreadPathByAgentKey[agentKey] == selectedThreadPath &&
-        (resolvedTitle == null || _selectedThreadLabelByAgentKey[agentKey] == resolvedTitle) &&
-        (resolvedTitle == null || persistedTitle == resolvedTitle)) {
+        (resolvedTitle == null || _selectedThreadLabelByAgentKey[agentKey] == resolvedTitle)) {
       return;
     }
 
@@ -5877,10 +5775,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         return;
       }
 
-      final nextPersistedTitle = _persistedSelectedThreadLabelForAgentKey(agentKey, selectedThreadPath: selectedThreadPath);
       if (_selectedThreadPathByAgentKey[agentKey] == selectedThreadPath &&
-          (resolvedTitle == null || _selectedThreadLabelByAgentKey[agentKey] == resolvedTitle) &&
-          (resolvedTitle == null || nextPersistedTitle == resolvedTitle)) {
+          (resolvedTitle == null || _selectedThreadLabelByAgentKey[agentKey] == resolvedTitle)) {
         return;
       }
 
@@ -6040,7 +5936,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return _buildFilesArea(context, const [], showDesktopSidetrayToggle: false);
     }
 
-    final rawChatContext = _resolveMobileChatHeaderContext(supported, selected, includePersistedThreadLabel: true);
+    final rawChatContext = _resolveMobileChatHeaderContext(supported, selected);
     final threadListPath = rawChatContext?.threadListPath;
     final threadListChatClient = _agentChatClientFor(rawChatContext?.agentName);
     final agentItems = _desktopPreviewAgentItems(supported, selected);
@@ -6543,7 +6439,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 agentOptions.firstWhereOrNull((option) => option.routeId == selectedAgentRouteId) ?? agentOptions.firstOrNull;
             selectedAgentRouteId = selectedAgent?.routeId;
 
-            final selectedThreadPath = _selectedThreadPathForAgentKey(selectedAgentRouteId, includePersistedMobileSelection: true);
+            final selectedThreadPath = _selectedThreadPathForAgentKey(selectedAgentRouteId);
             final actions = <Widget>[
               if (switcherState == _MobileRoomContextSwitcherState.agents && isOwner.state.value == true)
                 ShadButton(
@@ -6603,10 +6499,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                           leadingIcon: option.leadingIcon,
                           selected: selectedAgentRouteId == option.routeId,
                           onTap: () {
-                            final rememberedThreadPath = _selectedThreadPathForAgentKey(
-                              option.routeId,
-                              includePersistedMobileSelection: true,
-                            );
+                            final rememberedThreadPath = _selectedThreadPathForAgentKey(option.routeId);
                             final rememberedThreadLabel = _selectedThreadLabelForAgentKey(option.routeId);
 
                             didCommitSelection = true;
@@ -6722,7 +6615,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final selectedThreadPath = _selectedThreadPathForAgentKey(selectedAgent.routeId, includePersistedMobileSelection: true);
+    final selectedThreadPath = _selectedThreadPathForAgentKey(selectedAgent.routeId);
     final displayName = _selectedThreadLabelForAgentKey(selectedAgent.routeId);
     final selectionChanged = selectedAgent.routeId != chatContext.agentKey || selectedThreadPath != chatContext.selectedThreadPath;
     if (!selectionChanged) {
@@ -6990,7 +6883,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               if (descriptor?.isChat == true) {
                 final selectedThreadPath = useSelectedThreadOverride
                     ? selectedThreadPathOverride
-                    : _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile);
+                    : _selectedThreadPathForAgentKey(agentKey);
                 return _buildChatArea(
                   context,
                   name,
@@ -7023,9 +6916,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             final type = _serviceType(service);
             final agentKey = selected.routeId;
             if (descriptor?.isChat == true) {
-              final selectedThreadPath = useSelectedThreadOverride
-                  ? selectedThreadPathOverride
-                  : _selectedThreadPathForAgentKey(agentKey, includePersistedMobileSelection: isMobile);
+              final selectedThreadPath = useSelectedThreadOverride ? selectedThreadPathOverride : _selectedThreadPathForAgentKey(agentKey);
               return _buildChatArea(
                 context,
                 service.agents[0].name,
@@ -7334,9 +7225,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewFilePreviewFullscreen = false;
       _desktopPreviewComposerAttachmentPreviewPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     });
-    if (_roomNameForSelectionPersistence case final roomName?) {
-      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
-    }
     _setComposerAttachmentSeed(agentKey, [filePath]);
     setPreviewFilePreviewFullscreen(false);
 
@@ -7357,9 +7245,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _selectedThreadLabelByAgentKey.remove(agentKey);
       _newThreadResetVersion++;
     });
-    if (_roomNameForSelectionPersistence case final roomName?) {
-      clearLastSelectedRoomThread(widget.projectId, roomName, agentKey);
-    }
     _setComposerAttachmentSeed(agentKey, [normalizedPath]);
 
     if (!mounted || !context.mounted) {
