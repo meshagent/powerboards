@@ -289,6 +289,8 @@ class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
   List<Connector> _availableConnectors = const <Connector>[];
   final Map<String, bool> _connectedConnectors = <String, bool>{};
 
+  bool get _canAddMcpServices => widget.room.apiGrant?.admin != null;
+
   String _connectorKey(Connector connector) {
     return jsonEncode(<String, Object?>{
       'name': connector.name,
@@ -399,6 +401,10 @@ class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
   }
 
   Future<void> _addConnector() async {
+    if (!_canAddMcpServices) {
+      return;
+    }
+
     await showShadDialog<bool?>(
       context: context,
       builder: (context) => InstallServiceDialog(
@@ -453,16 +459,18 @@ class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
                         const _McpInfoCard(text: 'No connectors are configured for this room')
                       else
                         for (final connector in _availableConnectors) _buildConnectorOption(connector),
-                      const PbMenuDivider(),
-                      PbMenuOption(
-                        title: 'Add...',
-                        leadingIconAssetName: 'plus',
-                        singleLine: true,
-                        onPressed: () {
-                          _setOpen(false);
-                          unawaited(_addConnector());
-                        },
-                      ),
+                      if (_canAddMcpServices) ...[
+                        const PbMenuDivider(),
+                        PbMenuOption(
+                          title: 'Add...',
+                          leadingIconAssetName: 'plus',
+                          singleLine: true,
+                          onPressed: () {
+                            _setOpen(false);
+                            unawaited(_addConnector());
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 )
