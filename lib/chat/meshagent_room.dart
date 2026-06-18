@@ -2020,7 +2020,7 @@ class _BlankDesktopPreviewRoomWorkspace extends StatelessWidget {
           Expanded(
             child: PbEmptyState(
               iconAssetName: 'messages-square',
-              title: 'Start with an agent',
+              title: 'Chat with an agent',
               subtitle: 'Add an agent to help keep conversations, files, and follow-ups moving.',
               topFactor: sourceTopFactor,
               topOffset: -sourceThreadHeaderHeight * (1 - sourceTopFactor),
@@ -2892,6 +2892,26 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return supported;
   }
 
+  bool _isMeetingTranscriberService(ServiceSpec service) => _serviceType(service) == 'MeetingTranscriber';
+
+  bool _isMeetingTranscriberRouteId(String? routeId, List<ServiceSpec> services) {
+    if (routeId == null || routeId.trim().isEmpty) {
+      return false;
+    }
+
+    return services.any((service) => _serviceId(service) == routeId && _isMeetingTranscriberService(service));
+  }
+
+  String? _chatSelectableRouteId(String? routeId, List<ServiceSpec> services) {
+    return _isMeetingTranscriberRouteId(routeId, services) ? null : routeId;
+  }
+
+  List<ServiceSpec> _chatVisibleServices(List<ServiceSpec> supported) {
+    final services = supported.where((service) => !_isMeetingTranscriberService(service)).toList();
+    services.sort(_compareServices);
+    return services;
+  }
+
   String _serviceSortKey(ServiceSpec s) => s.agents.firstOrNull?.name ?? s.metadata.name;
   int _compareServices(ServiceSpec a, ServiceSpec b) => _serviceSortKey(a).compareTo(_serviceSortKey(b));
 
@@ -2912,7 +2932,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   List<String> _meetingTranscriberAgentNames(Iterable<ServiceSpec> services) {
     return [
       for (final service in services)
-        if (_serviceType(service) == 'MeetingTranscriber')
+        if (_isMeetingTranscriberService(service))
           for (final agent in service.agents)
             if (agent.name.trim().isNotEmpty) agent.name.trim(),
     ];
@@ -3208,9 +3228,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return LucideIcons.bot;
   }
 
-  List<RemoteParticipant> _developmentParticipants(List<ServiceSpec> supported) {
+  List<RemoteParticipant> _developmentParticipants(List<ServiceSpec> supported, {List<ServiceSpec>? serviceAgentNameSource}) {
     final serviceAgentNames = <String>{};
-    for (final service in supported) {
+    for (final service in serviceAgentNameSource ?? supported) {
       final name = _serviceAgentName(service);
       if (name != null) {
         serviceAgentNames.add(name);
@@ -3241,12 +3261,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return participants;
   }
 
-  bool _hasVisibleAgents(List<ServiceSpec> supported) {
+  bool _hasVisibleAgents(List<ServiceSpec> supported, {List<ServiceSpec>? serviceAgentNameSource}) {
     if (supported.isNotEmpty) {
       return true;
     }
 
-    return _developmentParticipants(supported).isNotEmpty;
+    return _developmentParticipants(supported, serviceAgentNameSource: serviceAgentNameSource).isNotEmpty;
   }
 
   bool get _canPersistRoomContextSelection {
@@ -3299,8 +3319,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _lastPersistedMobileAgentRouteId = routeId;
   }
 
-  _ResolvedAgentSelection _resolveSelectedAgent(List<ServiceSpec> supported, {String? requestedRouteId}) {
-    final resolvedRouteId = requestedRouteId ?? widget.service;
+  _ResolvedAgentSelection _resolveSelectedAgent(
+    List<ServiceSpec> supported, {
+    String? requestedRouteId,
+    List<ServiceSpec>? serviceAgentNameSource,
+    bool allowWidgetServiceFallback = true,
+  }) {
+    final resolvedRouteId = requestedRouteId ?? (allowWidgetServiceFallback ? widget.service : null);
     if (resolvedRouteId != null) {
       final service = supported.firstWhereOrNull((candidate) => _serviceId(candidate) == resolvedRouteId);
       if (service != null) {
@@ -3311,6 +3336,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       if (participantName != null) {
         final participant = _developmentParticipants(
           supported,
+          serviceAgentNameSource: serviceAgentNameSource,
         ).firstWhereOrNull((candidate) => participantDisplayName(candidate) == participantName);
         return _ResolvedAgentSelection(
           routeId: developmentAgentRouteId(participantName),
@@ -3341,7 +3367,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return _ResolvedAgentSelection(routeId: _serviceId(defaultService), service: defaultService, developmentParticipant: null);
     }
 
-    final participant = _developmentParticipants(supported).firstOrNull;
+    final participant = _developmentParticipants(supported, serviceAgentNameSource: serviceAgentNameSource).firstOrNull;
     if (participant != null) {
       final participantName = participantDisplayName(participant);
       if (participantName != null) {
@@ -5681,10 +5707,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     );
   }
 
-  List<PbAgentListItemData> _desktopPreviewAgentItems(List<ServiceSpec> supported, _ResolvedAgentSelection selected) {
-    final services = supported.where((service) => hasAgentMetadata(service) && _serviceType(service) != 'MeetingTranscriber').toList();
+  List<PbAgentListItemData> _desktopPreviewAgentItems(
+    List<ServiceSpec> supported,
+    _ResolvedAgentSelection selected, {
+    List<ServiceSpec>? serviceAgentNameSource,
+  }) {
+    final services = supported.where((service) => hasAgentMetadata(service) && !_isMeetingTranscriberService(service)).toList();
     services.sort((a, b) => a.metadata.name.toLowerCase().compareTo(b.metadata.name.toLowerCase()));
-    final developmentParticipants = _developmentParticipants(supported);
+    final developmentParticipants = _developmentParticipants(supported, serviceAgentNameSource: serviceAgentNameSource);
     return [
       for (final service in services) _desktopPreviewAgentItemForService(service, selected),
       for (final participant in developmentParticipants)
@@ -5949,13 +5979,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required bool canViewStorageAllowed,
     required bool isAdaptiveWebapp,
   }) {
+    final chatVisibleServices = _chatVisibleServices(supported);
     if (controller.inMeeting) {
       return _buildMeeting(
         context,
         null,
         const [],
         showDesktopSidetrayToggle: false,
-        desktopPreviewRoomPanelContentAvailable: _hasVisibleAgents(supported),
+        desktopPreviewRoomPanelContentAvailable: _hasVisibleAgents(chatVisibleServices, serviceAgentNameSource: supported),
       );
     }
 
@@ -5963,11 +5994,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return _buildFilesArea(context, const [], showDesktopSidetrayToggle: false);
     }
 
-    final rawChatContext = _resolveMobileChatHeaderContext(supported, selected);
+    final rawChatContext = _resolveMobileChatHeaderContext(chatVisibleServices, selected);
     final threadListPath = rawChatContext?.threadListPath;
     final threadListChatClient = _agentChatClientFor(rawChatContext?.agentName);
-    final agentItems = _desktopPreviewAgentItems(supported, selected);
-    final hasVisibleAgents = _hasVisibleAgents(supported);
+    final agentItems = _desktopPreviewAgentItems(chatVisibleServices, selected, serviceAgentNameSource: supported);
+    final hasVisibleAgents = _hasVisibleAgents(chatVisibleServices, serviceAgentNameSource: supported);
     final voiceOnlyAgent = rawChatContext?.isVoiceOnly == true;
 
     return _DesktopPreviewThreadList(
@@ -6869,12 +6900,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
             final all = services.state.value!;
             final supported = _supportedServices(all);
-            final selected = _resolveSelectedAgent(supported, requestedRouteId: _preferredMobileAgentRouteId(context));
+            final isDesktopPreviewChat = powerboardsUsesDesktopUiPreview(context) && !isMobile;
+            final selectableServices = isDesktopPreviewChat ? _chatVisibleServices(supported) : supported;
+            final requestedRouteId = _preferredMobileAgentRouteId(context);
+            final selected = _resolveSelectedAgent(
+              selectableServices,
+              requestedRouteId: isDesktopPreviewChat ? _chatSelectableRouteId(requestedRouteId, supported) : requestedRouteId,
+              serviceAgentNameSource: supported,
+              allowWidgetServiceFallback: !isDesktopPreviewChat,
+            );
             final service = selected.service;
             final developmentParticipant = selected.developmentParticipant;
 
             if (service == null && developmentParticipant == null) {
-              final requestedRouteId = _preferredMobileAgentRouteId(context);
               final requestedDevelopmentParticipantName = requestedRouteId == null ? null : developmentAgentNameFromRoute(requestedRouteId);
               final requestedLegacyDevelopmentParticipantId = requestedRouteId == null
                   ? null
@@ -6888,7 +6926,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 );
               }
 
-              if (supported.isEmpty) {
+              if (selectableServices.isEmpty) {
                 return _buildErrorArea(context, "No supported agents installed", actions, embedMobileChrome: embedMobileChrome);
               }
 
@@ -7602,11 +7640,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                               final canViewStorageAllowed = canViewStorage.state.value == true;
                               final filesVisible = canViewStorageAllowed && controller.isFilesShown;
                               final supported = _supportedServices(services.state.value!);
-                              final selected = _resolveSelectedAgent(supported, requestedRouteId: _preferredMobileAgentRouteId(context));
+                              final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
+                              final selectableServices = useDesktopUiPreview ? _chatVisibleServices(supported) : supported;
+                              final requestedRouteId = _preferredMobileAgentRouteId(context);
+                              final selected = _resolveSelectedAgent(
+                                selectableServices,
+                                requestedRouteId: useDesktopUiPreview
+                                    ? _chatSelectableRouteId(requestedRouteId, supported)
+                                    : requestedRouteId,
+                                serviceAgentNameSource: supported,
+                                allowWidgetServiceFallback: !useDesktopUiPreview,
+                              );
                               if (isMobile) {
                                 _persistSelectedRoomAgentRouteId(selected.routeId);
                               }
-                              final roomCreateChatContext = _resolveMobileChatHeaderContext(supported, selected);
+                              final roomCreateChatContext = _resolveMobileChatHeaderContext(selectableServices, selected);
                               final meetingSessionActive = _isMeetingSessionActive(context);
                               final voiceSessionActive = meeting.isConnected && !meetingSessionActive;
                               _syncPreviewRoomRailMenuBridge(
@@ -7616,9 +7664,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                               );
                               final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;
                               final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);
-                              final useDesktopUiPreview = !isMobile && powerboardsUsesDesktopUiPreview(context);
 
-                              if (!_hasVisibleAgents(supported) && !(useDesktopUiPreview && !isMobile)) {
+                              if (!_hasVisibleAgents(selectableServices, serviceAgentNameSource: supported) &&
+                                  !(useDesktopUiPreview && !isMobile)) {
                                 final actions = _emptyRoomHeaderActions(isMobile: isMobile);
                                 final cs = ShadTheme.of(context).colorScheme;
                                 final emptyStateBody = SignalBuilder(
