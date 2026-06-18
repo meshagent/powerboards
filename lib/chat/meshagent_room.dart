@@ -3729,6 +3729,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final useDesktopV1ActiveControls =
         !usesMobileRoomLayout && _isMeetingSessionActive(context) && powerboardsUsesDesktopUiPreview(context);
     final compactTranscriptionControl = compact && !isLandscapePhone;
+    final transcriberInstalled = services.state.isReady && _meetingTranscriberAgentNames(services.state.value!).isNotEmpty;
 
     return [
       ...primaryControls,
@@ -3740,6 +3741,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         projectId: widget.projectId,
         roomName: widget.room.roomName,
         canInstallTranscriber: useDesktopV1ActiveControls && isOwner.state.value == true,
+        transcriberInstalled: transcriberInstalled,
         onTranscriberInstalled: services.refresh,
       ),
     ];
