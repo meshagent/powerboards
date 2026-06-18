@@ -2909,6 +2909,23 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   String _serviceId(ServiceSpec s) => s.metadata.annotations["meshagent.service.id"] ?? "";
   String _serviceType(ServiceSpec s) => s.agents.firstOrNull?.annotations["meshagent.agent.type"] ?? "[Unspecified]";
+  List<String> _meetingTranscriberAgentNames(Iterable<ServiceSpec> services) {
+    return [
+      for (final service in services)
+        if (_serviceType(service) == 'MeetingTranscriber')
+          for (final agent in service.agents)
+            if (agent.name.trim().isNotEmpty) agent.name.trim(),
+    ];
+  }
+
+  List<String> _hiddenMeetingAgentNames() {
+    if (!services.state.isReady) {
+      return const [];
+    }
+
+    return _meetingTranscriberAgentNames(services.state.value!);
+  }
+
   String? _serviceAgentName(ServiceSpec service) {
     final name = service.agents.firstOrNull?.name;
     if (name == null) {
@@ -3690,7 +3707,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return [
       ...primaryControls,
       if (!usesMobileRoomLayout) room.ShareScreen(compact: compact, desktopV1Style: useDesktopV1ActiveControls),
-      MeetingToolkits(room: widget.room, compact: compactTranscriptionControl, desktopV1Style: useDesktopV1ActiveControls),
+      MeetingToolkits(
+        room: widget.room,
+        compact: compactTranscriptionControl,
+        desktopV1Style: useDesktopV1ActiveControls,
+        projectId: widget.projectId,
+        roomName: widget.room.roomName,
+        canInstallTranscriber: useDesktopV1ActiveControls && isOwner.state.value == true,
+        onTranscriberInstalled: services.refresh,
+      ),
     ];
   }
 
@@ -5326,6 +5351,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       onCancel: _leaveMeeting,
                       joinMeeting: _joinMeeting,
                       agentName: agentName,
+                      hiddenMeetingAgentNames: _hiddenMeetingAgentNames(),
                     ),
                   ),
                 ],
@@ -5590,6 +5616,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               onCancel: _leaveMeeting,
               joinMeeting: _joinMeeting,
               agentName: agentName,
+              hiddenMeetingAgentNames: _hiddenMeetingAgentNames(),
             ),
           ),
         ],

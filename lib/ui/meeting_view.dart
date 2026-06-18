@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
+import 'package:http/http.dart' as http;
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -18,6 +20,9 @@ import 'package:powerboards/livekit/device_preview.dart';
 import 'package:powerboards/livekit/expand_participant_controller.dart';
 import 'package:powerboards/livekit/room.dart';
 import 'package:powerboards/livekit/video_room_participants_builder.dart';
+import 'package:powerboards/meshagent/agent_config.dart';
+import 'package:powerboards/meshagent/install_agent.dart';
+import 'package:powerboards/meshagent/meshagent.dart' as powerboards_meshagent;
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_voice_session_empty_state.dart';
@@ -27,6 +32,7 @@ import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/pane_empty_state.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
+import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:powerboards/ui/powerboards_toasts.dart';
 
 const _railGap = 16.0;
@@ -61,9 +67,17 @@ class MeetingViewController extends Controller {
 }
 
 class MeetingView extends StatefulWidget {
-  const MeetingView({super.key, required this.room, required this.onCancel, required this.joinMeeting, this.agentName});
+  const MeetingView({
+    super.key,
+    required this.room,
+    required this.onCancel,
+    required this.joinMeeting,
+    this.agentName,
+    this.hiddenMeetingAgentNames = const [],
+  });
 
   final String? agentName;
+  final List<String> hiddenMeetingAgentNames;
 
   final RoomClient room;
   final VoidCallback onCancel;
@@ -130,7 +144,7 @@ class _MeetingViewState extends State<MeetingView> {
             height: 100,
             child: Padding(
               padding: .fromLTRB(5, 0, 0, 5),
-              child: CameraStrip(room: room, horizontal: true),
+              child: CameraStrip(room: room, horizontal: true, hiddenAgentNames: widget.hiddenMeetingAgentNames),
             ),
           ),
 
@@ -202,6 +216,7 @@ class _MeetingViewState extends State<MeetingView> {
           padding: usesDesktopV1MeetingPadding ? const .fromLTRB(20, 10, 20, 20) : const .all(20),
           child: VideoRoomParticipantsBuilder(
             room: room,
+            hiddenAgentNames: widget.hiddenMeetingAgentNames,
             builder: (context, participants) {
               return ControllerBuilder<ExpandParticipantController>(
                 controller: expandParticipantController,
@@ -389,12 +404,26 @@ class _DesktopShareLayout extends StatelessWidget {
 }
 
 class MeetingToolkits extends StatefulWidget {
-  const MeetingToolkits({super.key, required this.room, this.breakoutRoom = "", this.compact = false, this.desktopV1Style = false});
+  const MeetingToolkits({
+    super.key,
+    required this.room,
+    this.breakoutRoom = "",
+    this.compact = false,
+    this.desktopV1Style = false,
+    this.projectId,
+    this.roomName,
+    this.canInstallTranscriber = false,
+    this.onTranscriberInstalled,
+  });
 
   final RoomClient room;
   final String breakoutRoom;
   final bool compact;
   final bool desktopV1Style;
+  final String? projectId;
+  final String? roomName;
+  final bool canInstallTranscriber;
+  final VoidCallback? onTranscriberInstalled;
 
   @override
   State createState() => _MeetingToolkitsState();
@@ -402,6 +431,7 @@ class MeetingToolkits extends StatefulWidget {
 
 class _MeetingToolkitsState extends State<MeetingToolkits> {
   Timer? timer;
+  bool _installingTranscriber = false;
 
   late final toolkits = Resource<List<ToolkitDescription>>(() => widget.room.agents.listToolkits());
 
@@ -452,6 +482,83 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
     }
   }
 
+  Future<ServiceDirectoryEntry?> _loadMeetingTranscriberTemplate() async {
+    final serverUrl = powerboards_meshagent.MeshagentConfig.current?.serverUrl;
+    if (serverUrl == null) {
+      throw StateError("MeshagentConfig.current.serverUrl is not set");
+    }
+
+    final response = await http.get(serverUrl.resolve("/directory"));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception("Failed to load service directory: ${response.statusCode}");
+    }
+
+    final directory = await ServiceDirectoryPage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return directory.templates.firstWhereOrNull(
+      (entry) => powerboards_meshagent.serviceTemplateAgentType(entry.parsed) == "MeetingTranscriber",
+    );
+  }
+
+  Future<void> _openTranscriberInstallDialog() async {
+    final projectId = widget.projectId;
+    final roomName = widget.roomName?.trim();
+    if (!widget.canInstallTranscriber || projectId == null || roomName == null || roomName.isEmpty || _installingTranscriber) {
+      return;
+    }
+
+    setState(() => _installingTranscriber = true);
+    try {
+      final template = await _loadMeetingTranscriberTemplate();
+      if (!mounted) {
+        return;
+      }
+
+      if (template == null) {
+        _showTranscriptionToast("Transcriber agent is unavailable");
+        return;
+      }
+
+      final installed = await showPowerboardsFlowDialog<bool>(
+        context: context,
+        builder: (_) => InstallServiceDialog(
+          template: template.template,
+          projectId: projectId,
+          roomName: roomName,
+          onInstalled: (dialogContext, _, _, _) {
+            Navigator.of(dialogContext).pop(true);
+          },
+        ),
+      );
+
+      if (!mounted || installed != true) {
+        return;
+      }
+
+      _showTranscriptionToast("Transcriber agent installed");
+      widget.onTranscriberInstalled?.call();
+      toolkits.refresh();
+    } catch (error) {
+      if (mounted) {
+        _showTranscriptionToast("Unable to install transcriber agent");
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _installingTranscriber = false);
+      }
+    }
+  }
+
+  Widget _buildDesktopV1InstallTranscriberButton() {
+    return MeetV1ToolbarButton.secondary(
+      label: "Transcribe",
+      tooltip: _installingTranscriber ? "Installing transcriber agent" : "Install transcriber agent",
+      iconAssetName: "captions",
+      compact: widget.compact,
+      loading: _installingTranscriber,
+      onPressed: _installingTranscriber ? null : () => unawaited(_openTranscriberInstallDialog()),
+    );
+  }
+
   Widget _buildDesktopV1TranscriptionButton({
     required ToolkitDescription? transcription,
     required ToolDescription? startRecording,
@@ -459,6 +566,14 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
     required bool transcribing,
   }) {
     final canToggle = transcription != null && ((transcribing && stopRecording != null) || (!transcribing && startRecording != null));
+    if (!canToggle && transcription == null) {
+      if (!widget.canInstallTranscriber) {
+        return const SizedBox.shrink();
+      }
+
+      return _buildDesktopV1InstallTranscriberButton();
+    }
+
     final tooltip = transcribing ? "Stop transcription" : "Start transcription";
 
     return MeetV1ToolbarButton.secondary(
