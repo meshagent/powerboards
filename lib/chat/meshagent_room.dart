@@ -3937,7 +3937,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
-  void _syncPreviewRoomRailMenuBridge(BuildContext context, {bool? meetingSessionActive, bool? voiceSessionActive}) {
+  void _syncPreviewRoomRailMenuBridge(
+    BuildContext context, {
+    bool? meetingSessionActive,
+    bool? voiceSessionActive,
+    List<RemoteParticipant>? participants,
+  }) {
     final shouldExpose = powerboardsUsesDesktopUiPreview(context);
     if (!shouldExpose) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3956,6 +3961,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final canShowManageAgents = isOwner.state.value == true;
     final showConsoleToggle = canViewDeveloperLogs.state.value == true;
     final showShutdown = isOwner.state.value == true;
+    final whoIsHereNames = _whoIsHereNamesForParticipants(participants ?? widget.room.messaging.remoteParticipants);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
@@ -3975,6 +3981,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         showShutdown: showShutdown,
         meetActive: resolvedMeetActive,
         consoleLabel: 'Developer console',
+        whoIsHereNames: whoIsHereNames,
         onRenamePressed: () => unawaited(_renameCurrentRoomFromPreviewRail()),
         onPermissionsPressed: () => unawaited(_openCurrentRoomPermissionsFromPreviewRail()),
         onManageAgentsPressed: () => unawaited(showManageAgents()),
@@ -3992,6 +3999,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       );
       exposePreviewRoomRailMenuBridge(_previewRoomRailMenuBridge);
     });
+  }
+
+  List<String> _whoIsHereNamesForParticipants(Iterable<RemoteParticipant> participants) {
+    final participantNames = <String>{};
+    final myName = (widget.room.localParticipant?.getAttribute("name") as String?)?.trim().toLowerCase();
+
+    for (final participant in participants) {
+      final name = participant.getAttribute("name") as String?;
+      if (participant.role != 'agent' && name != null && name.isNotEmpty && (myName == null || name.trim().toLowerCase() != myName)) {
+        participantNames.add(name);
+      }
+    }
+
+    return participantNames.sorted((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
   }
 
   Widget _buildAgentsActionRow(BuildContext context) {
@@ -7586,6 +7607,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                 context,
                                 meetingSessionActive: meetingSessionActive,
                                 voiceSessionActive: voiceSessionActive,
+                                participants: participants,
                               );
                               final useLandscapePhoneMeetingPane = _isLandscapePhoneViewport(context) && controller.inMeeting;
                               final split = filesVisible || (controller.inMeeting && !useLandscapePhoneMeetingPane);

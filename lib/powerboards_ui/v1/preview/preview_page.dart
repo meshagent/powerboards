@@ -4,12 +4,13 @@ import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_upda
 import '../theme/pb_colors.dart';
 import '../theme/pb_tokens.dart';
 import '../components/layouts/pb_primary_header.dart';
+import '../components/menus/pb_people_here_menu.dart';
 import '../components/layouts/pb_side_rail.dart';
 import '../components/menus/pb_account_menu.dart';
 import '../components/menus/pb_room_options_menu.dart';
 import '../components/menus/pb_switcher_menu.dart';
 
-enum _PreviewOpenMenu { none, project, room, more, account }
+enum _PreviewOpenMenu { none, project, room, more, whoIsHere, account }
 
 class PreviewPage extends StatefulWidget {
   const PreviewPage({super.key});
@@ -22,6 +23,12 @@ class _PreviewPageState extends State<PreviewPage> {
   _PreviewOpenMenu _openMenu = _PreviewOpenMenu.none;
   final TextEditingController _projectFilterController = TextEditingController();
   final TextEditingController _roomFilterController = TextEditingController();
+  static const List<PbPresenceMember> _roomMembers = [
+    PbPresenceMember(displayName: 'Ava Chen', initials: 'AC'),
+    PbPresenceMember(displayName: 'Jordan Lee', initials: 'JL'),
+    PbPresenceMember(displayName: 'Marco Silva', initials: 'MS'),
+    PbPresenceMember(displayName: 'Priya Patel', initials: 'PP'),
+  ];
 
   final List<String> _projects = ['ACME', 'Powerboards'];
   final List<String> _rooms = ['Product', 'Marketing', 'Client Demos'];
@@ -339,11 +346,16 @@ class _PreviewPageState extends State<PreviewPage> {
                             projectSelected: _openMenu == _PreviewOpenMenu.project,
                             roomSelected: _openMenu == _PreviewOpenMenu.room,
                             avatarSelected: _openMenu == _PreviewOpenMenu.account,
+                            presenceMembers: _roomMembers,
+                            presenceSelected: _openMenu == _PreviewOpenMenu.whoIsHere,
                             projectMenu: _openMenu == _PreviewOpenMenu.project ? _buildProjectMenu(240) : null,
                             roomMenu: _openMenu == _PreviewOpenMenu.room ? _buildRoomMenu(240) : null,
+                            presenceMenu: _openMenu == _PreviewOpenMenu.whoIsHere ? const PbPeopleHereMenu(members: _roomMembers) : null,
                             avatarMenu: _openMenu == _PreviewOpenMenu.account ? _buildAccountMenu() : null,
                             onProjectPressed: () => _toggleMenu(_PreviewOpenMenu.project),
                             onRoomPressed: () => _toggleMenu(_PreviewOpenMenu.room),
+                            onPresencePressed: () => _toggleMenu(_PreviewOpenMenu.whoIsHere),
+                            onPresenceDismissRequested: _closeMenus,
                             onAvatarPressed: () => _toggleMenu(_PreviewOpenMenu.account),
                           ),
                         ),
