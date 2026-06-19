@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/livekit/room.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/ui/meeting_view.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -203,7 +204,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(MeetV1ToolbarButton), findsNothing);
-    expect(find.byTooltip('Install transcriber agent'), findsNothing);
+    expect(find.byTooltip('Enable transcription'), findsNothing);
   });
 
   testWidgets('shows v1 transcriber install control when toolkit is missing and user can install', (tester) async {
@@ -211,11 +212,17 @@ void main() {
     addTearDown(harness.dispose);
 
     await _pumpMeetingToolkits(tester, harness);
-    await _pumpUntil(tester, () => find.byTooltip('Install transcriber agent').evaluate().isNotEmpty);
+    await _pumpUntil(tester, () => find.byTooltip('Enable transcription').evaluate().isNotEmpty);
 
     expect(find.byType(MeetV1ToolbarButton), findsOneWidget);
-    expect(find.byTooltip('Install transcriber agent'), findsOneWidget);
-    expect(_toolbarButton(tester).onPressed, isNotNull);
+    expect(find.byTooltip('Enable transcription'), findsOneWidget);
+    final button = _toolbarButton(tester);
+    expect(button.label, 'Enable transcription');
+    expect(button.iconAssetName, 'grid-2x2-plus');
+    expect(button.backgroundColor, PbColors.surfacePanel);
+    expect(button.foregroundColor, PbColors.textPrimary);
+    expect(button.borderColor, button.backgroundColor);
+    expect(button.onPressed, isNotNull);
   });
 
   testWidgets('shows preparing state instead of install when transcriber is installed but toolkit is not ready', (tester) async {

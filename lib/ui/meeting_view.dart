@@ -26,6 +26,7 @@ import 'package:powerboards/meshagent/meshagent.dart' as powerboards_meshagent;
 import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_voice_session_empty_state.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
@@ -587,12 +588,15 @@ class _MeetingToolkitsState extends State<MeetingToolkits> {
   }
 
   Widget _buildDesktopV1InstallTranscriberButton() {
-    return MeetV1ToolbarButton.secondary(
-      label: "Transcribe",
-      tooltip: _installingTranscriber ? "Installing transcriber agent" : "Install transcriber agent",
-      iconAssetName: "captions",
+    return MeetV1ToolbarButton(
+      label: "Enable transcription",
+      tooltip: _installingTranscriber ? "Enabling transcription" : "Enable transcription",
+      iconAssetName: "grid-2x2-plus",
       compact: widget.compact,
       loading: _installingTranscriber,
+      backgroundColor: PbColors.surfacePanel,
+      foregroundColor: PbColors.textPrimary,
+      borderColor: PbColors.surfacePanel,
       onPressed: _installingTranscriber ? null : () => unawaited(_openTranscriberInstallDialog()),
     );
   }
