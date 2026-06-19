@@ -68,10 +68,8 @@ class PowerboardsServiceNameCard extends StatelessWidget {
     final theme = ShadTheme.of(context);
     final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
     final titleStyle = powerboardsAgentCardTitleTextStyle(context);
-    final useV1VoiceIcon =
-        !powerboardsUsesNativeMobileDialogLayout(context) &&
-        powerboardsUsesDesktopUiPreview(context) &&
-        serviceTemplateUsesVoiceAgent(manifest);
+    final useV1ServiceIcon = !powerboardsUsesNativeMobileDialogLayout(context) && powerboardsUsesDesktopUiPreview(context);
+    final serviceIconAssetName = useV1ServiceIcon ? serviceTemplateIconAssetName(manifest) : null;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -100,8 +98,8 @@ class PowerboardsServiceNameCard extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(color: theme.colorScheme.foreground, shape: BoxShape.circle),
             alignment: Alignment.center,
-            child: useV1VoiceIcon
-                ? PbSvgIcon(assetName: 'audio-lines', size: 22, color: theme.colorScheme.background)
+            child: serviceIconAssetName != null
+                ? PbSvgIcon(assetName: serviceIconAssetName, size: 22, color: theme.colorScheme.background)
                 : Icon(LucideIcons.bot, color: theme.colorScheme.background, size: 22),
           ),
         ],
