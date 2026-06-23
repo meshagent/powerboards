@@ -63,16 +63,6 @@ String _agentDisplayTitle(String rawTitle) {
   return '${lowerCased[0].toUpperCase()}${lowerCased.substring(1)}';
 }
 
-String? _voiceAgentIconAssetName({ServiceSpec? service, ServiceTemplateSpec? template}) {
-  if (service != null && serviceUsesVoiceAgent(service)) {
-    return 'audio-lines';
-  }
-  if (template != null && serviceTemplateUsesVoiceAgent(template)) {
-    return 'audio-lines';
-  }
-  return null;
-}
-
 class AgentOptionTile extends StatefulWidget {
   final AgentOption option;
   final bool inRoom;
@@ -618,7 +608,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                     title: service.metadata.name,
                     subtitle: service.metadata.description ?? "",
                     icon: LucideIcons.puzzle,
-                    iconAssetName: _voiceAgentIconAssetName(service: service),
+                    iconAssetName: serviceIconAssetName(service),
                     color: const Color(0xFF222222),
                     canChange: true,
                     template: null,
@@ -633,7 +623,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                   subtitle: available.parsed.metadata.description ?? "",
                   template: available.template,
                   icon: LucideIcons.bot,
-                  iconAssetName: _voiceAgentIconAssetName(template: available.parsed),
+                  iconAssetName: serviceTemplateIconAssetName(available.parsed),
                   color: const Color(0xFF222222),
                   parsed: available.parsed,
                 ),

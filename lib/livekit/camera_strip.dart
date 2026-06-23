@@ -8,12 +8,21 @@ import 'participant_track.dart';
 import 'hover_builder.dart';
 
 class CameraStrip extends StatelessWidget {
-  const CameraStrip({super.key, required this.room, this.gap = 5, this.horizontal = false, this.participants, this.borderRadius = 8});
+  const CameraStrip({
+    super.key,
+    required this.room,
+    this.gap = 5,
+    this.horizontal = false,
+    this.participants,
+    this.hiddenAgentNames = const [],
+    this.borderRadius = 8,
+  });
 
   final lk.Room room;
   final double gap;
   final bool horizontal;
   final List<lk.Participant>? participants;
+  final List<String> hiddenAgentNames;
   final double borderRadius;
 
   Widget displayWrapper(Object key, Widget child) {
@@ -88,7 +97,7 @@ class CameraStrip extends StatelessWidget {
     return ListenableBuilder(
       listenable: room,
       builder: (context, _) {
-        final stripParticipants = participants ?? uniqueMeetingParticipants(room);
+        final stripParticipants = participants ?? uniqueMeetingParticipants(room, hiddenAgentNames: hiddenAgentNames);
 
         return ListenableBuilder(
           listenable: Listenable.merge(stripParticipants),

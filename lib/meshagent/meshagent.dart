@@ -22,6 +22,21 @@ bool serviceUsesVoiceAgent(ServiceSpec service) => serviceAgentType(service) == 
 
 bool serviceTemplateUsesVoiceAgent(ServiceTemplateSpec template) => serviceTemplateAgentType(template) == "VoiceBot";
 
+String? serviceIconAssetName(ServiceSpec service) => serviceAgentTypeIconAssetName(serviceAgentType(service));
+
+String? serviceTemplateIconAssetName(ServiceTemplateSpec template) => serviceAgentTypeIconAssetName(serviceTemplateAgentType(template));
+
+String? serviceAgentTypeIconAssetName(String? type) {
+  switch (type) {
+    case "VoiceBot":
+      return "audio-lines";
+    case "MeetingTranscriber":
+      return "captions";
+    default:
+      return null;
+  }
+}
+
 bool isSupportedServiceType(ServiceSpec service) {
   final type = serviceAgentType(service);
   return type == "ChatBot" || type == "VoiceBot" || type == "MeetingTranscriber" || type == "Shell";
