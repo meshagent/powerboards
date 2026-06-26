@@ -41,6 +41,7 @@ abstract final class PbColors {
   static const customAlert = Color(0xFFC83B3B);
   static const customAlertSoft = Color(0xFFFFF1F1);
   static const customCodeSurface = Color(0xFF0B1020);
+  static const customCodeInlineText = Color(0xFF31588F);
   static const customMenuOpenSurface = Color(0xFFF5F8FF);
   static const meetCameraSurface = Color(0xFF222222);
   static const meetControlAvailable = Color(0xFF0DAE4E);

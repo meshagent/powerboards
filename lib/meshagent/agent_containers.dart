@@ -6,6 +6,8 @@ import 'package:meshagent/client.dart' as meshagent_client;
 import 'package:meshagent/protocol.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart' as dev;
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
@@ -66,6 +68,10 @@ class PowerboardsServiceNameCard extends StatelessWidget {
     final theme = ShadTheme.of(context);
     final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
     final titleStyle = powerboardsAgentCardTitleTextStyle(context);
+    final useV1VoiceIcon =
+        !powerboardsUsesNativeMobileDialogLayout(context) &&
+        powerboardsUsesDesktopUiPreview(context) &&
+        serviceTemplateUsesVoiceAgent(manifest);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -94,7 +100,9 @@ class PowerboardsServiceNameCard extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(color: theme.colorScheme.foreground, shape: BoxShape.circle),
             alignment: Alignment.center,
-            child: Icon(LucideIcons.bot, color: theme.colorScheme.background, size: 22),
+            child: useV1VoiceIcon
+                ? PbSvgIcon(assetName: 'audio-lines', size: 22, color: theme.colorScheme.background)
+                : Icon(LucideIcons.bot, color: theme.colorScheme.background, size: 22),
           ),
         ],
       ),
@@ -371,29 +379,6 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
       try {
         roomClient.start();
         await roomClient.ready;
-
-        for (final variable in inputVariables) {
-          final secretId = variable.annotations?['meshagent.secret.id'];
-          if (secretId == null || secretId.isEmpty) {
-            continue;
-          }
-
-          final secretIdentity = variable.annotations?['meshagent.secret.identity'];
-          final secretName = variable.annotations?['meshagent.secret.name'];
-          final secretType = variable.annotations?['meshagent.secret.type'];
-
-          if (secretIdentity == null || secretIdentity.isEmpty) {
-            throw RoomServerException('meshagent.secret.identity is missing');
-          }
-
-          await roomClient.secrets.setSecret(
-            secretId: secretId,
-            name: secretName,
-            mimeType: secretType,
-            data: utf8.encode(vars[variable.name] ?? ''),
-            forIdentity: secretIdentity,
-          );
-        }
 
         for (final agent in service.agents) {
           final datasetAnnotation = agent.annotations['meshagent.agent.dataset.schema'];

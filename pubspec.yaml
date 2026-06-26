@@ -17,7 +17,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.44.11
+version: 0.44.13
 
 environment:
   sdk: ">=3.10.0"
@@ -35,6 +35,7 @@ dependencies:
     sdk: flutter
 
   app_links: ^7.0.0
+  archive: ^4.0.9
   flutter_svg: ^2.2.3
   collection: ^1.17.1
   file_picker: ^11.0.2
@@ -52,7 +53,7 @@ dependencies:
   livekit_client: ^2.5.3
   localstorage: ^5.0.0
   mime: ^2.0.0
-  meshagent_flutter_desktop_updater: ^0.44.11
+  meshagent_flutter_desktop_updater: ^0.44.13
   package_info_plus: ^9.0.1
   path: ^1.9.1
   path_provider: ^2.1.5
@@ -77,12 +78,12 @@ dependencies:
   shadcn_ui: ^0.54.0
   super_sliver_list: ^0.4.1
   super_clipboard: ^0.9.1
-  meshagent: ^0.44.11
-  meshagent_flutter: ^0.44.11
-  meshagent_agents: ^0.44.11
-  meshagent_flutter_shadcn: ^0.44.11
-  meshagent_flutter_dev: ^0.44.11
-  meshagent_flutter_auth: ^0.44.11
+  meshagent: ^0.44.13
+  meshagent_flutter: ^0.44.13
+  meshagent_agents: ^0.44.13
+  meshagent_flutter_shadcn: ^0.44.13
+  meshagent_flutter_dev: ^0.44.13
+  meshagent_flutter_auth: ^0.44.13
   pdfrx: ^2.2.18
 
   data_table_2: ^2.6.0

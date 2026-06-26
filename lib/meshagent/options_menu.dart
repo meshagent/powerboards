@@ -174,7 +174,7 @@ class _RoomOptionsMenuState extends State<RoomOptionsMenu> {
               onPressed: () {
                 showShadDialog<void>(
                   context: context,
-                  builder: (context) => KeychainDialog(room: widget.room),
+                  builder: (context) => KeychainDialog(client: getMeshagentClient(), projectId: widget.projectId),
                 );
               },
             ),

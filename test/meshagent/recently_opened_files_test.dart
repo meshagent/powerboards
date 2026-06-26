@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshagent/room_server_client.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/meshagent/v1_file_preview_source.dart';
@@ -10,6 +11,7 @@ import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata
 void main() {
   tearDown(() {
     powerboardsV1ClearRecentlyOpenedFileSessionCache();
+    powerboardsV1ClearFolderEntriesSessionCache();
     powerboardsV1ClearPdfPreviewCache();
   });
 
@@ -213,6 +215,23 @@ void main() {
     powerboardsV1SaveRecentlyOpenedFilesForSession(projectId: 'project', roomName: 'room', files: const []);
 
     expect(powerboardsV1RecentlyOpenedFilesForSession(projectId: 'project', roomName: 'room'), isEmpty);
+  });
+
+  test('v1 folder entry session cache restores by project room and normalized folder', () {
+    final entries = [
+      StorageEntry(name: 'notes.txt', isFolder: false, size: 12, createdAt: DateTime(2026, 6, 4), updatedAt: DateTime(2026, 6, 4)),
+    ];
+
+    powerboardsV1SaveFolderEntriesForTesting(projectId: 'project-a', roomName: 'room-a', folderPath: 'docs/', entries: entries);
+    entries.add(StorageEntry(name: 'late.txt', isFolder: false, size: 1, createdAt: DateTime(2026, 6, 4), updatedAt: DateTime(2026, 6, 4)));
+
+    expect(
+      powerboardsV1FolderEntriesForSession(projectId: 'project-a', roomName: 'room-a', folderPath: 'docs')!.map((entry) => entry.name),
+      ['notes.txt'],
+    );
+    expect(powerboardsV1FolderEntriesForSession(projectId: 'project-a', roomName: 'room-b', folderPath: 'docs'), isNull);
+    expect(powerboardsV1FolderEntriesForSession(projectId: 'project-b', roomName: 'room-a', folderPath: 'docs'), isNull);
+    expect(powerboardsV1FolderEntriesForSession(projectId: 'project-a', roomName: 'room-a', folderPath: 'other'), isNull);
   });
 }
 

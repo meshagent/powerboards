@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
@@ -29,11 +33,12 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
-import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
+import 'package:powerboards/meshagent/powerboards_v1_thread_composer.dart';
+import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
@@ -45,6 +50,145 @@ typedef PowerboardsThreadAttachmentsChanged =
       required String createdBy,
       required Iterable<String> attachmentPaths,
     });
+
+const String _threadTextFontFamily = 'Inter';
+const Color _desktopV1ThreadCodePlainColor = Color(0xFFE6EDF7);
+const Color _desktopV1ThreadCodeKeywordColor = Color(0xFFC084FC);
+const Color _desktopV1ThreadCodeTypeColor = Color(0xFF7DD3FC);
+const Color _desktopV1ThreadCodeStringColor = Color(0xFFA7F3D0);
+const Color _desktopV1ThreadCodeLiteralColor = Color(0xFFFDBA74);
+const Color _desktopV1ThreadCodeNumberColor = Color(0xFFF0ABFC);
+const Color _desktopV1ThreadCodeAttributeColor = Color(0xFF93C5FD);
+const Color _desktopV1ThreadCodeCommentColor = Color(0xFF6B7280);
+const Color _desktopV1ThreadCodeCommandColor = Color(0xFFFDE68A);
+const Color _desktopV1ThreadSelectionColor = Color(0x665EA2FF);
+const Color _desktopV1ThreadSelectionHandleColor = Color(0xFF5EA2FF);
+const Map<String, TextStyle> _desktopV1ThreadCodeHighlightTheme = {
+  'root': TextStyle(backgroundColor: PbColors.customCodeSurface, color: _desktopV1ThreadCodePlainColor),
+  'tag': TextStyle(color: _desktopV1ThreadCodePlainColor),
+  'subst': TextStyle(color: _desktopV1ThreadCodePlainColor),
+  'strong': TextStyle(color: _desktopV1ThreadCodePlainColor, fontWeight: FontWeight.bold),
+  'emphasis': TextStyle(color: _desktopV1ThreadCodePlainColor, fontStyle: FontStyle.italic),
+  'bullet': TextStyle(color: _desktopV1ThreadCodeCommandColor),
+  'quote': TextStyle(color: _desktopV1ThreadCodeCommandColor),
+  'number': TextStyle(color: _desktopV1ThreadCodeNumberColor),
+  'regexp': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'literal': TextStyle(color: _desktopV1ThreadCodeLiteralColor),
+  'link': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'code': TextStyle(color: _desktopV1ThreadCodeCommandColor),
+  'title': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'section': TextStyle(color: _desktopV1ThreadCodeCommandColor),
+  'selector-class': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'keyword': TextStyle(color: _desktopV1ThreadCodeKeywordColor),
+  'selector-tag': TextStyle(color: _desktopV1ThreadCodeKeywordColor),
+  'name': TextStyle(color: _desktopV1ThreadCodeKeywordColor),
+  'attr': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'symbol': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'attribute': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'params': TextStyle(color: _desktopV1ThreadCodePlainColor),
+  'title.class_': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'class-title': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'string': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'type': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'built_in': TextStyle(color: _desktopV1ThreadCodeTypeColor),
+  'selector-id': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'selector-attr': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'selector-pseudo': TextStyle(color: _desktopV1ThreadCodeAttributeColor),
+  'addition': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'variable': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'template-variable': TextStyle(color: _desktopV1ThreadCodeStringColor),
+  'comment': TextStyle(color: _desktopV1ThreadCodeCommentColor),
+  'deletion': TextStyle(color: _desktopV1ThreadCodeCommentColor),
+  'meta': TextStyle(color: _desktopV1ThreadCodeCommentColor),
+};
+
+EdgeInsets? _desktopV1ThreadMarkdownHeadingPadding(String tag) {
+  return switch (tag) {
+    'h1' => const EdgeInsets.only(top: 12, bottom: 2),
+    'h2' => const EdgeInsets.only(top: 10, bottom: 2),
+    'h3' => const EdgeInsets.only(top: 8, bottom: 1),
+    _ => null,
+  };
+}
+
+TextStyle? _desktopV1ThreadMarkdownHeadingStyle(String tag, TextStyle defaultStyle) {
+  return switch (tag) {
+    'h1' => defaultStyle.copyWith(fontSize: 18, height: 1.28, fontWeight: FontWeight.w800),
+    'h2' => defaultStyle.copyWith(fontSize: 17, height: 1.3, fontWeight: FontWeight.w800),
+    'h3' => defaultStyle.copyWith(fontSize: 16, height: 1.35, fontWeight: FontWeight.w700),
+    'h4' => defaultStyle.copyWith(fontSize: 16, height: 1.35, fontWeight: FontWeight.w700),
+    'h5' => defaultStyle.copyWith(fontSize: 16, height: 1.35, fontWeight: FontWeight.w700),
+    'h6' => defaultStyle.copyWith(fontSize: 16, height: 1.35, fontWeight: FontWeight.w500),
+    _ => null,
+  };
+}
+
+TextStyle _threadAssetTextStyle({
+  TextStyle? textStyle,
+  Color? color,
+  FontWeight? fontWeight,
+  double? fontSize,
+  double? height,
+  double? letterSpacing,
+}) {
+  return (textStyle ?? const TextStyle()).copyWith(
+    fontFamily: _threadTextFontFamily,
+    color: color,
+    fontWeight: fontWeight,
+    fontSize: fontSize,
+    height: height,
+    letterSpacing: letterSpacing,
+  );
+}
+
+TextStyle _threadSectionTitleStyle({Color color = shadForeground, double? height}) {
+  return _threadAssetTextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: color, height: height);
+}
+
+TextStyle _threadMetaTextStyle({required Color color, FontWeight fontWeight = FontWeight.w500, double? height}) {
+  return _threadAssetTextStyle(fontSize: 13, fontWeight: fontWeight, color: color, height: height);
+}
+
+Widget _buildThreadCurrentPill() {
+  return DecoratedBox(
+    decoration: const BoxDecoration(color: Colors.black, borderRadius: BorderRadius.all(Radius.circular(999))),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      child: Text(
+        "Current",
+        style: _threadAssetTextStyle(fontSize: 11, fontWeight: FontWeight.w700, height: 1, color: Colors.white),
+      ),
+    ),
+  );
+}
+
+Widget _buildDesktopV1ThreadAttachmentIcon(
+  BuildContext context, {
+  required String fileName,
+  required IconData fallbackIcon,
+  required Color? color,
+  required bool hovered,
+}) {
+  final metadata = PbResolvedAttachmentMetadata.resolve(title: fileName);
+  return PbSvgIcon(assetName: metadata.iconAssetName, size: 24, color: metadata.iconColor);
+}
+
+Widget _buildDesktopV1ThreadAttachmentActionIcon(BuildContext context, {required Color? color, required bool hovered}) {
+  return PbSvgIcon(assetName: 'arrow-up-right', size: 17, color: color ?? PbColors.customBrandInk);
+}
+
+@visibleForTesting
+bool powerboardsComposerAttachmentSeedMatchesAttachmentPaths({
+  required Iterable<String> seedPaths,
+  required Iterable<String> attachmentPaths,
+}) {
+  final normalizedSeedPaths = seedPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toSet();
+  if (normalizedSeedPaths.isEmpty) {
+    return false;
+  }
+
+  return attachmentPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).any(normalizedSeedPaths.contains);
+}
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
   MeshagentRoomChatThreadController({required super.room});
@@ -106,7 +250,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.onThreadAttachmentsChanged,
     this.composerAttachmentSeedVersion = 0,
     this.composerAttachmentPaths = const [],
-    this.onComposerAttachmentSeedApplied,
+    this.onComposerAttachmentSeedCleared,
     this.onComposerAttachmentOpen,
     this.onComposerAttachmentRemoved,
     this.onThreadAttachmentOpen,
@@ -141,7 +285,7 @@ class MeshagentThreadView extends StatefulWidget {
   final PowerboardsThreadAttachmentsChanged? onThreadAttachmentsChanged;
   final int composerAttachmentSeedVersion;
   final List<String> composerAttachmentPaths;
-  final VoidCallback? onComposerAttachmentSeedApplied;
+  final VoidCallback? onComposerAttachmentSeedCleared;
   final ValueChanged<String>? onComposerAttachmentOpen;
   final ValueChanged<String>? onComposerAttachmentRemoved;
   final ValueChanged<String>? onThreadAttachmentOpen;
@@ -190,7 +334,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       child: compact
           ? ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
-              child: Text(title, textAlign: TextAlign.center, style: powerboardsSectionTitleStyle()),
+              child: Text(title, textAlign: TextAlign.center, style: _threadSectionTitleStyle()),
             )
           : ChatThreadEmptyStateContent(title: title, description: description),
     );
@@ -207,7 +351,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     const horizontalInset = powerboardsMobileShellHorizontalInset;
     final theme = ShadTheme.of(context);
     final inactivePillColor = theme.colorScheme.foreground;
-    final pillTextStyle = powerboardsInterTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
+    final pillTextStyle = _threadAssetTextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.0);
     final items = <PowerboardsMobileActionPillItem>[
       const PowerboardsMobileActionPillItem(label: "Chat", selected: true),
       if (widget.onOpenFiles != null) PowerboardsMobileActionPillItem(label: "Share files", onPressed: widget.onOpenFiles),
@@ -306,14 +450,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   void _notifyThreadAttachments({required String threadPath, required String threadName, required Iterable<String> attachmentPaths}) {
-    final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+    final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
     if (normalizedThreadPath.isEmpty) {
       return;
     }
 
     final normalizedAttachmentPaths = attachmentPaths
-        .where(isPowerboardsStorageAttachmentPath)
-        .map(normalizePowerboardsAttachmentPath)
+        .map(powerboardsStorageAttachmentPathFromUrl)
         .where((path) => path.isNotEmpty)
         .toList(growable: false);
     if (normalizedAttachmentPaths.isEmpty) {
@@ -322,7 +465,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     final freshAttachmentPaths = <String>[];
     for (final attachmentPath in normalizedAttachmentPaths) {
-      if (_reportedAttachmentKeys.add('$normalizedThreadPath\n$attachmentPath')) {
+      final key = '$normalizedThreadPath\n$attachmentPath';
+      if (_reportedAttachmentKeys.add(key)) {
         freshAttachmentPaths.add(attachmentPath);
       }
     }
@@ -345,7 +489,19 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         threadName: _currentThreadNameForAttachmentIndex(message.threadPath),
         attachmentPaths: message.attachments.map((attachment) => attachment.url),
       );
+      _clearComposerAttachmentSeedIfAttachmentsMatch(message.attachments.map((attachment) => attachment.url));
     }
+  }
+
+  void _clearComposerAttachmentSeedIfAttachmentsMatch(Iterable<String> attachmentPaths) {
+    if (!powerboardsComposerAttachmentSeedMatchesAttachmentPaths(
+      seedPaths: widget.composerAttachmentPaths,
+      attachmentPaths: attachmentPaths,
+    )) {
+      return;
+    }
+
+    widget.onComposerAttachmentSeedCleared?.call();
   }
 
   String _composerAttachmentDisplayName(String path) {
@@ -373,7 +529,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       final seen = <String>{};
       final paths = <String>[];
       for (final path in widget.composerAttachmentPaths) {
-        final normalizedPath = normalizePowerboardsAttachmentPath(path);
+        final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
         if (normalizedPath.isNotEmpty && seen.add(normalizedPath)) {
           paths.add(normalizedPath);
         }
@@ -386,7 +542,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       for (final path in paths) {
         _chatController.attachFile(path, displayName: _composerAttachmentDisplayName(path));
       }
-      widget.onComposerAttachmentSeedApplied?.call();
     });
   }
 
@@ -410,9 +565,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         createdBy: _currentParticipantDisplayName(),
         attachmentPaths: attachmentPaths,
       ).catchError((Object error, StackTrace stackTrace) {
+        if (powerboardsIsExpectedRoomLifecycleClosure(error, stackTrace)) {
+          return;
+        }
         debugPrint('Failed to record file attachment index: $error');
       }),
     );
+    _clearComposerAttachmentSeedIfAttachmentsMatch(attachmentPaths);
   }
 
   Uri? _currentRouteUriOrNull() {
@@ -524,6 +683,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   Widget build(BuildContext context) {
     final usesDesktopUiPreview = powerboardsUsesDesktopUiPreview(context);
+    final materialTheme = Theme.of(context);
+    final shadTheme = ShadTheme.of(context);
+    final usesCenteredDesktopPreviewComposer =
+        usesDesktopUiPreview && widget.threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer && widget.emptyState == null;
     final usesMobileLayout = _usesMobileThreadLayout(context);
     final usesMobileEmptyState = _usesCompactMobileThreadEmptyState(context);
     final overlayHeaderScope = PowerboardsMobileOverlayHeaderScope.maybeOf(context);
@@ -555,7 +718,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       documentPath: widget.documentPath,
       controller: _chatController,
       onAttachmentOpen: _openComposerAttachment,
-      onAttachmentRemoved: (attachment) => widget.onComposerAttachmentRemoved?.call(attachment.path),
+      onAttachmentRemoved: (attachment) {
+        widget.onComposerAttachmentRemoved?.call(attachment.path);
+        _clearComposerAttachmentSeedIfAttachmentsMatch([attachment.path]);
+      },
       selectedThreadPath: widget.selectedThreadPath,
       selectedThreadDisplayName: widget.selectedThreadDisplayName,
       onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
@@ -574,6 +740,15 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       openFile: _openThreadAttachment,
       fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
       chatInputBoxBuilder: usesMobileLayout ? (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox) : null,
+      customInputBuilder: usesDesktopUiPreview && !usesMobileLayout
+          ? (context, config, defaultInput) => PowerboardsV1ThreadComposer(
+              projectId: widget.projectId,
+              room: widget.client,
+              agentName: widget.agentName,
+              config: config,
+              defaultInput: defaultInput,
+            )
+          : null,
       toolsBuilder: (context, controller, snapshot) =>
           buildTools(context, widget.projectId, widget.client, widget.agentName, controller, snapshot),
       inputPlaceholder: Text(_chatPlaceholderText(widget.agentName)),
@@ -588,15 +763,84 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
       mobileStorageSaveSurfacePresenter: usesMobileLayout ? showPowerboardsThreadStorageSaveSurface : null,
       mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
-      centerComposer: false,
+      centerComposer: usesCenteredDesktopPreviewComposer,
+      showCenteredComposerTitle: !usesCenteredDesktopPreviewComposer,
       hideChatInput: widget.hideChatInput,
       showThreadList: false,
     );
 
-    return IconTheme(
-      data: const IconThemeData(size: 14),
-      child: usesDesktopUiPreview ? ChatContextLayoutOverride(useMobileLayout: false, child: chatBotView) : chatBotView,
-    );
+    final scopedChatBotView = usesDesktopUiPreview
+        ? ma.ThreadTypographyOverride(
+            textFontFamily: 'Inter',
+            codeFontFamily: 'DM Mono',
+            threadParagraphBaseFontSize: 14,
+            threadParagraphLineHeight: 1.46,
+            bubbleContentPadding: const EdgeInsets.only(left: 18, right: 18, top: 8, bottom: 8),
+            threadFeedItemSpacing: 32,
+            useThreadAttachmentStyle: true,
+            normalizeParticipantDisplayName: true,
+            showInlineDisclosureCue: true,
+            useDesktopAuthorHeaderAtNarrowWidths: true,
+            mineBubbleColor: PbColors.customBlue,
+            mineBubbleTextColor: PbColors.surfacePanel,
+            mineBubbleLinkColor: PbColors.borderStateSelected,
+            otherHumanBubbleColor: PbColors.surfaceAccentSoft,
+            otherHumanBubbleTextColor: PbColors.textBody,
+            agentBubbleColor: PbColors.surfacePanel,
+            agentBubbleBorderColor: PbColors.borderFaint,
+            linkColor: PbColors.surfaceRailSelected,
+            attachmentSurfaceColor: PbColors.surfacePanel,
+            attachmentBorderColor: PbColors.borderSoft,
+            attachmentIconColor: PbColors.surfaceRailSelected,
+            attachmentActionColor: PbColors.customBrandInk,
+            attachmentHoverSurfaceColor: Color.lerp(PbColors.surfacePanelSoft, PbColors.surfacePanel, 0.56),
+            attachmentHoverShadows: PbShadows.stateHover,
+            alignAttachmentEdgesWithBubbles: true,
+            attachmentIconBuilder: _buildDesktopV1ThreadAttachmentIcon,
+            attachmentActionIconBuilder: _buildDesktopV1ThreadAttachmentActionIcon,
+            codeBlockSurfaceColor: PbColors.customCodeSurface,
+            codeBlockHeaderSurfaceColor: PbColors.customCodeSurface,
+            codeBlockBorderColor: PbColors.customCodeSurface,
+            codeBlockTextColor: _desktopV1ThreadCodePlainColor,
+            codeBlockHeaderTextColor: _desktopV1ThreadCodeCommentColor,
+            codeBlockHighlightTheme: _desktopV1ThreadCodeHighlightTheme,
+            codeBlockUseTextFontSize: true,
+            codeBlockWrapLines: true,
+            codeBlockHeaderFontSize: 13,
+            codeBlockActionIconSize: 17,
+            codeBlockActionButtonSize: 24,
+            inlineCodeTextColor: PbColors.customCodeInlineText,
+            inlineCodeBackgroundColor: PbColors.surfaceAccentSoft,
+            inlineCodeHorizontalPadding: true,
+            threadErrorSurfaceColor: PbColors.customAlertSoft,
+            threadErrorTextColor: Color.lerp(PbColors.customAlert, PbColors.textBody, 0.18),
+            markdownHorizontalRuleColor: PbColors.borderSoft,
+            markdownBlockquoteSideColor: PbColors.customBlue,
+            markdownBlockquoteBackgroundColor: PbColors.surfaceAccentSoft,
+            markdownSuppressHeadingDividers: true,
+            markdownHeadingPaddingResolver: _desktopV1ThreadMarkdownHeadingPadding,
+            markdownHeadingStyleResolver: _desktopV1ThreadMarkdownHeadingStyle,
+            child: ShadTheme.merge(
+              data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
+              child: Theme(
+                data: materialTheme.copyWith(textTheme: ma.threadTypographyMaterialTextTheme(materialTheme.textTheme, 'Inter')),
+                child: DefaultTextStyle.merge(
+                  style: const TextStyle(fontFamily: 'Inter'),
+                  child: TextSelectionTheme(
+                    data: const TextSelectionThemeData(
+                      cursorColor: PbColors.surfaceRailSelected,
+                      selectionColor: _desktopV1ThreadSelectionColor,
+                      selectionHandleColor: _desktopV1ThreadSelectionHandleColor,
+                    ),
+                    child: ChatContextLayoutOverride(useMobileLayout: false, child: chatBotView),
+                  ),
+                ),
+              ),
+            ),
+          )
+        : chatBotView;
+
+    return IconTheme(data: const IconThemeData(size: 14), child: scopedChatBotView);
   }
 }
 
@@ -748,12 +992,12 @@ class MeshagentInlineThreadCreatePrompt extends StatelessWidget {
 class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
   static TextStyle threadNameStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w400, Color? color}) {
     final theme = ShadTheme.of(context);
-    return powerboardsMetaTextStyle(color: color ?? theme.colorScheme.mutedForeground, fontWeight: fontWeight);
+    return _threadMetaTextStyle(color: color ?? theme.colorScheme.mutedForeground, fontWeight: fontWeight);
   }
 
   static TextStyle createActionStyle(BuildContext context, {FontWeight fontWeight = FontWeight.w700}) {
     final theme = ShadTheme.of(context);
-    return powerboardsInterTextStyle(
+    return _threadAssetTextStyle(
       fontSize: chatBubbleMarkdownBaseFontSize(context),
       fontWeight: fontWeight,
       color: theme.colorScheme.foreground,
@@ -1161,14 +1405,14 @@ class _MeshagentThreadListPaneState extends State<MeshagentThreadListPane> {
             if (icon != null) ...[Icon(icon, size: 44, color: shadMutedForeground), const SizedBox(height: 16)],
             Text(
               title,
-              style: powerboardsInterTextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
+              style: _threadAssetTextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: shadForeground),
             ),
             if (description != null) ...[
               const SizedBox(height: 8),
               Text(
                 description,
                 textAlign: TextAlign.center,
-                style: powerboardsSecondaryTextStyle(color: shadMutedForeground),
+                style: _threadAssetTextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: shadMutedForeground),
               ),
             ],
           ],
@@ -1313,7 +1557,7 @@ class _ThreadListEmptyHint extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(leadingInset, isMobile ? 4 : 8, 0, 0),
-      child: Text("Add and manage multiple threads.", style: powerboardsMetaTextStyle(color: shadMutedForeground, height: 1.4)),
+      child: Text("Add and manage multiple threads.", style: _threadMetaTextStyle(color: shadMutedForeground, height: 1.4)),
     );
   }
 }
@@ -1385,7 +1629,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
         final selected = widget.selected;
         final leadingWidth = _leadingWidth(isMobile);
         final textStyle = isMobile && widget.mobileUseDialogListStyle
-            ? powerboardsFileListTitleStyle().copyWith(fontWeight: selected ? FontWeight.w700 : FontWeight.w400)
+            ? _threadAssetTextStyle(fontSize: 14, fontWeight: selected ? FontWeight.w700 : FontWeight.w400, color: shadForeground)
             : _MeshagentThreadListPaneState.threadNameStyle(
                 context,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
@@ -1458,7 +1702,7 @@ class _ThreadListItemState extends State<_ThreadListItem> {
                                     ),
                                     if (selected && isMobile && widget.mobileUseDialogListStyle) ...[
                                       const SizedBox(width: 12),
-                                      buildPowerboardsCurrentPill(),
+                                      _buildThreadCurrentPill(),
                                     ],
                                   ],
                                 ),
@@ -1561,7 +1805,7 @@ class _DraftThreadListItem extends StatelessWidget {
     final isMobile = ResponsiveBreakpoints.of(context).isMobile;
     final leadingWidth = _leadingWidth(isMobile);
     final textStyle = mobileUseDialogListStyle
-        ? TextStyle(inherit: true, fontWeight: FontWeight.w700, color: shadForeground)
+        ? _threadAssetTextStyle(textStyle: const TextStyle(inherit: true), fontWeight: FontWeight.w700, color: shadForeground)
         : _MeshagentThreadListPaneState.threadNameStyle(context, fontWeight: FontWeight.w700, color: shadForeground);
 
     return DecoratedBox(
@@ -1651,18 +1895,17 @@ Widget buildTools(
     }
   }
 
-  final oauth2CallbackUrl = MeshagentConfig.current?.oauth2CallbackUrl;
-  final showMcpConnectors = state.agentOnline && state.supportsMcp && agent != null && oauth2CallbackUrl != null;
+  final showMcpConnectors = state.agentOnline && state.supportsMcp && agent != null;
   final canAddMcpServices = showMcpConnectors && room.apiGrant?.admin != null;
   final availableConnectors = !showMcpConnectors
       ? null
       : () async {
-          return mcpConnectorsFromRoomServices(services: await room.services.list(), agentName: normalizedAgentName);
-        };
-  final onConnectorSetup = !showMcpConnectors
-      ? null
-      : (Connector connector) async {
-          await connector.authenticate(room, agent!, oauth2CallbackUrl);
+          final client = getMeshagentClient();
+          return mcpConnectorsFromRoomServices(
+            services: await room.services.list(),
+            agentName: normalizedAgentName,
+            meshagentProxyConfig: MeshagentProxyConfig(apiUrl: client.baseUrl, apiKey: client.token),
+          );
         };
   final onAddMcpConnector = !canAddMcpServices
       ? null
@@ -1702,7 +1945,6 @@ Widget buildTools(
             agentName: normalizedAgentName,
             showMcpConnectors: showMcpConnectors,
             availableConnectors: availableConnectors,
-            onConnectorSetup: onConnectorSetup,
             onAddMcpConnector: onAddMcpConnector,
           )
         : null,

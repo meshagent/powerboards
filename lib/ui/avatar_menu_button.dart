@@ -13,6 +13,8 @@ import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/nav/switch_project_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/settings/shared_profiles.dart';
+import 'package:powerboards/settings/shared_profiles_dialog.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/app_context_menu.dart';
@@ -289,6 +291,13 @@ class _UserAvatarMenuButtonState extends State<UserAvatarMenuButton> {
             icon: LucideIcons.package,
             onPressed: _switchProject,
           ),
+          if (isSharedProfilesSupported)
+            AppMenuEntry(
+              title: "Switch profile",
+              description: "Use another saved account or environment",
+              icon: LucideIcons.userRound,
+              onPressed: () => showPowerboardsSharedProfilesDialog(context),
+            ),
           if (!isMobile && canPreviewNewUi)
             AppMenuEntry(
               title: currentUiMode == PowerboardsUiMode.v1 ? "Old Theme" : "New Theme",

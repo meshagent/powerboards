@@ -17,6 +17,7 @@ class PbAccountMenu extends StatelessWidget {
     this.projectLabel = 'Browsing project: ACME',
     this.width,
     this.onSelectProjectPressed,
+    this.onSwitchProfilePressed,
     this.onManageAccountPressed,
     this.previewTitle,
     this.previewIconAssetName = 'rotate-ccw',
@@ -30,6 +31,7 @@ class PbAccountMenu extends StatelessWidget {
   final String projectLabel;
   final double? width;
   final VoidCallback? onSelectProjectPressed;
+  final VoidCallback? onSwitchProfilePressed;
   final VoidCallback? onManageAccountPressed;
   final String? previewTitle;
   final String previewIconAssetName;
@@ -70,6 +72,13 @@ class PbAccountMenu extends StatelessWidget {
                   leadingIconAssetName: 'book-copy',
                   onPressed: onSelectProjectPressed,
                 ),
+                if (onSwitchProfilePressed != null)
+                  PbMenuOption(
+                    title: 'Switch profile',
+                    singleLine: true,
+                    leadingIconAssetName: 'user-round',
+                    onPressed: onSwitchProfilePressed,
+                  ),
                 if (showManageAccountOption)
                   PbMenuOption(
                     title: 'Manage account',

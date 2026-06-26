@@ -1,14 +1,9 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
-import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
-import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
@@ -17,7 +12,6 @@ import 'package:powerboards/meshagent/loader.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/room_ended_card.dart';
 import 'package:powerboards/meshagent/room_not_found.dart';
-import 'package:powerboards/oauth/oauth.dart';
 import 'package:powerboards/powerboards_controller/powerboards_controller.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/settings/ui_mode.dart';
@@ -26,8 +20,6 @@ import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
 import 'package:powerboards/ui/main_wrapper.dart';
-
-const String meshagentDomain = String.fromEnvironment('MESHAGENT_DOMAIN');
 
 class MeshagentConnectionResponse {
   MeshagentConnectionResponse({required this.url, required this.token, required this.roomType});
@@ -234,114 +226,6 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
           _roomWasConnected = true;
         },
         notFoundBuilder: (context) => RoomNotFound(),
-        oauthTokenRequestHandler: (RoomClient client, request) async {
-          showPowerboardsAlertDialog(
-            context: context,
-            builder: (context) => PowerboardsShadDialog.compact(
-              title: Text("An agent would like permission to use one of your accounts"),
-              description: Text("You will be redirected to the third party service to login (${request.authorizationEndpoint})."),
-              actions: [
-                ShadButton.destructive(
-                  onPressed: () {
-                    client.secrets.rejectOAuthAuthorization(requestId: request.requestId, error: "cancelled");
-
-                    Navigator.of(context).pop();
-                  },
-                  child: Text("Cancel"),
-                ),
-
-                ShadButton(
-                  onPressed: () async {
-                    Navigator.of(context).pop();
-
-                    final code = oauth2AuthorizationCode(
-                      await oauth2Authenticate(
-                        request,
-                        MeshagentConfig.current!.oauth2CallbackUrl,
-                        jsonEncode({"project_id": widget.projectId, "room_name": widget.roomName, "request_id": request.requestId}),
-                      ),
-                    );
-
-                    client.secrets.provideOAuthAuthorization(requestId: request.requestId, code: code!);
-                  },
-                  child: Text("Continue"),
-                ),
-              ],
-            ),
-          );
-        },
-        secretRequestHandler: (RoomClient client, SecretRequest request) async {
-          if (!context.mounted) return;
-
-          if (request.type == "git") {
-            final secretValue = {};
-            final value = await showPowerboardsAlertDialog<Map>(
-              context: context,
-              builder: (context) => PowerboardsShadDialog.alert(
-                title: Text("Secret requested"),
-                description: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  spacing: 8,
-                  children: [
-                    Text("An agent requested credentials for ${request.url}"),
-                    SizedBox(height: 8),
-                    PowerboardsAdaptiveInputFormField(
-                      label: Text("Username"),
-                      obscureText: false,
-                      onChanged: (value) => secretValue["username"] = value,
-                    ),
-                    PowerboardsAdaptiveInputFormField(
-                      label: Text("Password / Personal Access Token"),
-                      obscureText: true,
-                      onChanged: (value) => secretValue["password"] = value,
-                    ),
-                  ],
-                ),
-                actions: [
-                  ShadButton.secondary(onPressed: () => Navigator.of(context).pop(), child: Text("Cancel")),
-                  ShadButton(onPressed: () => Navigator.of(context).pop(secretValue), child: Text("Provide")),
-                ],
-              ),
-            );
-
-            if (value == null) {
-              await client.secrets.rejectSecret(requestId: request.requestId, error: "cancelled");
-            } else {
-              await client.secrets.provideSecret(requestId: request.requestId, data: Uint8List.fromList(utf8.encode(jsonEncode(value))));
-            }
-          } else {
-            String secretValue = "";
-            final value = await showPowerboardsAlertDialog<String>(
-              context: context,
-              builder: (context) => PowerboardsShadDialog.alert(
-                title: Text("Secret requested"),
-                description: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text("An agent requested a secret value."),
-                    SizedBox(height: 8),
-                    Text("Key: ${request.url}"),
-                    Text("Type: ${request.type}"),
-                    SizedBox(height: 16),
-                    PowerboardsAdaptiveInputFormField(label: Text("Secret"), obscureText: true, onChanged: (value) => secretValue = value),
-                  ],
-                ),
-                actions: [
-                  ShadButton.secondary(onPressed: () => Navigator.of(context).pop(), child: Text("Cancel")),
-                  ShadButton(onPressed: () => Navigator.of(context).pop(secretValue), child: Text("Provide")),
-                ],
-              ),
-            );
-
-            if (value == null) {
-              await client.secrets.rejectSecret(requestId: request.requestId, error: "cancelled");
-            } else {
-              await client.secrets.provideSecret(requestId: request.requestId, data: Uint8List.fromList(utf8.encode(value)));
-            }
-          }
-        },
         authorizingBuilder: (context) => _withReservedRoomHeader(_connectionProgress()),
         retryingBuilder: (context, error) => _withReservedRoomHeader(_connectionProgress(fallbackStatusText: "waiting to retry")),
         connectingBuilder: (context, client) => _withReservedRoomHeader(_connectionProgress(room: client)),

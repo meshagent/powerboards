@@ -1,0 +1,13 @@
+{
+    "SERVER_URL": "http://localhost:8080",
+    "APP_URL": "http://app.powerboards.localhost",
+    "BILLING_URL": "https://accounts.meshagent.life",
+    "OAUTH_CALLBACK_URL": "http://localhost:8002/oauth2/callback",
+    "OAUTH_CLIENT_ID": "powerboards-local",
+    "SENTRY_ENABLED": false,
+    "SENTRY_RELEASE": "",
+    "SENTRY_ENVIRONMENT": "local",
+    "IMAGE_TAG_PREFIX": "meshagent/",
+    "DOMAINS": "dev.localhost",
+    "MESHAGENT_MAIL_DOMAIN": "mail.meshagent.life"
+}

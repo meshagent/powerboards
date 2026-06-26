@@ -10,6 +10,8 @@ import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/meshagent/route_service_match.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
@@ -27,6 +29,7 @@ class AgentOption {
   final String subtitle;
   final String? readme;
   final IconData icon;
+  final String? iconAssetName;
   final Color iconColor;
   final Color color;
   final AgentConfigItem? config;
@@ -39,6 +42,7 @@ class AgentOption {
     required this.title,
     required this.subtitle,
     required this.icon,
+    this.iconAssetName,
     required this.color,
     required this.readme,
     required this.parsed,
@@ -57,6 +61,16 @@ String _agentDisplayTitle(String rawTitle) {
 
   final lowerCased = normalized.toLowerCase();
   return '${lowerCased[0].toUpperCase()}${lowerCased.substring(1)}';
+}
+
+String? _voiceAgentIconAssetName({ServiceSpec? service, ServiceTemplateSpec? template}) {
+  if (service != null && serviceUsesVoiceAgent(service)) {
+    return 'audio-lines';
+  }
+  if (template != null && serviceTemplateUsesVoiceAgent(template)) {
+    return 'audio-lines';
+  }
+  return null;
 }
 
 class AgentOptionTile extends StatefulWidget {
@@ -136,6 +150,10 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
     final theme = ShadTheme.of(context);
     final titleStyle = powerboardsAgentCardTitleTextStyle(context);
     final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
+    final useV1VoiceIcon =
+        widget.option.iconAssetName != null &&
+        !powerboardsUsesNativeMobileDialogLayout(context) &&
+        powerboardsUsesDesktopUiPreview(context);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -209,7 +227,9 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
                 height: 44,
                 decoration: BoxDecoration(color: widget.option.color, shape: BoxShape.circle),
                 alignment: Alignment.center,
-                child: Icon(widget.option.icon, color: Colors.white, size: 22),
+                child: useV1VoiceIcon
+                    ? PbSvgIcon(assetName: widget.option.iconAssetName!, size: 22, color: Colors.white)
+                    : Icon(widget.option.icon, color: Colors.white, size: 22),
               ),
             ],
           ),
@@ -384,7 +404,12 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
   });
 
   late final availableAgents = Resource(() async {
-    final res = await http.get(Uri.parse(const String.fromEnvironment("SERVER_URL")).resolve("/directory"));
+    final serverUrl = MeshagentConfig.current?.serverUrl;
+    if (serverUrl == null) {
+      throw StateError("MeshagentConfig.current.serverUrl is not set");
+    }
+
+    final res = await http.get(serverUrl.resolve("/directory"));
     final json = jsonDecode(res.body);
     return ServiceDirectoryPage.fromJson(json);
   });
@@ -593,6 +618,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                     title: service.metadata.name,
                     subtitle: service.metadata.description ?? "",
                     icon: LucideIcons.puzzle,
+                    iconAssetName: _voiceAgentIconAssetName(service: service),
                     color: const Color(0xFF222222),
                     canChange: true,
                     template: null,
@@ -607,6 +633,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                   subtitle: available.parsed.metadata.description ?? "",
                   template: available.template,
                   icon: LucideIcons.bot,
+                  iconAssetName: _voiceAgentIconAssetName(template: available.parsed),
                   color: const Color(0xFF222222),
                   parsed: available.parsed,
                 ),

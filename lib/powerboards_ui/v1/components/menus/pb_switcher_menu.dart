@@ -22,6 +22,7 @@ class PbSwitcherMenu extends StatefulWidget {
     required this.items,
     this.actionLabel,
     this.emptyLabel = 'No items',
+    this.showFilter = true,
     this.filterPlaceholder = 'Filter...',
     this.filterController,
     this.onFilterChanged,
@@ -35,6 +36,7 @@ class PbSwitcherMenu extends StatefulWidget {
   final List<PbSwitcherMenuItem> items;
   final String? actionLabel;
   final String emptyLabel;
+  final bool showFilter;
   final String filterPlaceholder;
   final TextEditingController? filterController;
   final ValueChanged<String>? onFilterChanged;
@@ -80,11 +82,12 @@ class _PbSwitcherMenuState extends State<PbSwitcherMenu> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  PbMenuFilterField(
-                    placeholder: widget.filterPlaceholder,
-                    controller: widget.filterController,
-                    onChanged: widget.onFilterChanged,
-                  ),
+                  if (widget.showFilter)
+                    PbMenuFilterField(
+                      placeholder: widget.filterPlaceholder,
+                      controller: widget.filterController,
+                      onChanged: widget.onFilterChanged,
+                    ),
                   ScrollbarTheme(
                     data: ScrollbarTheme.of(context).copyWith(
                       thumbColor: const WidgetStatePropertyAll(Color.fromRGBO(17, 24, 39, 0.2)),

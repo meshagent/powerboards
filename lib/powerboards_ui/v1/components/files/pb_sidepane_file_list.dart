@@ -12,12 +12,13 @@ const double _sidepaneScrollTopPadding = 8;
 const double _sidepaneScrollBottomPadding = 24;
 
 class PbSidepaneFileListItem {
-  const PbSidepaneFileListItem({required this.data, this.onPressed, this.onAskAgent, this.onShare, this.onDownload});
+  const PbSidepaneFileListItem({required this.data, this.onPressed, this.onAskAgent, this.onShare, this.onExtract, this.onDownload});
 
   final PbAttachmentListItemData data;
   final VoidCallback? onPressed;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
+  final VoidCallback? onExtract;
   final VoidCallback? onDownload;
 }
 
@@ -75,6 +76,7 @@ class PbSidepaneFileList extends StatelessWidget {
           onPressed: file.onPressed,
           onAskAgent: file.onAskAgent,
           onShare: file.onShare,
+          onExtract: file.onExtract,
           onDownload: file.onDownload,
         );
       },
@@ -176,6 +178,7 @@ class PbAttachmentCard extends StatefulWidget {
     this.onPressed,
     this.onAskAgent,
     this.onShare,
+    this.onExtract,
     this.onDownload,
     this.emptyState = false,
     this.emptyIconAssetName = 'file',
@@ -186,6 +189,7 @@ class PbAttachmentCard extends StatefulWidget {
   final VoidCallback? onPressed;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
+  final VoidCallback? onExtract;
   final VoidCallback? onDownload;
   final bool emptyState;
   final String emptyIconAssetName;
@@ -321,6 +325,7 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                             panelBuilder: (closeMenu) => PbFileItemMenu(
                               onOpen: widget.onPressed,
                               onAskAgent: widget.onAskAgent,
+                              onExtract: widget.onExtract,
                               onDownload: widget.onDownload,
                               onDismiss: closeMenu,
                             ),

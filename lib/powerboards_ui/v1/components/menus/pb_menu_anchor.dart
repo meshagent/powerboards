@@ -11,6 +11,7 @@ class PbMenuAnchor extends StatefulWidget {
     this.gap = 10,
     this.triggerWidth,
     this.triggerHeight = 48,
+    this.preferAboveWhenOverflow = false,
     this.onDismiss,
     this.onDismissRequested,
   });
@@ -21,6 +22,7 @@ class PbMenuAnchor extends StatefulWidget {
   final double gap;
   final double? triggerWidth;
   final double triggerHeight;
+  final bool preferAboveWhenOverflow;
   final VoidCallback? onDismiss;
   final VoidCallback? onDismissRequested;
 
@@ -99,6 +101,7 @@ class _PbMenuAnchorState extends State<PbMenuAnchor> {
                 gap: widget.gap,
                 viewportPadding: _viewportPadding,
                 mobileRailStretch: mobileRailStretch,
+                preferAboveWhenOverflow: widget.preferAboveWhenOverflow,
               ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxPanelWidth, maxHeight: maxPanelHeight),
@@ -124,6 +127,7 @@ class _PbMenuAnchorLayoutDelegate extends SingleChildLayoutDelegate {
     required this.gap,
     required this.viewportPadding,
     required this.mobileRailStretch,
+    required this.preferAboveWhenOverflow,
   });
 
   final Rect childRect;
@@ -132,6 +136,7 @@ class _PbMenuAnchorLayoutDelegate extends SingleChildLayoutDelegate {
   final double gap;
   final double viewportPadding;
   final bool mobileRailStretch;
+  final bool preferAboveWhenOverflow;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
@@ -155,6 +160,16 @@ class _PbMenuAnchorLayoutDelegate extends SingleChildLayoutDelegate {
         top = childRect.top;
     }
 
+    if (preferAboveWhenOverflow && placement != PbMenuAnchorPlacement.rightTop) {
+      final panelBottom = top + childSize.height;
+      final maxBottom = size.height - viewportPadding;
+      final aboveTop = childRect.top - gap - childSize.height;
+      final canFitAbove = aboveTop >= viewportPadding;
+      if (panelBottom > maxBottom && canFitAbove) {
+        top = aboveTop;
+      }
+    }
+
     final maxLeft = size.width - viewportPadding - childSize.width;
     final maxTop = size.height - viewportPadding - childSize.height;
 
@@ -171,6 +186,7 @@ class _PbMenuAnchorLayoutDelegate extends SingleChildLayoutDelegate {
         placement != oldDelegate.placement ||
         gap != oldDelegate.gap ||
         viewportPadding != oldDelegate.viewportPadding ||
-        mobileRailStretch != oldDelegate.mobileRailStretch;
+        mobileRailStretch != oldDelegate.mobileRailStretch ||
+        preferAboveWhenOverflow != oldDelegate.preferAboveWhenOverflow;
   }
 }

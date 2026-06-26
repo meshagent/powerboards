@@ -45,9 +45,7 @@ flutter build web \
   --dart-define=OAUTH_MOBILE_CALLBACK_URL=powerboards:/mauth/callback \
   --dart-define=OAUTH_MOBILE_CLIENT_ID=$MOBILE_OAUTH_CLIENT_ID_FROM_MESHAGENT \
   --dart-define=SENTRY_ENABLED=false \
-  --dart-define=MESHAGENT_DOMAIN=meshagent.com \
   --dart-define=DOMAINS=meshagent.app \
-  --dart-define=MESHAGENT_MAIL_DOMAIN=mail.meshagent.com \
   --dart-define=IMAGE_TAG_PREFIX=us-central1-docker.pkg.dev/meshagent-public/images/
 ```
 
@@ -64,9 +62,7 @@ flutter run \
   --dart-define=OAUTH_MOBILE_CALLBACK_URL=powerboards:/mauth/callback \
   --dart-define=OAUTH_MOBILE_CLIENT_ID=$MOBILE_OAUTH_CLIENT_ID_FROM_MESHAGENT \
   --dart-define=SENTRY_ENABLED=false \
-  --dart-define=MESHAGENT_DOMAIN=meshagent.com \
   --dart-define=DOMAINS=meshagent.app \
-  --dart-define=MESHAGENT_MAIL_DOMAIN=mail.meshagent.com \
   --dart-define=IMAGE_TAG_PREFIX=us-central1-docker.pkg.dev/meshagent-public/images/
 
 ## 3) Deploy static files to GCS + HTTPS Load Balancer
@@ -228,9 +224,7 @@ RUN flutter build web \
   --dart-define=OAUTH_MOBILE_CALLBACK_URL=powerboards:/mauth/callback \
   --dart-define=OAUTH_MOBILE_CLIENT_ID=[my-mobile-oauth-id-from-meshagent] \
   --dart-define=SENTRY_ENABLED=false \
-  --dart-define=MESHAGENT_DOMAIN=meshagent.com \
   --dart-define=DOMAINS=meshagent.app \
-  --dart-define=MESHAGENT_MAIL_DOMAIN=mail.meshagent.com \
   --dart-define=IMAGE_TAG_PREFIX=us-central1-docker.pkg.dev/meshagent-public/images/
 
 FROM dart:stable AS builder

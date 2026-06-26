@@ -1141,7 +1141,8 @@ class MeetV1ToolbarButton extends StatefulWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.borderColor,
-  }) : assert(icon != null || iconAssetName != null);
+    this.width,
+  });
 
   const MeetV1ToolbarButton.secondary({
     super.key,
@@ -1153,10 +1154,10 @@ class MeetV1ToolbarButton extends StatefulWidget {
     this.compact = true,
     this.active = false,
     this.loading = false,
+    this.width,
   }) : backgroundColor = null,
        foregroundColor = null,
-       borderColor = null,
-       assert(icon != null || iconAssetName != null);
+       borderColor = null;
 
   final String label;
   final String? tooltip;
@@ -1169,6 +1170,7 @@ class MeetV1ToolbarButton extends StatefulWidget {
   final Color? backgroundColor;
   final Color? foregroundColor;
   final Color? borderColor;
+  final double? width;
 
   @override
   State<MeetV1ToolbarButton> createState() => _MeetV1ToolbarButtonState();
@@ -1191,6 +1193,7 @@ class _MeetV1ToolbarButtonState extends State<MeetV1ToolbarButton> {
         : baseBackground;
     final effectiveBorder = _hovered && _enabled ? Color.lerp(baseBorder, PbColors.customBrandInk, _secondary ? 0.08 : 0.12)! : baseBorder;
     final lifted = _hovered && !_pressed && _enabled;
+    final hasIcon = widget.iconAssetName != null || widget.icon != null;
     final child = widget.loading
         ? SizedBox(
             width: 18,
@@ -1203,10 +1206,10 @@ class _MeetV1ToolbarButtonState extends State<MeetV1ToolbarButton> {
             children: [
               if (widget.iconAssetName != null)
                 PbSvgIcon(assetName: widget.iconAssetName!, size: 22, color: baseForeground)
-              else
+              else if (widget.icon != null)
                 Icon(widget.icon, size: 22, color: baseForeground),
+              if (!widget.compact && hasIcon) ...[const SizedBox(width: 10)],
               if (!widget.compact) ...[
-                const SizedBox(width: 10),
                 Text(
                   widget.label,
                   maxLines: 1,
@@ -1253,7 +1256,7 @@ class _MeetV1ToolbarButtonState extends State<MeetV1ToolbarButton> {
                 child: AnimatedContainer(
                   duration: PbMotion.state,
                   curve: Curves.easeOut,
-                  width: widget.compact ? 44 : null,
+                  width: widget.compact ? 44 : widget.width,
                   height: 44,
                   constraints: BoxConstraints(minWidth: widget.compact ? 44 : 44),
                   padding: EdgeInsets.symmetric(horizontal: widget.compact ? 0 : 16),

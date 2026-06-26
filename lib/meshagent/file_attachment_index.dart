@@ -6,6 +6,7 @@ import 'package:meshagent/room_server_client.dart';
 import 'thread_display_name.dart';
 
 const String powerboardsFileAttachmentIndexPath = '.powerboards/file-attachment-index.json';
+Future<void> _powerboardsFileAttachmentLinkWriteQueue = Future<void>.value();
 
 class PowerboardsFileAttachmentLink {
   const PowerboardsFileAttachmentLink({
@@ -25,7 +26,7 @@ class PowerboardsFileAttachmentLink {
 
     return PowerboardsFileAttachmentLink(
       filePath: filePath is String ? normalizePowerboardsAttachmentPath(filePath) : '',
-      threadPath: threadPath is String ? normalizePowerboardsAttachmentPath(threadPath) : '',
+      threadPath: threadPath is String ? normalizePowerboardsThreadAttachmentPath(threadPath) : '',
       threadName: threadName is String ? threadName.trim() : '',
       createdBy: createdBy is String ? createdBy.trim() : '',
       createdAt: createdAt is String ? DateTime.tryParse(createdAt) : null,
@@ -58,6 +59,54 @@ class PowerboardsFileAttachmentLink {
 
 String normalizePowerboardsAttachmentPath(String path) {
   return path.trim().split('/').where((segment) => segment.isNotEmpty).join('/');
+}
+
+String powerboardsStorageAttachmentPathFromUrl(String path) {
+  final trimmed = path.trim();
+  if (trimmed.isEmpty || trimmed.startsWith('data:')) {
+    return '';
+  }
+
+  final uri = Uri.tryParse(trimmed);
+  if (uri != null && uri.scheme.isNotEmpty) {
+    if (uri.scheme != 'room') {
+      return '';
+    }
+
+    final segments = [
+      if (uri.host.trim().isNotEmpty) uri.host.trim(),
+      ...uri.pathSegments.map((segment) => segment.trim()).where((segment) => segment.isNotEmpty),
+    ];
+    final roomPath = normalizePowerboardsAttachmentPath(segments.join('/'));
+    return roomPath.isEmpty ? '' : roomPath;
+  }
+
+  if (!isPowerboardsStorageAttachmentPath(trimmed)) {
+    return '';
+  }
+  return normalizePowerboardsAttachmentPath(trimmed);
+}
+
+String normalizePowerboardsThreadAttachmentPath(String path) {
+  final trimmed = path.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+
+  if (trimmed.contains('://')) {
+    return trimmed;
+  }
+
+  return normalizePowerboardsAttachmentPath(trimmed);
+}
+
+String powerboardsThreadAttachmentMatchKey(String path) {
+  final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(path);
+  if (normalizedThreadPath.isEmpty) {
+    return '';
+  }
+
+  return normalizePowerboardsAttachmentPath(normalizedThreadPath);
 }
 
 bool isPowerboardsStorageAttachmentPath(String path) {
@@ -104,31 +153,55 @@ Future<void> recordPowerboardsFileAttachmentLinks({
   required String createdBy,
   required Iterable<String> attachmentPaths,
 }) async {
-  final normalizedThreadPath = normalizePowerboardsAttachmentPath(threadPath);
+  final operation = _powerboardsFileAttachmentLinkWriteQueue
+      .catchError((_) {})
+      .then(
+        (_) => _recordPowerboardsFileAttachmentLinks(
+          room: room,
+          threadPath: threadPath,
+          threadName: threadName,
+          createdBy: createdBy,
+          attachmentPaths: attachmentPaths,
+        ),
+      );
+  _powerboardsFileAttachmentLinkWriteQueue = operation.catchError((_) {});
+  await operation;
+}
+
+Future<void> _recordPowerboardsFileAttachmentLinks({
+  required RoomClient room,
+  required String threadPath,
+  required String threadName,
+  required String createdBy,
+  required Iterable<String> attachmentPaths,
+}) async {
+  final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
   if (normalizedThreadPath.isEmpty) {
     return;
   }
 
-  final normalizedAttachments = attachmentPaths
-      .where(isPowerboardsStorageAttachmentPath)
-      .map(normalizePowerboardsAttachmentPath)
-      .where((path) => path.isNotEmpty)
-      .toSet();
+  final normalizedAttachments = attachmentPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toSet();
   if (normalizedAttachments.isEmpty) {
     return;
   }
 
   final now = DateTime.now().toUtc();
   final existing = await loadPowerboardsFileAttachmentLinks(room);
-  final linksByKey = <String, PowerboardsFileAttachmentLink>{for (final link in existing) '${link.filePath}\n${link.threadPath}': link};
+  final linksByKey = <String, PowerboardsFileAttachmentLink>{
+    for (final link in existing) '${link.filePath}\n${powerboardsThreadAttachmentMatchKey(link.threadPath)}': link,
+  };
 
   for (final filePath in normalizedAttachments) {
-    linksByKey['$filePath\n$normalizedThreadPath'] = PowerboardsFileAttachmentLink(
+    final key = '$filePath\n${powerboardsThreadAttachmentMatchKey(normalizedThreadPath)}';
+    final existing = linksByKey[key];
+    final normalizedCreatedBy = createdBy.trim();
+
+    linksByKey[key] = PowerboardsFileAttachmentLink(
       filePath: filePath,
       threadPath: normalizedThreadPath,
-      threadName: threadName.trim(),
-      createdBy: createdBy.trim(),
-      createdAt: now,
+      threadName: threadName.trim().isNotEmpty ? threadName.trim() : existing?.threadName ?? '',
+      createdBy: normalizedCreatedBy.isNotEmpty ? normalizedCreatedBy : existing?.createdBy ?? '',
+      createdAt: existing?.createdAt ?? now,
     );
   }
 

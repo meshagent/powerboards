@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -22,9 +21,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'powerboards_router/powerboards_router.dart';
 import 'powerboards_controller/powerboards_controller.dart';
 
-import 'firebase.dart';
 import 'logical_keyboard_monitor/logical_keyboard_monitor.dart';
 import 'meshagent/meshagent.dart';
+import 'meshagent/room_lifecycle_errors.dart';
 import 'nav/chrome_visibility.dart';
 import 'nav/nav.dart';
 import 'theme/theme.dart';
@@ -38,6 +37,7 @@ import 'ui/powerboards_toast_theme.dart';
 import 'ui/routes.dart';
 import 'ui/top_banner.dart';
 import 'updates/powerboards_desktop_update_banner.dart';
+import 'settings/shared_profiles.dart';
 import 'settings/ui_mode.dart';
 
 final uiRoot = GlobalKey();
@@ -108,27 +108,34 @@ bool _isExpectedWebHotRestartViewDispose(Object error, [StackTrace? stackTrace])
 }
 
 bool _isExpectedRoomClientDisposed(Object error, [StackTrace? stackTrace]) {
-  final errorText = '$error';
-  final stackText = stackTrace?.toString() ?? '';
-  return errorText.contains('room client disposed') ||
-      errorText.contains('room connection closed before request completed') ||
-      stackText.contains('room client disposed');
+  return powerboardsIsExpectedRoomLifecycleClosure(error, stackTrace);
 }
 
 void main() async {
   SolidartConfig.assertSignalBuilderWithoutDependencies = false;
 
-  const sentryEnabled = bool.fromEnvironment('SENTRY_ENABLED', defaultValue: false);
-  const sentryRelease = String.fromEnvironment('SENTRY_RELEASE');
-  const sentryEnvironment = String.fromEnvironment('SENTRY_ENVIRONMENT');
+  WidgetsFlutterBinding.ensureInitialized();
 
-  if (sentryEnabled) {
+  // If SERVER_URL is in the environment, it means the config was complied in. Use it.
+  const serverUrl = String.fromEnvironment("SERVER_URL");
+  if (serverUrl.isNotEmpty) {
+    MeshagentConfig.current = MeshagentConfig.fromEnvironment();
+  } else {
+    // Get the config from the website
+    final configUri = Uri.parse("/config/config.json");
+    MeshagentConfig.current = await MeshagentConfig.fromUri(configUri);
+  }
+
+  final config = MeshagentConfig.current!;
+
+  if (config.sentryEnabled) {
     await SentryFlutter.init((options) {
-      if (sentryRelease.isNotEmpty) {
-        options.release = sentryRelease;
+      options.dsn = config.sentryDsn;
+      if (config.sentryRelease.isNotEmpty) {
+        options.release = config.sentryRelease;
       }
-      if (sentryEnvironment.isNotEmpty) {
-        options.environment = sentryEnvironment;
+      if (config.sentryEnvironment.isNotEmpty) {
+        options.environment = config.sentryEnvironment;
       }
       // Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
       // We recommend adjusting this value in production.
@@ -160,7 +167,6 @@ void main() async {
 }
 
 Future<void> startApp() async {
-  WidgetsFlutterBinding.ensureInitialized();
   _configureDebugPrintFilter();
   final originalFlutterErrorHandler = FlutterError.onError;
   FlutterError.onError = (details) {
@@ -184,7 +190,11 @@ Future<void> startApp() async {
     ),
   );
 
-  MeshagentConfig.current = MeshagentConfig.fromEnvironment();
+  await applySharedProfileConfigIfSupported();
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.macOS || defaultTargetPlatform == TargetPlatform.windows)) {
+    MeshagentConfig.current = await MeshagentConfig.current!.withDeploymentConfig();
+  }
+  await hydrateSharedProfileAuthIfSupported();
 
   final initialLink = kIsWeb ? null : await appLinks.getInitialLink();
   final uri = initialLink != null && isShareMediaUri(initialLink) ? null : initialLink;
@@ -209,9 +219,6 @@ Future<void> initializeApp() async {
   await initializeFlutterDocumenRuntime();
   await Highlighter.initialize(['dart', 'sql', 'yaml']);
 
-  if (powerboardsSupportsNativeFirebase && powerboardsFirebaseEnabled) {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  }
   LogicalKeyboardMonitor.start();
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
 class PreviewRoomRailMenuBridge extends ChangeNotifier {
+  bool chatActive = false;
   bool showDestinations = true;
   bool showMore = true;
   bool showRename = true;
@@ -24,6 +25,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
   bool _notificationScheduled = false;
 
   void configure({
+    required bool chatActive,
     required bool showDestinations,
     required bool showMore,
     required bool showRename,
@@ -52,6 +54,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
     this.onShutdownPressed = onShutdownPressed;
 
     final changed =
+        this.chatActive != chatActive ||
         this.showDestinations != showDestinations ||
         this.showMore != showMore ||
         this.showRename != showRename ||
@@ -64,6 +67,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
         this.meetActive != meetActive ||
         this.consoleLabel != consoleLabel;
 
+    this.chatActive = chatActive;
     this.showDestinations = showDestinations;
     this.showMore = showMore;
     this.showRename = showRename;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,7 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.d
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_sidepane_item_menu.dart' as sidepane_menu;
 import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_transcript_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 
 class _NoopProtocolChannel extends ProtocolChannel {
@@ -57,7 +60,301 @@ class _FakeThreadStorageRepository extends agent_sessions.ThreadStorageRepositor
   Future<void> renameThread(String threadPath, String name) async {}
 }
 
+class _DelayedThreadStorageRepository extends _FakeThreadStorageRepository {
+  _DelayedThreadStorageRepository(super.entries);
+
+  final Completer<void> _openCompleter = Completer<void>();
+
+  void completeOpen() {
+    if (!_openCompleter.isCompleted) {
+      _openCompleter.complete();
+    }
+  }
+
+  @override
+  Future<void> open() => _openCompleter.future;
+}
+
+RuntimeDocument _threadDocumentWithJson(List<Map<String, dynamic>> children) {
+  final schema = MeshSchema(
+    rootTagName: 'thread',
+    elements: [
+      ElementType(
+        tagName: 'thread',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['messages', 'message', 'reasoning', 'exec', 'event']),
+        ],
+      ),
+      ElementType(
+        tagName: 'messages',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['message', 'reasoning', 'exec', 'event']),
+        ],
+      ),
+      ElementType(
+        tagName: 'message',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['file', 'image']),
+        ],
+      ),
+      ElementType(
+        tagName: 'reasoning',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['file', 'image']),
+        ],
+      ),
+      ElementType(
+        tagName: 'exec',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['file', 'image']),
+        ],
+      ),
+      ElementType(
+        tagName: 'event',
+        description: null,
+        properties: [
+          ChildProperty(name: 'children', description: null, childTagNames: const ['file', 'image']),
+        ],
+      ),
+      ElementType(tagName: 'file', description: null, properties: const []),
+      ElementType(tagName: 'image', description: null, properties: const []),
+    ],
+  );
+  final document = RuntimeDocument(id: 'thread', sendChanges: (_) {}, schema: schema);
+  document.receiveChanges({
+    'root': true,
+    'elements': [
+      {
+        'insert': [
+          for (final child in children) {'element': child},
+        ],
+      },
+    ],
+    'attributes': {'set': const [], 'delete': const []},
+  });
+  return document;
+}
+
 void main() {
+  test('scoped value helper falls back when the local scope is unavailable', () {
+    expect(powerboardsPreferScopedValue<String>(scopedValue: 'scoped', fallbackValue: 'fallback'), 'scoped');
+    expect(powerboardsPreferScopedValue<String>(scopedValue: null, fallbackValue: 'fallback'), 'fallback');
+    expect(powerboardsPreferScopedValue<String>(scopedValue: null, fallbackValue: null), isNull);
+  });
+
+  test('voice session disconnect helper keys off the active session and route change', () {
+    expect(
+      powerboardsShouldDisconnectVoiceSessionForAgentSwitch(voiceSessionConnected: true, currentRouteId: 'voice', nextRouteId: 'assistant'),
+      isTrue,
+    );
+    expect(
+      powerboardsShouldDisconnectVoiceSessionForAgentSwitch(
+        voiceSessionConnected: false,
+        currentRouteId: 'voice',
+        nextRouteId: 'assistant',
+      ),
+      isFalse,
+    );
+    expect(
+      powerboardsShouldDisconnectVoiceSessionForAgentSwitch(voiceSessionConnected: true, currentRouteId: 'voice', nextRouteId: 'voice'),
+      isFalse,
+    );
+  });
+
+  test('preview rail keeps voice session inactive while a disconnect is still settling', () {
+    expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: true, pendingVoiceSessionDisconnect: true), isFalse);
+    expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: false, pendingVoiceSessionDisconnect: true), isFalse);
+    expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: true, pendingVoiceSessionDisconnect: false), isTrue);
+  });
+
+  test('desktop preview does not derive loading thread title from stale path slugs', () {
+    final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+      selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',
+      currentThreadLabel: 'New Chat',
+      currentThreadLabelTrusted: false,
+      threadNamesByPath: const {},
+      threadListLoaded: false,
+    );
+
+    expect(title, powerboardsDesktopPreviewLoadingThreadTitle);
+    expect(title, isNot('New Chat'));
+  });
+
+  test('desktop preview uses remembered title while selected thread list is loading', () {
+    final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+      selectedThreadPath: 'dataset://agents/assistant/threads/testing-screenshot-upload',
+      currentThreadLabel: 'Testing Screenshot Upload',
+      currentThreadLabelTrusted: true,
+      threadNamesByPath: const {},
+      threadListLoaded: false,
+    );
+
+    expect(title, 'Testing Screenshot Upload');
+  });
+
+  test('desktop preview ignores remembered generic thread title while selected thread list is loading', () {
+    for (final genericTitle in const ['New Chat', 'New thread']) {
+      final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+        selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',
+        currentThreadLabel: genericTitle,
+        currentThreadLabelTrusted: true,
+        threadNamesByPath: const {},
+        threadListLoaded: false,
+      );
+
+      expect(title, powerboardsDesktopPreviewLoadingThreadTitle);
+      expect(title, isNot(genericTitle));
+    }
+  });
+
+  test('desktop preview uses thread list title after remembered thread loads', () {
+    final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
+      selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',
+      currentThreadLabel: 'New Chat',
+      currentThreadLabelTrusted: false,
+      threadNamesByPath: const {'dataset://agents/assistant/threads/new-chat': 'IBM Presentation Summary'},
+      threadListLoaded: true,
+    );
+
+    expect(title, 'IBM Presentation Summary');
+  });
+
+  test('desktop preview extracts attachments from messages containers', () {
+    final document = _threadDocumentWithJson([
+      {
+        'tagName': 'messages',
+        'children': [
+          {
+            'element': {
+              'tagName': 'message',
+              'children': [
+                {
+                  'element': {
+                    'tagName': 'file',
+                    'attributes': {'path': 'scratch.md'},
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    final messages = powerboardsDesktopPreviewThreadMessageElements(document);
+    final attachments = [
+      for (final message in messages)
+        for (final attachment in message.getChildren().whereType<MeshElement>()) powerboardsDesktopPreviewThreadAttachmentPath(attachment),
+    ];
+
+    expect(attachments, ['scratch.md']);
+  });
+
+  test('desktop preview extracts attachments from top-level message nodes', () {
+    final document = _threadDocumentWithJson([
+      {
+        'tagName': 'message',
+        'children': [
+          {
+            'element': {
+              'tagName': 'image',
+              'attributes': {'url': 'screenshots/testing.png'},
+            },
+          },
+        ],
+      },
+    ]);
+
+    final messages = powerboardsDesktopPreviewThreadMessageElements(document);
+    final attachments = [
+      for (final message in messages)
+        for (final attachment in message.getChildren().whereType<MeshElement>()) powerboardsDesktopPreviewThreadAttachmentPath(attachment),
+    ];
+
+    expect(attachments, ['screenshots/testing.png']);
+  });
+
+  test('desktop preview extracts room URL attachments from thread nodes', () {
+    final document = _threadDocumentWithJson([
+      {
+        'tagName': 'message',
+        'children': [
+          {
+            'element': {
+              'tagName': 'image',
+              'attributes': {'url': 'room:///sample-attachments/testing.png'},
+            },
+          },
+        ],
+      },
+    ]);
+
+    final messages = powerboardsDesktopPreviewThreadMessageElements(document);
+    final attachments = [
+      for (final message in messages)
+        for (final attachment in message.getChildren().whereType<MeshElement>()) powerboardsDesktopPreviewThreadAttachmentPath(attachment),
+    ];
+
+    expect(attachments, ['sample-attachments/testing.png']);
+  });
+
+  test('desktop preview extracts attachments from agent input content', () {
+    final turnStart = agent_sessions.TurnStart(
+      threadId: 'dataset://agents/assistant/threads/testing-screenshot-upload',
+      content: const [
+        agent_sessions.AgentFileContent(url: 'room:///sample-attachments/screenshot.png'),
+        agent_sessions.AgentFileContent(url: 'room:///sample-attachments/screenshot.png'),
+      ],
+    );
+    final turnSteer = agent_sessions.TurnSteer(
+      threadId: 'dataset://agents/assistant/threads/testing-screenshot-upload',
+      turnId: 'turn-1',
+      content: const [agent_sessions.AgentFileContent(url: 'sample-attachments/scratch.md')],
+    );
+
+    expect(powerboardsDesktopPreviewAgentMessageAttachmentPaths(turnStart), ['sample-attachments/screenshot.png']);
+    expect(powerboardsDesktopPreviewAgentMessageAttachmentPaths(turnSteer), ['sample-attachments/scratch.md']);
+  });
+
+  test('desktop preview attachment scope follows only the selected thread', () {
+    expect(powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread('dataset://agents/assistant/threads/selected'), [
+      'dataset://agents/assistant/threads/selected',
+    ]);
+
+    expect(powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(null), isEmpty);
+    expect(powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(''), isEmpty);
+  });
+
+  test('desktop preview attachment scope signature is stable for the same selected thread', () {
+    final initial = powerboardsDesktopPreviewAttachmentThreadScopeSignature(
+      selectedThreadPath: 'dataset://agents/assistant/threads/selected',
+      selectedThreadName: 'Selected',
+    );
+    final sameSelectedThread = powerboardsDesktopPreviewAttachmentThreadScopeSignature(
+      selectedThreadPath: 'dataset://agents/assistant/threads/selected',
+      selectedThreadName: 'Selected',
+    );
+    final selectedChanged = powerboardsDesktopPreviewAttachmentThreadScopeSignature(
+      selectedThreadPath: 'dataset://agents/assistant/threads/other',
+      selectedThreadName: 'Other',
+    );
+
+    expect(sameSelectedThread, initial);
+    expect(selectedChanged, isNot(initial));
+    expect(powerboardsDesktopPreviewAttachmentThreadScopeSignature(selectedThreadPath: null, selectedThreadName: null), isEmpty);
+  });
+
+  test('desktop preview attachment loader is gated to files tab or preview', () {
+    expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.agents, filePreviewOpen: false), isFalse);
+    expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.files, filePreviewOpen: false), isTrue);
+    expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.agents, filePreviewOpen: true), isTrue);
+  });
+
   Widget buildHarness({
     required List<PbAgentListItemData> agents,
     String? selectedAgentId,
@@ -157,6 +454,189 @@ void main() {
 
     expect(find.text('Realtime Thread'), findsOneWidget);
     expect(find.text('Greeting Chat2'), findsOneWidget);
+  });
+
+  testWidgets('desktop preview treats missing selected thread as new thread', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final storage = _FakeThreadStorageRepository([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/real',
+        name: 'Real Thread',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              height: 720,
+              child: PowerboardsDesktopPreviewThreadListHarness(
+                client: room,
+                threadListPath: 'dataset://agents/assistant/threads',
+                selectedThreadPath: 'dataset://agents/assistant/threads/missing',
+                selectedThreadName: 'Invisible Thread',
+                chatClientFactory: (_, _) => _FakeChatClient(),
+                threadStorageFactory: (_) => storage,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final newThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'New Thread...'));
+    final realThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Real Thread'));
+
+    expect(newThreadChip.selected, isTrue);
+    expect(realThreadChip.selected, isFalse);
+    expect(find.text('Invisible Thread'), findsNothing);
+  });
+
+  testWidgets('desktop preview keeps selected thread visible while thread list opens', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final storage = _DelayedThreadStorageRepository([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/real',
+        name: 'Real Thread',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/other',
+        name: 'Other Thread',
+        createdAt: '2026-05-28T22:00:00.000Z',
+        modifiedAt: '2026-05-28T22:00:00.000Z',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              height: 720,
+              child: PowerboardsDesktopPreviewThreadListHarness(
+                client: room,
+                threadListPath: 'dataset://agents/assistant/threads',
+                selectedThreadPath: 'dataset://agents/assistant/threads/real',
+                selectedThreadName: 'Real Thread',
+                chatClientFactory: (_, _) => _FakeChatClient(),
+                threadStorageFactory: (_) => storage,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final loadingNewThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'New Thread...'));
+    final loadingRealThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Real Thread'));
+
+    expect(loadingNewThreadChip.selected, isFalse);
+    expect(loadingRealThreadChip.selected, isTrue);
+    expect(find.text('Other Thread'), findsNothing);
+
+    storage.completeOpen();
+    await tester.pumpAndSettle();
+
+    final loadedRealThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Real Thread'));
+    final loadedOtherThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Other Thread'));
+
+    expect(loadedRealThreadChip.selected, isTrue);
+    expect(loadedOtherThreadChip.selected, isFalse);
+  });
+
+  test('desktop preview verifies selected thread only after list load', () {
+    const selectedPath = 'dataset://agents/assistant/threads/real';
+    const visiblePaths = ['dataset://agents/assistant/threads/real', 'dataset://agents/assistant/threads/other'];
+
+    expect(
+      powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads(
+        selectedThreadPath: selectedPath,
+        threadPaths: visiblePaths,
+        threadListLoaded: false,
+      ),
+      isNull,
+    );
+    expect(
+      powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads(
+        selectedThreadPath: selectedPath,
+        threadPaths: visiblePaths,
+        threadListLoaded: true,
+      ),
+      selectedPath,
+    );
+    expect(
+      powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads(
+        selectedThreadPath: 'dataset://agents/assistant/threads/missing',
+        threadPaths: visiblePaths,
+        threadListLoaded: true,
+      ),
+      isNull,
+    );
+  });
+
+  testWidgets('desktop preview restores visible selected thread', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final storage = _FakeThreadStorageRepository([
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/real',
+        name: 'Real Thread',
+        createdAt: '2026-05-28T23:00:00.000Z',
+        modifiedAt: '2026-05-28T23:00:00.000Z',
+      ),
+      const agent_sessions.ThreadListEntry(
+        path: 'dataset://agents/assistant/threads/other',
+        name: 'Other Thread',
+        createdAt: '2026-05-28T22:00:00.000Z',
+        modifiedAt: '2026-05-28T22:00:00.000Z',
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              height: 720,
+              child: PowerboardsDesktopPreviewThreadListHarness(
+                client: room,
+                threadListPath: 'dataset://agents/assistant/threads',
+                selectedThreadPath: 'dataset://agents/assistant/threads/real',
+                chatClientFactory: (_, _) => _FakeChatClient(),
+                threadStorageFactory: (_) => storage,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final newThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'New Thread...'));
+    final realThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Real Thread'));
+    final otherThreadChip = tester.widget<PbThreadChip>(find.widgetWithText(PbThreadChip, 'Other Thread'));
+
+    expect(newThreadChip.selected, isFalse);
+    expect(realThreadChip.selected, isTrue);
+    expect(otherThreadChip.selected, isFalse);
   });
 
   testWidgets('agent list uses ids so duplicate titles stay independently selectable', (tester) async {
@@ -651,6 +1131,80 @@ void main() {
     expect(loadCount, 1);
   });
 
+  testWidgets('editable document preview keeps controlled draft across preview remounts', (tester) async {
+    late StateSetter rebuildParent;
+    var fullscreen = false;
+    var loadCount = 0;
+    String? draftText;
+    String? savedText;
+    var draftDirty = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuildParent = setState;
+              return SizedBox(
+                width: 560,
+                height: 480,
+                child: PbFilePreviewPane(
+                  key: ValueKey(fullscreen ? 'fullscreen-preview' : 'side-preview'),
+                  file: PbAttachmentListItemData.fromFileName(title: 'mobile-test.txt', path: 'docs/mobile-test.txt'),
+                  fullscreen: fullscreen,
+                  sourceKey: 'docs/mobile-test.txt',
+                  loadText: () async {
+                    loadCount += 1;
+                    return 'Loaded text $loadCount';
+                  },
+                  onSaveTextRequested: (text) async {
+                    savedText = text;
+                  },
+                  draftText: draftText,
+                  draftDirty: draftDirty,
+                  onDraftTextChanged: (text) {
+                    draftText = text;
+                    draftDirty = true;
+                  },
+                  onDraftSaved: () {
+                    draftText = null;
+                    draftDirty = false;
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(loadCount, 1);
+    await tester.enterText(find.byType(TextField), 'Unsaved remount draft');
+    await tester.pump();
+
+    rebuildParent(() => fullscreen = true);
+    await tester.pumpAndSettle();
+
+    var textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.controller?.text, 'Unsaved remount draft');
+    expect(loadCount, 1);
+
+    rebuildParent(() => fullscreen = false);
+    await tester.pumpAndSettle();
+
+    textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.controller?.text, 'Unsaved remount draft');
+    expect(loadCount, 1);
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(savedText, 'Unsaved remount draft');
+    expect(draftText, isNull);
+    expect(draftDirty, isFalse);
+  });
+
   testWidgets('room panel file preview source owns editable real content instead of legacy child', (tester) async {
     String? savedText;
     final file = PbAttachmentListItemData.fromFileName(title: 'notes.csv', path: 'docs/notes.csv');
@@ -857,6 +1411,67 @@ void main() {
     expect(find.text('Share'), findsNothing);
   });
 
+  testWidgets('interim room panel overlay keeps file preview in sheet mode', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'brief.pdf', path: 'docs/brief.pdf');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 760,
+            height: 560,
+            child: PbRoomPanel(
+              responsiveOverlay: true,
+              responsiveOverlayMobile: false,
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              attachments: [file],
+              threads: const ['New Thread...'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<PbFilePreviewPane>(find.byType(PbFilePreviewPane)).fullscreen, isFalse);
+  });
+
+  testWidgets('mobile room panel overlay can request fullscreen file preview', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'brief.pdf', path: 'docs/brief.pdf');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbRoomPanel(
+              responsiveOverlay: true,
+              responsiveOverlayMobile: true,
+              openFilePreviewAsFullscreen: true,
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              attachments: [file],
+              threads: const ['New Thread...'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<PbFilePreviewPane>(find.byType(PbFilePreviewPane)).fullscreen, isTrue);
+  });
+
   testWidgets('responsive ask agent closes file preview and returns to threads panel', (tester) async {
     final file = PbAttachmentListItemData.fromFileName(title: 'brief.pdf', path: 'docs/brief.pdf');
     var selectedTab = PbRoomPanelTab.files;
@@ -998,6 +1613,67 @@ void main() {
     expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
   });
 
+  testWidgets('room panel forced fullscreen keeps minimize control when not a responsive overlay', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'scratch.md', path: 'sample-attachments/scratch.md');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 960,
+            height: 560,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              openFilePreviewAsFullscreen: true,
+              attachments: [file],
+              threads: const ['Planning'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'minimize-2'), findsOneWidget);
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'maximize-2'), findsNothing);
+  });
+
+  testWidgets('room panel responsive overlay fullscreen hides minimize control', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'scratch.md', path: 'sample-attachments/scratch.md');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+              openFilePreviewAsFullscreen: true,
+              responsiveOverlay: true,
+              attachments: [file],
+              threads: const ['Planning'],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'minimize-2'), findsNothing);
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'maximize-2'), findsNothing);
+  });
+
   testWidgets('file preview uses real native document child instead of editable sample fallback', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -1029,7 +1705,7 @@ void main() {
             width: 560,
             height: 480,
             child: PbFilePreviewPane(
-              file: PbAttachmentListItemData.fromFileName(title: 'archive.zip', previewState: PbAttachmentPreviewState.unsupported),
+              file: PbAttachmentListItemData.fromFileName(title: 'archive.rar', previewState: PbAttachmentPreviewState.unsupported),
               fullscreen: false,
             ),
           ),
@@ -1044,6 +1720,35 @@ void main() {
     expect(find.text('File preview not supported'), findsOneWidget);
     expect((frameCenter.dx - cardCenter.dx).abs(), lessThan(1));
     expect((frameCenter.dy - cardCenter.dy).abs(), lessThan(1));
+  });
+
+  testWidgets('archive preview state card shows extraction action with file size', (tester) async {
+    var extracted = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: PbFilePreviewStateCard(
+              file: PbAttachmentListItemData.fromFileName(
+                title: 'archive.zip',
+                previewState: PbAttachmentPreviewState.unsupported,
+                sizeLabel: '732 KB',
+              ),
+              state: PbAttachmentPreviewState.unsupported,
+              onExtractArchive: () => extracted = true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Extract files into folder'), findsOneWidget);
+    expect(find.text('732 KB'), findsOneWidget);
+    expect(find.text('Generated by Assistant'), findsNothing);
+
+    await tester.tap(find.text('Extract files into folder'));
+    expect(extracted, isTrue);
   });
 
   testWidgets('file preview state card supports contextual empty labels', (tester) async {
@@ -1218,6 +1923,57 @@ void main() {
 
     expect(find.text('Browse transcripts from recent meetings.'), findsOneWidget);
     expect(find.text('Browse transcripts from the last seven days.'), findsNothing);
+  });
+
+  testWidgets('interim meet transcript overlay keeps file preview in sheet mode', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'daily.transcript', path: 'transcripts/daily.transcript');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 760,
+            height: 560,
+            child: PbMeetTranscriptPanel(
+              responsiveOverlay: true,
+              responsiveOverlayMobile: false,
+              transcripts: [file],
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<PbFilePreviewPane>(find.byType(PbFilePreviewPane)).fullscreen, isFalse);
+  });
+
+  testWidgets('mobile meet transcript overlay can request fullscreen file preview', (tester) async {
+    final file = PbAttachmentListItemData.fromFileName(title: 'daily.transcript', path: 'transcripts/daily.transcript');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 560,
+            child: PbMeetTranscriptPanel(
+              responsiveOverlay: true,
+              responsiveOverlayMobile: true,
+              openFilePreviewAsFullscreen: true,
+              transcripts: [file],
+              initialPreviewFile: file,
+              initialFilePreviewOpen: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<PbFilePreviewPane>(find.byType(PbFilePreviewPane)).fullscreen, isTrue);
   });
 
   testWidgets('meet transcript row menu exposes ask agent and download actions', (tester) async {

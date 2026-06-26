@@ -15,12 +15,12 @@ import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/connection.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
-import 'package:powerboards/meshagent/oauth_response.dart';
 import 'package:powerboards/meshagent/preselect_room.dart';
 import 'package:powerboards/meshagent/rooms_list_builder.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/settings/selected_room.dart';
+import 'package:powerboards/settings/shared_profiles.dart';
 import 'package:powerboards/theme/theme.dart';
 
 import 'empty_states.dart';
@@ -305,6 +305,7 @@ Widget loginRequiredBuilder(BuildContext context, WidgetBuilder builder, Uri cur
     builder: builder,
     scope: fullOAuthScope,
     extraQueryParams: {"state": state.encode()},
+    preferEphemeralAuthSession: !kIsWeb && {TargetPlatform.macOS, TargetPlatform.windows}.contains(defaultTargetPlatform),
   );
 }
 
@@ -359,56 +360,14 @@ final routes = [
         callbackUrl: config.oauthCallbackUrl,
         oauthClientId: config.oauthClientId,
         authorizationCode: code!,
-        onAuthSuccess: () {
+        onAuthSuccess: () async {
+          await syncPowerboardsAuthToSharedProfile();
+          if (!context.mounted) {
+            return;
+          }
           context.go(redirectUri);
         },
       );
-    },
-  ),
-
-  PathRoute.keyBuilder(
-    name: "oauth_callback",
-    keyBuilder: (route) => ValueKey(route.parameters["room_name"]),
-    path: "/oauth2/callback",
-    builder: (context, args) {
-      final stateRaw = args.uri.queryParameters["state"];
-      final code = args.uri.queryParameters["code"];
-      if (stateRaw == null || code == null || code.trim().isEmpty) {
-        return _LoginFailed(
-          error: "OAuth callback is missing required parameters",
-          errorCode: "invalid_oauth_callback",
-          errorDescription: "Missing state or authorization code in the callback URL.",
-        );
-      }
-
-      final parsedState = jsonDecode(stateRaw);
-      if (parsedState is! Map) {
-        return _LoginFailed(
-          error: "OAuth callback state is invalid",
-          errorCode: "invalid_oauth_state",
-          errorDescription: "Expected callback state to be a JSON object.",
-        );
-      }
-
-      final roomName = (parsedState["room_name"] ?? parsedState["roomName"])?.toString().trim();
-      final requestId = (parsedState["request_id"] ?? parsedState["requestId"])?.toString().trim();
-      final projectId = (parsedState["project_id"] ?? parsedState["projectId"])?.toString().trim();
-
-      if (roomName == null ||
-          roomName.isEmpty ||
-          requestId == null ||
-          requestId.isEmpty ||
-          projectId == null ||
-          projectId.isEmpty ||
-          projectId == "null") {
-        return _LoginFailed(
-          error: "OAuth callback state is incomplete",
-          errorCode: "invalid_oauth_state",
-          errorDescription: "Missing project_id, room_name, or request_id in OAuth callback state.",
-        );
-      }
-
-      return OAuthResponsePage(projectId: projectId, roomName: roomName, requestId: requestId, authorizationCode: code);
     },
   ),
 
