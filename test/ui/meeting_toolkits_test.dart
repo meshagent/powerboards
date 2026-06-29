@@ -167,16 +167,7 @@ Future<void> _pumpMeetingToolkits(
 }) async {
   await tester.pumpWidget(
     ShadApp(
-      home: Scaffold(
-        body: MeetingToolkits(
-          room: harness.room,
-          desktopV1Style: true,
-          roomName: 'test-room',
-          projectId: 'project',
-          canInstallTranscriber: canInstallTranscriber,
-          transcriberInstalled: transcriberInstalled,
-        ),
-      ),
+      home: Scaffold(body: MeetingToolkits(room: harness.room, desktopV1Style: true)),
     ),
   );
 }

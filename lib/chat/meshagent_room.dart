@@ -3975,6 +3975,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         showShutdown: showShutdown,
         meetActive: resolvedMeetActive,
         consoleLabel: 'Developer console',
+        whoIsHereNames: const [],
         onRenamePressed: () => unawaited(_renameCurrentRoomFromPreviewRail()),
         onPermissionsPressed: () => unawaited(_openCurrentRoomPermissionsFromPreviewRail()),
         onManageAgentsPressed: () => unawaited(showManageAgents()),
