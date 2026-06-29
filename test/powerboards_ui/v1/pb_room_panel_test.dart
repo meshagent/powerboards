@@ -852,7 +852,7 @@ void main() {
 
     expect(find.text('Files'), findsNothing);
     expect(find.text('Browse threads by selected agent.'), findsOneWidget);
-    expect(find.text('Browse attachments by selected agent.'), findsNothing);
+    expect(find.text('Browse attachments by selected thread.'), findsNothing);
   });
 
   testWidgets('empty agent install state stays inside agents tab', (tester) async {
@@ -1522,7 +1522,7 @@ void main() {
     expect(askedFile, file);
     expect(find.byKey(const ValueKey('file-preview-content-frame')), findsNothing);
     expect(find.text('Browse threads by selected agent.'), findsOneWidget);
-    expect(find.text('Browse attachments by selected agent.'), findsNothing);
+    expect(find.text('Browse attachments by selected thread.'), findsNothing);
   });
 
   testWidgets('thread preview unavailable state does not expose an inert composer', (tester) async {

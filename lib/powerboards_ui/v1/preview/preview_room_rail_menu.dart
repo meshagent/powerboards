@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:collection/collection.dart';
 
 class PreviewRoomRailMenuBridge extends ChangeNotifier {
   bool chatActive = false;
@@ -14,6 +15,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
   bool showShutdown = false;
   bool meetActive = false;
   String consoleLabel = 'Developer console';
+  List<String> whoIsHereNames = const [];
 
   VoidCallback? onRenamePressed;
   VoidCallback? onPermissionsPressed;
@@ -37,6 +39,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
     required bool showShutdown,
     required bool meetActive,
     required String consoleLabel,
+    required List<String> whoIsHereNames,
     VoidCallback? onRenamePressed,
     VoidCallback? onPermissionsPressed,
     VoidCallback? onManageAgentsPressed,
@@ -65,7 +68,8 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
         this.showConsoleToggle != showConsoleToggle ||
         this.showShutdown != showShutdown ||
         this.meetActive != meetActive ||
-        this.consoleLabel != consoleLabel;
+        this.consoleLabel != consoleLabel ||
+        !const ListEquality<String>().equals(this.whoIsHereNames, whoIsHereNames);
 
     this.chatActive = chatActive;
     this.showDestinations = showDestinations;
@@ -79,6 +83,7 @@ class PreviewRoomRailMenuBridge extends ChangeNotifier {
     this.showShutdown = showShutdown;
     this.meetActive = meetActive;
     this.consoleLabel = consoleLabel;
+    this.whoIsHereNames = List<String>.unmodifiable(whoIsHereNames);
 
     if (changed) {
       _notifyListenersSafely();

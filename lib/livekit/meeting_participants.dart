@@ -41,14 +41,12 @@ Iterable<lk.TrackPublication> activeVideoPublications(lk.Participant participant
   }
 }
 
-List<lk.Participant> uniqueMeetingParticipants(lk.Room room) {
+List<lk.Participant> uniqueMeetingParticipants(lk.Room room, {Iterable<String> hiddenAgentNames = const []}) {
   final participantsByIdentity = <String, lk.Participant>{};
+  final hiddenAgentNameSet = hiddenAgentNames.map(_normalizeParticipantName).where((name) => name.isNotEmpty).toSet();
 
   for (final participant in room.remoteParticipants.values) {
-    final isRecorder = participant.identity.endsWith(".agent-recorder");
-    final isTranscriber = participant.identity.endsWith(".agent-transcriber");
-
-    if (isRecorder || isTranscriber) {
+    if (_isHiddenMeetingParticipant(participant, hiddenAgentNameSet)) {
       continue;
     }
 
@@ -65,4 +63,28 @@ List<lk.Participant> uniqueMeetingParticipants(lk.Room room) {
 
 String _participantKey(lk.Participant participant) {
   return participant.identity.isNotEmpty ? participant.identity : participant.sid;
+}
+
+bool _isHiddenMeetingParticipant(lk.Participant participant, Set<String> hiddenAgentNames) {
+  return isHiddenMeetingParticipant(
+    identity: participant.identity,
+    participantName: participant.attributes["name"],
+    hiddenAgentNames: hiddenAgentNames,
+  );
+}
+
+bool isHiddenMeetingParticipant({required String identity, Object? participantName, Iterable<String> hiddenAgentNames = const []}) {
+  final isRecorder = identity.endsWith(".agent-recorder");
+  final isTranscriber = identity.endsWith(".agent-transcriber");
+  if (isRecorder || isTranscriber) {
+    return true;
+  }
+
+  final hiddenAgentNameSet = hiddenAgentNames.map(_normalizeParticipantName).where((name) => name.isNotEmpty).toSet();
+  final normalizedParticipantName = _normalizeParticipantName(participantName);
+  return normalizedParticipantName.isNotEmpty && hiddenAgentNameSet.contains(normalizedParticipantName);
+}
+
+String _normalizeParticipantName(Object? value) {
+  return value is String ? value.trim().toLowerCase() : '';
 }

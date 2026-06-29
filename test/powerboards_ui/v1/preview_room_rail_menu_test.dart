@@ -33,6 +33,7 @@ void main() {
                   showShutdown: false,
                   meetActive: false,
                   consoleLabel: 'Developer console',
+                  whoIsHereNames: const [],
                 );
                 return const SizedBox.shrink();
               },
