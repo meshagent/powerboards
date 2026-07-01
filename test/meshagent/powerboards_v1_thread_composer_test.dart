@@ -72,6 +72,8 @@ Widget _buildSendHarness({
   required RoomClient room,
   required ChatThreadController controller,
   required Future<void> Function(String, List<FileAttachment>) onSend,
+  bool sendEnabled = true,
+  VoidCallback? onCancelSend,
 }) {
   return ShadApp(
     home: Scaffold(
@@ -83,10 +85,11 @@ Widget _buildSendHarness({
           controller: controller,
           snapshot: _emptySnapshot(),
           placeholder: const Text('Ask Assistant...'),
-          sendEnabled: true,
+          sendEnabled: sendEnabled,
           sendDisabledReason: null,
           readOnly: false,
           onSend: onSend,
+          onCancelSend: onCancelSend,
           sendPendingText: 'Waiting for Assistant to be ready.',
         ),
         defaultInput: const SizedBox.shrink(),
@@ -122,12 +125,26 @@ void main() {
     await tester.pump();
 
     expect(controller.text, isEmpty);
-    expect(find.text('Waiting for Assistant to be ready.'), findsOneWidget);
+    expect(find.text('Waiting for Assistant to be ready.'), findsNothing);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
     sendCompleter.complete();
     await tester.pumpAndSettle();
 
+    expect(find.text('Waiting for Assistant to be ready.'), findsNothing);
+  });
+
+  testWidgets('v1 composer shows pending send spinner when parent send is pending', (tester) async {
+    final room = _roomClientWithAdminGrant(isAdmin: true);
+    addTearDown(room.dispose);
+    final controller = ChatThreadController(room: room);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _buildSendHarness(room: room, controller: controller, sendEnabled: false, onCancelSend: () {}, onSend: (text, attachments) async {}),
+    );
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Waiting for Assistant to be ready.'), findsNothing);
   });
 

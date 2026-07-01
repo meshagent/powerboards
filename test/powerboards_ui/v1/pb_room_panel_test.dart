@@ -172,7 +172,7 @@ void main() {
     expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: true, pendingVoiceSessionDisconnect: false), isTrue);
   });
 
-  test('desktop preview does not derive loading thread title from stale path slugs', () {
+  test('desktop preview uses path title while selected thread list is loading', () {
     final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
       selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',
       currentThreadLabel: 'New Chat',
@@ -181,8 +181,7 @@ void main() {
       threadListLoaded: false,
     );
 
-    expect(title, powerboardsDesktopPreviewLoadingThreadTitle);
-    expect(title, isNot('New Chat'));
+    expect(title, 'New Chat');
   });
 
   test('desktop preview uses remembered title while selected thread list is loading', () {
@@ -197,7 +196,7 @@ void main() {
     expect(title, 'Testing Screenshot Upload');
   });
 
-  test('desktop preview ignores remembered generic thread title while selected thread list is loading', () {
+  test('desktop preview falls back to path title for remembered generic thread title while selected thread list is loading', () {
     for (final genericTitle in const ['New Chat', 'New thread']) {
       final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
         selectedThreadPath: 'dataset://agents/assistant/threads/new-chat',
@@ -207,8 +206,7 @@ void main() {
         threadListLoaded: false,
       );
 
-      expect(title, powerboardsDesktopPreviewLoadingThreadTitle);
-      expect(title, isNot(genericTitle));
+      expect(title, 'New Chat');
     }
   });
 

@@ -569,8 +569,6 @@ String? powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads({
   );
 }
 
-const powerboardsDesktopPreviewLoadingThreadTitle = 'Loading thread';
-
 @visibleForTesting
 bool powerboardsDesktopPreviewThreadTitleIsGenericFallback(String? title) {
   final normalized = title?.trim().toLowerCase();
@@ -578,7 +576,7 @@ bool powerboardsDesktopPreviewThreadTitleIsGenericFallback(String? title) {
     return true;
   }
 
-  return normalized == 'new chat' || normalized == 'new thread' || normalized == powerboardsDesktopPreviewLoadingThreadTitle.toLowerCase();
+  return normalized == 'new chat' || normalized == 'new thread';
 }
 
 @visibleForTesting
@@ -703,7 +701,7 @@ String powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads({
   }
 
   final fallbackThreadLabel = defaultThreadDisplayNameFromPath(normalizedSelectedThreadPath);
-  return threadListLoaded ? fallbackThreadLabel : powerboardsDesktopPreviewLoadingThreadTitle;
+  return fallbackThreadLabel;
 }
 
 @visibleForTesting
@@ -729,9 +727,7 @@ List<PbThreadListItemData> powerboardsDesktopPreviewThreadItemsForVisibleThreads
 
   final trimmedTitle = selectedThreadTitle?.trim();
   final fallbackTitle = defaultThreadDisplayNameFromPath(normalizedSelectedThreadPath);
-  final title = trimmedTitle == null || trimmedTitle.isEmpty || trimmedTitle == powerboardsDesktopPreviewLoadingThreadTitle
-      ? fallbackTitle
-      : trimmedTitle;
+  final title = trimmedTitle == null || trimmedTitle.isEmpty ? fallbackTitle : trimmedTitle;
 
   return <PbThreadListItemData>[PbThreadListItemData(id: normalizedSelectedThreadPath, title: title, actionsEnabled: false), ...items];
 }
@@ -860,6 +856,17 @@ class _DesktopPreviewThreadListState extends State<_DesktopPreviewThreadList> {
       final storage = widget.threadStorageFactory?.call(chatClient) ?? agent_sessions.AgentThreadStorageRepository(chatClient: chatClient);
       storage.addListener(_onThreadListChanged);
       await chatClient.start();
+      if (chatClient.agentParticipant() == null && chatClient is agent_sessions.MessagingChatClient) {
+        await chatClient.waitForAgentParticipant(waitKey: 'desktop-preview-thread-list:$nextThreadListPath:$nextAgentName');
+      }
+      if (!mounted || _normalizedThreadListPath() != nextThreadListPath) {
+        storage.removeListener(_onThreadListChanged);
+        await storage.close();
+        if (widget.disposeChatClient) {
+          await chatClient.stop();
+        }
+        return;
+      }
       await storage.open();
       if (!mounted || _normalizedThreadListPath() != nextThreadListPath) {
         storage.removeListener(_onThreadListChanged);
@@ -5711,50 +5718,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     List<_DesktopPreviewThreadEntry> threads, {
     required bool threadListLoaded,
   }) {
-    if (chatContext == null) {
-      return null;
-    }
-
-    final selectedThreadPath = chatContext.selectedThreadPath;
-    final visibleSelectedThreadPath = powerboardsDesktopPreviewSelectedThreadPathForVisibleThreads(
-      selectedThreadPath: selectedThreadPath,
-      threadPaths: threads.map((thread) => thread.path),
-      threadListLoaded: threadListLoaded,
-    );
-
-    if (selectedThreadPath == visibleSelectedThreadPath) {
-      return chatContext;
-    }
-
-    final trimmedSelectedThreadPath = selectedThreadPath?.trim();
-    if (threadListLoaded &&
-        visibleSelectedThreadPath == null &&
-        trimmedSelectedThreadPath != null &&
-        trimmedSelectedThreadPath.isNotEmpty) {
-      _clearMissingDesktopPreviewThreadSelection(chatContext, trimmedSelectedThreadPath);
-    }
-
-    return chatContext.withThreadSelection(currentThreadLabel: 'New thread', selectedThreadPath: visibleSelectedThreadPath);
-  }
-
-  void _clearMissingDesktopPreviewThreadSelection(_MobileChatHeaderContext chatContext, String selectedThreadPath) {
-    final agentKey = chatContext.agentKey;
-    if (agentKey == null) {
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-
-      final inMemoryPath = _selectedThreadPathByAgentKey[agentKey]?.trim();
-      if (inMemoryPath != selectedThreadPath) {
-        return;
-      }
-
-      _setSelectedThreadPath(agentKey, null);
-    });
+    return chatContext;
   }
 
   void _syncDesktopPreviewVisibleThreadSelection(_MobileChatHeaderContext? chatContext, String selectedThreadTitle) {

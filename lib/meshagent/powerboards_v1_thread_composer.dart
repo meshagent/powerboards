@@ -164,6 +164,7 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
             widget.config.sendEnabled &&
             allAttachmentsCompleted &&
             (widget.config.controller.text.trim().isNotEmpty || attachments.isNotEmpty);
+        final sendPending = _sending || (!widget.config.sendEnabled && widget.config.onCancelSend != null);
         final showMcpConnectors = _showMcpConnectors();
 
         return PbCommentBoxShell(
@@ -197,36 +198,7 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
                   agentName: widget.agentName?.trim(),
                 ),
             ],
-            trailingControl: _sending
-                ? _PendingSendButton(
-                    onPressed: widget.config.onCancelSend,
-                    message: widget.config.sendPendingText ?? 'Waiting for agent to come online.',
-                  )
-                : PbComposerSendButton(active: canSend, onPressed: _handleSend),
-            status: _sending && widget.config.sendPendingText != null
-                ? Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          widget.config.sendPendingText!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: PowerboardsTypography.textXSmall.copyWith(color: PbColors.textMuted, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                      if (widget.config.onCancelSend != null) ...<Widget>[
-                        const SizedBox(width: 12),
-                        GestureDetector(
-                          onTap: widget.config.onCancelSend,
-                          child: Text(
-                            'Cancel',
-                            style: PowerboardsTypography.textXSmall.copyWith(color: PbColors.customBlue, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ],
-                    ],
-                  )
-                : null,
+            trailingControl: sendPending ? const _PendingSendButton() : PbComposerSendButton(active: canSend, onPressed: _handleSend),
             onChanged: (value) => widget.config.onChanged?.call(value, widget.config.controller.attachmentUploads),
           ),
         );
@@ -443,6 +415,7 @@ class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
   @override
   Widget build(BuildContext context) {
     final selectedConnectors = widget.controller.selectedMcpConnectors;
+    final canAddMcpServices = widget.room.apiGrant?.admin != null;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -470,16 +443,18 @@ class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
                         const _McpInfoCard(text: 'No connectors are configured for this room')
                       else
                         for (final connector in _availableConnectors) _buildConnectorOption(connector),
-                      const PbMenuDivider(),
-                      PbMenuOption(
-                        title: 'Add...',
-                        leadingIconAssetName: 'plus',
-                        singleLine: true,
-                        onPressed: () {
-                          _setOpen(false);
-                          unawaited(_addConnector());
-                        },
-                      ),
+                      if (canAddMcpServices) ...<Widget>[
+                        const PbMenuDivider(),
+                        PbMenuOption(
+                          title: 'Add...',
+                          leadingIconAssetName: 'plus',
+                          singleLine: true,
+                          onPressed: () {
+                            _setOpen(false);
+                            unawaited(_addConnector());
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 )
@@ -524,18 +499,18 @@ class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
 }
 
 class _PendingSendButton extends StatelessWidget {
-  const _PendingSendButton({required this.onPressed, required this.message});
-
-  final VoidCallback? onPressed;
-  final String message;
+  const _PendingSendButton();
 
   @override
   Widget build(BuildContext context) {
-    return PbComposerIconButton(
-      tooltip: message,
-      onPressed: onPressed,
-      active: onPressed != null,
-      child: const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: PbColors.customBrandInk)),
+    return PbComposerActionSurface(
+      tooltip: 'Sending',
+      width: 42,
+      minHeight: 36,
+      padding: EdgeInsets.zero,
+      active: true,
+      primary: true,
+      child: const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: PbColors.textInverse)),
     );
   }
 }
