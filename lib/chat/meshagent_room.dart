@@ -2700,6 +2700,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   final Map<String, String> _selectedThreadPathByAgentKey = <String, String>{};
   final Map<String, String> _selectedThreadLabelByAgentKey = <String, String>{};
+  final Map<String, String> _pendingDesktopPreviewThreadPathByAgentKey = <String, String>{};
+  final Map<String, String> _pendingDesktopPreviewThreadLabelByAgentKey = <String, String>{};
   final Map<String, List<String>> _composerAttachmentPathsByAgentKey = <String, List<String>>{};
   final Map<String, int> _composerAttachmentSeedVersionByAgentKey = <String, int>{};
   final Map<String, PowerboardsFileAttachmentLink> _localThreadAttachmentLinksByKey = <String, PowerboardsFileAttachmentLink>{};
@@ -3391,6 +3393,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     setState(() {
+      _pendingDesktopPreviewThreadPathByAgentKey.remove(agentKey);
+      _pendingDesktopPreviewThreadLabelByAgentKey.remove(agentKey);
       if (resolvedPath == null) {
         _selectedThreadPathByAgentKey.remove(agentKey);
         _selectedThreadLabelByAgentKey.remove(agentKey);
@@ -3402,6 +3406,31 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         } else {
           _selectedThreadLabelByAgentKey[agentKey] = effectiveDisplayName;
         }
+      }
+    });
+  }
+
+  void _deferDesktopPreviewNewThreadSelection(String? agentKey, String? path, {String? displayName}) {
+    if (agentKey == null) {
+      return;
+    }
+
+    final normalizedPath = path?.trim();
+    if (normalizedPath == null || normalizedPath.isEmpty) {
+      _setSelectedThreadPath(agentKey, null);
+      return;
+    }
+
+    final normalizedName = displayName?.trim();
+    setState(() {
+      final previousPath = _pendingDesktopPreviewThreadPathByAgentKey[agentKey];
+      _pendingDesktopPreviewThreadPathByAgentKey[agentKey] = normalizedPath;
+      if (normalizedName == null || normalizedName.isEmpty) {
+        if (previousPath != normalizedPath) {
+          _pendingDesktopPreviewThreadLabelByAgentKey.remove(agentKey);
+        }
+      } else {
+        _pendingDesktopPreviewThreadLabelByAgentKey[agentKey] = normalizedName;
       }
     });
   }
@@ -4710,6 +4739,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         : normalizedThreadPath;
     final isMultiThread = threadDisplayMode == ChatThreadDisplayMode.multiThreadComposer;
     final isMobile = _usesMobileRoomLayout(context);
+    final deferDesktopPreviewNewThreadSelection = !isMobile && powerboardsUsesDesktopUiPreview(context) && isMultiThread;
     final chatActions = actions;
     final chatHorizontalInset = isMobile ? 0.0 : desktopPaneChatHorizontalInset;
     final chatBottomInset = isMobile ? 0.0 : desktopPaneBottomInset - 8;
@@ -4748,6 +4778,24 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           )
         : null;
     final agentChatClient = _agentChatClientFor(agentName);
+    void handleSelectedThreadPathChanged(String? path) {
+      if (deferDesktopPreviewNewThreadSelection && selectedThreadPath == null && path != null) {
+        _deferDesktopPreviewNewThreadSelection(agentKey, path);
+        return;
+      }
+
+      onSelectedThreadPathChanged?.call(path);
+    }
+
+    void handleSelectedThreadResolved(String? path, String? displayName) {
+      if (deferDesktopPreviewNewThreadSelection && selectedThreadPath == null && path != null) {
+        _deferDesktopPreviewNewThreadSelection(agentKey, path, displayName: displayName);
+        return;
+      }
+
+      _setSelectedThreadPath(agentKey, path, displayName: displayName);
+    }
+
     final chatView = Padding(
       padding: EdgeInsets.fromLTRB(chatHorizontalInset, 0, chatHorizontalInset, chatBottomInset),
       child: MeshagentThreadView(
@@ -4760,8 +4808,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         documentPath: documentPath,
         selectedThreadPath: selectedThreadPath,
         selectedThreadDisplayName: resolvedSelectedThreadDisplayName ?? _selectedThreadLabelForAgentKey(agentKey),
-        onSelectedThreadPathChanged: onSelectedThreadPathChanged,
-        onSelectedThreadResolved: (path, displayName) => _setSelectedThreadPath(agentKey, path, displayName: displayName),
+        onSelectedThreadPathChanged: handleSelectedThreadPathChanged,
+        onSelectedThreadResolved: handleSelectedThreadResolved,
         participantNames: [
           if (userEmail is String && userEmail.isNotEmpty) userEmail,
           if (agentName case final String agentParticipantName) agentParticipantName,
@@ -5749,6 +5797,29 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     });
   }
 
+  void _syncPendingDesktopPreviewThreadSelection(_MobileChatHeaderContext? chatContext, List<_DesktopPreviewThreadEntry> threads) {
+    final agentKey = chatContext?.agentKey;
+    if (agentKey == null) {
+      return;
+    }
+
+    final pendingPath = _pendingDesktopPreviewThreadPathByAgentKey[agentKey];
+    if (pendingPath == null || !threads.any((thread) => thread.path == pendingPath)) {
+      return;
+    }
+
+    final pendingLabel = _pendingDesktopPreviewThreadLabelByAgentKey[agentKey];
+    final listedLabel = threads.firstWhereOrNull((thread) => thread.path == pendingPath)?.name;
+    final displayName = pendingLabel ?? listedLabel;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pendingDesktopPreviewThreadPathByAgentKey[agentKey] != pendingPath) {
+        return;
+      }
+
+      _setSelectedThreadPath(agentKey, pendingPath, displayName: displayName);
+    });
+  }
+
   void _selectDesktopPreviewThread(_MobileChatHeaderContext? chatContext, String? path, {String? displayName}) {
     final agentKey = chatContext?.agentKey;
     if (agentKey == null) {
@@ -5922,6 +5993,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads, threadListLoaded: threadListLoaded);
         final selectedThreadDisplayName = _desktopPreviewSelectedThreadDisplayName(chatContext, threads);
         final selectedThreadTitleResolving = chatContext?.selectedThreadPath != null && !threadListLoaded;
+        _syncPendingDesktopPreviewThreadSelection(chatContext, threads);
         if (selectedThreadDisplayName != null) {
           _syncDesktopPreviewVisibleThreadSelection(chatContext, selectedThreadDisplayName);
         }
