@@ -96,14 +96,31 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
     }
 
     setState(() => _sending = true);
+    final sendFuture = widget.config.onSend(text, attachments);
+    controller.clear();
+    _focusNode.requestFocus();
     try {
-      await widget.config.onSend(text, attachments);
-      controller.clear();
-      _focusNode.requestFocus();
+      await sendFuture;
     } on ChatSendCancelledException {
+      if (controller.textFieldController.text.isEmpty && controller.attachmentUploads.isEmpty) {
+        controller.textFieldController.text = text;
+        for (final attachment in attachments) {
+          if (attachment.status == UploadStatus.completed) {
+            controller.attachFile(attachment.path);
+          }
+        }
+      }
       _focusNode.requestFocus();
     } catch (error) {
       if (mounted) {
+        if (controller.textFieldController.text.isEmpty && controller.attachmentUploads.isEmpty) {
+          controller.textFieldController.text = text;
+          for (final attachment in attachments) {
+            if (attachment.status == UploadStatus.completed) {
+              controller.attachFile(attachment.path);
+            }
+          }
+        }
         ShadToaster.of(context).show(ShadToast.destructive(title: const Text('Unable to send message'), description: Text('$error')));
       }
       _focusNode.requestFocus();

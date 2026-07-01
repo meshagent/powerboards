@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
@@ -66,7 +68,69 @@ Widget _buildHarness({required RoomClient room, required ChatThreadController co
   );
 }
 
+Widget _buildSendHarness({
+  required RoomClient room,
+  required ChatThreadController controller,
+  required Future<void> Function(String, List<FileAttachment>) onSend,
+}) {
+  return ShadApp(
+    home: Scaffold(
+      body: PowerboardsV1ThreadComposer(
+        projectId: 'project',
+        room: room,
+        agentName: null,
+        config: ChatThreadInputConfig(
+          controller: controller,
+          snapshot: _emptySnapshot(),
+          placeholder: const Text('Ask Assistant...'),
+          sendEnabled: true,
+          sendDisabledReason: null,
+          readOnly: false,
+          onSend: onSend,
+          sendPendingText: 'Waiting for Assistant to be ready.',
+        ),
+        defaultInput: const SizedBox.shrink(),
+      ),
+    ),
+  );
+}
+
 void main() {
+  testWidgets('v1 composer clears draft and shows pending send while send is unresolved', (tester) async {
+    final room = _roomClientWithAdminGrant(isAdmin: true);
+    addTearDown(room.dispose);
+    final controller = ChatThreadController(room: room);
+    addTearDown(controller.dispose);
+    final sendCompleter = Completer<void>();
+
+    await tester.pumpWidget(
+      _buildSendHarness(
+        room: room,
+        controller: controller,
+        onSend: (text, attachments) {
+          expect(text, 'hello');
+          expect(attachments, isEmpty);
+          return sendCompleter.future;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(EditableText), 'hello');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Send'));
+    await tester.pump();
+
+    expect(controller.text, isEmpty);
+    expect(find.text('Waiting for Assistant to be ready.'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    sendCompleter.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Waiting for Assistant to be ready.'), findsNothing);
+  });
+
   testWidgets('v1 MCP menu hides Add for non-admin users', (tester) async {
     final room = _roomClientWithAdminGrant(isAdmin: false);
     addTearDown(room.dispose);
