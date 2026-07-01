@@ -5955,16 +5955,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       disposeChatClient: false,
       builder: (context, threads, threadListLoaded) {
         final chatContext = _desktopPreviewChatContextForVisibleThreads(rawChatContext, threads, threadListLoaded: threadListLoaded);
-        final verifiedSelectedThreadPath = powerboardsDesktopPreviewVerifiedThreadPathForLoadedThreads(
-          selectedThreadPath: rawChatContext?.selectedThreadPath,
-          threadPaths: threads.map((thread) => thread.path),
-          threadListLoaded: threadListLoaded,
-        );
         final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads, threadListLoaded: threadListLoaded);
         final selectedThreadDisplayName = _desktopPreviewSelectedThreadDisplayName(chatContext, threads);
         final selectedThreadTitleResolving = chatContext?.selectedThreadPath != null && !threadListLoaded;
-        final selectedThreadLoading = chatContext?.selectedThreadPath != null && !threadListLoaded;
-        final verifiedSelectedThreadDisplayName = verifiedSelectedThreadPath == null ? null : selectedThreadDisplayName;
         if (selectedThreadDisplayName != null) {
           _syncDesktopPreviewVisibleThreadSelection(chatContext, selectedThreadDisplayName);
         }
@@ -5999,18 +5992,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     },
                   ),
                   Expanded(
-                    child: selectedThreadLoading
-                        ? _buildDesktopPreviewThreadLoading(context)
-                        : _buildAgentArea(
-                            context,
-                            const [],
-                            showEmbeddedThreadList: false,
-                            embedMobileChrome: false,
-                            showDesktopThreadListAlternatives: false,
-                            useSelectedThreadOverride: chatContext != null,
-                            selectedThreadPathOverride: verifiedSelectedThreadPath,
-                            selectedThreadDisplayNameOverride: verifiedSelectedThreadDisplayName,
-                          ),
+                    child: _buildAgentArea(
+                      context,
+                      const [],
+                      showEmbeddedThreadList: false,
+                      embedMobileChrome: false,
+                      showDesktopThreadListAlternatives: false,
+                      useSelectedThreadOverride: chatContext != null,
+                      selectedThreadPathOverride: chatContext?.selectedThreadPath,
+                      selectedThreadDisplayNameOverride: selectedThreadDisplayName,
+                    ),
                   ),
                 ],
               )
@@ -6089,18 +6080,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                           },
                         ),
                         Expanded(
-                          child: selectedThreadLoading
-                              ? _buildDesktopPreviewThreadLoading(context)
-                              : _buildAgentArea(
-                                  context,
-                                  const [],
-                                  showEmbeddedThreadList: false,
-                                  embedMobileChrome: false,
-                                  showDesktopThreadListAlternatives: false,
-                                  useSelectedThreadOverride: chatContext != null,
-                                  selectedThreadPathOverride: verifiedSelectedThreadPath,
-                                  selectedThreadDisplayNameOverride: verifiedSelectedThreadDisplayName,
-                                ),
+                          child: _buildAgentArea(
+                            context,
+                            const [],
+                            showEmbeddedThreadList: false,
+                            embedMobileChrome: false,
+                            showDesktopThreadListAlternatives: false,
+                            useSelectedThreadOverride: chatContext != null,
+                            selectedThreadPathOverride: chatContext?.selectedThreadPath,
+                            selectedThreadDisplayNameOverride: selectedThreadDisplayName,
+                          ),
                         ),
                       ],
                     )
@@ -6790,15 +6779,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     return const SizedBox(height: desktopPaneHeaderToChatViewportOffset);
-  }
-
-  Widget _buildDesktopPreviewThreadLoading(BuildContext context) {
-    return ColoredBox(
-      color: PbColors.surfacePanel,
-      child: Center(
-        child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: PbColors.textSubtle)),
-      ),
-    );
   }
 
   Widget _buildDesktopSecondaryControlSpacer(BuildContext context) {
