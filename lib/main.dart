@@ -8,6 +8,7 @@ import 'package:flutter_solidart/flutter_solidart.dart';
 import 'package:localstorage/localstorage.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
 import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_updater.dart';
+import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart';
 import 'package:meshagent_flutter_shadcn/web_context_menu_manager.dart';
 import 'package:powerboards/ui/error_states.dart';
 import 'package:screenshot/screenshot.dart';
@@ -180,6 +181,7 @@ Future<void> startApp() async {
 
   await initializeApp();
   await initLocalStorage();
+  await initializeMeshagentTerminalRuntime();
   initializePowerboardsUiMode();
 
   SystemChrome.setSystemUIOverlayStyle(
