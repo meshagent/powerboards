@@ -2872,7 +2872,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final services = (await widget.room.services.list().timeout(
       _roomResourceTimeout,
       onTimeout: () => throw TimeoutException("Timed out while loading room services."),
-    )).where(hasAgentMetadata).toList();
+    )).services.where(hasAgentMetadata).toList();
     services.sort(_compareServices);
     return services;
   });
