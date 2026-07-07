@@ -7895,12 +7895,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                             id: "bottom",
                                             defaultSize: defaultDebugSize,
                                             minSize: 0,
-                                            child: RoomDeveloperConsole(
-                                              pricing: null,
-                                              events: events,
-                                              room: widget.room,
-                                              shellImage: "${MeshagentConfig.current!.imageTagPrefix}cli:{SERVER_VERSION}",
-                                            ),
+                                            child: RoomDeveloperConsole(pricing: null, events: events, room: widget.room),
                                           ),
                                       ],
                                     ),
