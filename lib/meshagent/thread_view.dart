@@ -1902,7 +1902,7 @@ Widget buildTools(
       : () async {
           final client = getMeshagentClient();
           return mcpConnectorsFromRoomServices(
-            services: await room.services.list(),
+            services: (await room.services.list()).services,
             agentName: normalizedAgentName,
             meshagentProxyConfig: MeshagentProxyConfig(apiUrl: client.baseUrl, apiKey: client.token),
           );

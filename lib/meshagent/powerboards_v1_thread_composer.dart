@@ -304,7 +304,10 @@ class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
     });
 
     try {
-      final connectors = mcpConnectorsFromRoomServices(services: await widget.room.services.list(), agentName: normalizedAgentName);
+      final connectors = mcpConnectorsFromRoomServices(
+        services: (await widget.room.services.list()).services,
+        agentName: normalizedAgentName,
+      );
       final statuses = <String, bool>{};
       for (final connector in connectors) {
         try {
