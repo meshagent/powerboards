@@ -1,7 +1,8 @@
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meshagent/room_server_client.dart';
+import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/meshagent/v1_file_preview_source.dart';
@@ -103,6 +104,38 @@ void main() {
 
     expect(attempts, 2);
     expect(loaded, [7]);
+  });
+
+  test('v1 preview content classifies opaque storage paths from displayed filenames', () {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    final imageFile = const PbAttachmentListItemData(
+      title: 'IMG_0683.jpeg',
+      subtitle: 'File',
+      fileType: PbAttachmentFileType.generic,
+      path: 'ig_09c631980005c30a016a0368ee98e08190898751c0c7613de7',
+    );
+    final pdfFile = const PbAttachmentListItemData(
+      title: 'brief.pdf',
+      subtitle: 'File',
+      fileType: PbAttachmentFileType.generic,
+      path: 'uploads/blob-brief',
+    );
+
+    expect(powerboardsV1PreviewClassificationPath(file: imageFile, path: imageFile.path!), 'IMG_0683.jpeg');
+    expect(
+      powerboardsV1PreviewContentChild(
+        room: room,
+        file: imageFile,
+        path: imageFile.path!,
+        downloadUrl: (_) async => 'https://api.example.test/rooms/test/download?path=IMG_0683.jpeg',
+      ),
+      isNotNull,
+    );
+
+    final pdfPreview = powerboardsV1PreviewContentChild(room: room, file: pdfFile, path: pdfFile.path!);
+
+    expect(pdfPreview, isA<PowerboardsV1PdfPreview>());
+    expect((pdfPreview as PowerboardsV1PdfPreview).key, const ValueKey('v1-pdf-preview:uploads/blob-brief'));
   });
 
   test('recently opened files move opened file to the front and de-dupe', () {
@@ -247,4 +280,15 @@ PbFilesItemData _file(String id, {PbFilesItemKind kind = PbFilesItemKind.file}) 
     parentPath: '',
     kind: kind,
   );
+}
+
+class _NoopProtocolChannel extends ProtocolChannel {
+  @override
+  void dispose() {}
+
+  @override
+  Future<void> sendData(Uint8List data) async {}
+
+  @override
+  void start(void Function(Uint8List data) onDataReceived, {void Function()? onDone, void Function(Object? error)? onError}) {}
 }
