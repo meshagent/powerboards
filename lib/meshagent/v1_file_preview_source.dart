@@ -91,17 +91,26 @@ bool powerboardsV1IsNativeDocumentPath(String path) {
   return const {'thread', 'widget', 'document', 'gallery', 'presentation', 'form'}.contains(powerboardsV1ExtensionForPath(path));
 }
 
-bool powerboardsV1IsEditableTextPreview({required PbAttachmentFileType fileType, required String path}) {
+String powerboardsV1PreviewClassificationPath({required PbAttachmentListItemData file, required String path}) {
+  if (powerboardsV1ExtensionForPath(path).isNotEmpty) {
+    return path;
+  }
+
+  return powerboardsV1ExtensionForPath(file.title).isEmpty ? path : file.title;
+}
+
+bool powerboardsV1IsEditableTextPreview({required PbAttachmentFileType fileType, required String path, String? classificationPath}) {
   if (path.startsWith('dataset://')) {
     return false;
   }
 
-  final extension = powerboardsV1ExtensionForPath(path);
+  final previewPath = classificationPath ?? path;
+  final extension = powerboardsV1ExtensionForPath(previewPath);
   if (powerboardsV1EditableTextPreviewExtensions.contains(extension)) {
     return true;
   }
 
-  final kind = classifyFile(path);
+  final kind = classifyFile(previewPath);
   if (kind == FileKind.markdown || kind == FileKind.code || kind == FileKind.tsv) {
     return true;
   }
@@ -257,7 +266,8 @@ PbFilePreviewSource powerboardsV1PreviewSourceForAttachment({
   PowerboardsV1PreviewDownloadUrl? downloadUrl,
   PowerboardsV1UnavailablePreviewBuilder? unavailablePreviewBuilder,
 }) {
-  final extension = powerboardsV1ExtensionForPath(path);
+  final classificationPath = powerboardsV1PreviewClassificationPath(file: file, path: path);
+  final extension = powerboardsV1ExtensionForPath(classificationPath);
   final effectiveLoadText = loadText ?? (path) => powerboardsV1LoadPreviewText(room, path);
   final effectiveSaveText = saveText ?? (path, text) => powerboardsV1SavePreviewText(room, path, text);
 
@@ -277,7 +287,7 @@ PbFilePreviewSource powerboardsV1PreviewSourceForAttachment({
     );
   }
 
-  if (powerboardsV1IsEditableTextPreview(fileType: file.fileType, path: path)) {
+  if (powerboardsV1IsEditableTextPreview(fileType: file.fileType, path: path, classificationPath: classificationPath)) {
     return PbFilePreviewSource(sourceKey: path, loadText: () => effectiveLoadText(path), saveText: (text) => effectiveSaveText(path, text));
   }
 
@@ -304,8 +314,9 @@ Widget? powerboardsV1PreviewContentChild({
     return _v1DocumentPaneContent(room: room, file: file, path: path, unavailablePreviewBuilder: unavailablePreviewBuilder);
   }
 
-  final extension = powerboardsV1ExtensionForPath(path);
-  final kind = classifyFile(path);
+  final classificationPath = powerboardsV1PreviewClassificationPath(file: file, path: path);
+  final extension = powerboardsV1ExtensionForPath(classificationPath);
+  final kind = classifyFile(classificationPath);
   if (file.fileType == PbAttachmentFileType.thread || extension == 'thread' || kind == FileKind.thread) {
     return _V1ThreadDocumentPreview(room: room, path: path, file: file);
   }
@@ -314,7 +325,7 @@ Widget? powerboardsV1PreviewContentChild({
     return fileViewer(room, path);
   }
 
-  if (powerboardsV1IsNativeDocumentPath(path)) {
+  if (powerboardsV1IsNativeDocumentPath(classificationPath)) {
     return _v1DocumentPaneContent(room: room, file: file, path: path, unavailablePreviewBuilder: unavailablePreviewBuilder);
   }
 
@@ -325,7 +336,7 @@ Widget? powerboardsV1PreviewContentChild({
         path: path,
         file: file,
         downloadUrl: downloadUrl,
-        builder: (url) => ImagePreview(url: url, fit: BoxFit.contain),
+        builder: (url) => ImagePreview(key: ValueKey('v1-image-preview:$path'), url: url, fit: BoxFit.contain),
       );
     case PbAttachmentFileType.video:
     case PbAttachmentFileType.mediaGeneric:
@@ -340,7 +351,7 @@ Widget? powerboardsV1PreviewContentChild({
         builder: (url) => AudioPreview(url: url),
       );
     case PbAttachmentFileType.pdf:
-      return PowerboardsV1PdfPreview(room: room, path: path, file: file);
+      return PowerboardsV1PdfPreview(key: ValueKey('v1-pdf-preview:$path'), room: room, path: path, file: file);
     case PbAttachmentFileType.transcript:
     case PbAttachmentFileType.thread:
     case PbAttachmentFileType.presentation:
@@ -368,7 +379,7 @@ Widget? powerboardsV1PreviewContentChild({
         path: path,
         file: file,
         downloadUrl: downloadUrl,
-        builder: (url) => ImagePreview(url: url, fit: BoxFit.contain),
+        builder: (url) => ImagePreview(key: ValueKey('v1-image-preview:$path'), url: url, fit: BoxFit.contain),
       );
     case FileKind.video:
       return _V1StorageUrlPreview(room: room, path: path, file: file, downloadUrl: downloadUrl, builder: powerboardsV1VideoPreview);
@@ -381,7 +392,7 @@ Widget? powerboardsV1PreviewContentChild({
         builder: (url) => AudioPreview(url: url),
       );
     case FileKind.pdf:
-      return PowerboardsV1PdfPreview(room: room, path: path, file: file);
+      return PowerboardsV1PdfPreview(key: ValueKey('v1-pdf-preview:$path'), room: room, path: path, file: file);
     case FileKind.custom:
       return fileViewer(room, path);
     case FileKind.thread:
@@ -463,6 +474,7 @@ class _PowerboardsV1PdfPreviewState extends State<PowerboardsV1PdfPreview> {
         }
 
         return PdfViewer.data(
+          key: ValueKey('v1-pdf-viewer:${widget.path}'),
           data,
           sourceName: widget.path,
           initialPageNumber: widget.pageNumber,

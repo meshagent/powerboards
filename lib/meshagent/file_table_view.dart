@@ -2381,17 +2381,18 @@ class _FileManagerViewState extends State<FileManagerView> {
     return p.extension(path).replaceFirst('.', '').toLowerCase();
   }
 
-  bool _v1IsEditableTextPreview(PbFilesItemData item, String path) {
+  bool _v1IsEditableTextPreview(PbFilesItemData item, String path, {String? classificationPath}) {
     if (path.startsWith('dataset://')) {
       return false;
     }
 
-    final extension = _v1ExtensionForPath(path);
+    final previewPath = classificationPath ?? path;
+    final extension = _v1ExtensionForPath(previewPath);
     if (_v1EditableTextExtensions.contains(extension)) {
       return true;
     }
 
-    final kind = classifyFile(path);
+    final kind = classifyFile(previewPath);
     if (kind == FileKind.markdown || kind == FileKind.code || kind == FileKind.tsv) {
       return true;
     }
@@ -2481,19 +2482,26 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Widget? _buildV1PreviewContentChild(PbFilesItemData item, String path) {
-    final kind = classifyFile(path);
+    final file = item.toAttachmentData();
+    final classificationPath = powerboardsV1PreviewClassificationPath(file: file, path: path);
+    final extension = _v1ExtensionForPath(classificationPath);
+    final kind = classifyFile(classificationPath);
 
-    if (item.fileType == PbAttachmentFileType.thread || _v1ExtensionForPath(path) == 'thread' || kind == FileKind.thread) {
+    if (item.fileType == PbAttachmentFileType.thread || extension == 'thread' || kind == FileKind.thread) {
       return null;
     }
 
-    if (_v1IsNativeDocumentPath(path)) {
+    if (_v1IsNativeDocumentPath(classificationPath)) {
       return _v1DocumentPaneContent(item, path);
     }
 
     switch (item.fileType) {
       case PbAttachmentFileType.image:
-        return _v1StorageUrlPreview(item, path, (url) => ImagePreview(url: url, fit: BoxFit.contain));
+        return _v1StorageUrlPreview(
+          item,
+          path,
+          (url) => ImagePreview(key: ValueKey('v1-image-preview:$path'), url: url, fit: BoxFit.contain),
+        );
       case PbAttachmentFileType.video:
       case PbAttachmentFileType.mediaGeneric:
         return _v1StorageUrlPreview(item, path, powerboardsV1VideoPreview);
@@ -2501,7 +2509,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       case PbAttachmentFileType.music:
         return _v1StorageUrlPreview(item, path, (url) => AudioPreview(url: url));
       case PbAttachmentFileType.pdf:
-        return PowerboardsV1PdfPreview(room: widget.client, path: path, file: item.toAttachmentData());
+        return PowerboardsV1PdfPreview(key: ValueKey('v1-pdf-preview:$path'), room: widget.client, path: path, file: file);
       case PbAttachmentFileType.transcript:
       case PbAttachmentFileType.thread:
       case PbAttachmentFileType.presentation:
@@ -2524,13 +2532,17 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     switch (kind) {
       case FileKind.image:
-        return _v1StorageUrlPreview(item, path, (url) => ImagePreview(url: url, fit: BoxFit.contain));
+        return _v1StorageUrlPreview(
+          item,
+          path,
+          (url) => ImagePreview(key: ValueKey('v1-image-preview:$path'), url: url, fit: BoxFit.contain),
+        );
       case FileKind.video:
         return _v1StorageUrlPreview(item, path, powerboardsV1VideoPreview);
       case FileKind.audio:
         return _v1StorageUrlPreview(item, path, (url) => AudioPreview(url: url));
       case FileKind.pdf:
-        return PowerboardsV1PdfPreview(room: widget.client, path: path, file: item.toAttachmentData());
+        return PowerboardsV1PdfPreview(key: ValueKey('v1-pdf-preview:$path'), room: widget.client, path: path, file: file);
       case FileKind.thread:
       case FileKind.markdown:
       case FileKind.code:
@@ -2549,12 +2561,14 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   PbFilePreviewSource _buildV1PreviewSource(PbFilesItemData item) {
     final path = _v1PathForItem(item);
-    final extension = _v1ExtensionForPath(path);
-    final kind = classifyFile(path);
+    final file = item.toAttachmentData();
+    final classificationPath = powerboardsV1PreviewClassificationPath(file: file, path: path);
+    final extension = _v1ExtensionForPath(classificationPath);
+    final kind = classifyFile(classificationPath);
     if (item.fileType == PbAttachmentFileType.thread || extension == 'thread' || kind == FileKind.thread) {
       return powerboardsV1PreviewSourceForAttachment(
         room: widget.client,
-        file: item.toAttachmentData(),
+        file: file,
         path: path,
         loadText: (_) => _loadV1PreviewText(path),
         saveText: (_, text) => _saveV1PreviewText(item, path, text),
@@ -2563,7 +2577,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (item.fileType == PbAttachmentFileType.transcript || extension == 'transcript' || extension == 'srt' || extension == 'vtt') {
-      final file = item.toAttachmentData();
       return PbFilePreviewSource(
         sourceKey: path,
         childBuilder: (fullscreen) => extension == 'transcript'
@@ -2572,7 +2585,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       );
     }
 
-    if (_v1IsEditableTextPreview(item, path)) {
+    if (_v1IsEditableTextPreview(item, path, classificationPath: classificationPath)) {
       return PbFilePreviewSource(
         sourceKey: path,
         loadText: () => _loadV1PreviewText(path),
