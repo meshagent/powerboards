@@ -82,7 +82,8 @@ dependencies:
   meshagent_flutter_shadcn: ^0.46.2
   meshagent_flutter_dev: ^0.46.2
   meshagent_flutter_auth: ^0.46.2
-  pdfrx: ^2.2.18
+  pdfrx: ^2.4.4
+  pdfrx_coregraphics: ^0.2.2
 
   data_table_2: ^2.6.0
   file_icon: ^1.0.0
