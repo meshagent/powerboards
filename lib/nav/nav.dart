@@ -1465,7 +1465,7 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
                 switchOutCurve: Curves.easeInCubic,
                 transitionBuilder: (child, animation) => SizeTransition(
                   sizeFactor: animation,
-                  axisAlignment: -1,
+                  alignment: AlignmentDirectional.topStart,
                   child: FadeTransition(opacity: animation, child: child),
                 ),
                 child: !(isMobile && _mobileRoomListFilterMode)
@@ -2475,7 +2475,7 @@ class _NavBarState extends State<_NavBar> {
             switchOutCurve: Curves.easeInCubic,
             transitionBuilder: (child, animation) => FadeTransition(
               opacity: animation,
-              child: SizeTransition(sizeFactor: animation, axisAlignment: 1, child: child),
+              child: SizeTransition(sizeFactor: animation, alignment: AlignmentDirectional.bottomStart, child: child),
             ),
             child: buildDesktopFooter(),
           ),

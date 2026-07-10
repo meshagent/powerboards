@@ -521,7 +521,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
               child: ClipRect(
                 child: FadeTransition(
                   opacity: animation,
-                  child: SizeTransition(sizeFactor: animation, axisAlignment: 1.0, child: transitionChild),
+                  child: SizeTransition(sizeFactor: animation, alignment: AlignmentDirectional.bottomStart, child: transitionChild),
                 ),
               ),
             );
