@@ -4646,7 +4646,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         return ClipRect(
           child: FadeTransition(
             opacity: animation,
-            child: SizeTransition(sizeFactor: animation, axisAlignment: -1.0, child: child),
+            child: SizeTransition(sizeFactor: animation, alignment: AlignmentDirectional.topStart, child: child),
           ),
         );
       },
@@ -6029,7 +6029,7 @@ class _FileTableViewState extends State<FileTableView> {
         return ClipRect(
           child: FadeTransition(
             opacity: animation,
-            child: SizeTransition(sizeFactor: animation, axisAlignment: -1.0, child: child),
+            child: SizeTransition(sizeFactor: animation, alignment: AlignmentDirectional.topStart, child: child),
           ),
         );
       },
