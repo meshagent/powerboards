@@ -132,6 +132,11 @@ const Set<String> _websitePreviewAppProjectFolderNames = <String>{'node_modules'
 typedef PowerboardsV1FilePromptRequested =
     FutureOr<void> Function(ChatFilePromptAction action, String filePath, {required bool responsiveHandoff, String? fileDisplayName});
 
+@visibleForTesting
+bool powerboardsV1IsCanonicalWebServerFolder({required bool usesDesktopV1FilesBrowser, required String fullPath, required bool isFolder}) {
+  return usesDesktopV1FilesBrowser && isFolder && PendingStorageDeletes.normalizePath(fullPath) == powerboardsWebServerFolderName;
+}
+
 class _V1WebsitePreviewState {
   const _V1WebsitePreviewState({required this.entryPath, this.previewHtml, this.previewUrl, required this.title})
     : assert(previewHtml != null || previewUrl != null);
@@ -1084,6 +1089,7 @@ class FileManagerView extends StatefulWidget {
   final double? v1RoomPanelWidth;
   final ValueChanged<double>? onV1RoomPanelWidthChanged;
   final PowerboardsV1FilePromptRequested? onV1FilePromptRequested;
+  final VoidCallback? onServiceChanged;
 
   const FileManagerView({
     super.key,
@@ -1105,6 +1111,7 @@ class FileManagerView extends StatefulWidget {
     this.v1RoomPanelWidth,
     this.onV1RoomPanelWidthChanged,
     this.onV1FilePromptRequested,
+    this.onServiceChanged,
   });
 
   @override
@@ -4233,6 +4240,9 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
       final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters)..remove(_webServerPreviewQueryParameter);
       context.go(currentUri.replace(queryParameters: updatedQueryParameters).toString());
+      if (_webServerPreviewEntryPathFromEntries(entries) == null) {
+        return;
+      }
       unawaited(_openV1WebsitePreview(entries: entries));
     });
   }
@@ -4273,10 +4283,11 @@ class _FileManagerViewState extends State<FileManagerView> {
   bool get _hasInstalledWebServer => _currentWebServerService() != null;
 
   bool _isWebServerFolderPath(String fullPath, {required bool isFolder}) {
-    return _usesDesktopV1FilesBrowser() &&
-        _hasInstalledWebServer &&
-        isFolder &&
-        PendingStorageDeletes.normalizePath(fullPath) == _webServerFolderName;
+    return powerboardsV1IsCanonicalWebServerFolder(
+      usesDesktopV1FilesBrowser: _usesDesktopV1FilesBrowser(),
+      fullPath: fullPath,
+      isFolder: isFolder,
+    );
   }
 
   bool _isWebServerInstalled() {
@@ -4303,6 +4314,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   Future<void> _refreshWebServerState() async {
     final services = widget.services;
     await powerboardsRefreshFilesWebServerState(services: services, roomRoutes: roomRoutes);
+    widget.onServiceChanged?.call();
     if (mounted) {
       setState(() {});
     }
@@ -4572,18 +4584,37 @@ class _FileManagerViewState extends State<FileManagerView> {
   Future<void> _deleteActiveWebServerFolder(String folderPath) async {
     final projectId = widget.projectId;
     final roomName = widget.client.roomName?.trim();
-    final service = _currentWebServerService();
-    if (projectId == null || roomName == null || roomName.isEmpty || service?.id == null) {
-      throw StateError('Web server service is not available.');
+    if (projectId == null || roomName == null || roomName.isEmpty) {
+      throw StateError('Web server room context is not available.');
     }
 
     final client = powerboards_meshagent.getMeshagentClient();
-    final routes = await client.listRoomRoutes(projectId: projectId, roomName: roomName);
-    final matchedRoutes = routesForService(routes: routes, service: service!);
+    final listedServices = await client.listRoomServices(projectId: projectId, roomName: roomName);
+    final service = listedServices.firstWhereOrNull(
+      (candidate) => candidate.metadata.annotations['meshagent.service.id'] == _webServerServiceId,
+    );
+    if (service != null) {
+      final serviceId = service.id?.trim();
+      if (serviceId == null || serviceId.isEmpty) {
+        throw StateError('The Web server service is missing its service id.');
+      }
+      final routes = await client.listRoutes(projectId);
+      final matchedRoutes = routesForService(routes: routes, service: service);
 
-    await client.deleteRoomService(projectId: projectId, serviceId: service.id!, roomName: roomName);
-    for (final route in matchedRoutes) {
-      await client.deleteRoute(projectId: projectId, domain: route.domain);
+      await powerboardsDeleteRoutesThenService(
+        routes: matchedRoutes,
+        deleteRoute: (route) => client.deleteRoute(projectId: projectId, domain: route.domain),
+        deleteService: () => client.deleteRoomService(projectId: projectId, serviceId: serviceId, roomName: roomName),
+        observeServiceDeleted: () async {
+          return powerboardsWaitForRoomServiceRemoval(
+            serviceKindId: _webServerServiceId,
+            loadServices: () => client.listRoomServices(projectId: projectId, roomName: roomName),
+            routeDomains: matchedRoutes.map((route) => route.domain),
+            loadRouteDomains: () async =>
+                (await client.listRoomRoutes(projectId: projectId, roomName: roomName)).map((route) => route.domain),
+          );
+        },
+      );
     }
 
     try {

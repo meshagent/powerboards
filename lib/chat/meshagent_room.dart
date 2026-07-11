@@ -667,6 +667,59 @@ String powerboardsDesktopPreviewAttachmentThreadScopeSignature({required String?
 }
 
 @visibleForTesting
+String? powerboardsDesktopPreviewActiveThreadValue({required String? selectedValue, required String? pendingValue}) {
+  final normalizedSelected = selectedValue?.trim();
+  if (normalizedSelected != null && normalizedSelected.isNotEmpty) {
+    return normalizedSelected;
+  }
+  final normalizedPending = pendingValue?.trim();
+  return normalizedPending == null || normalizedPending.isEmpty ? null : normalizedPending;
+}
+
+@visibleForTesting
+String? powerboardsDesktopPreviewVisiblePathForPendingThread({
+  required String? pendingThreadPath,
+  required Iterable<String> visibleThreadPaths,
+}) {
+  final pendingPath = pendingThreadPath?.trim();
+  if (pendingPath == null || pendingPath.isEmpty) {
+    return null;
+  }
+
+  final visiblePaths = visibleThreadPaths.map((path) => path.trim()).where((path) => path.isNotEmpty).toList(growable: false);
+  if (visiblePaths.contains(pendingPath)) {
+    return pendingPath;
+  }
+
+  String? threadId(String path) {
+    final uri = Uri.tryParse(path);
+    if (uri == null) {
+      return null;
+    }
+
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme.isNotEmpty && scheme != 'agent' && scheme != 'dataset') {
+      return null;
+    }
+
+    final segments = <String>[if (uri.host.isNotEmpty) uri.host, ...uri.pathSegments.where((segment) => segment.isNotEmpty)];
+    final threadsIndex = segments.lastIndexWhere((segment) => segment == 'threads' || segment == '.threads');
+    if (threadsIndex < 0 || threadsIndex + 1 >= segments.length) {
+      return null;
+    }
+    final suffix = segments.sublist(threadsIndex + 1).join('/');
+    return suffix.endsWith('.thread') ? suffix.substring(0, suffix.length - '.thread'.length) : suffix;
+  }
+
+  final pendingThreadId = threadId(pendingPath);
+  if (pendingThreadId == null) {
+    return null;
+  }
+  final matches = visiblePaths.where((path) => threadId(path) == pendingThreadId).toList(growable: false);
+  return matches.length == 1 ? matches.single : null;
+}
+
+@visibleForTesting
 bool powerboardsDesktopPreviewShouldLoadThreadAttachments({required PbRoomPanelTab selectedTab, required bool filePreviewOpen}) {
   return selectedTab == PbRoomPanelTab.files || filePreviewOpen;
 }
@@ -3402,12 +3455,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return null;
     }
 
-    final inMemory = _selectedThreadPathByAgentKey[agentKey];
-    if (inMemory != null) {
-      return inMemory;
-    }
-
-    return null;
+    return powerboardsDesktopPreviewActiveThreadValue(
+      selectedValue: _selectedThreadPathByAgentKey[agentKey],
+      pendingValue: _pendingDesktopPreviewThreadPathByAgentKey[agentKey],
+    );
   }
 
   // ignore: unused_element
@@ -3416,12 +3467,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return null;
     }
 
-    final stored = _selectedThreadLabelByAgentKey[agentKey];
-    if (stored != null && stored.trim().isNotEmpty) {
-      return stored;
-    }
-
-    return null;
+    return powerboardsDesktopPreviewActiveThreadValue(
+      selectedValue: _selectedThreadLabelByAgentKey[agentKey],
+      pendingValue: _pendingDesktopPreviewThreadLabelByAgentKey[agentKey],
+    );
   }
 
   void _setSelectedThreadPath(String? agentKey, String? path, {String? displayName}) {
@@ -3524,6 +3573,35 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _composerAttachmentPathsByAgentKey.remove(agentKey);
       _composerAttachmentDisplayNamesByAgentKey.remove(agentKey);
       _composerAttachmentSeedVersionByAgentKey.remove(agentKey);
+    });
+  }
+
+  void _removeComposerAttachmentSeedPath(String agentKey, String path) {
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
+    final currentPaths = _composerAttachmentPathsByAgentKey[agentKey];
+    if (normalizedPath.isEmpty || currentPaths == null || currentPaths.isEmpty) {
+      return;
+    }
+
+    final nextPaths = currentPaths.where((candidate) => candidate != normalizedPath).toList(growable: false);
+    if (nextPaths.length == currentPaths.length) {
+      return;
+    }
+    if (nextPaths.isEmpty) {
+      _clearComposerAttachmentSeed(agentKey);
+      return;
+    }
+
+    setState(() {
+      _composerAttachmentPathsByAgentKey[agentKey] = nextPaths;
+      final displayNames = Map<String, String>.from(_composerAttachmentDisplayNamesByAgentKey[agentKey] ?? const {});
+      displayNames.remove(normalizedPath);
+      if (displayNames.isEmpty) {
+        _composerAttachmentDisplayNamesByAgentKey.remove(agentKey);
+      } else {
+        _composerAttachmentDisplayNamesByAgentKey[agentKey] = displayNames;
+      }
+      _composerAttachmentSeedVersionByAgentKey[agentKey] = ++_composerAttachmentSeedRevision;
     });
   }
 
@@ -4171,6 +4249,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _showFilesPane(BuildContext context) {
+    _refreshServiceResources();
     controller.showFiles();
     _replaceRoomRouteState(context, pane: _MobileRoomPane.files);
   }
@@ -4910,9 +4989,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         onComposerAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel, fromComposerAttachment: true)
             : null,
-        onComposerAttachmentRemoved: !isMobile && powerboardsUsesDesktopUiPreview(context)
-            ? _closeDesktopPreviewAttachmentPreviewIfRemoved
-            : null,
+        onComposerAttachmentRemoved: agentKey == null
+            ? null
+            : (path) {
+                _removeComposerAttachmentSeedPath(agentKey, path);
+                if (!isMobile && powerboardsUsesDesktopUiPreview(context)) {
+                  _closeDesktopPreviewAttachmentPreviewIfRemoved(path);
+                }
+              },
         onThreadAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) {
                 final effectiveThreadPath = selectedThreadPath ?? documentPath;
@@ -5242,6 +5326,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 client: widget.room,
                 projectId: widget.projectId,
                 services: fileManagerServices,
+                onServiceChanged: _refreshServiceResources,
                 hideSystem: true,
                 mobileShellOwnsHeader: isMobile && !embedMobileChrome,
                 showDesktopSidetrayToggle: showDesktopSidetrayToggle,
@@ -5880,19 +5965,23 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final pendingPath = _pendingDesktopPreviewThreadPathByAgentKey[agentKey];
-    if (pendingPath == null || !threads.any((thread) => thread.path == pendingPath)) {
+    final visiblePath = powerboardsDesktopPreviewVisiblePathForPendingThread(
+      pendingThreadPath: pendingPath,
+      visibleThreadPaths: threads.map((thread) => thread.path),
+    );
+    if (pendingPath == null || visiblePath == null) {
       return;
     }
 
     final pendingLabel = _pendingDesktopPreviewThreadLabelByAgentKey[agentKey];
-    final listedLabel = threads.firstWhereOrNull((thread) => thread.path == pendingPath)?.name;
+    final listedLabel = threads.firstWhereOrNull((thread) => thread.path == visiblePath)?.name;
     final displayName = pendingLabel ?? listedLabel;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _pendingDesktopPreviewThreadPathByAgentKey[agentKey] != pendingPath) {
         return;
       }
 
-      _setSelectedThreadPath(agentKey, pendingPath, displayName: displayName);
+      _setSelectedThreadPath(agentKey, visiblePath, displayName: displayName);
     });
   }
 
@@ -7806,11 +7895,13 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                               return ToolConnectionScope(
                                 room: widget.room,
                                 tools: [
-                                  UIToolkit(
+                                  powerboardsRoomUiToolkit(
                                     context: context,
+                                    enableV1WebServerTools: useDesktopUiPreview,
                                     projectId: widget.projectId,
                                     roomName: widget.room.roomName,
                                     onWebServerServiceInstalled: (_) => _refreshServiceResources(),
+                                    onWebServerSiteFilesSaved: (_) => _refreshServiceResources(),
                                   ),
                                 ],
                                 builder: (context, error) {

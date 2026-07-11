@@ -14,6 +14,7 @@ import 'package:powerboards/meshagent/route_service_match.dart';
 
 const String installWebServerServiceToolName = 'install_webserver_service';
 const String saveWebServerSiteFilesToolName = 'save_webserver_site_files';
+const String openWebServerFileToolName = 'open_webserver_file';
 const String uninstallWebServerServiceToolName = 'uninstall_webserver_service';
 
 const Map<String, dynamic> installWebServerServiceInputSchema = {
@@ -80,25 +81,29 @@ const Map<String, dynamic> saveWebServerSiteFilesInputSchema = {
 const Map<String, dynamic> saveWebServerSiteFilesOutputSchema = {
   'type': 'object',
   'additionalProperties': false,
-  'required': ['status', 'folder_path', 'site_label', 'created_files', 'message', 'assistant_reply'],
+  'required': ['status', 'assistant_reply'],
   'properties': {
     'status': {
       'type': 'string',
       'enum': ['saved', 'blocked', 'failed'],
     },
-    'folder_path': {'type': 'string'},
-    'site_label': {'type': 'string'},
-    'created_files': {
-      'type': 'array',
-      'items': {'type': 'string'},
-    },
-    'domain': {'type': 'string'},
-    'message': {'type': 'string'},
     'assistant_reply': {'type': 'string'},
   },
 };
 
 const Map<String, dynamic> uninstallWebServerServiceInputSchema = {'type': 'object', 'additionalProperties': false, 'properties': {}};
+
+const Map<String, dynamic> openWebServerFileInputSchema = {
+  'type': 'object',
+  'additionalProperties': false,
+  'required': ['path'],
+  'properties': {
+    'path': {
+      'type': 'string',
+      'description': 'The requested file name or path relative to the webserver root, such as index.html or assets/logo.svg.',
+    },
+  },
+};
 
 const Map<String, dynamic> uninstallWebServerServiceOutputSchema = {
   'type': 'object',
@@ -275,6 +280,24 @@ class UninstallWebServerServiceRequest {
   final String roomName;
 }
 
+class OpenWebServerFileRequest {
+  const OpenWebServerFileRequest({required this.projectId, required this.roomName, required this.path});
+
+  final String projectId;
+  final String roomName;
+  final String path;
+}
+
+class OpenWebServerFileResult {
+  const OpenWebServerFileResult({required this.status, required this.path, required this.message});
+
+  final String status;
+  final String path;
+  final String message;
+
+  Map<String, dynamic> toJson() => {'status': status, 'path': path, 'message': message};
+}
+
 class UninstallWebServerServiceResult {
   const UninstallWebServerServiceResult({
     required this.status,
@@ -294,6 +317,9 @@ class UninstallWebServerServiceResult {
 
   Map<String, dynamic> toJson() {
     final normalizedPreservedFolderPath = preservedFolderPath?.trim();
+    final displayedFolderPath = normalizedPreservedFolderPath == null || normalizedPreservedFolderPath.isEmpty
+        ? siteLabel
+        : normalizedPreservedFolderPath.replaceFirst(RegExp(r'/+$'), '');
     return {
       'status': status,
       'folder_path': folderPath,
@@ -303,11 +329,7 @@ class UninstallWebServerServiceResult {
       'removed_domains': removedDomains,
       'message': message,
       'assistant_reply': status == 'removed'
-          ? [
-              'Removed the webserver service from this room.',
-              '',
-              'Files were kept in Files at `$siteLabel`.',
-            ].join('\n')
+          ? ['Removed the webserver service from this room.', '', 'Files were kept in Files at `$displayedFolderPath`.'].join('\n')
           : message,
     };
   }
@@ -315,28 +337,61 @@ class UninstallWebServerServiceResult {
 
 typedef InstallWebServerServiceRunner = Future<InstallWebServerServiceResult> Function(InstallWebServerServiceRequest request);
 typedef SaveWebServerSiteFilesRunner = Future<SaveWebServerSiteFilesResult> Function(SaveWebServerSiteFilesRequest request);
+typedef OpenWebServerFileRunner = Future<OpenWebServerFileResult> Function(OpenWebServerFileRequest request);
 typedef UninstallWebServerServiceRunner = Future<UninstallWebServerServiceResult> Function(UninstallWebServerServiceRequest request);
+
+List<BaseTool> powerboardsWebServerTools({
+  required String projectId,
+  required String roomName,
+  required bool enableV1WebServerTools,
+  InstallWebServerServiceRunner install = installPowerboardsWebServerService,
+  SaveWebServerSiteFilesRunner saveSiteFiles = savePowerboardsWebServerSiteFiles,
+  OpenWebServerFileRunner openFile = openPowerboardsWebServerFile,
+  UninstallWebServerServiceRunner uninstall = uninstallPowerboardsWebServerService,
+  FutureOr<void> Function(InstallWebServerServiceResult result)? onInstalled,
+  FutureOr<void> Function(SaveWebServerSiteFilesResult result)? onSaved,
+  FutureOr<void> Function(UninstallWebServerServiceResult result)? onUninstalled,
+}) {
+  if (!enableV1WebServerTools) {
+    return const <BaseTool>[];
+  }
+
+  return [
+    InstallWebServerServiceTool(projectId: projectId, roomName: roomName, install: install, onInstalled: onInstalled),
+    SaveWebServerSiteFilesTool(projectId: projectId, roomName: roomName, save: saveSiteFiles, onSaved: onSaved),
+    OpenWebServerFileTool(projectId: projectId, roomName: roomName, openFile: openFile),
+    UninstallWebServerServiceTool(projectId: projectId, roomName: roomName, uninstall: uninstall, onUninstalled: onUninstalled),
+  ];
+}
 
 class InstallWebServerServiceToolkit extends Toolkit {
   InstallWebServerServiceToolkit({
     required String projectId,
     required String roomName,
+    required bool enableV1WebServerTools,
     InstallWebServerServiceRunner install = installPowerboardsWebServerService,
     SaveWebServerSiteFilesRunner saveSiteFiles = savePowerboardsWebServerSiteFiles,
+    OpenWebServerFileRunner openFile = openPowerboardsWebServerFile,
     UninstallWebServerServiceRunner uninstall = uninstallPowerboardsWebServerService,
     FutureOr<void> Function(InstallWebServerServiceResult result)? onInstalled,
+    FutureOr<void> Function(SaveWebServerSiteFilesResult result)? onSaved,
     FutureOr<void> Function(UninstallWebServerServiceResult result)? onUninstalled,
-    bool enableV1Actions = false,
   }) : super(
          name: 'powerboards',
          title: 'PowerBoards actions',
          description: 'Product actions for the current PowerBoards room.',
-         tools: [
-           InstallWebServerServiceTool(projectId: projectId, roomName: roomName, install: install, onInstalled: onInstalled),
-           SaveWebServerSiteFilesTool(projectId: projectId, roomName: roomName, save: saveSiteFiles),
-           if (enableV1Actions)
-             UninstallWebServerServiceTool(projectId: projectId, roomName: roomName, uninstall: uninstall, onUninstalled: onUninstalled),
-         ],
+         tools: powerboardsWebServerTools(
+           projectId: projectId,
+           roomName: roomName,
+           enableV1WebServerTools: enableV1WebServerTools,
+           install: install,
+           saveSiteFiles: saveSiteFiles,
+           openFile: openFile,
+           uninstall: uninstall,
+           onInstalled: onInstalled,
+           onSaved: onSaved,
+           onUninstalled: onUninstalled,
+         ),
          rules: const [],
        );
 }
@@ -379,7 +434,7 @@ class InstallWebServerServiceTool extends FunctionTool {
       );
 
       if (result.status == 'installed' || result.status == 'already_installed') {
-        await onInstalled?.call(result);
+        _dispatchDeferredValueCallback(onInstalled, result);
       }
 
       return JsonContent(json: result.toJson());
@@ -397,8 +452,42 @@ class InstallWebServerServiceTool extends FunctionTool {
   }
 }
 
+class OpenWebServerFileTool extends FunctionTool {
+  OpenWebServerFileTool({required this.projectId, required this.roomName, required this.openFile})
+    : super(
+        name: openWebServerFileToolName,
+        title: 'Provide Web server file',
+        description:
+            'Find and provide a file from the current room webserver root. Use this when the user asks to find, get, open, show, attach, or provide '
+            'a website file such as index.html. Pass the requested name or path relative to the webserver root. A successful result is displayed '
+            'automatically as a clickable file attachment in chat; briefly confirm it is attached and do not replace it with a text-only path or link.',
+        inputSchema: openWebServerFileInputSchema,
+        outputSpec: ToolContentSpec(types: [ToolContentType.link, ToolContentType.json]),
+      );
+
+  final String projectId;
+  final String roomName;
+  final OpenWebServerFileRunner openFile;
+
+  @override
+  Future<Content> execute(ToolContext context, Map<String, dynamic> arguments) async {
+    try {
+      final result = await openFile(
+        OpenWebServerFileRequest(projectId: projectId, roomName: roomName, path: (arguments['path'] ?? '').toString()),
+      );
+      if (result.status == 'opened') {
+        final name = result.path.split('/').where((segment) => segment.isNotEmpty).last;
+        return LinkContent(url: 'room:///${result.path}', name: name);
+      }
+      return JsonContent(json: result.toJson());
+    } catch (error) {
+      return JsonContent(json: {'status': 'failed', 'path': '', 'message': 'Unable to provide the webserver file: $error'});
+    }
+  }
+}
+
 class SaveWebServerSiteFilesTool extends FunctionTool {
-  SaveWebServerSiteFilesTool({required this.projectId, required this.roomName, required this.save})
+  SaveWebServerSiteFilesTool({required this.projectId, required this.roomName, required this.save, this.onSaved})
     : super(
         name: saveWebServerSiteFilesToolName,
         title: 'Save Web server site files',
@@ -414,6 +503,7 @@ class SaveWebServerSiteFilesTool extends FunctionTool {
   final String projectId;
   final String roomName;
   final SaveWebServerSiteFilesRunner save;
+  final FutureOr<void> Function(SaveWebServerSiteFilesResult result)? onSaved;
 
   @override
   Future<Content> execute(ToolContext context, Map<String, dynamic> arguments) async {
@@ -421,17 +511,20 @@ class SaveWebServerSiteFilesTool extends FunctionTool {
       final result = await save(
         SaveWebServerSiteFilesRequest(projectId: projectId, roomName: roomName, files: _siteFilesFromArguments(arguments['files'])),
       );
-      return JsonContent(json: result.toJson());
+      if (result.status == 'saved') {
+        _dispatchDeferredValueCallback(onSaved, result);
+      }
+      final json = result.toJson();
+      return JsonContent(json: {'status': json['status'], 'assistant_reply': json['assistant_reply']});
     } catch (error) {
-      return JsonContent(
-        json: SaveWebServerSiteFilesResult(
-          status: 'failed',
-          folderPath: '$powerboardsWebServerFolderName/',
-          siteLabel: powerboardsWebServerFolderName,
-          createdFiles: const [],
-          message: 'Unable to save the website files: $error',
-        ).toJson(),
-      );
+      final json = SaveWebServerSiteFilesResult(
+        status: 'failed',
+        folderPath: '$powerboardsWebServerFolderName/',
+        siteLabel: powerboardsWebServerFolderName,
+        createdFiles: const [],
+        message: 'Unable to save the website files: $error',
+      ).toJson();
+      return JsonContent(json: {'status': json['status'], 'assistant_reply': json['assistant_reply']});
     }
   }
 }
@@ -459,10 +552,7 @@ class UninstallWebServerServiceTool extends FunctionTool {
     try {
       final result = await uninstall(UninstallWebServerServiceRequest(projectId: projectId, roomName: roomName));
       if (result.status == 'removed') {
-        final callbackResult = onUninstalled?.call(result);
-        if (callbackResult is Future<void>) {
-          unawaited(callbackResult.catchError((Object _) {}));
-        }
+        _dispatchDeferredValueCallback(onUninstalled, result);
       }
       return JsonContent(json: result.toJson());
     } catch (error) {
@@ -494,8 +584,8 @@ Future<InstallWebServerServiceResult> installPowerboardsWebServerService(Install
   final existing = await client.listRoomServices(projectId: projectId, roomName: roomName);
   final existingWebServer = existing.firstWhereOrNull(_isWebServerService);
   if (existingWebServer != null) {
-    await powerboardsEnsureWebServerFolderExists(client: client, projectId: projectId, roomName: roomName);
     final existingDomain = _webServerTemplateValues(existingWebServer)['url'];
+    await powerboardsPrepareWebServerFolderForDomain(client: client, projectId: projectId, roomName: roomName, domain: existingDomain);
     return InstallWebServerServiceResult(
       status: 'already_installed',
       serviceId: powerboardsWebServerServiceId,
@@ -563,8 +653,15 @@ Future<InstallWebServerServiceResult> installPowerboardsWebServerService(Install
     }
   }
 
-  await client.createRoomServiceFromTemplate(projectId: projectId, roomName: roomName, template: template.template, values: values);
-  await powerboardsEnsureWebServerFolderExists(client: client, projectId: projectId, roomName: roomName);
+  await powerboardsSaveServiceAfterPreparingWebServerFolder(
+    isWebServer: true,
+    prepareWebServerFolder: () async {
+      // Restore archived files before the container can create a fresh empty website folder.
+      await powerboardsPrepareWebServerFolderForDomain(client: client, projectId: projectId, roomName: roomName, domain: routeValue);
+    },
+    saveService: () =>
+        client.createRoomServiceFromTemplate(projectId: projectId, roomName: roomName, template: template.template, values: values),
+  );
 
   return InstallWebServerServiceResult(
     status: 'installed',
@@ -577,7 +674,10 @@ Future<InstallWebServerServiceResult> installPowerboardsWebServerService(Install
   );
 }
 
-Future<UninstallWebServerServiceResult> uninstallPowerboardsWebServerService(UninstallWebServerServiceRequest request) async {
+Future<UninstallWebServerServiceResult> uninstallPowerboardsWebServerService(
+  UninstallWebServerServiceRequest request, {
+  StorageClient? storage,
+}) async {
   final projectId = request.projectId.trim();
   final roomName = request.roomName.trim();
   if (projectId.isEmpty || roomName.isEmpty) {
@@ -613,22 +713,105 @@ Future<UninstallWebServerServiceResult> uninstallPowerboardsWebServerService(Uni
 
   final domain = _webServerTemplateValues(webServer)['url']?.trim();
   final siteLabel = domain == null || domain.isEmpty ? powerboardsWebServerFolderName : domain;
-  final routes = await client.listRoomRoutes(projectId: projectId, roomName: roomName);
+  final archivedFolderName = powerboardsArchivedWebServerFolderName(siteLabel);
+  final routes = await client.listRoutes(projectId);
   final matchedRoutes = routesForService(routes: routes, service: webServer);
 
-  await client.deleteRoomService(projectId: projectId, serviceId: serviceId, roomName: roomName);
-  for (final route in matchedRoutes) {
-    await client.deleteRoute(projectId: projectId, domain: route.domain);
+  await powerboardsDeleteRoutesThenService(
+    routes: matchedRoutes,
+    deleteRoute: (route) => client.deleteRoute(projectId: projectId, domain: route.domain),
+    deleteService: () => client.deleteRoomService(projectId: projectId, serviceId: serviceId, roomName: roomName),
+    observeServiceDeleted: () async {
+      return powerboardsWaitForRoomServiceRemoval(
+        serviceKindId: powerboardsWebServerServiceId,
+        loadServices: () => client.listRoomServices(projectId: projectId, roomName: roomName),
+        routeDomains: matchedRoutes.map((route) => route.domain),
+        loadRouteDomains: () async => (await client.listRoomRoutes(projectId: projectId, roomName: roomName)).map((route) => route.domain),
+      );
+    },
+  );
+
+  String? preservedFolderPath;
+  try {
+    preservedFolderPath = storage == null
+        ? await powerboardsPreserveFormerWebServerFolder(
+            client: client,
+            projectId: projectId,
+            roomName: roomName,
+            preferredName: archivedFolderName,
+          )
+        : await powerboardsPreserveFormerWebServerFolderInStorage(storage, preferredName: archivedFolderName);
+  } catch (_) {
+    preservedFolderPath = null;
   }
 
   return UninstallWebServerServiceResult(
     status: 'removed',
     folderPath: '$powerboardsWebServerFolderName/',
     siteLabel: siteLabel,
-    preservedFolderPath: '$powerboardsWebServerFolderName/',
+    preservedFolderPath: preservedFolderPath,
     removedDomains: matchedRoutes.map((route) => route.domain).where((domain) => domain.trim().isNotEmpty).toList(growable: false),
     message: 'Removed the Web server service from this room.',
   );
+}
+
+Future<OpenWebServerFileResult> openPowerboardsWebServerFile(OpenWebServerFileRequest request, {StorageClient? storage}) async {
+  final projectId = request.projectId.trim();
+  final roomName = request.roomName.trim();
+  if (projectId.isEmpty || roomName.isEmpty) {
+    return const OpenWebServerFileResult(
+      status: 'failed',
+      path: '',
+      message: 'I need a current PowerBoards room before I can provide a file.',
+    );
+  }
+
+  final requestedPath = _normalizeRequestedWebServerFilePath(request.path);
+  if (requestedPath == null) {
+    return const OpenWebServerFileResult(status: 'not_found', path: '', message: 'Tell me which webserver file you want.');
+  }
+
+  final client = getMeshagentClient();
+  final services = await client.listRoomServices(projectId: projectId, roomName: roomName);
+  if (!services.any(_isWebServerService)) {
+    return const OpenWebServerFileResult(
+      status: 'not_installed',
+      path: '',
+      message: 'The Web server service is not installed in this room.',
+    );
+  }
+
+  if (storage != null) {
+    final match = await _findWebServerFilePath(storage, requestedPath);
+    if (match == null) {
+      return OpenWebServerFileResult(
+        status: 'not_found',
+        path: '$powerboardsWebServerFolderName/$requestedPath',
+        message: 'I could not find `$requestedPath` in the webserver folder.',
+      );
+    }
+    return OpenWebServerFileResult(status: 'opened', path: match, message: 'Attached `${match.split('/').last}`.');
+  }
+
+  final roomConnection = await client.connectRoom(projectId: projectId, roomName: roomName);
+  final roomClient = RoomClient(
+    protocolFactory: meshagent.WebSocketClientProtocol.createFactory(url: roomConnection.roomUrl, token: roomConnection.jwt),
+  );
+  try {
+    roomClient.start();
+    await roomClient.ready;
+    final match = await _findWebServerFilePath(roomClient.storage, requestedPath);
+    if (match == null) {
+      return OpenWebServerFileResult(
+        status: 'not_found',
+        path: '$powerboardsWebServerFolderName/$requestedPath',
+        message: 'I could not find `$requestedPath` in the webserver folder.',
+      );
+    }
+    return OpenWebServerFileResult(status: 'opened', path: match, message: 'Attached `${match.split('/').last}`.');
+  } finally {
+    roomClient.dispose();
+  }
 }
 
 Future<SaveWebServerSiteFilesResult> savePowerboardsWebServerSiteFiles(SaveWebServerSiteFilesRequest request) async {
@@ -730,6 +913,76 @@ List<SaveWebServerSiteFile> _siteFilesFromArguments(Object? value) {
       .whereType<Map>()
       .map((file) => SaveWebServerSiteFile(path: (file['path'] ?? '').toString(), content: (file['content'] ?? '').toString()))
       .toList(growable: false);
+}
+
+String? _normalizeRequestedWebServerFilePath(String rawPath) {
+  var normalized = rawPath.trim().replaceAll('\\', '/');
+  while (normalized.startsWith('/')) {
+    normalized = normalized.substring(1);
+  }
+  if (normalized.startsWith('$powerboardsWebServerFolderName/')) {
+    normalized = normalized.substring(powerboardsWebServerFolderName.length + 1);
+  }
+  final segments = normalized.split('/').map((segment) => segment.trim()).where((segment) => segment.isNotEmpty).toList(growable: false);
+  if (segments.isEmpty || segments.any((segment) => segment == '.' || segment == '..')) {
+    return null;
+  }
+  return segments.join('/');
+}
+
+Future<List<String>> _listWebServerFilePaths(StorageClient storage, String folderPath) async {
+  final paths = <String>[];
+  for (final entry in await storage.list(folderPath)) {
+    final path = '$folderPath/${entry.name}';
+    if (entry.isFolder) {
+      paths.addAll(await _listWebServerFilePaths(storage, path));
+    } else if (entry.name != powerboardsStorageFolderPlaceholderFileName) {
+      paths.add(path);
+    }
+  }
+  return paths;
+}
+
+Future<String?> _findWebServerFilePath(StorageClient storage, String requestedPath) async {
+  final exactPath = '$powerboardsWebServerFolderName/$requestedPath';
+  if (await storage.exists(exactPath)) {
+    return exactPath;
+  }
+
+  final paths = await _listWebServerFilePaths(storage, powerboardsWebServerFolderName);
+  final requestedLower = requestedPath.toLowerCase();
+  final requestedName = requestedLower.split('/').last;
+  final requestedStem = requestedName.contains('.') ? requestedName.substring(0, requestedName.lastIndexOf('.')) : requestedName;
+
+  final exactCaseInsensitive = paths.firstWhereOrNull(
+    (path) => path.substring(powerboardsWebServerFolderName.length + 1).toLowerCase() == requestedLower,
+  );
+  if (exactCaseInsensitive != null) {
+    return exactCaseInsensitive;
+  }
+
+  final sameName = paths.firstWhereOrNull((path) => path.split('/').last.toLowerCase() == requestedName);
+  if (sameName != null) {
+    return sameName;
+  }
+
+  final sameStem =
+      paths
+          .where((path) {
+            final name = path.split('/').last.toLowerCase();
+            final stem = name.contains('.') ? name.substring(0, name.lastIndexOf('.')) : name;
+            return stem == requestedStem;
+          })
+          .toList(growable: false)
+        ..sort((left, right) {
+          final leftHtml = left.toLowerCase().endsWith('.html') || left.toLowerCase().endsWith('.htm');
+          final rightHtml = right.toLowerCase().endsWith('.html') || right.toLowerCase().endsWith('.htm');
+          if (leftHtml != rightHtml) {
+            return leftHtml ? -1 : 1;
+          }
+          return left.toLowerCase().compareTo(right.toLowerCase());
+        });
+  return sameStem.firstOrNull;
 }
 
 String _normalizeWebServerSiteFilePath(String rawPath) {
@@ -877,4 +1130,17 @@ List<({String domain, String port})> _routeRequestsForTemplate(meshagent.Service
     routeRequests.add((domain: domain, port: port));
   }
   return routeRequests;
+}
+
+void _dispatchDeferredValueCallback<T>(FutureOr<void> Function(T value)? callback, T value) {
+  if (callback == null) {
+    return;
+  }
+  unawaited(
+    Future<void>(() async {
+      try {
+        await callback(value);
+      } catch (_) {}
+    }),
+  );
 }

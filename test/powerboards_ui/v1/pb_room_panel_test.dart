@@ -184,6 +184,67 @@ void main() {
     expect(title, 'New Chat');
   });
 
+  test('desktop preview activates a newly created pending thread before the thread list catches up', () {
+    expect(
+      powerboardsDesktopPreviewActiveThreadValue(
+        selectedValue: null,
+        pendingValue: 'dataset://agents/assistant/threads/webserver-service-installation',
+      ),
+      'dataset://agents/assistant/threads/webserver-service-installation',
+    );
+    expect(
+      powerboardsDesktopPreviewActiveThreadValue(
+        selectedValue: 'dataset://agents/assistant/threads/selected',
+        pendingValue: 'dataset://agents/assistant/threads/pending',
+      ),
+      'dataset://agents/assistant/threads/selected',
+    );
+  });
+
+  test('desktop preview resolves a pending agent thread to its one visible dataset thread', () {
+    const pendingPath = 'agent://threads/webserver-service-installation';
+    const visiblePath = 'dataset://agents/assistant/threads/webserver-service-installation';
+
+    expect(
+      powerboardsDesktopPreviewVisiblePathForPendingThread(pendingThreadPath: pendingPath, visibleThreadPaths: const [visiblePath]),
+      visiblePath,
+    );
+    expect(
+      powerboardsDesktopPreviewVisiblePathForPendingThread(
+        pendingThreadPath: pendingPath,
+        visibleThreadPaths: const [
+          'dataset://agents/assistant/threads/webserver-service-installation',
+          'dataset://agents/assistant/threads/webserver-service-installation',
+        ],
+      ),
+      isNull,
+    );
+    expect(
+      powerboardsDesktopPreviewVisiblePathForPendingThread(
+        pendingThreadPath: 'room:///unrelated/webserver-service-installation',
+        visibleThreadPaths: const [visiblePath],
+      ),
+      isNull,
+    );
+  });
+
+  test('desktop preview resolves live storage thread paths to the visible dataset thread', () {
+    const visiblePath = 'dataset://agents/assistant/threads/webserver-service-installation';
+
+    for (final pendingPath in const [
+      'agents/assistant/threads/webserver-service-installation.thread',
+      '/agents/assistant/threads/webserver-service-installation.thread',
+      '.threads/webserver-service-installation.thread',
+      '/threads/webserver-service-installation',
+    ]) {
+      expect(
+        powerboardsDesktopPreviewVisiblePathForPendingThread(pendingThreadPath: pendingPath, visibleThreadPaths: const [visiblePath]),
+        visiblePath,
+        reason: pendingPath,
+      );
+    }
+  });
+
   test('desktop preview uses remembered title while selected thread list is loading', () {
     final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
       selectedThreadPath: 'dataset://agents/assistant/threads/testing-screenshot-upload',

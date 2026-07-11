@@ -4,6 +4,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/agent.dart';
 import 'package:meshagent/room_server_client.dart';
+import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
+import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/tools/install_webserver_service.dart';
 import 'package:powerboards/meshagent/tools/ui_toolkit.dart';
 
@@ -32,6 +35,7 @@ void main() {
       expect(tool.inputSchema['required'], ['site_name', 'domain', 'intent']);
 
       final result = await tool.execute(const ToolContext(), {'site_name': 'sunrise', 'domain': '', 'intent': 'install_only'});
+      await Future<void>.delayed(Duration.zero);
 
       expect(request?.projectId, 'project-1');
       expect(request?.roomName, 'room-1');
@@ -124,7 +128,7 @@ void main() {
   });
 
   group('SaveWebServerSiteFilesTool', () {
-    test('uses strict-safe file arguments and returns structured JSON', () async {
+    test('returns only the canonical website reply after saving files', () async {
       SaveWebServerSiteFilesRequest? request;
       final tool = SaveWebServerSiteFilesTool(
         projectId: 'project-1',
@@ -157,7 +161,7 @@ void main() {
       expect(request?.files.single.content, contains('Sunrise'));
       expect(result, isA<JsonContent>());
       expect((result as JsonContent).json['status'], 'saved');
-      expect(result.json['created_files'], ['index.html']);
+      expect(result.json.keys, {'status', 'assistant_reply'});
       expect(result.json['assistant_reply'], contains('Created the website in `sunrise.meshagent.dev`.'));
       expect(result.json['assistant_reply'], isNot(contains('- `index.html`')));
       expect(
@@ -180,7 +184,8 @@ void main() {
               as JsonContent;
 
       expect(result.json['status'], 'failed');
-      expect(result.json['message'], contains('boom'));
+      expect(result.json.keys, {'status', 'assistant_reply'});
+      expect(result.json['assistant_reply'], contains('boom'));
     });
   });
 
@@ -197,7 +202,7 @@ void main() {
             status: 'removed',
             folderPath: 'website/',
             siteLabel: 'sunrise.meshagent.dev',
-            preservedFolderPath: 'website/',
+            preservedFolderPath: 'sunrise.meshagent.dev',
             removedDomains: ['sunrise.meshagent.dev'],
             message: 'Removed the Web server service from this room.',
           );
@@ -209,6 +214,7 @@ void main() {
       expect(tool.inputSchema['properties'], isEmpty);
 
       final result = await tool.execute(const ToolContext(), {});
+      await Future<void>.delayed(Duration.zero);
 
       expect(request?.projectId, 'project-1');
       expect(request?.roomName, 'room-1');
@@ -218,10 +224,14 @@ void main() {
         'status': 'removed',
         'folder_path': 'website/',
         'site_label': 'sunrise.meshagent.dev',
-        'preserved_folder_path': 'website/',
+        'preserved_folder_path': 'sunrise.meshagent.dev',
         'removed_domains': ['sunrise.meshagent.dev'],
         'message': 'Removed the Web server service from this room.',
-        'assistant_reply': ['Removed the webserver service from this room.', '', 'Files were kept in Files at `sunrise.meshagent.dev`.'].join('\n'),
+        'assistant_reply': [
+          'Removed the webserver service from this room.',
+          '',
+          'Files were kept in Files at `sunrise.meshagent.dev`.',
+        ].join('\n'),
       });
     });
 
@@ -273,10 +283,161 @@ void main() {
     });
   });
 
+  group('OpenWebServerFileTool', () {
+    test('returns a native room link that chat renders as a separate attachment', () async {
+      OpenWebServerFileRequest? request;
+      final tool = OpenWebServerFileTool(
+        projectId: 'project-1',
+        roomName: 'room-1',
+        openFile: (input) async {
+          request = input;
+          return const OpenWebServerFileResult(status: 'opened', path: 'website/index.html', message: 'Attached index.html.');
+        },
+      );
+
+      final result = await tool.execute(const ToolContext(), {'path': 'index.file'});
+
+      expect(request?.projectId, 'project-1');
+      expect(request?.roomName, 'room-1');
+      expect(request?.path, 'index.file');
+      expect(result, isA<LinkContent>());
+      expect((result as LinkContent).url, 'room:///website/index.html');
+      expect(result.name, 'index.html');
+    });
+
+    test('returns structured not-found output instead of an inert link', () async {
+      final tool = OpenWebServerFileTool(
+        projectId: 'project-1',
+        roomName: 'room-1',
+        openFile: (_) async => const OpenWebServerFileResult(status: 'not_found', path: 'website/missing.html', message: 'File not found.'),
+      );
+
+      final result = await tool.execute(const ToolContext(), {'path': 'missing.html'});
+
+      expect(result, isA<JsonContent>());
+      expect((result as JsonContent).json['status'], 'not_found');
+    });
+  });
+
+  test('webserver lifecycle removes routes before deleting the service', () async {
+    final operations = <String>[];
+
+    await powerboardsDeleteRoutesThenService(
+      routes: const ['first.example', 'second.example'],
+      deleteRoute: (route) async => operations.add('route:$route'),
+      deleteService: () async => operations.add('service'),
+      observeServiceDeleted: () async {
+        operations.add('observed-removed');
+        return true;
+      },
+    );
+
+    expect(operations, ['route:first.example', 'route:second.example', 'service', 'observed-removed']);
+  });
+
+  test('service removal observer waits for the API list to converge', () async {
+    var loads = 0;
+    var waits = 0;
+    final webServer = ServiceSpec(
+      metadata: ServiceMetadata(name: 'web server', annotations: const {'meshagent.service.id': powerboardsWebServerServiceId}),
+    );
+
+    final removed = await powerboardsWaitForRoomServiceRemoval(
+      serviceKindId: powerboardsWebServerServiceId,
+      loadServices: () async {
+        loads += 1;
+        return loads < 3 ? [webServer] : const <ServiceSpec>[];
+      },
+      wait: (_) async => waits += 1,
+    );
+
+    expect(removed, isTrue);
+    expect(loads, 3);
+    expect(waits, 2);
+  });
+
+  test('service removal observer waits for both service and route absence', () async {
+    var serviceLoads = 0;
+    var routeLoads = 0;
+    final webServer = ServiceSpec(
+      id: 'service-instance',
+      metadata: ServiceMetadata(name: 'web server', annotations: const {'meshagent.service.id': powerboardsWebServerServiceId}),
+    );
+
+    final removed = await powerboardsWaitForRoomServiceRemoval(
+      serviceKindId: powerboardsWebServerServiceId,
+      routeDomains: const ['site.meshagent.dev'],
+      loadServices: () async {
+        serviceLoads += 1;
+        return serviceLoads == 1 ? [webServer] : const <ServiceSpec>[];
+      },
+      loadRouteDomains: () async {
+        routeLoads += 1;
+        return routeLoads < 3 ? const ['site.meshagent.dev'] : const <String>[];
+      },
+      wait: (_) async {},
+    );
+
+    expect(removed, isTrue);
+    expect(serviceLoads, 3);
+    expect(routeLoads, 3);
+  });
+
+  test('route and service deletion fails instead of reporting success before convergence', () async {
+    expect(
+      () => powerboardsDeleteRoutesThenService(
+        routes: const <String>[],
+        deleteRoute: (_) async {},
+        deleteService: () async {},
+        observeServiceDeleted: () async => false,
+      ),
+      throwsStateError,
+    );
+  });
+
   group('UIToolkit', () {
-    test('registers install_webserver_service when room context is present', () {
+    test('keeps room webserver tools behind the V1 UI flag', () {
+      final legacyToolkit = powerboardsRoomUiToolkit(
+        context: _FakeBuildContext(),
+        enableV1WebServerTools: false,
+        projectId: 'project-1',
+        roomName: 'room-1',
+      );
+      final v1Toolkit = powerboardsRoomUiToolkit(
+        context: _FakeBuildContext(),
+        enableV1WebServerTools: true,
+        projectId: 'project-1',
+        roomName: 'room-1',
+      );
+
+      expect(
+        legacyToolkit.tools.map((tool) => tool.name),
+        isNot(
+          contains(
+            anyOf(
+              installWebServerServiceToolName,
+              saveWebServerSiteFilesToolName,
+              openWebServerFileToolName,
+              uninstallWebServerServiceToolName,
+            ),
+          ),
+        ),
+      );
+      expect(
+        v1Toolkit.tools.map((tool) => tool.name),
+        containsAll([
+          installWebServerServiceToolName,
+          saveWebServerSiteFilesToolName,
+          openWebServerFileToolName,
+          uninstallWebServerServiceToolName,
+        ]),
+      );
+    });
+
+    test('registers webserver tools only when room context and the V1 flag are present', () {
       final toolkit = UIToolkit(
         context: _FakeBuildContext(),
+        enableV1WebServerTools: true,
         projectId: 'project-1',
         roomName: 'room-1',
         installWebServerService: (_) async {
@@ -289,8 +450,15 @@ void main() {
         },
       );
 
-      expect(toolkit.tools.map((tool) => tool.name), contains(installWebServerServiceToolName));
-      expect(toolkit.tools.map((tool) => tool.name), contains(saveWebServerSiteFilesToolName));
+      expect(
+        toolkit.tools.map((tool) => tool.name),
+        containsAll([
+          installWebServerServiceToolName,
+          saveWebServerSiteFilesToolName,
+          openWebServerFileToolName,
+          uninstallWebServerServiceToolName,
+        ]),
+      );
     });
 
     test('does not register install_webserver_service without room context', () {
@@ -299,13 +467,85 @@ void main() {
       expect(toolkit.tools.map((tool) => tool.name), isNot(contains(installWebServerServiceToolName)));
       expect(toolkit.tools.map((tool) => tool.name), isNot(contains(saveWebServerSiteFilesToolName)));
     });
+
+    test('does not register webserver tools for a legacy room context', () {
+      final toolkit = UIToolkit(context: _FakeBuildContext(), projectId: 'project-1', roomName: 'room-1');
+
+      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(installWebServerServiceToolName)));
+      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(saveWebServerSiteFilesToolName)));
+      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(openWebServerFileToolName)));
+      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(uninstallWebServerServiceToolName)));
+    });
   });
 
   group('InstallWebServerServiceToolkit', () {
+    test('executes client tool requests through one toolkit and refreshes mutating UI state', () async {
+      final refreshes = <String>[];
+      final controller = ChatThreadController(room: null);
+      addTearDown(controller.dispose);
+      controller.addClientToolkit(
+        InstallWebServerServiceToolkit(
+          projectId: 'project-1',
+          roomName: 'room-1',
+          enableV1WebServerTools: true,
+          install: (_) async => const InstallWebServerServiceResult(
+            status: 'installed',
+            serviceId: powerboardsWebServerServiceId,
+            folderPath: 'website/',
+            message: 'installed',
+          ),
+          saveSiteFiles: (_) async => const SaveWebServerSiteFilesResult(
+            status: 'saved',
+            folderPath: 'website/',
+            siteLabel: 'site.meshagent.dev',
+            createdFiles: ['index.html'],
+            message: 'saved',
+          ),
+          openFile: (_) async => const OpenWebServerFileResult(status: 'opened', path: 'website/index.html', message: 'opened'),
+          uninstall: (_) async => const UninstallWebServerServiceResult(
+            status: 'removed',
+            folderPath: 'website/',
+            siteLabel: 'site.meshagent.dev',
+            message: 'removed',
+          ),
+          onInstalled: (_) => refreshes.add('installed'),
+          onSaved: (_) => refreshes.add('saved'),
+          onUninstalled: (_) => refreshes.add('uninstalled'),
+        ),
+      );
+
+      Future<Content> execute(String tool, Map<String, dynamic> arguments) {
+        return controller.executeClientToolCall(
+          agent_sessions.AgentClientToolCallRequested(
+            threadId: 'thread-1',
+            turnId: 'turn-1',
+            requestId: 'request-$tool',
+            toolkit: 'powerboards',
+            tool: tool,
+            arguments: arguments,
+          ),
+        );
+      }
+
+      await execute(installWebServerServiceToolName, {'site_name': 'site', 'domain': '', 'intent': 'install_only'});
+      await execute(saveWebServerSiteFilesToolName, {
+        'files': [
+          {'path': 'index.html', 'content': '<html></html>'},
+        ],
+      });
+      final opened = await execute(openWebServerFileToolName, {'path': 'index.html'});
+      await execute(uninstallWebServerServiceToolName, const {});
+      await Future<void>.delayed(Duration.zero);
+
+      expect(opened, isA<LinkContent>());
+      expect(refreshes, ['installed', 'saved', 'uninstalled']);
+    });
+
     test('exposes webserver install and site file actions for chat turns', () {
       final toolkit = InstallWebServerServiceToolkit(
         projectId: 'project-1',
         roomName: 'room-1',
+        enableV1WebServerTools: true,
         install: (_) async {
           return const InstallWebServerServiceResult(
             status: 'installed',
@@ -317,17 +557,23 @@ void main() {
       );
 
       expect(toolkit.name, 'powerboards');
-      expect(toolkit.tools.map((tool) => tool.name), [installWebServerServiceToolName, saveWebServerSiteFilesToolName]);
+      expect(toolkit.tools.map((tool) => tool.name), [
+        installWebServerServiceToolName,
+        saveWebServerSiteFilesToolName,
+        openWebServerFileToolName,
+        uninstallWebServerServiceToolName,
+      ]);
     });
 
-    test('keeps uninstall action behind V1 flag', () {
-      final defaultToolkit = InstallWebServerServiceToolkit(projectId: 'project-1', roomName: 'room-1');
-      final v1Toolkit = InstallWebServerServiceToolkit(projectId: 'project-1', roomName: 'room-1', enableV1Actions: true);
+    test('keeps every webserver action behind the V1 flag', () {
+      final legacyToolkit = InstallWebServerServiceToolkit(projectId: 'project-1', roomName: 'room-1', enableV1WebServerTools: false);
+      final v1Toolkit = InstallWebServerServiceToolkit(projectId: 'project-1', roomName: 'room-1', enableV1WebServerTools: true);
 
-      expect(defaultToolkit.tools.map((tool) => tool.name), isNot(contains(uninstallWebServerServiceToolName)));
+      expect(legacyToolkit.tools, isEmpty);
       expect(v1Toolkit.tools.map((tool) => tool.name), [
         installWebServerServiceToolName,
         saveWebServerSiteFilesToolName,
+        openWebServerFileToolName,
         uninstallWebServerServiceToolName,
       ]);
     });

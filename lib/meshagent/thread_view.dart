@@ -327,6 +327,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const double _mobileThreadEmptyStateWidthMax = 600;
 
   late final ChatThreadController _chatController;
+  String? _powerboardsClientToolkitSignature;
   String? _lastRestoredThreadScrollOffsetValue;
   final Set<String> _reportedAttachmentKeys = <String>{};
   int _lastAppliedComposerAttachmentSeedVersion = 0;
@@ -362,11 +363,15 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
 
     if (uri.host == 'files' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'webserver') {
-      _openWebServerFolder(context);
+      if (powerboardsUsesDesktopUiPreview(context)) {
+        _openWebServerFolder(context);
+      }
       return true;
     }
     if (uri.host == 'preview' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'webserver') {
-      _openWebServerPreview(context);
+      if (powerboardsUsesDesktopUiPreview(context)) {
+        _openWebServerPreview(context);
+      }
       return true;
     }
     if (uri.host == 'copy') {
@@ -519,8 +524,17 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   void _configurePowerboardsClientToolkit() {
     final projectId = widget.projectId.trim();
     final roomName = widget.client.roomName?.trim();
-    if (projectId.isEmpty || roomName == null || roomName.isEmpty) {
-      _chatController.removeClientToolkit('powerboards');
+    final enableV1WebServerTools = powerboardsUsesDesktopUiPreview(context);
+    if (!enableV1WebServerTools || projectId.isEmpty || roomName == null || roomName.isEmpty) {
+      if (_powerboardsClientToolkitSignature != null) {
+        _chatController.removeClientToolkit('powerboards');
+        _powerboardsClientToolkitSignature = null;
+      }
+      return;
+    }
+
+    final signature = '$projectId\n$roomName';
+    if (_powerboardsClientToolkitSignature == signature) {
       return;
     }
 
@@ -528,11 +542,15 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       InstallWebServerServiceToolkit(
         projectId: projectId,
         roomName: roomName,
+        enableV1WebServerTools: true,
         onInstalled: (_) => widget.onServiceChanged?.call(),
+        onSaved: (_) => widget.onServiceChanged?.call(),
         onUninstalled: (_) => widget.onServiceChanged?.call(),
-        enableV1Actions: powerboardsUsesDesktopUiPreview(context),
+        openFile: (request) => openPowerboardsWebServerFile(request, storage: widget.client.storage),
+        uninstall: (request) => uninstallPowerboardsWebServerService(request, storage: widget.client.storage),
       ),
     );
+    _powerboardsClientToolkitSignature = signature;
   }
 
   String _currentParticipantDisplayName() {
@@ -837,7 +855,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       onAttachmentOpen: _openComposerAttachment,
       onAttachmentRemoved: (attachment) {
         widget.onComposerAttachmentRemoved?.call(attachment.path);
-        _clearComposerAttachmentSeedIfAttachmentsMatch([attachment.path]);
       },
       selectedThreadPath: widget.selectedThreadPath,
       selectedThreadDisplayName: widget.selectedThreadDisplayName,

@@ -26,6 +26,72 @@ const String powerboardsWebServerFolderName = 'website';
 const String powerboardsStorageFolderPlaceholderFileName = '.placeholder';
 const String powerboardsWebServerDescription = "Publish this room's website from files in its web server folder.";
 
+Future<void> powerboardsDeleteRoutesThenService<T>({
+  required Iterable<T> routes,
+  required Future<void> Function(T route) deleteRoute,
+  required Future<void> Function() deleteService,
+  Future<bool> Function()? observeServiceDeleted,
+}) async {
+  for (final route in routes) {
+    await deleteRoute(route);
+  }
+  await deleteService();
+  final serviceDeleted = await observeServiceDeleted?.call();
+  if (serviceDeleted == false) {
+    throw StateError('The service deletion did not converge. Refresh and try again.');
+  }
+}
+
+Future<bool> powerboardsWaitForRoomServiceRemoval({
+  required String serviceKindId,
+  required Future<Iterable<ServiceSpec>> Function() loadServices,
+  Iterable<String> routeDomains = const <String>[],
+  Future<Iterable<String>> Function()? loadRouteDomains,
+  int maxAttempts = 20,
+  Duration retryDelay = const Duration(milliseconds: 250),
+  Future<void> Function(Duration delay) wait = Future<void>.delayed,
+}) async {
+  final normalizedServiceKindId = serviceKindId.trim();
+  final normalizedRouteDomains = routeDomains.map((domain) => domain.trim()).where((domain) => domain.isNotEmpty).toSet();
+  if (normalizedServiceKindId.isEmpty || maxAttempts <= 0) {
+    return false;
+  }
+
+  for (var attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      final services = await loadServices();
+      final stillPresent = services.any(
+        (service) =>
+            service.id?.trim() == normalizedServiceKindId ||
+            service.metadata.annotations['meshagent.service.id']?.trim() == normalizedServiceKindId,
+      );
+      var routeStillPresent = false;
+      if (normalizedRouteDomains.isNotEmpty && loadRouteDomains != null) {
+        final currentRouteDomains = (await loadRouteDomains()).map((domain) => domain.trim()).toSet();
+        routeStillPresent = normalizedRouteDomains.any(currentRouteDomains.contains);
+      }
+      if (!stillPresent && !routeStillPresent) {
+        return true;
+      }
+    } catch (_) {
+      return false;
+    }
+
+    if (attempt + 1 < maxAttempts) {
+      await wait(retryDelay);
+    }
+  }
+  return false;
+}
+
+Future<bool> _powerboardsFolderIsEmptyOrPlaceholderOnly(StorageClient storage, String folderName) async {
+  final entries = await storage.list(folderName);
+  if (entries.isEmpty) {
+    return true;
+  }
+  return entries.length == 1 && !entries.single.isFolder && entries.single.name == powerboardsStorageFolderPlaceholderFileName;
+}
+
 List<String> _powerboardsWebServerConfiguredDomains({List<String>? configuredDomains}) {
   final rawDomains = configuredDomains ?? MeshagentConfig.current?.domains ?? const <String>[];
   return [
@@ -137,6 +203,12 @@ String powerboardsWebServerSlugFromValue(
   return host;
 }
 
+String powerboardsArchivedWebServerFolderName(String rawValue, {String fallback = powerboardsWebServerFolderName}) {
+  final host = powerboardsWebServerDisplayHost(rawValue, fallback: fallback).trim();
+  final name = host.isEmpty ? fallback : host;
+  return name.replaceAll(RegExp(r'[\\/]'), '-');
+}
+
 String powerboardsWebServerDomainFromSlug(String slug, {String? currentValue, List<String>? configuredDomains}) {
   final normalizedSlug = slug.trim().toLowerCase();
   final currentHost = currentValue == null ? '' : powerboardsWebServerDisplayHost(currentValue, fallback: '');
@@ -166,27 +238,106 @@ Future<String?> powerboardsPreserveFormerWebServerFolder({
   try {
     roomClient.start();
     await roomClient.ready;
-
-    if (!await roomClient.storage.exists(powerboardsWebServerFolderName)) {
-      return null;
-    }
-
-    var candidate = baseName;
-    var suffix = 2;
-    while (candidate != powerboardsWebServerFolderName && await roomClient.storage.exists(candidate)) {
-      candidate = '$baseName $suffix';
-      suffix += 1;
-    }
-
-    if (candidate == powerboardsWebServerFolderName) {
-      return candidate;
-    }
-
-    await roomClient.storage.move(powerboardsWebServerFolderName, candidate);
-    return candidate;
+    return powerboardsPreserveFormerWebServerFolderInStorage(roomClient.storage, preferredName: baseName);
   } finally {
     roomClient.dispose();
   }
+}
+
+Future<String?> powerboardsPreserveFormerWebServerFolderInStorage(StorageClient storage, {required String preferredName}) async {
+  final normalizedPreferredName = preferredName.trim().replaceAll(RegExp(r'[\\/]'), '-');
+  final baseName = normalizedPreferredName.isEmpty ? powerboardsWebServerFolderName : normalizedPreferredName;
+  if (!await storage.exists(powerboardsWebServerFolderName)) {
+    return null;
+  }
+
+  if (baseName != powerboardsWebServerFolderName &&
+      await storage.exists(baseName) &&
+      await _powerboardsFolderIsEmptyOrPlaceholderOnly(storage, powerboardsWebServerFolderName)) {
+    await storage.delete(powerboardsWebServerFolderName, recursive: true);
+    return baseName;
+  }
+
+  var candidate = baseName;
+  var suffix = 2;
+  while (candidate != powerboardsWebServerFolderName && await storage.exists(candidate)) {
+    candidate = '$baseName $suffix';
+    suffix += 1;
+  }
+
+  if (candidate == powerboardsWebServerFolderName) {
+    return candidate;
+  }
+
+  await storage.move(powerboardsWebServerFolderName, candidate);
+  return candidate;
+}
+
+Future<String> powerboardsRestoreArchivedWebServerFolder({
+  required meshagent_client.Meshagent client,
+  required String projectId,
+  required String roomName,
+  required String archivedFolderName,
+}) async {
+  final normalizedArchivedFolderName = archivedFolderName.trim().replaceAll(RegExp(r'[\\/]'), '-');
+  final sourceFolderName = normalizedArchivedFolderName.isEmpty ? powerboardsWebServerFolderName : normalizedArchivedFolderName;
+  final roomConnection = await client.connectRoom(projectId: projectId, roomName: roomName);
+  final roomClient = RoomClient(
+    protocolFactory: WebSocketClientProtocol.createFactory(url: roomConnection.roomUrl, token: roomConnection.jwt),
+  );
+
+  try {
+    roomClient.start();
+    await roomClient.ready;
+
+    if (sourceFolderName != powerboardsWebServerFolderName && await roomClient.storage.exists(sourceFolderName)) {
+      if (await roomClient.storage.exists(powerboardsWebServerFolderName)) {
+        if (!await _powerboardsFolderIsEmptyOrPlaceholderOnly(roomClient.storage, powerboardsWebServerFolderName)) {
+          return powerboardsWebServerFolderName;
+        }
+        await roomClient.storage.delete(powerboardsWebServerFolderName, recursive: true);
+      }
+      await roomClient.storage.move(sourceFolderName, powerboardsWebServerFolderName);
+    }
+
+    if (!await roomClient.storage.exists(powerboardsWebServerFolderName)) {
+      await roomClient.storage.uploadStream(
+        '$powerboardsWebServerFolderName/$powerboardsStorageFolderPlaceholderFileName',
+        Stream<Uint8List>.value(Uint8List(0)),
+        overwrite: true,
+        size: 0,
+      );
+    }
+
+    return powerboardsWebServerFolderName;
+  } finally {
+    roomClient.dispose();
+  }
+}
+
+Future<String> powerboardsPrepareWebServerFolderForDomain({
+  required meshagent_client.Meshagent client,
+  required String projectId,
+  required String roomName,
+  required String? domain,
+}) {
+  return powerboardsRestoreArchivedWebServerFolder(
+    client: client,
+    projectId: projectId,
+    roomName: roomName,
+    archivedFolderName: powerboardsArchivedWebServerFolderName(domain ?? ''),
+  );
+}
+
+Future<T> powerboardsSaveServiceAfterPreparingWebServerFolder<T>({
+  required bool isWebServer,
+  required Future<void> Function() prepareWebServerFolder,
+  required Future<T> Function() saveService,
+}) async {
+  if (isWebServer) {
+    await prepareWebServerFolder();
+  }
+  return saveService();
 }
 
 Future<void> powerboardsEnsureWebServerFolderExists({
@@ -232,9 +383,9 @@ TextStyle powerboardsAgentCardTitleTextStyle(BuildContext context) {
   return powerboardsEmphasizedTitleStyle(color: theme.colorScheme.foreground);
 }
 
-String? powerboardsDisplayServiceDescription({String? serviceId, String? description}) {
+String? powerboardsDisplayServiceDescription({String? serviceId, String? description, bool enableV1WebServerPresentation = false}) {
   final normalizedServiceId = serviceId?.trim() ?? '';
-  if (normalizedServiceId == powerboardsWebServerServiceId) {
+  if (enableV1WebServerPresentation && normalizedServiceId == powerboardsWebServerServiceId) {
     return powerboardsWebServerDescription;
   }
 
@@ -246,28 +397,30 @@ String? powerboardsDisplayServiceDescription({String? serviceId, String? descrip
   return trimmedDescription;
 }
 
-String? powerboardsDisplayServiceDescriptionForService(ServiceSpec service) {
+String? powerboardsDisplayServiceDescriptionForService(ServiceSpec service, {bool enableV1WebServerPresentation = false}) {
   return powerboardsDisplayServiceDescription(
     serviceId: service.metadata.annotations['meshagent.service.id'],
     description: service.metadata.description,
+    enableV1WebServerPresentation: enableV1WebServerPresentation,
   );
 }
 
-String? powerboardsDisplayServiceDescriptionForTemplate(ServiceTemplateSpec template) {
+String? powerboardsDisplayServiceDescriptionForTemplate(ServiceTemplateSpec template, {bool enableV1WebServerPresentation = false}) {
   return powerboardsDisplayServiceDescription(
     serviceId: template.metadata.annotations['meshagent.service.id'],
     description: template.metadata.description,
+    enableV1WebServerPresentation: enableV1WebServerPresentation,
   );
 }
 
-ServiceTemplateSpec powerboardsDisplayServiceTemplateSpec(ServiceTemplateSpec manifest) {
+ServiceTemplateSpec powerboardsDisplayServiceTemplateSpec(ServiceTemplateSpec manifest, {bool enableV1WebServerPresentation = false}) {
   return ServiceTemplateSpec(
     version: manifest.version,
     kind: manifest.kind,
     variables: manifest.variables,
     metadata: ServiceTemplateMetadata(
       name: powerboardsDisplayServiceName(manifest.metadata.name),
-      description: powerboardsDisplayServiceDescriptionForTemplate(manifest),
+      description: powerboardsDisplayServiceDescriptionForTemplate(manifest, enableV1WebServerPresentation: enableV1WebServerPresentation),
       icon: manifest.metadata.icon,
       repo: manifest.metadata.repo,
       annotations: Map<String, String>.from(manifest.metadata.annotations),
@@ -285,7 +438,11 @@ TextStyle powerboardsAgentCardDescriptionTextStyle(BuildContext context) {
   return descriptionStyle.copyWith(color: descriptionStyle.color ?? theme.colorScheme.mutedForeground);
 }
 
-String? powerboardsServiceIconAssetName({ServiceSpec? service, ServiceTemplateSpec? template}) {
+String? powerboardsServiceIconAssetName({ServiceSpec? service, ServiceTemplateSpec? template, bool enableV1WebServerPresentation = false}) {
+  if (!enableV1WebServerPresentation) {
+    return null;
+  }
+
   final agentTypeIconAssetName = service == null
       ? (template == null ? null : serviceTemplateIconAssetName(template))
       : serviceIconAssetName(service);
@@ -312,7 +469,8 @@ class PowerboardsServiceNameCard extends StatelessWidget {
     final theme = ShadTheme.of(context);
     final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
     final titleStyle = powerboardsAgentCardTitleTextStyle(context);
-    final iconAssetName = powerboardsServiceIconAssetName(template: manifest);
+    final enableV1WebServerPresentation = powerboardsUsesDesktopUiPreview(context);
+    final iconAssetName = powerboardsServiceIconAssetName(template: manifest, enableV1WebServerPresentation: enableV1WebServerPresentation);
     final useV1VoiceIcon =
         !powerboardsUsesNativeMobileDialogLayout(context) &&
         powerboardsUsesDesktopUiPreview(context) &&
@@ -421,7 +579,10 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
   @override
   Widget build(BuildContext context) {
     final isInstalled = widget.serviceId != null;
-    final displayManifest = powerboardsDisplayServiceTemplateSpec(widget.manifest);
+    final displayManifest = powerboardsDisplayServiceTemplateSpec(
+      widget.manifest,
+      enableV1WebServerPresentation: powerboardsUsesDesktopUiPreview(context),
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
@@ -574,6 +735,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
     if (!validate()) {
       return;
     }
+    final enableV1WebServerFlow = powerboardsUsesDesktopUiPreview(context);
 
     setState(() {
       _error = null;
@@ -592,7 +754,6 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
       if (serviceId == null || serviceId.isEmpty) {
         throw RoomServerException('service is missing meshagent.service.id annotation');
       }
-
       final routeRequests = <({String domain, String port})>[];
       for (final variable in inputVariables) {
         if (variable.type != 'route') {
@@ -680,15 +841,23 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
         roomClient.dispose();
       }
 
-      final savedService = widget.serviceId != null
-          ? await client.updateRoomServiceFromTemplate(
-              projectId: projectId,
-              serviceId: widget.serviceId!,
-              template: widget.template,
-              values: vars,
-              roomName: roomName,
-            )
-          : await client.createRoomServiceFromTemplate(projectId: projectId, template: widget.template, values: vars, roomName: roomName);
+      final domain = routeRequests.isEmpty ? null : routeRequests.first.domain;
+      final savedService = await powerboardsSaveServiceAfterPreparingWebServerFolder(
+        isWebServer: enableV1WebServerFlow && serviceId == powerboardsWebServerServiceId,
+        prepareWebServerFolder: () async {
+          // Restore archived files before the container can create a fresh empty website folder.
+          await powerboardsPrepareWebServerFolderForDomain(client: client, projectId: projectId, roomName: roomName, domain: domain);
+        },
+        saveService: () => widget.serviceId != null
+            ? client.updateRoomServiceFromTemplate(
+                projectId: projectId,
+                serviceId: widget.serviceId!,
+                template: widget.template,
+                values: vars,
+                roomName: roomName,
+              )
+            : client.createRoomServiceFromTemplate(projectId: projectId, template: widget.template, values: vars, roomName: roomName),
+      );
 
       for (final route in existingServiceRoutes) {
         if (requestedRouteDomains.contains(route.domain)) {
@@ -808,8 +977,9 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
       final client = getMeshagentClient();
       final roomName = _requireRoomName();
       final serviceKindId = widget.manifest.metadata.annotations['meshagent.service.id']?.trim();
-      final preservedFolderName = serviceKindId == powerboardsWebServerServiceId
-          ? powerboardsWebServerSlugFromValue(widget.prefilledVars?['url'] ?? '')
+      final enableV1WebServerFlow = powerboardsUsesDesktopUiPreview(context);
+      final preservedFolderName = enableV1WebServerFlow && serviceKindId == powerboardsWebServerServiceId
+          ? powerboardsArchivedWebServerFolderName(widget.prefilledVars?['url'] ?? '')
           : null;
 
       final domainsToDelete = await _domainsToDelete(client);
@@ -859,13 +1029,20 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
         throw RoomServerException('service id is required to uninstall');
       }
 
-      await client.deleteRoomService(projectId: widget.projectId, serviceId: serviceId, roomName: roomName);
-
-      if (domainsToDelete.isNotEmpty) {
-        for (final domain in domainsToDelete) {
-          await client.deleteRoute(projectId: widget.projectId, domain: domain.domain);
-        }
-      }
+      await powerboardsDeleteRoutesThenService(
+        routes: domainsToDelete,
+        deleteRoute: (domain) => client.deleteRoute(projectId: widget.projectId, domain: domain.domain),
+        deleteService: () => client.deleteRoomService(projectId: widget.projectId, serviceId: serviceId, roomName: roomName),
+        observeServiceDeleted: () async {
+          return powerboardsWaitForRoomServiceRemoval(
+            serviceKindId: serviceKindId ?? serviceId,
+            loadServices: () => client.listRoomServices(projectId: widget.projectId, roomName: roomName),
+            routeDomains: domainsToDelete.map((route) => route.domain),
+            loadRouteDomains: () async =>
+                (await client.listRoomRoutes(projectId: widget.projectId, roomName: roomName)).map((route) => route.domain),
+          );
+        },
+      );
 
       String? preservedFolderPath;
       if (preservedFolderName != null) {

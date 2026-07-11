@@ -11,6 +11,7 @@ void main() {
         projectId: projectId,
         roomName: 'alpha-room',
         serviceId: powerboardsWebServerServiceId,
+        enableV1WebServerUi: true,
       );
 
       final uri = Uri.parse(route);
@@ -19,9 +20,26 @@ void main() {
       expect(uri.queryParameters['p'], 'website/');
     });
 
+    test('keeps website installs on the legacy service page when V1 UI is disabled', () {
+      const projectId = '7c12af6e-7a2f-4cb3-85d4-e6fadc6be7bb';
+      final route = powerboardsInstalledServiceRoute(
+        projectId: projectId,
+        roomName: 'alpha-room',
+        serviceId: powerboardsWebServerServiceId,
+        enableV1WebServerUi: false,
+      );
+
+      expect(route, '/p/${fromUUID(projectId)}/r/alpha-room/a/$powerboardsWebServerServiceId');
+    });
+
     test('routes other installs to the service details page', () {
       const projectId = '7c12af6e-7a2f-4cb3-85d4-e6fadc6be7bb';
-      final route = powerboardsInstalledServiceRoute(projectId: projectId, roomName: 'alpha-room', serviceId: 'meshagent.voice');
+      final route = powerboardsInstalledServiceRoute(
+        projectId: projectId,
+        roomName: 'alpha-room',
+        serviceId: 'meshagent.voice',
+        enableV1WebServerUi: true,
+      );
 
       expect(route, '/p/${fromUUID(projectId)}/r/alpha-room/a/meshagent.voice');
     });

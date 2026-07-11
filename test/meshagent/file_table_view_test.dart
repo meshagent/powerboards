@@ -6,6 +6,14 @@ import 'package:meshagent/meshagent.dart' as meshagent_api;
 import 'package:powerboards/meshagent/file_table_view.dart';
 
 void main() {
+  test('canonical website folder keeps lifecycle handling even while service state refreshes', () {
+    expect(powerboardsV1IsCanonicalWebServerFolder(usesDesktopV1FilesBrowser: true, fullPath: '/website/', isFolder: true), isTrue);
+    expect(
+      powerboardsV1IsCanonicalWebServerFolder(usesDesktopV1FilesBrowser: true, fullPath: 'test-23x.meshagent.dev', isFolder: true),
+      isFalse,
+    );
+  });
+
   test('website preview uses route for app-like webserver folders', () {
     final entries = [
       meshagent_api.StorageEntry(

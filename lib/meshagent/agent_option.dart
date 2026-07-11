@@ -13,6 +13,7 @@ import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/meshagent/route_service_match.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -150,7 +151,7 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
     final theme = ShadTheme.of(context);
     final titleStyle = powerboardsAgentCardTitleTextStyle(context);
     final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
-    final useAssetIcon = widget.option.iconAssetName != null;
+    final useAssetIcon = widget.option.iconAssetName != null && powerboardsUsesDesktopUiPreview(context);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -287,8 +288,10 @@ class _InstallAgentDialog extends StatelessWidget {
       roomName: roomName,
       onInstalled: (ctx, projectId, roomName, serviceId) {
         Navigator.of(ctx).pop(true);
-        if (serviceId == powerboardsWebServerServiceId && context.mounted) {
-          context.go(powerboardsInstalledServiceRoute(projectId: projectId, roomName: roomName, serviceId: serviceId));
+        if (serviceId == powerboardsWebServerServiceId && context.mounted && powerboardsUsesDesktopUiPreview(context)) {
+          context.go(
+            powerboardsInstalledServiceRoute(projectId: projectId, roomName: roomName, serviceId: serviceId, enableV1WebServerUi: true),
+          );
         }
       },
     );
@@ -591,6 +594,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
         return LayoutBuilder(
           builder: (context, constraints) {
             final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+            final enableV1WebServerPresentation = powerboardsUsesDesktopUiPreview(context);
             final isScreen = widget.asScreen && isMobile;
             final isLoading =
                 availableAgents.state.value == null ||
@@ -618,9 +622,16 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                     id: service.metadata.annotations["meshagent.service.id"] ?? "",
                     readme: service.metadata.annotations["meshagent.service.readme"],
                     title: service.metadata.name,
-                    subtitle: powerboardsDisplayServiceDescriptionForService(service) ?? "",
+                    subtitle:
+                        powerboardsDisplayServiceDescriptionForService(
+                          service,
+                          enableV1WebServerPresentation: enableV1WebServerPresentation,
+                        ) ??
+                        "",
                     icon: LucideIcons.puzzle,
-                    iconAssetName: powerboardsServiceIconAssetName(service: service) ?? _voiceAgentIconAssetName(service: service),
+                    iconAssetName:
+                        powerboardsServiceIconAssetName(service: service, enableV1WebServerPresentation: enableV1WebServerPresentation) ??
+                        _voiceAgentIconAssetName(service: service),
                     color: const Color(0xFF222222),
                     canChange: true,
                     template: null,
@@ -632,11 +643,20 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                   readme: available.parsed.metadata.annotations["meshagent.service.readme"],
                   id: available.parsed.metadata.annotations["meshagent.service.id"] ?? "",
                   title: available.parsed.metadata.name,
-                  subtitle: powerboardsDisplayServiceDescriptionForTemplate(available.parsed) ?? "",
+                  subtitle:
+                      powerboardsDisplayServiceDescriptionForTemplate(
+                        available.parsed,
+                        enableV1WebServerPresentation: enableV1WebServerPresentation,
+                      ) ??
+                      "",
                   template: available.template,
                   icon: LucideIcons.bot,
                   iconAssetName:
-                      powerboardsServiceIconAssetName(template: available.parsed) ?? _voiceAgentIconAssetName(template: available.parsed),
+                      powerboardsServiceIconAssetName(
+                        template: available.parsed,
+                        enableV1WebServerPresentation: enableV1WebServerPresentation,
+                      ) ??
+                      _voiceAgentIconAssetName(template: available.parsed),
                   color: const Color(0xFF222222),
                   parsed: available.parsed,
                 ),

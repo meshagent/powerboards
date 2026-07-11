@@ -10,6 +10,7 @@ import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_adaptive_input.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
@@ -37,8 +38,13 @@ Widget _desktopInstallDialogBodyViewport({required Widget child}) {
   return Padding(padding: powerboardsDialogScrollViewportPadding, child: child);
 }
 
-String powerboardsInstalledServiceRoute({required String projectId, required String roomName, required String serviceId}) {
-  if (serviceId == powerboardsWebServerServiceId) {
+String powerboardsInstalledServiceRoute({
+  required String projectId,
+  required String roomName,
+  required String serviceId,
+  required bool enableV1WebServerUi,
+}) {
+  if (enableV1WebServerUi && serviceId == powerboardsWebServerServiceId) {
     return Uri(
       path: "/p/${fromUUID(projectId)}/r/$roomName",
       queryParameters: {'pane': 'files', 'p': '$powerboardsWebServerFolderName/'},
@@ -379,8 +385,9 @@ class _AgentInstaller extends State<AgentInstaller> {
   Future<void> _handleInstalled(BuildContext context, String serviceId) async {
     final projectId = _projectId!;
     final roomName = _roomName!;
+    final enableV1WebServerUi = powerboardsUsesDesktopUiPreview(context);
 
-    if (serviceId == powerboardsWebServerServiceId) {
+    if (enableV1WebServerUi && serviceId == powerboardsWebServerServiceId) {
       try {
         await powerboardsEnsureWebServerFolderExists(client: getMeshagentClient(), projectId: projectId, roomName: roomName);
       } catch (error) {
@@ -404,7 +411,14 @@ class _AgentInstaller extends State<AgentInstaller> {
     if (widget.onInstalled != null) {
       widget.onInstalled!(context, projectId, roomName, serviceId);
     } else {
-      context.go(powerboardsInstalledServiceRoute(projectId: projectId, roomName: roomName, serviceId: serviceId));
+      context.go(
+        powerboardsInstalledServiceRoute(
+          projectId: projectId,
+          roomName: roomName,
+          serviceId: serviceId,
+          enableV1WebServerUi: enableV1WebServerUi,
+        ),
+      );
     }
   }
 
@@ -725,7 +739,10 @@ class _AgentInstaller extends State<AgentInstaller> {
 
   Widget _reviewStep() {
     final usesMobileFlowLayout = _usesMobileFlowLayout;
-    final displaySpec = powerboardsDisplayServiceTemplateSpec(_spec.state.value!);
+    final displaySpec = powerboardsDisplayServiceTemplateSpec(
+      _spec.state.value!,
+      enableV1WebServerPresentation: powerboardsUsesDesktopUiPreview(context),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -914,7 +931,10 @@ class _AgentInstaller extends State<AgentInstaller> {
 
     final existingService = _currentServiceForSpec();
     final existingServiceId = existingService?.id;
-    final displaySpec = powerboardsDisplayServiceTemplateSpec(_spec.state.value!);
+    final displaySpec = powerboardsDisplayServiceTemplateSpec(
+      _spec.state.value!,
+      enableV1WebServerPresentation: powerboardsUsesDesktopUiPreview(context),
+    );
 
     Map<String, String> prefill = {};
     /*try {
