@@ -858,6 +858,7 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
       PbFilesItemKind.processingError => ['Delete'],
       PbFilesItemKind.folder => [
         'Browse folder',
+        if (widget.onAskAgent != null) 'Ask agent',
         if (widget.onDownload != null) 'Download as zip',
         if (widget.onRename != null) 'Rename',
         if (widget.onDelete != null) 'Delete',
@@ -972,7 +973,9 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
                                 onOpen: widget.onPressed,
                                 onBrowseFolder: widget.onBrowseFolder,
                                 onRemoveProcessingRow: widget.onRemoveProcessingRow,
-                                onAskAgent: widget.item.kind == PbFilesItemKind.file ? widget.onAskAgent : null,
+                                onAskAgent: widget.item.kind == PbFilesItemKind.file || widget.item.kind == PbFilesItemKind.folder
+                                    ? widget.onAskAgent
+                                    : null,
                                 onShare: widget.item.kind == PbFilesItemKind.file ? widget.onShare : null,
                                 showExtract: widget.item.kind == PbFilesItemKind.file && widget.showExtract,
                                 onExtract: widget.item.kind == PbFilesItemKind.file ? widget.onExtract : null,

@@ -40,6 +40,7 @@ import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
+import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
@@ -408,6 +409,11 @@ typedef PowerboardsDesktopPreviewChatClientFactory = agent_sessions.BaseChatClie
 typedef PowerboardsDesktopPreviewThreadStorageFactory =
     agent_sessions.ThreadStorageRepository Function(agent_sessions.BaseChatClient chatClient);
 
+@visibleForTesting
+bool powerboardsFilePromptShouldShowPreview({required bool isFolder, required bool responsiveHandoff}) {
+  return !isFolder && !responsiveHandoff;
+}
+
 class _DesktopPreviewThreadEntry {
   const _DesktopPreviewThreadEntry({
     required this.storage,
@@ -597,6 +603,33 @@ bool powerboardsDesktopPreviewIsThreadMessageElement(MeshElement element) {
     'message' || 'reasoning' || 'exec' || 'event' => true,
     _ => false,
   };
+}
+
+@visibleForTesting
+String? powerboardsUniqueChatFilePreviewCandidate(String requestedPath, Iterable<String> candidatePaths) {
+  final normalizedPath = normalizePowerboardsAttachmentPath(requestedPath);
+  if (normalizedPath.isEmpty) {
+    return null;
+  }
+  final candidates = candidatePaths.map(normalizePowerboardsAttachmentPath).where((path) => path.isNotEmpty).toSet().toList();
+  if (candidates.length == 1) {
+    return candidates.single;
+  }
+  final suffixMatches = candidates.where((candidate) => candidate == normalizedPath || candidate.endsWith('/$normalizedPath')).toList();
+  return suffixMatches.length == 1 ? suffixMatches.single : null;
+}
+
+@visibleForTesting
+bool powerboardsChatFileNameMatchesLinkPath(String candidateName, String requestedName) {
+  if (candidateName == requestedName) {
+    return true;
+  }
+
+  // CommonMark destinations cannot contain unescaped spaces. If an agent emits
+  // one, markdown_widget can hand us only the prefix before the first space.
+  // Recover only a filename with that exact prefix and a space boundary; the
+  // caller still requires the candidate to be unique before opening it.
+  return requestedName.isNotEmpty && candidateName.startsWith('$requestedName ');
 }
 
 @visibleForTesting
@@ -2808,6 +2841,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final path = currentUri.queryParameters['p'];
     final pane = _roomPaneFromUri(currentUri);
     final usesMobileRoomLayout = _usesMobileRoomLayout(context);
+    final routeTargetsFolder = pane == _MobileRoomPane.files && (path == null || path.isEmpty || path.endsWith('/'));
+
+    if (routeTargetsFolder) {
+      _desktopPreviewFilePreviewFile = null;
+      _desktopPreviewFilePreviewOpen = false;
+      _desktopPreviewFilePreviewFullscreen = false;
+      _desktopPreviewComposerAttachmentPreviewPath = null;
+      if (previewFilePreviewFullscreenListenable.value) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setPreviewFilePreviewFullscreen(false);
+          }
+        });
+      }
+    }
 
     if (!usesMobileRoomLayout && !_didNormalizeInitialDesktopPane) {
       _didNormalizeInitialDesktopPane = true;
@@ -3015,7 +3063,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return developmentAgentName;
   }
 
-  List<_FilePromptAgentChoice> _filePromptAgentChoices(String path, {String? preferredAgentKey}) {
+  List<_FilePromptAgentChoice> _filePromptAgentChoices(String path, {String? preferredAgentKey, bool isFolder = false}) {
     if (!services.state.isReady) {
       return const <_FilePromptAgentChoice>[];
     }
@@ -3045,7 +3093,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         _FilePromptAgentChoice(
           routeId: normalizedRouteId,
           agentName: normalizedAgentName,
-          action: actionsByAgentName[normalizedAgentName] ?? defaultChatFilePromptAction(agentName: normalizedAgentName),
+          action:
+              actionsByAgentName[normalizedAgentName] ??
+              (isFolder
+                  ? defaultChatFolderPromptAction(agentName: normalizedAgentName)
+                  : defaultChatFilePromptAction(agentName: normalizedAgentName)),
         ),
       );
     }
@@ -3108,6 +3160,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     ChatFilePromptAction action, {
     required String filePath,
     String? preferredAgentKey,
+    bool isFolder = false,
   }) async {
     if (!services.state.isReady) {
       return action;
@@ -3120,7 +3173,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return action;
     }
 
-    final choices = _filePromptAgentChoices(filePath, preferredAgentKey: preferredAgentKey);
+    final choices = _filePromptAgentChoices(filePath, preferredAgentKey: preferredAgentKey, isFolder: isFolder);
     if (choices.isEmpty) {
       return action;
     }
@@ -3435,9 +3488,39 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     });
   }
 
-  void _setComposerAttachmentSeed(String agentKey, Iterable<String> paths) {
-    final normalizedPaths = paths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toList(growable: false);
+  Future<List<PowerboardsFolderChatEntry>> _visibleFolderDirectChildren(String folderPath) async {
+    try {
+      final entries = await widget.room.storage.list(folderPath);
+      return <PowerboardsFolderChatEntry>[
+        for (final entry in entries)
+          if (!entry.name.startsWith('.'))
+            PowerboardsFolderChatEntry(
+              storagePath: joinPaths(folderPath, entry.name),
+              name: entry.name,
+              isFolder: entry.isFolder,
+              sizeBytes: entry.size,
+            ),
+      ];
+    } catch (_) {
+      return const <PowerboardsFolderChatEntry>[];
+    }
+  }
+
+  Future<void> _setComposerAttachmentSeed(String agentKey, Iterable<String> paths, {bool isFolder = false}) async {
+    final normalizedPaths = <String>[];
+    if (isFolder) {
+      for (final path in paths) {
+        final folderPath = powerboardsStorageAttachmentPathFromUrl(path);
+        final visibleDirectChildren = await _visibleFolderDirectChildren(folderPath);
+        normalizedPaths.add(powerboardsFolderChatContextDataUrl(folderPath, visibleDirectChildren: visibleDirectChildren));
+      }
+    } else {
+      normalizedPaths.addAll(paths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty));
+    }
     if (normalizedPaths.isEmpty) {
+      return;
+    }
+    if (!mounted) {
       return;
     }
 
@@ -4846,13 +4929,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 final effectiveThreadName = currentThreadLabel == 'New thread'
                     ? defaultThreadDisplayNameFromPath(effectiveThreadPath)
                     : currentThreadLabel;
-                _recordLocalThreadAttachments(
-                  threadPath: effectiveThreadPath,
-                  threadName: effectiveThreadName,
-                  createdBy: userEmail is String ? userEmail : '',
-                  attachmentPaths: [path],
+                unawaited(
+                  _openDesktopPreviewThreadFile(
+                    path,
+                    threadPath: effectiveThreadPath,
+                    threadName: effectiveThreadName,
+                    createdBy: userEmail is String ? userEmail : '',
+                  ),
                 );
-                _openDesktopPreviewAttachment(path, threadName: effectiveThreadName);
               }
             : null,
         fileDropOverlayBuilder: chatDropOverlayBuilder,
@@ -5182,10 +5266,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 v1RoomPanelWidth: usesDesktopUiPreview ? _desktopPreviewRoomPanelWidth : null,
                 onV1RoomPanelWidthChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelWidth : null,
                 onV1FilePromptRequested: usesDesktopUiPreview
-                    ? (action, filePath, {required responsiveHandoff}) => _handleDesktopPreviewFilePromptRequested(
+                    ? (action, filePath, {required isFolder, required responsiveHandoff}) => _handleDesktopPreviewFilePromptRequested(
                         context,
                         action: action,
                         filePath: filePath,
+                        isFolder: isFolder,
                         responsiveHandoff: responsiveHandoff,
                       )
                     : null,
@@ -7158,6 +7243,79 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     unawaited(_refreshDesktopPreviewAttachmentSizeLabel(normalizedPath));
   }
 
+  Future<String?> _resolveDesktopPreviewThreadFilePath(String filePath) async {
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
+    if (normalizedPath.isEmpty) {
+      return null;
+    }
+
+    try {
+      final exactEntry = await widget.room.storage.stat(normalizedPath);
+      if (exactEntry != null && !exactEntry.isFolder) {
+        return normalizedPath;
+      }
+      if (exactEntry?.isFolder == true) {
+        return null;
+      }
+    } catch (_) {}
+
+    final requestedName = normalizedPath.split('/').where((segment) => segment.isNotEmpty).lastOrNull;
+    if (requestedName == null || requestedName.startsWith('.')) {
+      return null;
+    }
+
+    const maxDepth = 8;
+    const maxEntries = 2000;
+    final pendingFolders = <({String path, int depth})>[(path: '', depth: 0)];
+    final matchingPaths = <String>[];
+    var visitedEntries = 0;
+    while (pendingFolders.isNotEmpty && visitedEntries < maxEntries) {
+      final folder = pendingFolders.removeLast();
+      List<StorageEntry> entries;
+      try {
+        entries = await widget.room.storage.list(folder.path);
+      } catch (_) {
+        continue;
+      }
+
+      for (final entry in entries) {
+        if (++visitedEntries > maxEntries) {
+          break;
+        }
+        if (entry.name.startsWith('.')) {
+          continue;
+        }
+        final entryPath = joinPaths(folder.path, entry.name);
+        if (entry.isFolder) {
+          if (folder.depth < maxDepth) {
+            pendingFolders.add((path: entryPath, depth: folder.depth + 1));
+          }
+          continue;
+        }
+        if (powerboardsChatFileNameMatchesLinkPath(entry.name, requestedName)) {
+          matchingPaths.add(entryPath);
+        }
+      }
+    }
+
+    return powerboardsUniqueChatFilePreviewCandidate(normalizedPath, matchingPaths);
+  }
+
+  Future<void> _openDesktopPreviewThreadFile(
+    String filePath, {
+    required String threadPath,
+    required String threadName,
+    required String createdBy,
+  }) async {
+    final resolvedPath = await _resolveDesktopPreviewThreadFilePath(filePath);
+    if (resolvedPath == null || !mounted) {
+      return;
+    }
+
+    _recordLocalThreadAttachments(threadPath: threadPath, threadName: threadName, createdBy: createdBy, attachmentPaths: [resolvedPath]);
+    _openDesktopPreviewAttachment(resolvedPath, threadName: threadName);
+  }
+
   void _closeDesktopPreviewAttachmentPreviewIfRemoved(String filePath) {
     if (!_desktopPreviewFilePreviewOpen) {
       return;
@@ -7207,13 +7365,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required ChatFilePromptAction action,
     required String filePath,
     String? preferredAgentKey,
+    bool isFolder = false,
     bool responsiveHandoff = false,
   }) async {
     if (!mounted || !context.mounted) {
       return;
     }
 
-    final resolvedAction = await _resolveAttachmentPromptAction(action, filePath: filePath, preferredAgentKey: preferredAgentKey);
+    final resolvedAction = await _resolveAttachmentPromptAction(
+      action,
+      filePath: filePath,
+      preferredAgentKey: preferredAgentKey,
+      isFolder: isFolder,
+    );
     if (resolvedAction == null || !mounted || !context.mounted) {
       return;
     }
@@ -7224,8 +7388,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    if (responsiveHandoff) {
-      _handoffResponsiveDesktopPreviewFilePrompt(context, agentKey: agentKey, filePath: filePath);
+    if (!powerboardsFilePromptShouldShowPreview(isFolder: isFolder, responsiveHandoff: responsiveHandoff)) {
+      await _handoffResponsiveDesktopPreviewFilePrompt(context, agentKey: agentKey, filePath: filePath, isFolder: isFolder);
       return;
     }
 
@@ -7242,7 +7406,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewFilePreviewFullscreen = false;
       _desktopPreviewComposerAttachmentPreviewPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     });
-    _setComposerAttachmentSeed(agentKey, [filePath]);
+    await _setComposerAttachmentSeed(agentKey, [filePath], isFolder: isFolder);
     setPreviewFilePreviewFullscreen(false);
 
     if (!mounted || !context.mounted) {
@@ -7251,9 +7415,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _showDesktopPreviewChatPane(context, agentKey: agentKey);
   }
 
-  void _handoffResponsiveDesktopPreviewFilePrompt(BuildContext context, {required String agentKey, required String filePath}) {
+  Future<void> _handoffResponsiveDesktopPreviewFilePrompt(
+    BuildContext context, {
+    required String agentKey,
+    required String filePath,
+    required bool isFolder,
+  }) async {
     final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
-    if (normalizedPath.isEmpty) {
+    if (normalizedPath.isEmpty && !isFolder) {
       return;
     }
 
@@ -7262,7 +7431,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _selectedThreadLabelByAgentKey.remove(agentKey);
       _newThreadResetVersion++;
     });
-    _setComposerAttachmentSeed(agentKey, [normalizedPath]);
+    await _setComposerAttachmentSeed(agentKey, [normalizedPath], isFolder: isFolder);
 
     if (!mounted || !context.mounted) {
       return;

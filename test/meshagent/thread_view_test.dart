@@ -11,8 +11,12 @@ import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/chat/new_chat_thread.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
+import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -231,6 +235,58 @@ void main() {
     );
   });
 
+  test('composer attachment seed matching preserves nested and root folder identities', () {
+    final nestedFolder = powerboardsFolderChatContextDataUrl('content/research');
+    final rootFolder = powerboardsFolderChatContextDataUrl('');
+
+    expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [nestedFolder], attachmentPaths: [nestedFolder]), isTrue);
+    expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [rootFolder]), isTrue);
+    expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [nestedFolder]), isFalse);
+  });
+
+  test('folder and file chat links dispatch to Files navigation and file preview', () {
+    String? openedFolder;
+    String? previewedFile;
+
+    expect(
+      powerboardsHandleChatLink(
+        url: 'powerboards://files?path=content%2Fresearch',
+        onOpenFolder: (path) => openedFolder = path,
+        onOpenFilePreview: (path) => previewedFile = path,
+      ),
+      isTrue,
+    );
+    expect(openedFolder, 'content/research');
+    expect(previewedFile, isNull);
+
+    expect(
+      powerboardsHandleChatLink(
+        url: 'powerboards://preview?path=content%2Fresearch%2Fnotes.md',
+        onOpenFolder: (path) => openedFolder = path,
+        onOpenFilePreview: (path) => previewedFile = path,
+      ),
+      isTrue,
+    );
+    expect(previewedFile, 'content/research/notes.md');
+    expect(
+      powerboardsHandleChatLink(
+        url: 'powerboards://preview?path=documents%2FScreenshot% 2026-06-02%20at%2010.06.10%20AM.png',
+        onOpenFolder: (path) => openedFolder = path,
+        onOpenFilePreview: (path) => previewedFile = path,
+      ),
+      isTrue,
+    );
+    expect(previewedFile, 'documents/Screenshot 2026-06-02 at 10.06.10 AM.png');
+    expect(
+      powerboardsHandleChatLink(
+        url: 'https://example.com',
+        onOpenFolder: (path) => openedFolder = path,
+        onOpenFilePreview: (path) => previewedFile = path,
+      ),
+      isFalse,
+    );
+  });
+
   testWidgets('composer attachment seed appears in the new thread composer', (tester) async {
     final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
@@ -252,6 +308,77 @@ void main() {
     await tester.pump();
 
     expect(find.text('brief.pdf'), findsOneWidget);
+  });
+
+  testWidgets('Files root folder context appears in the new thread composer', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final previousMode = powerboardsUiModeSignal.value;
+    powerboardsUiModeSignal.value = PowerboardsUiMode.v1;
+    addTearDown(() => powerboardsUiModeSignal.value = previousMode);
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        child: Scaffold(
+          body: SizedBox.expand(
+            child: _ThreadViewHarness(
+              room: room,
+              composerAttachmentPaths: [powerboardsFolderChatContextDataUrl('')],
+              composerAttachmentSeedVersion: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Files'), findsOneWidget);
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'folder'), findsOneWidget);
+  });
+
+  testWidgets('wrapped folder context renders as a folder card in a thread', (tester) async {
+    final wrappedContext = 'room:///${powerboardsFolderChatContextDataUrl('')}';
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Builder(
+          builder: (context) {
+            return powerboardsFolderThreadAttachmentBuilder(context, wrappedContext)!;
+          },
+        ),
+      ),
+    );
+
+    final card = tester.widget<PbFolderThreadAttachmentCard>(find.byType(PbFolderThreadAttachmentCard));
+    expect(card.title, 'Files');
+    expect(find.text('Files'), findsOneWidget);
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'folder'), findsOneWidget);
+    expect(find.textContaining('base64'), findsNothing);
+  });
+
+  testWidgets('folder thread renderer leaves ordinary files to the existing file preview renderer', (tester) async {
+    Widget? folderAttachment;
+    Widget? malformedPercentPngAttachment;
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Builder(
+          builder: (context) {
+            folderAttachment = powerboardsFolderThreadAttachmentBuilder(context, 'scratch.md');
+            malformedPercentPngAttachment = powerboardsFolderThreadAttachmentBuilder(context, 'Screenshot% image.png');
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(folderAttachment, isNull);
+    expect(malformedPercentPngAttachment, isNull);
+    expect(find.byType(PbFolderThreadAttachmentCard), findsNothing);
   });
 
   testWidgets('switches from the new thread view to the selected thread when the parent selection changes', (tester) async {

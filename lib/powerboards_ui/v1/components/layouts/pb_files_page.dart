@@ -200,7 +200,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
     });
   }
 
-  void _setCurrentPath(String path, {bool keepPreview = true}) {
+  void _setCurrentPath(String path) {
     setState(() {
       _currentPath = path;
       _selectedIds.clear();
@@ -208,9 +208,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
       _keyboardPreviewDirection = 0;
       _filesKeyboardBrowseArmed = false;
 
-      if (!keepPreview) {
-        _closePreview();
-      }
+      _closePreview();
     });
   }
 
@@ -278,7 +276,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
     }
 
     if (item.kind == PbFilesItemKind.folder) {
-      _setCurrentPath(item.folderPath, keepPreview: true);
+      _setCurrentPath(item.folderPath);
       return;
     }
 
@@ -812,7 +810,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
           keyboardPreviewFileId: _keyboardPreviewFileId,
           keyboardPreviewDirection: _keyboardPreviewDirection,
           savingIds: _savingFileIds,
-          onBreadcrumbPressed: (path) => _setCurrentPath(path, keepPreview: true),
+          onBreadcrumbPressed: _setCurrentPath,
           onSortChanged: _setSort,
           onFilterChanged: (_) => setState(() {}),
           onToggleSelection: _toggleRowSelection,
@@ -827,7 +825,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
           onOpenRecentFiles: _openRoomPanelOverlay,
           onRoomPanelToggle: () => _toggleRoomPanel(responsivePanel: responsivePanel, responsiveMode: responsiveMode),
           onItemPressed: (item) => _openItem(item, responsivePanel: responsivePanel, mobilePanel: mobilePanel),
-          onBrowseFolder: (item) => _setCurrentPath(item.folderPath, keepPreview: true),
+          onBrowseFolder: (item) => _setCurrentPath(item.folderPath),
           onRemoveProcessingRow: _removeProcessingRow,
           onLinkedThreadPressed: _openLinkedThread,
           onExtract: _showMockArchiveExtractDialog,
@@ -950,6 +948,7 @@ class PbFilesMainPanel extends StatelessWidget {
     required this.onCreateFolder,
     required this.onCreateTextFile,
     required this.onUpload,
+    this.onAskCurrentFolder,
     required this.onFilesDropped,
     required this.onOpenRecentFiles,
     required this.onRoomPanelToggle,
@@ -994,6 +993,7 @@ class PbFilesMainPanel extends StatelessWidget {
   final VoidCallback onCreateFolder;
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
+  final VoidCallback? onAskCurrentFolder;
   final ValueChanged<List<String>> onFilesDropped;
   final VoidCallback onOpenRecentFiles;
   final VoidCallback onRoomPanelToggle;
@@ -1045,6 +1045,7 @@ class PbFilesMainPanel extends StatelessWidget {
             onCreateFolder: onCreateFolder,
             onCreateTextFile: onCreateTextFile,
             onUpload: onUpload,
+            onAskCurrentFolder: onAskCurrentFolder,
             onClearSelection: onClearSelection,
             onDeleteSelection: onDeleteSelection,
             onDownloadSelection: onDownloadSelection,

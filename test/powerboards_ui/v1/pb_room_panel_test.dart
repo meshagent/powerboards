@@ -141,6 +141,31 @@ RuntimeDocument _threadDocumentWithJson(List<Map<String, dynamic>> children) {
 }
 
 void main() {
+  test('chat file-link recovery is file-type agnostic', () {
+    const extensions = <String>['md', 'png', 'jpg', 'pdf', 'zip', 'mp4', 'mp3', 'csv', 'json', 'docx', 'unknown'];
+    for (final extension in extensions) {
+      final name = 'sample.$extension';
+      expect(powerboardsUniqueChatFilePreviewCandidate(name, <String>['folder/$name']), 'folder/$name', reason: extension);
+    }
+
+    expect(powerboardsUniqueChatFilePreviewCandidate('sample.png', const <String>['one/sample.png', 'two/sample.png']), isNull);
+  });
+
+  test('chat file-link recovery accepts only a space-boundary filename completion', () {
+    expect(powerboardsChatFileNameMatchesLinkPath('Screenshot 2026-06-02 at 10.06.10 AM.png', 'Screenshot'), isTrue);
+    expect(powerboardsChatFileNameMatchesLinkPath('Screenshot.png', 'Screenshot'), isFalse);
+    expect(powerboardsChatFileNameMatchesLinkPath('Screenshot-old.png', 'Screenshot'), isFalse);
+
+    expect(
+      powerboardsUniqueChatFilePreviewCandidate('stuff/Screenshot', const <String>['stuff/Screenshot 2026-06-02 at 10.06.10 AM.png']),
+      'stuff/Screenshot 2026-06-02 at 10.06.10 AM.png',
+    );
+    expect(
+      powerboardsUniqueChatFilePreviewCandidate('stuff/Screenshot', const <String>['stuff/Screenshot one.png', 'stuff/Screenshot two.png']),
+      isNull,
+    );
+  });
+
   test('scoped value helper falls back when the local scope is unavailable', () {
     expect(powerboardsPreferScopedValue<String>(scopedValue: 'scoped', fallbackValue: 'fallback'), 'scoped');
     expect(powerboardsPreferScopedValue<String>(scopedValue: null, fallbackValue: 'fallback'), 'fallback');
@@ -164,6 +189,13 @@ void main() {
       powerboardsShouldDisconnectVoiceSessionForAgentSwitch(voiceSessionConnected: true, currentRouteId: 'voice', nextRouteId: 'voice'),
       isFalse,
     );
+  });
+
+  test('folder prompts never request a file preview pane', () {
+    expect(powerboardsFilePromptShouldShowPreview(isFolder: true, responsiveHandoff: false), isFalse);
+    expect(powerboardsFilePromptShouldShowPreview(isFolder: true, responsiveHandoff: true), isFalse);
+    expect(powerboardsFilePromptShouldShowPreview(isFolder: false, responsiveHandoff: true), isFalse);
+    expect(powerboardsFilePromptShouldShowPreview(isFolder: false, responsiveHandoff: false), isTrue);
   });
 
   test('preview rail keeps voice session inactive while a disconnect is still settling', () {

@@ -973,6 +973,9 @@ class FileManagerViewController {
   }
 }
 
+typedef PowerboardsV1FilePromptRequested =
+    FutureOr<void> Function(ChatFilePromptAction action, String path, {required bool isFolder, required bool responsiveHandoff});
+
 class FileManagerView extends StatefulWidget {
   final RoomClient client;
   final String? projectId;
@@ -990,7 +993,7 @@ class FileManagerView extends StatefulWidget {
   final ValueChanged<bool>? onV1RoomPanelCollapsedChanged;
   final double? v1RoomPanelWidth;
   final ValueChanged<double>? onV1RoomPanelWidthChanged;
-  final FutureOr<void> Function(ChatFilePromptAction action, String filePath, {required bool responsiveHandoff})? onV1FilePromptRequested;
+  final PowerboardsV1FilePromptRequested? onV1FilePromptRequested;
 
   const FileManagerView({
     super.key,
@@ -1368,6 +1371,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final folderChanged = _location.folder != next.folder;
     final openedFileChanged = _location.openedFile != next.openedFile;
+    final closesPreviewForFolder = next.openedFile == null && (folderChanged || openedFileChanged);
 
     if (folderChanged) {
       _folderSig.value = next.folder;
@@ -1385,6 +1389,15 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     setState(() {
+      if (closesPreviewForFolder) {
+        if (_v1PreviewFile != null) {
+          _clearV1PreviewDraftForItem(_v1PreviewFile);
+        }
+        _v1PreviewFile = null;
+        _v1FilePreviewFullscreen = false;
+        _v1FilesRoomPanelOverlayOpen = false;
+        _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      }
       if (openedFileChanged) {
         _tab = 'preview';
       }
@@ -1393,6 +1406,9 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
       _location = next;
     });
+    if (closesPreviewForFolder) {
+      setPreviewFilePreviewFullscreen(false);
+    }
   }
 
   void _onRoomEvent(RoomEvent event) {
@@ -2664,8 +2680,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  List<ChatFilePromptAction> _filePromptActionsForPath(String fullPath, {required bool isFolder}) {
-    if (isFolder || widget.services?.state.isReady != true) {
+  List<ChatFilePromptAction> _filePromptActionsForPath(String fullPath, {required bool isFolder, bool allowFolder = false}) {
+    if (isFolder && !allowFolder || widget.services?.state.isReady != true) {
       return const <ChatFilePromptAction>[];
     }
 
@@ -2674,11 +2690,11 @@ class _FileManagerViewState extends State<FileManagerView> {
       return actions;
     }
 
-    final fallback = _fallbackFilePromptAction();
+    final fallback = _fallbackFilePromptAction(isFolder: isFolder);
     return fallback == null ? const <ChatFilePromptAction>[] : [fallback];
   }
 
-  ChatFilePromptAction? _fallbackFilePromptAction() {
+  ChatFilePromptAction? _fallbackFilePromptAction({required bool isFolder}) {
     if (widget.services?.state.isReady != true) {
       return null;
     }
@@ -2696,7 +2712,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
       final agentName = rawAgentName.trim();
       if (agentName.isNotEmpty) {
-        return defaultChatFilePromptAction(agentName: agentName);
+        return isFolder ? defaultChatFolderPromptAction(agentName: agentName) : defaultChatFilePromptAction(agentName: agentName);
       }
     }
 
@@ -2708,21 +2724,21 @@ class _FileManagerViewState extends State<FileManagerView> {
 
       final agentName = ma.participantDisplayName(participant);
       if (agentName != null) {
-        return defaultChatFilePromptAction(agentName: agentName);
+        return isFolder ? defaultChatFolderPromptAction(agentName: agentName) : defaultChatFilePromptAction(agentName: agentName);
       }
     }
 
     return null;
   }
 
-  Future<void> _openManageAgentsForFilePrompt() async {
+  Future<void> _openManageAgentsForFilePrompt({required bool isFolder}) async {
     final projectId = widget.projectId?.trim();
     if (projectId == null || projectId.isEmpty) {
       if (mounted) {
         ShadToaster.of(context).show(
           powerboardsToast(
             title: "No chat agent available",
-            description: "Install a chat agent before asking about files.",
+            description: "Install a chat agent before asking about this ${isFolder ? 'folder' : 'file'}.",
             destructive: true,
           ),
         );
@@ -2746,22 +2762,26 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Future<void> _startDefaultFilePrompt(
     String fullPath, {
+    required bool isFolder,
     PbFilesItemData? recentlyOpenedItem,
     required bool cleanupSurfacesAfterHandoff,
   }) async {
-    final action = _filePromptActionsForPath(fullPath, isFolder: false).firstOrNull;
+    final action = _filePromptActionsForPath(fullPath, isFolder: isFolder, allowFolder: true).firstOrNull;
     if (action == null) {
-      await _openManageAgentsForFilePrompt();
+      await _openManageAgentsForFilePrompt(isFolder: isFolder);
       return;
     }
 
     final callback = widget.onV1FilePromptRequested;
     if (callback != null) {
-      await callback(action, fullPath, responsiveHandoff: cleanupSurfacesAfterHandoff);
+      await callback(action, fullPath, isFolder: isFolder, responsiveHandoff: cleanupSurfacesAfterHandoff);
       if (!mounted) {
         return;
       }
-      _finishV1FilePromptHandoff(recentlyOpenedItem: recentlyOpenedItem, cleanupSurfaces: cleanupSurfacesAfterHandoff);
+      _finishV1FilePromptHandoff(
+        recentlyOpenedItem: isFolder ? null : recentlyOpenedItem,
+        cleanupSurfaces: isFolder || cleanupSurfacesAfterHandoff,
+      );
       return;
     }
 
@@ -3035,6 +3055,19 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _openEntry(String path, bool isFolder) {
     _clearV1KeyboardPreviewNavigation();
+
+    if (isFolder && (_v1PreviewFile != null || _v1FilePreviewFullscreen || _v1FilesRoomPanelOverlayOpen)) {
+      setState(() {
+        if (_v1PreviewFile != null) {
+          _clearV1PreviewDraftForItem(_v1PreviewFile);
+        }
+        _v1PreviewFile = null;
+        _v1FilePreviewFullscreen = false;
+        _v1FilesRoomPanelOverlayOpen = false;
+        _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      });
+      setPreviewFilePreviewFullscreen(false);
+    }
 
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
@@ -4292,6 +4325,8 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onCreateFolder: () => unawaited(_addFolder(currentFolder)),
                   onCreateTextFile: _showNewTextFileDialog,
                   onUpload: () => unawaited(_addFiles(currentFolder)),
+                  onAskCurrentFolder: () =>
+                      unawaited(_startDefaultFilePrompt(currentFolder, isFolder: true, cleanupSurfacesAfterHandoff: usesStackedRoomPanel)),
                   onFilesDropped: (_) {},
                   onOpenRecentFiles: () {
                     if (!sidePaneAvailable) {
@@ -4335,6 +4370,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onAskAgent: (item) => unawaited(
                     _startDefaultFilePrompt(
                       _v1PathForItem(item),
+                      isFolder: _v1IsFolder(item),
                       recentlyOpenedItem: item,
                       cleanupSurfacesAfterHandoff: usesStackedRoomPanel,
                     ),
@@ -4387,6 +4423,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                 onAskAgent: (item) => unawaited(
                   _startDefaultFilePrompt(
                     _v1PathForItem(item),
+                    isFolder: false,
                     recentlyOpenedItem: item,
                     cleanupSurfacesAfterHandoff: usesStackedRoomPanel,
                   ),
@@ -4503,7 +4540,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       final callback = widget.onV1FilePromptRequested;
       if (callback != null) {
         final responsiveHandoff = _usesResponsiveV1FilePromptHandoff();
-        await callback(action, fullPath, responsiveHandoff: responsiveHandoff);
+        await callback(action, fullPath, isFolder: isFolder, responsiveHandoff: responsiveHandoff);
         if (!mounted) {
           return;
         }

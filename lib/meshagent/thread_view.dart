@@ -34,6 +34,7 @@ import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
+import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
@@ -42,6 +43,7 @@ import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
 
 typedef PowerboardsThreadAttachmentsChanged =
     void Function({
@@ -169,7 +171,10 @@ Widget _buildDesktopV1ThreadAttachmentIcon(
   required Color? color,
   required bool hovered,
 }) {
-  final metadata = PbResolvedAttachmentMetadata.resolve(title: fileName);
+  final metadata = PbResolvedAttachmentMetadata.resolve(
+    title: fileName,
+    explicitFileType: fallbackIcon == LucideIcons.folder ? PbAttachmentFileType.folder : null,
+  );
   return PbSvgIcon(assetName: metadata.iconAssetName, size: 24, color: metadata.iconColor);
 }
 
@@ -182,12 +187,54 @@ bool powerboardsComposerAttachmentSeedMatchesAttachmentPaths({
   required Iterable<String> seedPaths,
   required Iterable<String> attachmentPaths,
 }) {
-  final normalizedSeedPaths = seedPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toSet();
-  if (normalizedSeedPaths.isEmpty) {
+  final seedIdentities = seedPaths.map(_powerboardsChatAttachmentIdentity).whereType<String>().toSet();
+  if (seedIdentities.isEmpty) {
     return false;
   }
 
-  return attachmentPaths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).any(normalizedSeedPaths.contains);
+  return attachmentPaths.map(_powerboardsChatAttachmentIdentity).whereType<String>().any(seedIdentities.contains);
+}
+
+String? _powerboardsChatAttachmentIdentity(String value) {
+  final folderContext = powerboardsFolderChatContextFromDataUrl(value);
+  if (folderContext != null) {
+    return 'folder:${folderContext.storagePath}';
+  }
+
+  final normalizedPath = powerboardsStorageAttachmentPathFromUrl(value);
+  return normalizedPath.isEmpty ? null : 'file:$normalizedPath';
+}
+
+@visibleForTesting
+bool powerboardsHandleChatLink({
+  required String url,
+  required ValueChanged<String> onOpenFolder,
+  required ValueChanged<String> onOpenFilePreview,
+}) {
+  final target = powerboardsChatLinkTargetFromUrl(url);
+  if (target == null) {
+    return false;
+  }
+
+  switch (target.kind) {
+    case PowerboardsChatLinkKind.folder:
+      onOpenFolder(target.storagePath);
+      break;
+    case PowerboardsChatLinkKind.filePreview:
+      onOpenFilePreview(target.storagePath);
+      break;
+  }
+  return true;
+}
+
+@visibleForTesting
+Widget? powerboardsFolderThreadAttachmentBuilder(BuildContext context, String path) {
+  final folderContext = powerboardsFolderChatContextFromDataUrl(path);
+  if (folderContext == null) {
+    return null;
+  }
+
+  return PbFolderThreadAttachmentCard(title: folderContext.displayName);
 }
 
 class MeshagentRoomChatThreadController extends ChatThreadController {
@@ -303,6 +350,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   String? _lastRestoredThreadScrollOffsetValue;
   final Set<String> _reportedAttachmentKeys = <String>{};
   int _lastAppliedComposerAttachmentSeedVersion = 0;
+  String? _activeFolderContextStoragePath;
 
   bool _usesCompactMobileThreadEmptyState(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -326,6 +374,15 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
 
     return "Message $normalizedAgentName...";
+  }
+
+  bool _handleMarkdownLink(BuildContext context, String url) {
+    return powerboardsHandleChatLink(
+      url: url,
+      onOpenFolder: _openFolderContext,
+      onOpenFilePreview: (path) =>
+          _openThreadAttachment(powerboardsResolveChatFilePreviewPath(path, activeFolderStoragePath: _activeFolderContextStoragePath)),
+    );
   }
 
   Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description, required bool compact}) {
@@ -505,6 +562,11 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   String _composerAttachmentDisplayName(String path) {
+    final folderContext = powerboardsFolderChatContextFromDataUrl(path);
+    if (folderContext != null) {
+      return folderContext.displayName;
+    }
+
     final normalized = path.trim();
     if (normalized.isEmpty) {
       return normalized;
@@ -529,8 +591,17 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       final seen = <String>{};
       final paths = <String>[];
       for (final path in widget.composerAttachmentPaths) {
+        final folderContext = powerboardsFolderChatContextFromDataUrl(path);
+        if (folderContext != null) {
+          final identity = 'folder:${folderContext.storagePath}';
+          if (seen.add(identity)) {
+            paths.add(path);
+          }
+          continue;
+        }
+
         final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
-        if (normalizedPath.isNotEmpty && seen.add(normalizedPath)) {
+        if (normalizedPath.isNotEmpty && seen.add('file:$normalizedPath')) {
           paths.add(normalizedPath);
         }
       }
@@ -540,7 +611,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
       _chatController.clear();
       for (final path in paths) {
-        _chatController.attachFile(path, displayName: _composerAttachmentDisplayName(path));
+        final folderContext = powerboardsFolderChatContextFromDataUrl(path);
+        _chatController.attachFile(
+          path,
+          mimeType: folderContext == null ? null : 'text/plain',
+          displayName: _composerAttachmentDisplayName(path),
+        );
       }
     });
   }
@@ -584,6 +660,11 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   void _openThreadAttachment(String path) {
     final normalizedPath = path.trim();
+    final folderContext = powerboardsFolderChatContextFromDataUrl(normalizedPath);
+    if (folderContext != null) {
+      _openFolderContext(folderContext.storagePath);
+      return;
+    }
     if (normalizedPath.isEmpty || normalizedPath.startsWith('data:')) {
       return;
     }
@@ -598,11 +679,25 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   Widget _fileInThreadBuilder(BuildContext context, String path) {
+    final folderPreview = _pendingFolderInThreadBuilder(context, path);
+    if (folderPreview != null) {
+      return folderPreview;
+    }
+
     if (path.endsWith('.meeting')) {
       return MeetingCard(onJoin: () => widget.joinMeeting());
     }
 
     return ChatThreadPreview(room: widget.client, path: path);
+  }
+
+  Widget? _pendingFolderInThreadBuilder(BuildContext context, String path) {
+    final folderContext = powerboardsFolderChatContextFromDataUrl(path);
+    if (folderContext == null) {
+      return null;
+    }
+    _activeFolderContextStoragePath = folderContext.storagePath;
+    return PbFolderThreadAttachmentCard(title: folderContext.displayName);
   }
 
   void _open(String path) {
@@ -628,8 +723,32 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     context.go(newUri.toString());
   }
 
+  void _openFolderContext(String storagePath) {
+    final currentUri = _currentRouteUriOrNull();
+    if (currentUri == null) {
+      return;
+    }
+
+    final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters)..['pane'] = 'files';
+    final normalizedPath = normalizePowerboardsFolderStoragePath(storagePath);
+    if (normalizedPath.isEmpty) {
+      updatedQueryParameters.remove('p');
+    } else {
+      updatedQueryParameters['p'] = powerboardsFolderFilesRoutePath(normalizedPath);
+    }
+    updatedQueryParameters
+      ..remove(filePreviewOriginQueryParameter)
+      ..remove(filePreviewThreadScrollOffsetQueryParameter);
+    context.go(currentUri.replace(queryParameters: updatedQueryParameters).toString());
+  }
+
   void _openComposerAttachment(FileAttachment attachment) {
     final path = attachment.path.trim();
+    final folderContext = powerboardsFolderChatContextFromDataUrl(path);
+    if (folderContext != null) {
+      _openFolderContext(folderContext.storagePath);
+      return;
+    }
     if (path.isEmpty || path.startsWith('data:')) {
       return;
     }
@@ -737,6 +856,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             ),
       onMessageSent: _onMessageSent,
       fileInThreadBuilder: _fileInThreadBuilder,
+      pendingFileInThreadBuilder: _pendingFolderInThreadBuilder,
+      datasetInlineAttachmentViewerPredicate: (path) => powerboardsFolderChatContextFromDataUrl(path) == null,
       openFile: _openThreadAttachment,
       fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
       chatInputBoxBuilder: usesMobileLayout ? (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox) : null,
@@ -820,6 +941,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             markdownSuppressHeadingDividers: true,
             markdownHeadingPaddingResolver: _desktopV1ThreadMarkdownHeadingPadding,
             markdownHeadingStyleResolver: _desktopV1ThreadMarkdownHeadingStyle,
+            markdownLinkHandler: _handleMarkdownLink,
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(

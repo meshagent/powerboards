@@ -91,6 +91,7 @@ class PbFilesToolbar extends StatelessWidget {
     required this.onCreateFolder,
     required this.onCreateTextFile,
     required this.onUpload,
+    this.onAskCurrentFolder,
     required this.onClearSelection,
     required this.onDeleteSelection,
     required this.onDownloadSelection,
@@ -106,6 +107,7 @@ class PbFilesToolbar extends StatelessWidget {
   final VoidCallback onCreateFolder;
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
+  final VoidCallback? onAskCurrentFolder;
   final VoidCallback onClearSelection;
   final VoidCallback onDeleteSelection;
   final VoidCallback onDownloadSelection;
@@ -118,12 +120,14 @@ class PbFilesToolbar extends StatelessWidget {
             responsiveMode == PbFilesResponsiveMode.mobile ||
             responsiveMode == PbFilesResponsiveMode.overlay && constraints.maxWidth <= PbBreakpoints.shellMobile;
         final iconActions = constraints.maxWidth < 620 && !stackedActions;
+        final compactSelectionActions = constraints.maxWidth < 960 && !stackedActions;
         final createActions = _FilesCreateActions(
           iconActions: iconActions,
           fullWidth: stackedActions,
           onCreateFolder: onCreateFolder,
           onCreateTextFile: onCreateTextFile,
           onUpload: onUpload,
+          onAskCurrentFolder: onAskCurrentFolder,
         );
         final filterField = PbMenuFilterField(
           placeholder: 'Filter...',
@@ -164,6 +168,7 @@ class PbFilesToolbar extends StatelessWidget {
                       if (hasSelection)
                         _FilesSelectionActions(
                           selectedCount: selectedCount,
+                          iconOnly: compactSelectionActions,
                           onDeleteSelection: onDeleteSelection,
                           onClearSelection: onClearSelection,
                           onDownloadSelection: onDownloadSelection,
@@ -442,6 +447,7 @@ class _FilesCreateActions extends StatefulWidget {
     required this.onCreateFolder,
     required this.onCreateTextFile,
     required this.onUpload,
+    this.onAskCurrentFolder,
   });
 
   final bool iconActions;
@@ -449,6 +455,7 @@ class _FilesCreateActions extends StatefulWidget {
   final VoidCallback onCreateFolder;
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
+  final VoidCallback? onAskCurrentFolder;
 
   @override
   State<_FilesCreateActions> createState() => _FilesCreateActionsState();
@@ -493,6 +500,14 @@ class _FilesCreateActionsState extends State<_FilesCreateActions> {
             iconOnly: widget.iconActions,
             width: widget.iconActions ? 48 : 132,
             onPressed: widget.onUpload,
+          ),
+          const SizedBox(width: 10),
+          _FilesToolbarButton(
+            label: 'Ask agent',
+            iconAssetName: 'message-square-plus',
+            iconOnly: widget.iconActions,
+            width: widget.iconActions ? 48 : 148,
+            onPressed: widget.onAskCurrentFolder,
           ),
         ],
       );
@@ -549,6 +564,14 @@ class _FilesCreateActionsState extends State<_FilesCreateActions> {
       width: widget.fullWidth ? null : (widget.iconActions ? 48 : 132),
       onPressed: widget.onUpload,
     );
+    final askAgentButton = _FilesToolbarButton(
+      label: 'Ask agent',
+      iconAssetName: 'message-square-plus',
+      iconOnly: widget.iconActions,
+      fullWidth: widget.fullWidth,
+      width: widget.fullWidth ? null : (widget.iconActions ? 48 : 148),
+      onPressed: widget.onAskCurrentFolder,
+    );
 
     return Row(
       mainAxisSize: MainAxisSize.max,
@@ -556,6 +579,8 @@ class _FilesCreateActionsState extends State<_FilesCreateActions> {
         Expanded(child: createButton),
         const SizedBox(width: 10),
         Expanded(child: uploadButton),
+        const SizedBox(width: 10),
+        Expanded(child: askAgentButton),
       ],
     );
   }
@@ -569,6 +594,7 @@ class _FilesSelectionActions extends StatelessWidget {
     required this.onDownloadSelection,
     this.stretch = false,
     this.showCount = true,
+    this.iconOnly = false,
   });
 
   final int selectedCount;
@@ -577,6 +603,7 @@ class _FilesSelectionActions extends StatelessWidget {
   final VoidCallback onDownloadSelection;
   final bool stretch;
   final bool showCount;
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -590,13 +617,17 @@ class _FilesSelectionActions extends StatelessWidget {
     final clearButton = _FilesToolbarButton(
       label: 'Clear selection',
       iconAssetName: 'circle-x',
+      iconOnly: iconOnly,
       fullWidth: stretch,
+      width: iconOnly ? 48 : null,
       onPressed: onClearSelection,
     );
     final downloadButton = _FilesToolbarButton(
       label: 'Download',
       iconAssetName: 'arrow-down-to-line',
+      iconOnly: iconOnly,
       fullWidth: stretch,
+      width: iconOnly ? 48 : null,
       onPressed: onDownloadSelection,
     );
     final buttons = Row(
@@ -701,7 +732,12 @@ class _FilesToolbarButtonState extends State<_FilesToolbarButton> {
       onPressed: widget.onPressed,
     );
 
-    return SizedBox(width: widget.width, child: button);
+    final sizedButton = SizedBox(width: widget.width, child: button);
+    if (!widget.iconOnly) {
+      return sizedButton;
+    }
+
+    return Tooltip(message: widget.label, child: sizedButton);
   }
 }
 

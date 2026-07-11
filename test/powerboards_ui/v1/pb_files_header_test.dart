@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_header.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
 
 void main() {
   String labelForPath(String path) {
@@ -98,6 +99,9 @@ void main() {
     required VoidCallback onCreateFolder,
     required VoidCallback onCreateTextFile,
     required VoidCallback onUpload,
+    VoidCallback? onAskCurrentFolder,
+    bool hasSelection = false,
+    int selectedCount = 0,
   }) async {
     final filterController = TextEditingController();
     addTearDown(filterController.dispose);
@@ -110,8 +114,8 @@ void main() {
             child: SizedBox(
               width: width,
               child: PbFilesToolbar(
-                hasSelection: false,
-                selectedCount: 0,
+                hasSelection: hasSelection,
+                selectedCount: selectedCount,
                 filterController: filterController,
                 filterEnabled: true,
                 responsiveMode: responsiveMode,
@@ -120,6 +124,7 @@ void main() {
                 onCreateFolder: onCreateFolder,
                 onCreateTextFile: onCreateTextFile,
                 onUpload: onUpload,
+                onAskCurrentFolder: onAskCurrentFolder,
                 onClearSelection: () {},
                 onDeleteSelection: () {},
                 onDownloadSelection: () {},
@@ -150,6 +155,7 @@ void main() {
     expect(find.text('New folder'), findsOneWidget);
     expect(find.text('New text file'), findsOneWidget);
     expect(find.text('Upload'), findsOneWidget);
+    expect(find.text('Ask agent'), findsOneWidget);
 
     await tester.tap(find.text('New folder'));
     await tester.tap(find.text('New text file'));
@@ -158,6 +164,25 @@ void main() {
     expect(folderCreates, 1);
     expect(textFileCreates, 1);
     expect(uploads, 1);
+  });
+
+  testWidgets('files toolbar runs Ask agent for the currently viewed folder', (tester) async {
+    var asks = 0;
+
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      onAskCurrentFolder: () => asks += 1,
+    );
+
+    final askAgentFinder = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent');
+    expect(askAgentFinder, findsOneWidget);
+    await tester.tap(askAgentFinder);
+    expect(asks, 1);
   });
 
   testWidgets('files toolbar uses wide create actions in shell-mobile overlay mode', (tester) async {
@@ -176,6 +201,7 @@ void main() {
 
     expect(find.text('Create'), findsOneWidget);
     expect(find.text('Upload'), findsOneWidget);
+    expect(find.text('Ask agent'), findsOneWidget);
     expect(find.text('New folder'), findsNothing);
     expect(find.text('New text file'), findsNothing);
 
@@ -215,6 +241,7 @@ void main() {
 
     expect(find.text('Create'), findsOneWidget);
     expect(find.text('Upload'), findsOneWidget);
+    expect(find.text('Ask agent'), findsOneWidget);
     expect(find.text('New folder'), findsNothing);
     expect(find.text('New text file'), findsNothing);
 
@@ -233,5 +260,35 @@ void main() {
     await tester.tap(find.text('New text file'));
     await tester.pumpAndSettle();
     expect(textFileCreates, 1);
+  });
+
+  testWidgets('files toolbar hides Ask agent for a single selection', (tester) async {
+    await pumpToolbar(
+      tester,
+      width: 900,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      hasSelection: true,
+      selectedCount: 1,
+    );
+
+    expect(find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent'), findsNothing);
+  });
+
+  testWidgets('files toolbar hides Ask agent for multiple selections', (tester) async {
+    await pumpToolbar(
+      tester,
+      width: 900,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      hasSelection: true,
+      selectedCount: 2,
+    );
+
+    expect(find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent'), findsNothing);
   });
 }

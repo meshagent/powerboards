@@ -8,6 +8,7 @@ import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:path/path.dart' as path;
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
+import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_comment_box.dart';
@@ -106,7 +107,7 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
         controller.textFieldController.text = text;
         for (final attachment in attachments) {
           if (attachment.status == UploadStatus.completed) {
-            controller.attachFile(attachment.path);
+            controller.attachFile(attachment.path, mimeType: attachment.mimeType, displayName: attachment.displayName);
           }
         }
       }
@@ -117,7 +118,7 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
           controller.textFieldController.text = text;
           for (final attachment in attachments) {
             if (attachment.status == UploadStatus.completed) {
-              controller.attachFile(attachment.path);
+              controller.attachFile(attachment.path, mimeType: attachment.mimeType, displayName: attachment.displayName);
             }
           }
         }
@@ -221,7 +222,11 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
 
   Widget _buildAttachmentChip(FileAttachment attachment) {
     final title = _attachmentDisplayName(attachment);
-    final metadata = PbResolvedAttachmentMetadata.resolve(title: title);
+    final folderContext = powerboardsFolderChatContextFromDataUrl(attachment.path);
+    final metadata = PbResolvedAttachmentMetadata.resolve(
+      title: title,
+      explicitFileType: folderContext == null ? null : PbAttachmentFileType.folder,
+    );
     return PbComposerAttachmentChip(
       title: title,
       iconAssetName: metadata.iconAssetName,
@@ -246,6 +251,11 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
   }
 
   String _attachmentDisplayName(FileAttachment attachment) {
+    final folderContext = powerboardsFolderChatContextFromDataUrl(attachment.path);
+    if (folderContext != null) {
+      return folderContext.displayName;
+    }
+
     final explicit = attachment.displayName?.trim();
     if (explicit != null && explicit.isNotEmpty) {
       return explicit;
