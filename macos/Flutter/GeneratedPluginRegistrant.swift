@@ -22,6 +22,7 @@ import just_audio
 import livekit_client
 import meshagent_flutter_desktop_updater
 import package_info_plus
+import pdfrx_coregraphics
 import record_macos
 import sentry_flutter
 import share_plus
@@ -50,6 +51,7 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   LiveKitPlugin.register(with: registry.registrar(forPlugin: "LiveKitPlugin"))
   MeshagentFlutterDesktopUpdaterPlugin.register(with: registry.registrar(forPlugin: "MeshagentFlutterDesktopUpdaterPlugin"))
   FPPPackageInfoPlusPlugin.register(with: registry.registrar(forPlugin: "FPPPackageInfoPlusPlugin"))
+  PdfrxCoregraphicsPlugin.register(with: registry.registrar(forPlugin: "PdfrxCoregraphicsPlugin"))
   RecordMacOsPlugin.register(with: registry.registrar(forPlugin: "RecordMacOsPlugin"))
   SentryFlutterPlugin.register(with: registry.registrar(forPlugin: "SentryFlutterPlugin"))
   SharePlusMacosPlugin.register(with: registry.registrar(forPlugin: "SharePlusMacosPlugin"))
