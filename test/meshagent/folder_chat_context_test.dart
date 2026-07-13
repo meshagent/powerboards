@@ -113,6 +113,26 @@ void main() {
       expect(powerboardsChatLinkTargetFromUrl('https://example.com'), isNull);
     });
 
+    test('canonicalizes only malformed preview Markdown destinations', () {
+      const normal = '[test.png](powerboards://preview?path=stuff%2Ftest.png)';
+      const external = '[Screenshot](https://example.com/Screenshot% image.png)';
+      const folder = '[stuff](powerboards://files?path=stuff with spaces)';
+      const malformed = '[Screenshot](powerboards://preview?path=stuff%2FScreenshot% 2026-06-02%20at%2010.06.10%20AM.png)';
+      const rawSpaces = '[Notes](powerboards://preview?path=stuff/Screenshot 2026-06-02 at 10.06.10 AM.md)';
+      const narrowNoBreakSpace = '[Screenshot](powerboards://preview?path=stuff%2FScreenshot%202026-06-02%20at%2010.06.10 AM.png)';
+
+      expect(powerboardsCanonicalizeMalformedPreviewMarkdownLinks(normal), normal);
+      expect(powerboardsCanonicalizeMalformedPreviewMarkdownLinks(external), external);
+      expect(powerboardsCanonicalizeMalformedPreviewMarkdownLinks(folder), folder);
+
+      for (final markdown in <String>[malformed, rawSpaces, narrowNoBreakSpace]) {
+        final canonicalized = powerboardsCanonicalizeMalformedPreviewMarkdownLinks(markdown);
+        expect(canonicalized, isNot(markdown));
+        expect(canonicalized, isNot(contains(RegExp(r'%(?![0-9A-Fa-f]{2})'))));
+        expect(canonicalized, isNot(contains(' ')));
+      }
+    });
+
     test('folder routes remain folders and basename file links resolve inside the active folder', () {
       expect(powerboardsFolderFilesRoutePath(''), isEmpty);
       expect(powerboardsFolderFilesRoutePath('my-content'), 'my-content/');

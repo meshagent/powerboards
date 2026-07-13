@@ -941,6 +941,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             markdownSuppressHeadingDividers: true,
             markdownHeadingPaddingResolver: _desktopV1ThreadMarkdownHeadingPadding,
             markdownHeadingStyleResolver: _desktopV1ThreadMarkdownHeadingStyle,
+            markdownTextTransformer: powerboardsCanonicalizeMalformedPreviewMarkdownLinks,
             markdownLinkHandler: _handleMarkdownLink,
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),

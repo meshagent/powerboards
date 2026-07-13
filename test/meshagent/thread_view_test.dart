@@ -9,6 +9,8 @@ import 'package:meshagent/runtime.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/chat/new_chat_thread.dart';
+import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
+import 'package:meshagent_flutter_shadcn/thread_typography.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/folder_chat_context.dart';
@@ -285,6 +287,60 @@ void main() {
       ),
       isFalse,
     );
+  });
+
+  testWidgets('rendered folder file links preserve spaced filenames for preview dispatch', (tester) async {
+    Future<String?> tapRenderedLink(String destination) async {
+      String? tappedUrl;
+      await tester.pumpWidget(
+        _buildResponsiveTestApp(
+          child: ThreadTypographyOverride(
+            markdownTextTransformer: powerboardsCanonicalizeMalformedPreviewMarkdownLinks,
+            markdownLinkHandler: (context, url) {
+              tappedUrl = url;
+              return true;
+            },
+            child: Scaffold(
+              body: MarkdownViewer(markdown: '[Screenshot 2026-06-02 at 10.06.10 AM.png]($destination)', padding: EdgeInsets.zero),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final link = find.byWidgetPredicate(
+        (widget) => widget is RichText && widget.text.toPlainText().contains('Screenshot 2026-06-02 at 10.06.10 AM.png'),
+      );
+      expect(link, findsOneWidget);
+      await tester.tap(link);
+      await tester.pump();
+      return tappedUrl;
+    }
+
+    expect(
+      await tapRenderedLink('powerboards://preview?path=stuff%2FScreenshot%202026-06-02%20at%2010.06.10%20AM.png'),
+      'powerboards://preview?path=stuff%2FScreenshot%202026-06-02%20at%2010.06.10%20AM.png',
+    );
+    for (final destination in <String>[
+      'powerboards://preview?path=stuff%2FScreenshot% 2026-06-02%20at%2010.06.10%20AM.png',
+      'powerboards://preview?path=stuff/Screenshot 2026-06-02 at 10.06.10 AM.md',
+      'powerboards://preview?path=stuff%2FScreenshot%202026-06-02%20at%2010.06.10 AM.png',
+    ]) {
+      final tappedUrl = await tapRenderedLink(destination);
+      expect(tappedUrl, isNotNull);
+      String? previewedFile;
+      expect(powerboardsHandleChatLink(url: tappedUrl!, onOpenFolder: (_) {}, onOpenFilePreview: (path) => previewedFile = path), isTrue);
+      expect(
+        previewedFile,
+        destination.endsWith('.md')
+            ? 'stuff/Screenshot 2026-06-02 at 10.06.10 AM.md'
+            : destination.contains(' ')
+            ? 'stuff/Screenshot 2026-06-02 at 10.06.10 AM.png'
+            : 'stuff/Screenshot 2026-06-02 at 10.06.10 AM.png',
+      );
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('composer attachment seed appears in the new thread composer', (tester) async {

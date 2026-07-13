@@ -113,6 +113,30 @@ String powerboardsResolveChatFilePreviewPath(String storagePath, {String? active
   return '$normalizedFolderPath/$normalizedPath';
 }
 
+String powerboardsCanonicalizeMalformedPreviewMarkdownLinks(String markdown) {
+  final previewLinkPattern = RegExp(r'(\]\()(powerboards://preview\?[^)\r\n]*)(\))', caseSensitive: false);
+  final malformedPercentPattern = RegExp(r'%(?![0-9A-Fa-f]{2})');
+
+  return markdown.replaceAllMapped(previewLinkPattern, (match) {
+    final destination = match.group(2)!;
+    if (!destination.contains(RegExp(r'\s')) && !malformedPercentPattern.hasMatch(destination)) {
+      return match.group(0)!;
+    }
+
+    final target = powerboardsChatLinkTargetFromUrl(destination);
+    if (target == null || target.kind != PowerboardsChatLinkKind.filePreview || target.storagePath.isEmpty) {
+      return match.group(0)!;
+    }
+
+    final canonicalDestination = Uri(
+      scheme: 'powerboards',
+      host: 'preview',
+      queryParameters: <String, String>{'path': target.storagePath},
+    ).toString();
+    return '${match.group(1)}$canonicalDestination${match.group(3)}';
+  });
+}
+
 PowerboardsFolderChatContext? powerboardsFolderChatContextFromDataUrl(String value) {
   final normalized = value.trim();
   for (final encodedPayload in _powerboardsFolderContextPayloadCandidates(normalized)) {
@@ -240,6 +264,8 @@ String _decodePowerboardsChatLinkPath(String value) {
       }
       decoded = next;
     } on FormatException {
+      break;
+    } on ArgumentError {
       break;
     }
   }
