@@ -360,6 +360,14 @@ void main() {
     expect(powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(''), isEmpty);
   });
 
+  test('desktop preview opens sync documents only for storage thread paths', () {
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('agents/assistant/threads/legacy.thread'), isTrue);
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('/agents/assistant/threads/legacy.thread'), isTrue);
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('dataset://agents/assistant/threads/selected'), isFalse);
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('agent://threads/selected'), isFalse);
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('tmp://agents/assistant/threads/selected'), isFalse);
+  });
+
   test('desktop preview attachment scope signature is stable for the same selected thread', () {
     final initial = powerboardsDesktopPreviewAttachmentThreadScopeSignature(
       selectedThreadPath: 'dataset://agents/assistant/threads/selected',

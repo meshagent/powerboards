@@ -688,6 +688,11 @@ List<String> powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(Str
 }
 
 @visibleForTesting
+bool powerboardsDesktopPreviewUsesSyncThreadDocument(String threadPath) {
+  return isPowerboardsStorageAttachmentPath(normalizePowerboardsThreadAttachmentPath(threadPath));
+}
+
+@visibleForTesting
 String powerboardsDesktopPreviewAttachmentThreadScopeSignature({required String? selectedThreadPath, required String? selectedThreadName}) {
   final paths = powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(selectedThreadPath);
   if (paths.isEmpty) {
@@ -1271,7 +1276,8 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   }
 
   Future<void> _syncThreadDocuments(List<_DesktopPreviewAttachmentThreadRef> threads, {required int generation}) async {
-    final desiredPaths = threads.map((thread) => thread.path).toSet();
+    final syncThreads = threads.where((thread) => powerboardsDesktopPreviewUsesSyncThreadDocument(thread.path)).toList(growable: false);
+    final desiredPaths = syncThreads.map((thread) => thread.path).toSet();
     final currentPaths = _threadDocuments.keys.toSet();
 
     for (final path in currentPaths.difference(desiredPaths)) {
@@ -1284,7 +1290,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       } catch (_) {}
     }
 
-    for (final thread in threads) {
+    for (final thread in syncThreads) {
       if (_threadDocuments.containsKey(thread.path)) {
         continue;
       }
