@@ -949,6 +949,7 @@ class PbFilesMainPanel extends StatelessWidget {
     required this.onCreateTextFile,
     required this.onUpload,
     this.onAskCurrentFolder,
+    this.toolbarTrailingAction,
     required this.onFilesDropped,
     required this.onOpenRecentFiles,
     required this.onRoomPanelToggle,
@@ -994,6 +995,7 @@ class PbFilesMainPanel extends StatelessWidget {
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
   final VoidCallback? onAskCurrentFolder;
+  final PbFilesToolbarTrailingAction? toolbarTrailingAction;
   final ValueChanged<List<String>> onFilesDropped;
   final VoidCallback onOpenRecentFiles;
   final VoidCallback onRoomPanelToggle;
@@ -1046,6 +1048,7 @@ class PbFilesMainPanel extends StatelessWidget {
             onCreateTextFile: onCreateTextFile,
             onUpload: onUpload,
             onAskCurrentFolder: onAskCurrentFolder,
+            trailingAction: toolbarTrailingAction,
             onClearSelection: onClearSelection,
             onDeleteSelection: onDeleteSelection,
             onDownloadSelection: onDownloadSelection,
