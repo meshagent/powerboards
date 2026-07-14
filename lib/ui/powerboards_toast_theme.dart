@@ -53,7 +53,7 @@ ShadToastTheme _powerboardsV1ToastTheme(BuildContext context, {required bool des
     mainAxisAlignment: MainAxisAlignment.start,
     mainAxisSize: MainAxisSize.max,
     showCloseIconOnlyWhenHovered: false,
-    titleStyle: PowerboardsTypography.label.copyWith(color: titleColor),
-    descriptionStyle: PowerboardsTypography.meta.copyWith(color: descriptionColor),
+    titleStyle: PowerboardsTypography.label.copyWith(color: titleColor, backgroundColor: Colors.transparent),
+    descriptionStyle: PowerboardsTypography.meta.copyWith(color: descriptionColor, backgroundColor: Colors.transparent),
   );
 }

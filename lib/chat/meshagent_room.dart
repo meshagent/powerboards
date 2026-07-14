@@ -115,6 +115,7 @@ const double _mobileRoomHeaderGap = 8;
 const String _roomPaneQueryParameter = 'pane';
 const String _transcriptRootFolder = 'transcripts';
 const String _meetingTranscriptFolder = '$_transcriptRootFolder/meetings';
+const Duration _v1LongActionToastDelay = Duration(milliseconds: 700);
 
 enum _MobileRoomPane { chat, files, meeting }
 
@@ -3867,6 +3868,29 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     services.refresh();
   }
 
+  ShadToasterState? _rootOrRoomToaster() {
+    final routerDelegate = Router.of(context).routerDelegate;
+    if (routerDelegate is PathRouteDelegate) {
+      final rootContext = routerDelegate.navigatorKey.currentContext;
+      if (rootContext != null) {
+        final rootToaster = ShadToaster.maybeOf(rootContext);
+        if (rootToaster != null) {
+          return rootToaster;
+        }
+      }
+    }
+
+    return ShadToaster.maybeOf(context);
+  }
+
+  void _showToast(ShadToasterState? toaster, ShadToast toast) {
+    if (toaster == null || !toaster.mounted) {
+      return;
+    }
+
+    toaster.show(toast);
+  }
+
   Future<void> _renameCurrentRoomFromPreviewRail() async {
     final currentName = _roomDisplayName;
     final newName = await showRenameRoomDialog(context, initialValue: currentName);
@@ -3874,26 +3898,51 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
-    if (!mounted) {
-      return;
-    }
+    final toaster = ShadToaster.of(context);
+    var progressShown = false;
+    final progressTimer = Timer(_v1LongActionToastDelay, () {
+      if (!mounted) {
+        return;
+      }
 
-    await getMeshagentClient().updateRoom(
-      projectId: widget.projectId,
-      roomId: room.id,
-      name: room.name,
-      metadata: {"displayName": newName},
-    );
-    if (!mounted) {
-      return;
-    }
-
-    overridePreviewRoomDisplayName(projectId: widget.projectId, roomName: room.name, displayName: newName);
-    refreshPreviewRoomList();
-    setState(() {
-      _resolvedRoomDisplayName = newName;
+      progressShown = true;
+      toaster.show(powerboardsToast(title: 'Renaming room', description: currentName, duration: const Duration(seconds: 4)));
     });
+    try {
+      final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
+      if (!mounted) {
+        return;
+      }
+
+      await getMeshagentClient().updateRoom(
+        projectId: widget.projectId,
+        roomId: room.id,
+        name: room.name,
+        metadata: {"displayName": newName},
+      );
+      if (!mounted) {
+        return;
+      }
+
+      overridePreviewRoomDisplayName(projectId: widget.projectId, roomName: room.name, displayName: newName);
+      refreshPreviewRoomList();
+      setState(() {
+        _resolvedRoomDisplayName = newName;
+      });
+      if (progressShown) {
+        toaster.show(powerboardsToast(title: 'Room renamed', description: newName, duration: const Duration(seconds: 4)));
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      toaster.show(
+        powerboardsToast(title: 'Unable to rename room', description: '$error', destructive: true, duration: const Duration(seconds: 6)),
+      );
+    } finally {
+      progressTimer.cancel();
+    }
   }
 
   Future<void> _openCurrentRoomPermissionsFromPreviewRail() async {
@@ -3919,19 +3968,51 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
-    if (!mounted) {
-      return;
-    }
+    final toaster = _rootOrRoomToaster();
+    try {
+      final roomDisplayName = _roomDisplayName;
+      final deletingToast = powerboardsRoomLifecycleToast(
+        context,
+        title: 'Deleting room',
+        description: roomDisplayName,
+        duration: const Duration(minutes: 2),
+        showProgress: true,
+      );
+      final deletedToast = powerboardsRoomLifecycleToast(
+        context,
+        title: 'Room deleted',
+        description: roomDisplayName,
+        duration: const Duration(seconds: 4),
+      );
+      _showToast(toaster, deletingToast);
+      final room = await getMeshagentClient().getRoom(name: widget.room.roomName!, projectId: widget.projectId);
 
-    await getMeshagentClient().deleteRoom(projectId: widget.projectId, roomId: room.id);
-    if (!mounted) {
-      return;
-    }
+      await getMeshagentClient().deleteRoom(projectId: widget.projectId, roomId: room.id);
+      _showToast(toaster, deletedToast);
 
-    refreshPreviewRoomList();
-    clearLastSelectedRoom(widget.projectId);
-    context.go('/p/${fromUUID(widget.projectId)}');
+      refreshPreviewRoomList();
+      clearLastSelectedRoom(widget.projectId);
+      if (!mounted) {
+        return;
+      }
+
+      context.go('/p/${fromUUID(widget.projectId)}');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _showToast(
+        toaster,
+        powerboardsRoomLifecycleToast(
+          context,
+          title: 'Unable to delete room',
+          description: '$error',
+          destructive: true,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    }
   }
 
   void _openRoomKeychainFromPreviewRail() {
@@ -7491,14 +7572,44 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _filesHeaderController.openExtractedArchiveForPreview(target);
   }
 
+  String _attachmentToastLabel(PbAttachmentListItemData file, String path) {
+    final title = file.title.trim();
+    if (title.isNotEmpty) {
+      return title;
+    }
+
+    final segments = path.split('/').where((segment) => segment.isNotEmpty).toList();
+    return segments.isEmpty ? path : segments.last;
+  }
+
   Future<void> _downloadAttachmentFile(PbAttachmentListItemData file) async {
     final path = _previewAttachmentPath(file);
     if (path == null) {
       return;
     }
 
-    final url = await widget.room.storage.downloadUrl(path, download: true);
-    await launchUrl(Uri.parse(url));
+    final label = _attachmentToastLabel(file, path);
+    final useDesktopV1 = powerboardsUsesDesktopUiPreview(context);
+    final toaster = useDesktopV1 ? ShadToaster.of(context) : null;
+    if (useDesktopV1) {
+      toaster?.show(powerboardsToast(title: 'Downloading', description: label, duration: const Duration(seconds: 4)));
+    }
+
+    try {
+      final url = await widget.room.storage.downloadUrl(path, download: true);
+      final launched = await launchUrl(Uri.parse(url));
+      if (!launched && useDesktopV1) {
+        throw StateError('Unable to open download URL.');
+      }
+    } catch (error) {
+      if (!mounted || !useDesktopV1) {
+        return;
+      }
+
+      toaster?.show(
+        powerboardsToast(title: 'Download failed', description: '$error', destructive: true, duration: const Duration(seconds: 6)),
+      );
+    }
   }
 
   Future<void> _shareAttachmentFile(PbAttachmentListItemData file) async {
@@ -7507,7 +7618,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
+    final label = _attachmentToastLabel(file, path);
+    Timer? progressTimer;
     try {
+      if (powerboardsUsesDesktopUiPreview(context)) {
+        final toaster = ShadToaster.of(context);
+        progressTimer = Timer(_v1LongActionToastDelay, () {
+          if (!mounted || !powerboardsUsesDesktopUiPreview(context)) {
+            return;
+          }
+
+          toaster.show(powerboardsToast(title: 'Preparing share', description: label, duration: const Duration(seconds: 4)));
+        });
+      }
       await shareRemoteStorageFile(context: context, client: widget.room, path: path);
     } catch (error) {
       if (!mounted) {
@@ -7515,6 +7638,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
 
       ShadToaster.of(context).show(powerboardsToast(title: 'Unable to share file', description: '$error', destructive: true));
+    } finally {
+      progressTimer?.cancel();
     }
   }
 

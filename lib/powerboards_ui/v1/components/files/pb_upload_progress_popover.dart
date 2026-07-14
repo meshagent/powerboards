@@ -7,6 +7,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../menus/pb_menu_card.dart';
+import '../primitives/pb_progress_bar.dart';
 import '../primitives/pb_svg_icon.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_typography.dart';
@@ -269,40 +270,7 @@ class _UploadProgressRow extends StatelessWidget {
                 style: PowerboardsTypography.meta.copyWith(color: failed ? PbColors.customAlert : PbColors.textMuted),
               ),
               const SizedBox(height: 6),
-              _UploadProgressBar(value: value, color: color),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _UploadProgressBar extends StatelessWidget {
-  const _UploadProgressBar({required this.value, required this.color});
-
-  final double value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final clampedValue = value.clamp(0.0, 1.0);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Container(
-          height: 5,
-          decoration: BoxDecoration(color: PbColors.borderFaint, borderRadius: BorderRadius.circular(999)),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            alignment: Alignment.centerLeft,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                width: constraints.maxWidth * clampedValue,
-                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(999)),
-              ),
+              PbProgressBar(value: value, color: color),
             ],
           ),
         );
