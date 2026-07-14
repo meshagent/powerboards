@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
@@ -36,6 +37,7 @@ import 'package:powerboards/meshagent/archive_extract.dart';
 import 'package:powerboards/meshagent/archive_extract_toast.dart';
 import 'package:powerboards/livekit/room.dart' as room;
 import 'package:powerboards/livekit/voice_meeting_controls.dart';
+import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
@@ -2703,6 +2705,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final Map<String, String> _pendingDesktopPreviewThreadPathByAgentKey = <String, String>{};
   final Map<String, String> _pendingDesktopPreviewThreadLabelByAgentKey = <String, String>{};
   final Map<String, List<String>> _composerAttachmentPathsByAgentKey = <String, List<String>>{};
+  final Map<String, Map<String, String>> _composerAttachmentDisplayNamesByAgentKey = <String, Map<String, String>>{};
   final Map<String, int> _composerAttachmentSeedVersionByAgentKey = <String, int>{};
   final Map<String, PowerboardsFileAttachmentLink> _localThreadAttachmentLinksByKey = <String, PowerboardsFileAttachmentLink>{};
   final Map<String, agent_sessions.MessagingChatClient> _agentChatClients = <String, agent_sessions.MessagingChatClient>{};
@@ -2792,6 +2795,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _selectedThreadPathByAgentKey.clear();
     _selectedThreadLabelByAgentKey.clear();
     _composerAttachmentPathsByAgentKey.clear();
+    _composerAttachmentDisplayNamesByAgentKey.clear();
     _composerAttachmentSeedVersionByAgentKey.clear();
     _newThreadResetVersion++;
   }
@@ -2876,6 +2880,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     services.sort(_compareServices);
     return services;
   });
+  late final fileManagerServices = Resource<List<ServiceSpec>>(() async {
+    final services = await getMeshagentClient()
+        .listRoomServices(projectId: widget.projectId, roomName: widget.room.roomName!)
+        .timeout(_roomResourceTimeout, onTimeout: () => throw TimeoutException("Timed out while loading room services."));
+    services.sort(_compareServices);
+    return services;
+  });
+
+  void _refreshServiceResources() {
+    services.refresh();
+    fileManagerServices.refresh();
+  }
 
   @override
   void dispose() {
@@ -2918,6 +2934,39 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   String _serviceId(ServiceSpec s) => s.metadata.annotations["meshagent.service.id"] ?? "";
   String _serviceType(ServiceSpec s) => s.agents.firstOrNull?.annotations["meshagent.agent.type"] ?? "[Unspecified]";
+
+  Map<String, String> _serviceTemplateValues(ServiceSpec service) {
+    final raw = service.metadata.annotations['meshagent.service.template.values'];
+    if (raw == null || raw.trim().isEmpty) {
+      return const <String, String>{};
+    }
+
+    try {
+      return (jsonDecode(raw) as Map).map((key, value) => MapEntry(key.toString(), value?.toString() ?? ''));
+    } catch (_) {
+      return const <String, String>{};
+    }
+  }
+
+  String? _v1WebsiteRootDisplayName() {
+    final allServices = fileManagerServices.state.asReady?.value ?? services.state.asReady?.value;
+    if (allServices == null || allServices.isEmpty) {
+      return null;
+    }
+
+    final webServerService = allServices.firstWhereOrNull((service) => _serviceId(service) == powerboardsWebServerServiceId);
+    if (webServerService == null) {
+      return null;
+    }
+
+    final configuredUrl = _serviceTemplateValues(webServerService)['url']?.trim();
+    if (configuredUrl == null || configuredUrl.isEmpty) {
+      return powerboardsWebServerFolderName;
+    }
+
+    return powerboardsWebServerDisplayHost(configuredUrl, fallback: powerboardsWebServerFolderName);
+  }
+
   String? _serviceAgentName(ServiceSpec service) {
     final name = service.agents.firstOrNull?.name;
     if (name == null) {
@@ -3435,25 +3484,45 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     });
   }
 
-  void _setComposerAttachmentSeed(String agentKey, Iterable<String> paths) {
+  void _setComposerAttachmentSeed(String agentKey, Iterable<String> paths, {Map<String, String>? displayNamesByPath}) {
     final normalizedPaths = paths.map(powerboardsStorageAttachmentPathFromUrl).where((path) => path.isNotEmpty).toList(growable: false);
     if (normalizedPaths.isEmpty) {
       return;
     }
 
+    final normalizedPathSet = normalizedPaths.toSet();
+    final normalizedDisplayNamesByPath = <String, String>{};
+    if (displayNamesByPath != null) {
+      for (final entry in displayNamesByPath.entries) {
+        final normalizedPath = powerboardsStorageAttachmentPathFromUrl(entry.key);
+        final normalizedDisplayName = entry.value.trim();
+        if (normalizedPathSet.contains(normalizedPath) && normalizedDisplayName.isNotEmpty) {
+          normalizedDisplayNamesByPath[normalizedPath] = normalizedDisplayName;
+        }
+      }
+    }
+
     setState(() {
       _composerAttachmentPathsByAgentKey[agentKey] = normalizedPaths;
+      if (normalizedDisplayNamesByPath.isEmpty) {
+        _composerAttachmentDisplayNamesByAgentKey.remove(agentKey);
+      } else {
+        _composerAttachmentDisplayNamesByAgentKey[agentKey] = normalizedDisplayNamesByPath;
+      }
       _composerAttachmentSeedVersionByAgentKey[agentKey] = ++_composerAttachmentSeedRevision;
     });
   }
 
   void _clearComposerAttachmentSeed(String agentKey) {
-    if (!_composerAttachmentPathsByAgentKey.containsKey(agentKey) && !_composerAttachmentSeedVersionByAgentKey.containsKey(agentKey)) {
+    if (!_composerAttachmentPathsByAgentKey.containsKey(agentKey) &&
+        !_composerAttachmentDisplayNamesByAgentKey.containsKey(agentKey) &&
+        !_composerAttachmentSeedVersionByAgentKey.containsKey(agentKey)) {
       return;
     }
 
     setState(() {
       _composerAttachmentPathsByAgentKey.remove(agentKey);
+      _composerAttachmentDisplayNamesByAgentKey.remove(agentKey);
       _composerAttachmentSeedVersionByAgentKey.remove(agentKey);
     });
   }
@@ -3864,7 +3933,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Future<void> showManageAgents() async {
     await showManageAgentsSurface(context: context, projectId: widget.projectId, room: widget.room);
     if (!mounted) return;
-    services.refresh();
+    _refreshServiceResources();
   }
 
   Future<void> _renameCurrentRoomFromPreviewRail() async {
@@ -4396,9 +4465,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               context: context,
               room: widget.room,
               projectId: widget.projectId,
-              onServiceChanged: () {
-                services.refresh();
-              },
+              onServiceChanged: _refreshServiceResources,
             );
           },
         )
@@ -4676,7 +4743,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             description: Text("$error"),
             trailing: ShadButton.outline(
               onPressed: () {
-                services.refresh();
+                _refreshServiceResources();
                 canViewStorage.refresh();
                 canViewDeveloperLogs.refresh();
                 isOwner.refresh();
@@ -4758,7 +4825,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             : null);
     final agentKey = selectedAgentRouteId;
     final composerAttachmentPaths = agentKey == null ? const <String>[] : _composerAttachmentPathsByAgentKey[agentKey] ?? const <String>[];
+    final composerAttachmentDisplayNamesByPath = agentKey == null
+        ? const <String, String>{}
+        : _composerAttachmentDisplayNamesByAgentKey[agentKey] ?? const <String, String>{};
     final composerAttachmentSeedVersion = agentKey == null ? 0 : _composerAttachmentSeedVersionByAgentKey[agentKey] ?? 0;
+    final websiteRootDisplayName = powerboardsUsesDesktopUiPreview(context) ? _v1WebsiteRootDisplayName() : null;
     final normalizedSelectedThreadDisplayName = selectedThreadDisplayName?.trim();
     final resolvedSelectedThreadDisplayName = normalizedSelectedThreadDisplayName == null || normalizedSelectedThreadDisplayName.isEmpty
         ? null
@@ -4832,7 +4903,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         onOpenMeet: () => _showMeetingPane(context),
         onThreadAttachmentsChanged: _recordLocalThreadAttachments,
         composerAttachmentPaths: composerAttachmentPaths,
+        composerAttachmentDisplayNamesByPath: composerAttachmentDisplayNamesByPath,
         composerAttachmentSeedVersion: composerAttachmentSeedVersion,
+        websiteRootDisplayName: websiteRootDisplayName,
         onComposerAttachmentSeedCleared: agentKey == null ? null : () => _clearComposerAttachmentSeed(agentKey),
         onComposerAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel, fromComposerAttachment: true)
@@ -4857,6 +4930,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             : null,
         fileDropOverlayBuilder: chatDropOverlayBuilder,
         projectId: widget.projectId,
+        onServiceChanged: _refreshServiceResources,
       ),
     );
 
@@ -5167,10 +5241,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               child: FileManagerView(
                 client: widget.room,
                 projectId: widget.projectId,
-                services: services,
+                services: fileManagerServices,
                 hideSystem: true,
                 mobileShellOwnsHeader: isMobile && !embedMobileChrome,
                 showDesktopSidetrayToggle: showDesktopSidetrayToggle,
+                canInstallServices: isOwner.state.value == true,
                 controller: _filesHeaderController,
                 desktopHeaderLeadingActions: isMobile || !meetingSessionActive ? const [] : _meetingHeaderPrimaryControls(context),
                 desktopHeaderActions: isMobile ? const [] : actions,
@@ -5182,11 +5257,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 v1RoomPanelWidth: usesDesktopUiPreview ? _desktopPreviewRoomPanelWidth : null,
                 onV1RoomPanelWidthChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelWidth : null,
                 onV1FilePromptRequested: usesDesktopUiPreview
-                    ? (action, filePath, {required responsiveHandoff}) => _handleDesktopPreviewFilePromptRequested(
+                    ? (action, filePath, {required responsiveHandoff, fileDisplayName}) => _handleDesktopPreviewFilePromptRequested(
                         context,
                         action: action,
                         filePath: filePath,
                         responsiveHandoff: responsiveHandoff,
+                        fileDisplayName: fileDisplayName,
                       )
                     : null,
               ),
@@ -6059,9 +6135,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                 context: context,
                                 room: widget.room,
                                 projectId: widget.projectId,
-                                onServiceChanged: () {
-                                  services.refresh();
-                                },
+                                onServiceChanged: _refreshServiceResources,
                               ),
                             );
                           },
@@ -7208,6 +7282,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required String filePath,
     String? preferredAgentKey,
     bool responsiveHandoff = false,
+    String? fileDisplayName,
   }) async {
     if (!mounted || !context.mounted) {
       return;
@@ -7224,8 +7299,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
+    final normalizedFileDisplayName = fileDisplayName?.trim();
+    final composerAttachmentDisplayNamesByPath = normalizedFileDisplayName == null || normalizedFileDisplayName.isEmpty
+        ? null
+        : <String, String>{filePath: normalizedFileDisplayName};
+
     if (responsiveHandoff) {
-      _handoffResponsiveDesktopPreviewFilePrompt(context, agentKey: agentKey, filePath: filePath);
+      _handoffResponsiveDesktopPreviewFilePrompt(
+        context,
+        agentKey: agentKey,
+        filePath: filePath,
+        displayNamesByPath: composerAttachmentDisplayNamesByPath,
+      );
       return;
     }
 
@@ -7242,7 +7327,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewFilePreviewFullscreen = false;
       _desktopPreviewComposerAttachmentPreviewPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     });
-    _setComposerAttachmentSeed(agentKey, [filePath]);
+    _setComposerAttachmentSeed(agentKey, [filePath], displayNamesByPath: composerAttachmentDisplayNamesByPath);
     setPreviewFilePreviewFullscreen(false);
 
     if (!mounted || !context.mounted) {
@@ -7251,7 +7336,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _showDesktopPreviewChatPane(context, agentKey: agentKey);
   }
 
-  void _handoffResponsiveDesktopPreviewFilePrompt(BuildContext context, {required String agentKey, required String filePath}) {
+  void _handoffResponsiveDesktopPreviewFilePrompt(
+    BuildContext context, {
+    required String agentKey,
+    required String filePath,
+    Map<String, String>? displayNamesByPath,
+  }) {
     final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     if (normalizedPath.isEmpty) {
       return;
@@ -7262,7 +7352,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _selectedThreadLabelByAgentKey.remove(agentKey);
       _newThreadResetVersion++;
     });
-    _setComposerAttachmentSeed(agentKey, [normalizedPath]);
+    _setComposerAttachmentSeed(agentKey, [normalizedPath], displayNamesByPath: displayNamesByPath);
 
     if (!mounted || !context.mounted) {
       return;
@@ -7407,6 +7497,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       filePath: path,
       preferredAgentKey: agentKey,
       responsiveHandoff: responsiveHandoff,
+      fileDisplayName: file.title,
     );
   }
 
@@ -7635,9 +7726,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                     context: context,
                                                     room: widget.room,
                                                     projectId: widget.projectId,
-                                                    onServiceChanged: () {
-                                                      services.refresh();
-                                                    },
+                                                    onServiceChanged: _refreshServiceResources,
                                                   );
                                                 },
                                                 child: Text("Install an Agent"),
@@ -7672,9 +7761,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                       context: context,
                                                       room: widget.room,
                                                       projectId: widget.projectId,
-                                                      onServiceChanged: () {
-                                                        services.refresh();
-                                                      },
+                                                      onServiceChanged: _refreshServiceResources,
                                                     );
                                                   },
                                                   child: Text("Install an Agent"),
@@ -7718,7 +7805,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
                               return ToolConnectionScope(
                                 room: widget.room,
-                                tools: [UIToolkit(context: context)],
+                                tools: [
+                                  UIToolkit(
+                                    context: context,
+                                    projectId: widget.projectId,
+                                    roomName: widget.room.roomName,
+                                    onWebServerServiceInstalled: (_) => _refreshServiceResources(),
+                                  ),
+                                ],
                                 builder: (context, error) {
                                   final cs = ShadTheme.of(context).colorScheme;
 
@@ -7867,7 +7961,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                               selectedService: selected.service,
                                                               selectedAgentRouteId: selected.routeId,
                                                               services: supported,
-                                                              onOpen: services.refresh,
+                                                              onOpen: _refreshServiceResources,
                                                               onManageAgents: isOwner.state.value != true ? null : showManageAgents,
                                                               showRoomBreadcrumb: true,
                                                             ),

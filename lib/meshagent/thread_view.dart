@@ -30,6 +30,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat_bot_view.dart';
 import 'package:meshagent_flutter_shadcn/chat_bubble_markdown_config.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
+import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
@@ -41,6 +42,7 @@ import 'package:powerboards/meshagent/powerboards_v1_thread_composer.dart';
 import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
+import 'package:powerboards/meshagent/tools/install_webserver_service.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 
 typedef PowerboardsThreadAttachmentsChanged =
@@ -101,6 +103,25 @@ const Map<String, TextStyle> _desktopV1ThreadCodeHighlightTheme = {
   'deletion': TextStyle(color: _desktopV1ThreadCodeCommentColor),
   'meta': TextStyle(color: _desktopV1ThreadCodeCommentColor),
 };
+
+Uri powerboardsV1ThreadRouteUri({
+  required Uri currentUri,
+  required String pane,
+  String? rawPath,
+  Map<String, String> extraQueryParameters = const {},
+  Set<String> removeQueryParameters = const {},
+}) {
+  final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters)
+    ..['pane'] = pane
+    ..addAll(extraQueryParameters);
+  for (final parameter in removeQueryParameters) {
+    updatedQueryParameters.remove(parameter);
+  }
+  if (rawPath != null) {
+    updatedQueryParameters['p'] = rawPath;
+  }
+  return currentUri.replace(queryParameters: updatedQueryParameters);
+}
 
 EdgeInsets? _desktopV1ThreadMarkdownHeadingPadding(String tag) {
   return switch (tag) {
@@ -250,11 +271,14 @@ class MeshagentThreadView extends StatefulWidget {
     this.onThreadAttachmentsChanged,
     this.composerAttachmentSeedVersion = 0,
     this.composerAttachmentPaths = const [],
+    this.composerAttachmentDisplayNamesByPath = const {},
+    this.websiteRootDisplayName,
     this.onComposerAttachmentSeedCleared,
     this.onComposerAttachmentOpen,
     this.onComposerAttachmentRemoved,
     this.onThreadAttachmentOpen,
     this.fileDropOverlayBuilder,
+    this.onServiceChanged,
   });
 
   final String projectId;
@@ -285,11 +309,14 @@ class MeshagentThreadView extends StatefulWidget {
   final PowerboardsThreadAttachmentsChanged? onThreadAttachmentsChanged;
   final int composerAttachmentSeedVersion;
   final List<String> composerAttachmentPaths;
+  final Map<String, String> composerAttachmentDisplayNamesByPath;
+  final String? websiteRootDisplayName;
   final VoidCallback? onComposerAttachmentSeedCleared;
   final ValueChanged<String>? onComposerAttachmentOpen;
   final ValueChanged<String>? onComposerAttachmentRemoved;
   final ValueChanged<String>? onThreadAttachmentOpen;
   final FileDropOverlayBuilder? fileDropOverlayBuilder;
+  final VoidCallback? onServiceChanged;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -326,6 +353,68 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
 
     return "Message $normalizedAgentName...";
+  }
+
+  bool _handleMarkdownLink(BuildContext context, String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'powerboards') {
+      return false;
+    }
+
+    if (uri.host == 'files' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'webserver') {
+      _openWebServerFolder(context);
+      return true;
+    }
+    if (uri.host == 'preview' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'webserver') {
+      _openWebServerPreview(context);
+      return true;
+    }
+    if (uri.host == 'copy') {
+      final text = uri.queryParameters['text']?.trim();
+      if (text == null || text.isEmpty) {
+        return true;
+      }
+      Clipboard.setData(ClipboardData(text: text));
+      return true;
+    }
+    return false;
+  }
+
+  void _openWebServerFolder(BuildContext context) {
+    _replaceRoomRouteState(
+      context,
+      pane: 'files',
+      rawPath: '$powerboardsWebServerFolderName/',
+      removeQueryParameters: const {'webserver_preview'},
+    );
+  }
+
+  void _openWebServerPreview(BuildContext context) {
+    _replaceRoomRouteState(
+      context,
+      pane: 'files',
+      rawPath: '$powerboardsWebServerFolderName/',
+      extraQueryParameters: const {'webserver_preview': '1'},
+    );
+  }
+
+  void _replaceRoomRouteState(
+    BuildContext context, {
+    required String pane,
+    String? rawPath,
+    Map<String, String> extraQueryParameters = const {},
+    Set<String> removeQueryParameters = const {},
+  }) {
+    final state = PathRouteMatch.of(context);
+    context.go(
+      powerboardsV1ThreadRouteUri(
+        currentUri: state.uri,
+        pane: pane,
+        rawPath: rawPath,
+        extraQueryParameters: extraQueryParameters,
+        removeQueryParameters: removeQueryParameters,
+      ).toString(),
+    );
   }
 
   Widget _buildThreadEmptyState(BuildContext context, {required String title, required String description, required bool compact}) {
@@ -409,12 +498,14 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _configurePowerboardsClientToolkit();
     _scheduleComposerAttachmentSeed();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _configurePowerboardsClientToolkit();
     _restoreThreadScrollOffsetFromRoute();
   }
 
@@ -423,6 +514,25 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     _chatController.removeListener(_onChatControllerChanged);
     _chatController.dispose();
     super.dispose();
+  }
+
+  void _configurePowerboardsClientToolkit() {
+    final projectId = widget.projectId.trim();
+    final roomName = widget.client.roomName?.trim();
+    if (projectId.isEmpty || roomName == null || roomName.isEmpty) {
+      _chatController.removeClientToolkit('powerboards');
+      return;
+    }
+
+    _chatController.addClientToolkit(
+      InstallWebServerServiceToolkit(
+        projectId: projectId,
+        roomName: roomName,
+        onInstalled: (_) => widget.onServiceChanged?.call(),
+        onUninstalled: (_) => widget.onServiceChanged?.call(),
+        enableV1Actions: powerboardsUsesDesktopUiPreview(context),
+      ),
+    );
   }
 
   String _currentParticipantDisplayName() {
@@ -505,9 +615,16 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   String _composerAttachmentDisplayName(String path) {
-    final normalized = path.trim();
+    final normalized = powerboardsStorageAttachmentPathFromUrl(path).trim();
     if (normalized.isEmpty) {
       return normalized;
+    }
+
+    final explicitDisplayName =
+        widget.composerAttachmentDisplayNamesByPath[normalized] ?? widget.composerAttachmentDisplayNamesByPath[path.trim()];
+    final normalizedExplicitDisplayName = explicitDisplayName?.trim();
+    if (normalizedExplicitDisplayName != null && normalizedExplicitDisplayName.isNotEmpty) {
+      return normalizedExplicitDisplayName;
     }
 
     final segments = normalized.split('/').where((segment) => segment.trim().isNotEmpty).toList(growable: false);
@@ -747,6 +864,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
               agentName: widget.agentName,
               config: config,
               defaultInput: defaultInput,
+              websiteRootDisplayName: widget.websiteRootDisplayName,
             )
           : null,
       toolsBuilder: (context, controller, snapshot) =>
@@ -812,6 +930,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             inlineCodeTextColor: PbColors.customCodeInlineText,
             inlineCodeBackgroundColor: PbColors.surfaceAccentSoft,
             inlineCodeHorizontalPadding: true,
+            suppressRepeatedChatBubbleText: true,
+            suppressAgentOnlyChatContext: true,
             threadErrorSurfaceColor: PbColors.customAlertSoft,
             threadErrorTextColor: Color.lerp(PbColors.customAlert, PbColors.textBody, 0.18),
             markdownHorizontalRuleColor: PbColors.borderSoft,
@@ -820,6 +940,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             markdownSuppressHeadingDividers: true,
             markdownHeadingPaddingResolver: _desktopV1ThreadMarkdownHeadingPadding,
             markdownHeadingStyleResolver: _desktopV1ThreadMarkdownHeadingStyle,
+            markdownLinkHandler: _handleMarkdownLink,
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(

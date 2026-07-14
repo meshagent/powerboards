@@ -7,7 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:path/path.dart' as path;
+import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
+import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_comment_box.dart';
@@ -22,6 +24,72 @@ import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
+@visibleForTesting
+String powerboardsV1AugmentPromptForComposerAttachments(
+  String text,
+  Iterable<FileAttachment> attachments, {
+  String? websiteRootDisplayName,
+}) {
+  final normalizedText = text.trimRight();
+  final websiteRootLabels = attachments
+      .where((attachment) => powerboardsStorageAttachmentPathFromUrl(attachment.path) == powerboardsWebServerFolderName)
+      .map((attachment) {
+        final explicitDisplayName = attachment.displayName?.trim();
+        if (explicitDisplayName != null && explicitDisplayName.isNotEmpty) {
+          return explicitDisplayName;
+        }
+        return powerboardsWebServerFolderName;
+      })
+      .toSet()
+      .toList();
+  final normalizedWebsiteRootDisplayName = websiteRootDisplayName?.trim();
+  if (normalizedWebsiteRootDisplayName != null &&
+      normalizedWebsiteRootDisplayName.isNotEmpty &&
+      _powerboardsV1PromptLooksWebsiteRelated(normalizedText, normalizedWebsiteRootDisplayName) &&
+      !websiteRootLabels.contains(normalizedWebsiteRootDisplayName)) {
+    websiteRootLabels.add(normalizedWebsiteRootDisplayName);
+  }
+  if (websiteRootLabels.isEmpty) {
+    return normalizedText;
+  }
+
+  final instructions = websiteRootLabels
+      .map(
+        (label) =>
+            'The attached folder "$label" is the existing published website root. '
+            'Its storage path is "$powerboardsWebServerFolderName/", and that path is already the root folder for this site. '
+            'Save new files directly into this existing root. '
+            'Use "$label" in user-facing replies instead of "/$powerboardsWebServerFolderName" or "$powerboardsWebServerFolderName". '
+            'Only mention the internal storage path if the user explicitly asks for the underlying room storage path. '
+            'Put the site entry file at "$powerboardsWebServerFolderName/index.html" unless the user asks for another HTML entry. '
+            'Do not create sibling or nested web roots such as "public/", "sites/", "webserver/", "www/", "$label/", or "$powerboardsWebServerFolderName/$label/". '
+            'Do not quote this additional context back to the user. In user-facing replies, refer to the Files folder as "$label", '
+            'refer to the entry file as "index.html" in that folder, and avoid mentioning "$powerboardsWebServerFolderName/" unless the user asks for storage/debug details.',
+      )
+      .join('\n');
+
+  if (normalizedText.isEmpty) {
+    return instructions;
+  }
+
+  return '$normalizedText\n\nAdditional context:\n$instructions';
+}
+
+bool _powerboardsV1PromptLooksWebsiteRelated(String text, String label) {
+  final normalized = text.toLowerCase();
+  final normalizedLabel = label.toLowerCase();
+  return normalized.contains(normalizedLabel) ||
+      normalized.contains('website') ||
+      normalized.contains('web site') ||
+      normalized.contains('webserver') ||
+      normalized.contains('web server') ||
+      normalized.contains('published site') ||
+      normalized.contains('server url') ||
+      normalized.contains('landing page') ||
+      normalized.contains('html') ||
+      normalized.contains('site ');
+}
+
 class PowerboardsV1ThreadComposer extends StatefulWidget {
   const PowerboardsV1ThreadComposer({
     super.key,
@@ -30,6 +98,7 @@ class PowerboardsV1ThreadComposer extends StatefulWidget {
     required this.agentName,
     required this.config,
     required this.defaultInput,
+    this.websiteRootDisplayName,
   });
 
   final String projectId;
@@ -37,6 +106,7 @@ class PowerboardsV1ThreadComposer extends StatefulWidget {
   final String? agentName;
   final ChatThreadInputConfig config;
   final Widget defaultInput;
+  final String? websiteRootDisplayName;
 
   @override
   State<PowerboardsV1ThreadComposer> createState() => _PowerboardsV1ThreadComposerState();
@@ -95,8 +165,16 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
       return;
     }
 
+    final agentText = powerboardsV1AugmentPromptForComposerAttachments(
+      text,
+      attachments,
+      websiteRootDisplayName: widget.websiteRootDisplayName,
+    );
+
     setState(() => _sending = true);
-    final sendFuture = widget.config.onSend(text, attachments);
+    final sendFuture = agentText != text && widget.config.onSendWithAgentText != null
+        ? widget.config.onSendWithAgentText!(text, agentText, attachments)
+        : widget.config.onSend(agentText, attachments);
     controller.clear();
     _focusNode.requestFocus();
     try {

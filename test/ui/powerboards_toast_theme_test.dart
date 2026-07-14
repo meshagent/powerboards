@@ -73,10 +73,13 @@ void main() {
     expect(toastTheme?.closeIconPosition, powerboardsToastCloseIconPosition);
     expect(toastTheme?.constraints?.minWidth, 380);
     expect(toastTheme?.constraints?.maxWidth, 380);
+    expect(toastTheme?.canMerge, isTrue);
     expect(toastTheme?.showCloseIconOnlyWhenHovered, isFalse);
     expect(toastTheme?.textDirection, TextDirection.ltr);
     expect(toastTheme?.titleStyle?.fontSize, PowerboardsTypography.label.fontSize);
     expect(toastTheme?.descriptionStyle?.fontSize, PowerboardsTypography.meta.fontSize);
+    expect(toastTheme?.titleStyle?.backgroundColor, Colors.transparent);
+    expect(toastTheme?.descriptionStyle?.backgroundColor, Colors.transparent);
   });
 
   testWidgets('shrinks v1 toast width for responsive web preview widths', (tester) async {
@@ -102,8 +105,11 @@ void main() {
     );
 
     expect(toastTheme?.backgroundColor, PbColors.surfacePanel);
+    expect(toastTheme?.canMerge, isFalse);
     expect(toastTheme?.titleStyle?.color, PbColors.alert);
     expect(toastTheme?.descriptionStyle?.color, PbColors.textMuted);
+    expect(toastTheme?.titleStyle?.backgroundColor, Colors.transparent);
+    expect(toastTheme?.descriptionStyle?.backgroundColor, Colors.transparent);
   });
 
   test('powerboardsToast separates title and body text', () {
@@ -126,6 +132,37 @@ void main() {
     final toast = powerboardsToast(title: 'Device settings', description: 'Microphone access was blocked.', destructive: true);
 
     expect(toast.variant, ShadToastVariant.destructive);
+  });
+
+  testWidgets('toast close button renders without an overlay-backed tooltip context', (tester) async {
+    late BuildContext toastContext;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) {
+          return ShadTheme(
+            data: ShadThemeData(),
+            child: ShadToaster(
+              child: Builder(
+                builder: (context) {
+                  toastContext = context;
+                  return child!;
+                },
+              ),
+            ),
+          );
+        },
+        home: const SizedBox.shrink(),
+      ),
+    );
+
+    ShadToaster.of(toastContext).show(powerboardsToast(title: 'Website removed', description: 'The website files were kept.'));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Website removed'), findsOneWidget);
+    expect(find.byTooltip('Close'), findsNothing);
+    expect(find.byType(PowerboardsToastCloseButton), findsOneWidget);
   });
 
   testWidgets('keeps legacy desktop toast theme unchanged', (tester) async {

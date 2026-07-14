@@ -37,6 +37,17 @@ Widget _desktopInstallDialogBodyViewport({required Widget child}) {
   return Padding(padding: powerboardsDialogScrollViewportPadding, child: child);
 }
 
+String powerboardsInstalledServiceRoute({required String projectId, required String roomName, required String serviceId}) {
+  if (serviceId == powerboardsWebServerServiceId) {
+    return Uri(
+      path: "/p/${fromUUID(projectId)}/r/$roomName",
+      queryParameters: {'pane': 'files', 'p': '$powerboardsWebServerFolderName/'},
+    ).toString();
+  }
+
+  return "/p/${fromUUID(projectId)}/r/$roomName/a/$serviceId";
+}
+
 Widget _desktopInstallDialogDescriptionForStep(BuildContext context, String signature, ServiceType type) {
   final theme = ShadTheme.of(context);
 
@@ -241,8 +252,12 @@ class _AgentInstaller extends State<AgentInstaller> {
   _InstallerStep get _step {
     if (_collectingUrl && widget.template == null) return _InstallerStep.url;
     if (!_confirmed) return _InstallerStep.review;
-    if (_projectId == null && widget.template == null) return _InstallerStep.selectProject;
-    if (_roomName == null && widget.template == null) return _InstallerStep.selectRoom;
+    if (_projectId == null && widget.template == null) {
+      return _InstallerStep.selectProject;
+    }
+    if (_roomName == null && widget.template == null) {
+      return _InstallerStep.selectRoom;
+    }
     return _InstallerStep.confirm;
   }
 
@@ -361,14 +376,35 @@ class _AgentInstaller extends State<AgentInstaller> {
     });
   }
 
-  void _handleInstalled(BuildContext context, String serviceId) {
+  Future<void> _handleInstalled(BuildContext context, String serviceId) async {
     final projectId = _projectId!;
     final roomName = _roomName!;
+
+    if (serviceId == powerboardsWebServerServiceId) {
+      try {
+        await powerboardsEnsureWebServerFolderExists(client: getMeshagentClient(), projectId: projectId, roomName: roomName);
+      } catch (error) {
+        if (context.mounted) {
+          ShadToaster.of(context).show(
+            powerboardsToast(
+              title: 'Website installed',
+              description: 'The service was installed, but the website folder could not be created: $error',
+              destructive: true,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
+      }
+    }
+
+    if (!context.mounted) {
+      return;
+    }
 
     if (widget.onInstalled != null) {
       widget.onInstalled!(context, projectId, roomName, serviceId);
     } else {
-      context.go("/p/${fromUUID(projectId)}/r/$roomName/a/$serviceId");
+      context.go(powerboardsInstalledServiceRoute(projectId: projectId, roomName: roomName, serviceId: serviceId));
     }
   }
 

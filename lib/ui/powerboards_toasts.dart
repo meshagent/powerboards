@@ -69,35 +69,34 @@ class _PowerboardsToastCloseButtonState extends State<PowerboardsToastCloseButto
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Close',
-      waitDuration: const Duration(milliseconds: 500),
-      child: Semantics(
-        label: 'Close notification',
-        button: true,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() => _hovered = false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => ShadToaster.of(context).hide(),
-            child: Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                color: _hovered ? PbColors.borderFaint : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              alignment: Alignment.center,
-              child: Opacity(
-                opacity: _hovered ? 1 : 0.45,
-                child: const PbSvgIcon(assetName: 'x', size: 18, color: PbColors.textMuted),
-              ),
+    final closeButton = Semantics(
+      label: 'Close notification',
+      button: true,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => ShadToaster.of(context).hide(),
+          child: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(color: _hovered ? PbColors.borderFaint : Colors.transparent, borderRadius: BorderRadius.circular(10)),
+            alignment: Alignment.center,
+            child: Opacity(
+              opacity: _hovered ? 1 : 0.45,
+              child: const PbSvgIcon(assetName: 'x', size: 18, color: PbColors.textMuted),
             ),
           ),
         ),
       ),
     );
+
+    if (Overlay.maybeOf(context) == null) {
+      return closeButton;
+    }
+
+    return Tooltip(message: 'Close', waitDuration: const Duration(milliseconds: 500), child: closeButton);
   }
 }

@@ -10,8 +10,8 @@ import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
-import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/meshagent/route_service_match.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/powerboards_mobile_overlay_header.dart';
@@ -150,10 +150,7 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
     final theme = ShadTheme.of(context);
     final titleStyle = powerboardsAgentCardTitleTextStyle(context);
     final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
-    final useV1VoiceIcon =
-        widget.option.iconAssetName != null &&
-        !powerboardsUsesNativeMobileDialogLayout(context) &&
-        powerboardsUsesDesktopUiPreview(context);
+    final useAssetIcon = widget.option.iconAssetName != null;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -227,7 +224,7 @@ class _AgentOptionTileState extends State<AgentOptionTile> {
                 height: 44,
                 decoration: BoxDecoration(color: widget.option.color, shape: BoxShape.circle),
                 alignment: Alignment.center,
-                child: useV1VoiceIcon
+                child: useAssetIcon
                     ? PbSvgIcon(assetName: widget.option.iconAssetName!, size: 22, color: Colors.white)
                     : Icon(widget.option.icon, color: Colors.white, size: 22),
               ),
@@ -267,7 +264,9 @@ AgentRuntimeStatus parseStatus(dynamic raw) {
   final s = (raw ?? '').toString().toLowerCase();
   if (s.contains('pulling')) return AgentRuntimeStatus.pulling;
   if (s == 'running') return AgentRuntimeStatus.running;
-  if (s.contains('not_running') || s.contains('notrun')) return AgentRuntimeStatus.notRunning;
+  if (s.contains('not_running') || s.contains('notrun')) {
+    return AgentRuntimeStatus.notRunning;
+  }
   if (s.contains('err')) return AgentRuntimeStatus.error;
   if (s == 'invalid') return AgentRuntimeStatus.invalid;
   return AgentRuntimeStatus.unknown;
@@ -288,6 +287,9 @@ class _InstallAgentDialog extends StatelessWidget {
       roomName: roomName,
       onInstalled: (ctx, projectId, roomName, serviceId) {
         Navigator.of(ctx).pop(true);
+        if (serviceId == powerboardsWebServerServiceId && context.mounted) {
+          context.go(powerboardsInstalledServiceRoute(projectId: projectId, roomName: roomName, serviceId: serviceId));
+        }
       },
     );
   }
@@ -616,9 +618,9 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                     id: service.metadata.annotations["meshagent.service.id"] ?? "",
                     readme: service.metadata.annotations["meshagent.service.readme"],
                     title: service.metadata.name,
-                    subtitle: service.metadata.description ?? "",
+                    subtitle: powerboardsDisplayServiceDescriptionForService(service) ?? "",
                     icon: LucideIcons.puzzle,
-                    iconAssetName: _voiceAgentIconAssetName(service: service),
+                    iconAssetName: powerboardsServiceIconAssetName(service: service) ?? _voiceAgentIconAssetName(service: service),
                     color: const Color(0xFF222222),
                     canChange: true,
                     template: null,
@@ -630,10 +632,11 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                   readme: available.parsed.metadata.annotations["meshagent.service.readme"],
                   id: available.parsed.metadata.annotations["meshagent.service.id"] ?? "",
                   title: available.parsed.metadata.name,
-                  subtitle: available.parsed.metadata.description ?? "",
+                  subtitle: powerboardsDisplayServiceDescriptionForTemplate(available.parsed) ?? "",
                   template: available.template,
                   icon: LucideIcons.bot,
-                  iconAssetName: _voiceAgentIconAssetName(template: available.parsed),
+                  iconAssetName:
+                      powerboardsServiceIconAssetName(template: available.parsed) ?? _voiceAgentIconAssetName(template: available.parsed),
                   color: const Color(0xFF222222),
                   parsed: available.parsed,
                 ),

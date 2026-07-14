@@ -40,6 +40,9 @@ class PbFilesItemData {
     required this.fileType,
     this.kind = PbFilesItemKind.file,
     this.previewState = PbAttachmentPreviewState.none,
+    this.iconAssetNameOverride,
+    this.iconColorOverride,
+    this.renameActionLabelOverride,
   });
 
   factory PbFilesItemData.fromFileName({
@@ -107,6 +110,9 @@ class PbFilesItemData {
   final PbAttachmentFileType fileType;
   final PbFilesItemKind kind;
   final PbAttachmentPreviewState previewState;
+  final String? iconAssetNameOverride;
+  final Color? iconColorOverride;
+  final String? renameActionLabelOverride;
 
   PbFilesItemData copyWith({
     String? id,
@@ -126,6 +132,9 @@ class PbFilesItemData {
     PbAttachmentFileType? fileType,
     PbFilesItemKind? kind,
     PbAttachmentPreviewState? previewState,
+    String? iconAssetNameOverride,
+    Color? iconColorOverride,
+    String? renameActionLabelOverride,
   }) {
     return PbFilesItemData(
       id: id ?? this.id,
@@ -145,6 +154,9 @@ class PbFilesItemData {
       fileType: fileType ?? this.fileType,
       kind: kind ?? this.kind,
       previewState: previewState ?? this.previewState,
+      iconAssetNameOverride: iconAssetNameOverride ?? this.iconAssetNameOverride,
+      iconColorOverride: iconColorOverride ?? this.iconColorOverride,
+      renameActionLabelOverride: renameActionLabelOverride ?? this.renameActionLabelOverride,
     );
   }
 
@@ -179,6 +191,10 @@ class PbFilesItemData {
   }
 
   String get iconAssetName {
+    if (iconAssetNameOverride != null) {
+      return iconAssetNameOverride!;
+    }
+
     if (kind == PbFilesItemKind.folder) {
       return 'folder';
     }
@@ -187,6 +203,10 @@ class PbFilesItemData {
   }
 
   Color get iconColor {
+    if (iconColorOverride != null) {
+      return iconColorOverride!;
+    }
+
     if (kind == PbFilesItemKind.folder) {
       return PbColors.surfaceRailActive;
     }

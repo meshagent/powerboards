@@ -192,6 +192,13 @@ void main() {
     expect(fileName, 'Team- Updates-2-items-20260603-144105.zip');
   });
 
+  test('v1 download archive staging path is hidden from file rows', () {
+    expect(powerboardsV1IsDownloadArchiveStagingPath('.powerboards-downloads'), isTrue);
+    expect(powerboardsV1IsDownloadArchiveStagingPath('.powerboards-downloads/site.zip'), isTrue);
+    expect(powerboardsV1IsDownloadArchiveStagingPath('website/site.zip'), isFalse);
+    expect(powerboardsV1IsDownloadArchiveStagingPath('manual.zip'), isFalse);
+  });
+
   test('v1 visible selected ids retain visible file and folder rows', () {
     final realFile = _file('docs/readme.md');
     final realFolder = _file('docs/archive/', kind: PbFilesItemKind.folder);
@@ -265,6 +272,12 @@ void main() {
     expect(powerboardsV1FolderEntriesForSession(projectId: 'project-a', roomName: 'room-b', folderPath: 'docs'), isNull);
     expect(powerboardsV1FolderEntriesForSession(projectId: 'project-b', roomName: 'room-a', folderPath: 'docs'), isNull);
     expect(powerboardsV1FolderEntriesForSession(projectId: 'project-a', roomName: 'room-a', folderPath: 'other'), isNull);
+  });
+
+  test('live v1 folder entries only render when the loaded folder still matches the route', () {
+    expect(powerboardsV1LiveFolderEntriesMatchRoute(routeFolder: 'website', activeFolder: 'website', loadedFolderPath: 'website'), isTrue);
+    expect(powerboardsV1LiveFolderEntriesMatchRoute(routeFolder: '', activeFolder: '', loadedFolderPath: 'website'), isFalse);
+    expect(powerboardsV1LiveFolderEntriesMatchRoute(routeFolder: 'website', activeFolder: '', loadedFolderPath: 'website'), isFalse);
   });
 }
 

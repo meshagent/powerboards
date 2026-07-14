@@ -83,14 +83,19 @@ class PbFilesToolbar extends StatelessWidget {
     super.key,
     required this.hasSelection,
     required this.selectedCount,
+    required this.currentPath,
     required this.filterController,
     required this.filterEnabled,
     required this.responsiveMode,
     required this.padding,
     required this.onFilterChanged,
     required this.onCreateFolder,
+    this.onInstallWebServer,
     required this.onCreateTextFile,
     required this.onUpload,
+    this.showWebServerPreview = false,
+    this.webServerPreviewActive = false,
+    this.onPreviewWebServer,
     required this.onClearSelection,
     required this.onDeleteSelection,
     required this.onDownloadSelection,
@@ -98,14 +103,19 @@ class PbFilesToolbar extends StatelessWidget {
 
   final bool hasSelection;
   final int selectedCount;
+  final String currentPath;
   final TextEditingController filterController;
   final bool filterEnabled;
   final PbFilesResponsiveMode responsiveMode;
   final PbFilesPanelPadding padding;
   final ValueChanged<String> onFilterChanged;
   final VoidCallback onCreateFolder;
+  final VoidCallback? onInstallWebServer;
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
+  final bool showWebServerPreview;
+  final bool webServerPreviewActive;
+  final VoidCallback? onPreviewWebServer;
   final VoidCallback onClearSelection;
   final VoidCallback onDeleteSelection;
   final VoidCallback onDownloadSelection;
@@ -117,13 +127,24 @@ class PbFilesToolbar extends StatelessWidget {
         final stackedActions =
             responsiveMode == PbFilesResponsiveMode.mobile ||
             responsiveMode == PbFilesResponsiveMode.overlay && constraints.maxWidth <= PbBreakpoints.shellMobile;
-        final iconActions = constraints.maxWidth < 620 && !stackedActions;
+        final iconOnlyActions = stackedActions
+            ? const <_FilesToolbarAction>{}
+            : _FilesToolbarActionState.resolve(
+                maxWidth: constraints.maxWidth,
+                showPreviewWebServer: showWebServerPreview,
+                showInstallWebServer: currentPath.isEmpty && onInstallWebServer != null,
+              ).iconOnly;
         final createActions = _FilesCreateActions(
-          iconActions: iconActions,
+          iconOnlyActions: iconOnlyActions,
           fullWidth: stackedActions,
+          currentPath: currentPath,
           onCreateFolder: onCreateFolder,
+          onInstallWebServer: onInstallWebServer,
           onCreateTextFile: onCreateTextFile,
           onUpload: onUpload,
+          showWebServerPreview: showWebServerPreview,
+          webServerPreviewActive: webServerPreviewActive,
+          onPreviewWebServer: onPreviewWebServer,
         );
         final filterField = PbMenuFilterField(
           placeholder: 'Filter...',
@@ -435,127 +456,212 @@ class _FilesBreadcrumbSeparator extends StatelessWidget {
   }
 }
 
+enum _FilesToolbarAction { createFolder, createTextFile, upload, previewWebServer, installWebServer }
+
+class _FilesToolbarActionState {
+  const _FilesToolbarActionState({required this.iconOnly});
+
+  static const _filterGap = 10.0;
+  static const _minimumFilterWidth = 220.0;
+  static const _actionGap = 10.0;
+  static const _iconButtonWidth = 48.0;
+  static const _fullWidths = <_FilesToolbarAction, double>{
+    _FilesToolbarAction.createFolder: 148,
+    _FilesToolbarAction.createTextFile: 164,
+    _FilesToolbarAction.upload: 132,
+    _FilesToolbarAction.previewWebServer: 134,
+    _FilesToolbarAction.installWebServer: 164,
+  };
+
+  static const _collapseOrder = <_FilesToolbarAction>[
+    _FilesToolbarAction.installWebServer,
+    _FilesToolbarAction.previewWebServer,
+    _FilesToolbarAction.upload,
+    _FilesToolbarAction.createTextFile,
+    _FilesToolbarAction.createFolder,
+  ];
+
+  final Set<_FilesToolbarAction> iconOnly;
+
+  static _FilesToolbarActionState resolve({
+    required double maxWidth,
+    required bool showPreviewWebServer,
+    required bool showInstallWebServer,
+  }) {
+    final actions = <_FilesToolbarAction>[
+      _FilesToolbarAction.createFolder,
+      _FilesToolbarAction.createTextFile,
+      _FilesToolbarAction.upload,
+      if (showPreviewWebServer) _FilesToolbarAction.previewWebServer,
+      if (showInstallWebServer) _FilesToolbarAction.installWebServer,
+    ];
+    final iconOnly = <_FilesToolbarAction>{};
+
+    for (final action in _collapseOrder) {
+      if (_fits(maxWidth, actions, iconOnly)) {
+        break;
+      }
+      if (actions.contains(action)) {
+        iconOnly.add(action);
+      }
+    }
+
+    return _FilesToolbarActionState(iconOnly: Set.unmodifiable(iconOnly));
+  }
+
+  static bool _fits(double maxWidth, List<_FilesToolbarAction> actions, Set<_FilesToolbarAction> iconOnly) {
+    final actionWidth = actions.fold<double>(
+      0,
+      (sum, action) => sum + (iconOnly.contains(action) ? _iconButtonWidth : _fullWidths[action]!),
+    );
+    final actionGaps = (actions.length - 1).clamp(0, double.infinity) * _actionGap;
+    return actionWidth + actionGaps + _filterGap + _minimumFilterWidth <= maxWidth;
+  }
+}
+
 class _FilesCreateActions extends StatefulWidget {
   const _FilesCreateActions({
-    required this.iconActions,
+    required this.iconOnlyActions,
     required this.fullWidth,
+    required this.currentPath,
     required this.onCreateFolder,
+    this.onInstallWebServer,
     required this.onCreateTextFile,
     required this.onUpload,
+    required this.showWebServerPreview,
+    required this.webServerPreviewActive,
+    this.onPreviewWebServer,
   });
 
-  final bool iconActions;
+  final Set<_FilesToolbarAction> iconOnlyActions;
   final bool fullWidth;
+  final String currentPath;
   final VoidCallback onCreateFolder;
+  final VoidCallback? onInstallWebServer;
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
+  final bool showWebServerPreview;
+  final bool webServerPreviewActive;
+  final VoidCallback? onPreviewWebServer;
 
   @override
   State<_FilesCreateActions> createState() => _FilesCreateActionsState();
 }
 
 class _FilesCreateActionsState extends State<_FilesCreateActions> {
-  bool _createOpen = false;
+  static const _newWebsiteLabel = 'New website';
+  static const _previewWebsiteLabel = 'Preview';
 
-  void _closeCreateMenu() {
-    if (_createOpen) {
-      setState(() => _createOpen = false);
-    }
+  bool get _showInstallWebServerButton => widget.currentPath.isEmpty && widget.onInstallWebServer != null;
+  bool get _showPreviewWebServerButton => widget.showWebServerPreview;
+
+  bool _iconOnly(_FilesToolbarAction action) {
+    return widget.iconOnlyActions.contains(action);
+  }
+
+  Widget _buildInstallWebServerButton({required double? width}) {
+    final iconOnly = _iconOnly(_FilesToolbarAction.installWebServer);
+    return _FilesToolbarButton(
+      label: _newWebsiteLabel,
+      iconAssetName: 'folder-code',
+      iconOnly: iconOnly,
+      fullWidth: widget.fullWidth,
+      width: width,
+      onPressed: widget.onInstallWebServer,
+    );
+  }
+
+  Widget _buildPreviewWebServerButton({required double? width}) {
+    final active = widget.webServerPreviewActive;
+    final iconOnly = _iconOnly(_FilesToolbarAction.previewWebServer);
+    return _FilesToolbarButton(
+      label: _previewWebsiteLabel,
+      iconAssetName: 'globe',
+      iconOnly: iconOnly,
+      fullWidth: widget.fullWidth,
+      width: width,
+      backgroundColor: active ? PbColors.statusOnline : PbColors.surfacePanelSoft,
+      pressedBackgroundColor: active ? PbColors.statusOnline : PbColors.surfacePanelSoft,
+      borderColor: active ? PbColors.statusOnline : PbColors.borderSoft,
+      pressedBorderColor: active ? PbColors.statusOnline : PbColors.borderSoft,
+      foregroundColor: active ? PbColors.textInverse : PbColors.textMuted,
+      onPressed: widget.onPreviewWebServer,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (!widget.fullWidth) {
+      final createFolderIconOnly = _iconOnly(_FilesToolbarAction.createFolder);
+      final createTextFileIconOnly = _iconOnly(_FilesToolbarAction.createTextFile);
+      final uploadIconOnly = _iconOnly(_FilesToolbarAction.upload);
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           _FilesToolbarButton(
             label: 'New folder',
             iconAssetName: 'folder-plus',
-            iconOnly: widget.iconActions,
-            width: widget.iconActions ? 48 : 148,
-            contentOffset: widget.iconActions ? Offset.zero : const Offset(-2, 0),
+            iconOnly: createFolderIconOnly,
+            width: createFolderIconOnly ? 48 : 148,
+            contentOffset: createFolderIconOnly ? Offset.zero : const Offset(-2, 0),
             onPressed: widget.onCreateFolder,
           ),
           const SizedBox(width: 10),
           _FilesToolbarButton(
             label: 'New text file',
             iconAssetName: 'file-plus-corner',
-            iconOnly: widget.iconActions,
-            width: widget.iconActions ? 48 : 164,
-            contentOffset: widget.iconActions ? Offset.zero : const Offset(-2, 0),
+            iconOnly: createTextFileIconOnly,
+            width: createTextFileIconOnly ? 48 : 164,
+            contentOffset: createTextFileIconOnly ? Offset.zero : const Offset(-2, 0),
             onPressed: widget.onCreateTextFile,
           ),
           const SizedBox(width: 10),
           _FilesToolbarButton(
             label: 'Upload',
             iconAssetName: 'arrow-up-from-line',
-            iconOnly: widget.iconActions,
-            width: widget.iconActions ? 48 : 132,
+            iconOnly: uploadIconOnly,
+            width: uploadIconOnly ? 48 : 132,
             onPressed: widget.onUpload,
           ),
+          if (_showPreviewWebServerButton) ...[
+            const SizedBox(width: 10),
+            _buildPreviewWebServerButton(width: _iconOnly(_FilesToolbarAction.previewWebServer) ? 48 : 134),
+          ],
+          if (_showInstallWebServerButton) ...[
+            const SizedBox(width: 10),
+            _buildInstallWebServerButton(width: _iconOnly(_FilesToolbarAction.installWebServer) ? 48 : 164),
+          ],
         ],
       );
     }
 
-    final createButton = PbMenuAnchor(
-      placement: PbMenuAnchorPlacement.bottomLeft,
-      gap: 6,
-      triggerHeight: PbSizes.buttonTertiaryHeight,
-      onDismiss: _closeCreateMenu,
-      panel: _createOpen
-          ? PbMenuCard(
-              width: 220,
-              child: PbMenuList(
-                children: [
-                  PbMenuOption(
-                    title: 'New folder',
-                    leadingIconAssetName: 'folder-plus',
-                    singleLine: true,
-                    onPressed: () {
-                      _closeCreateMenu();
-                      widget.onCreateFolder();
-                    },
-                  ),
-                  PbMenuOption(
-                    title: 'New text file',
-                    leadingIconAssetName: 'file-plus-corner',
-                    singleLine: true,
-                    onPressed: () {
-                      _closeCreateMenu();
-                      widget.onCreateTextFile();
-                    },
-                  ),
-                ],
-              ),
-            )
-          : null,
-      child: _FilesToolbarButton(
-        label: 'Create',
-        iconAssetName: 'plus',
-        iconOnly: widget.iconActions,
-        fullWidth: widget.fullWidth,
-        width: widget.fullWidth ? null : (widget.iconActions ? 48 : 132),
-        contentOffset: widget.iconActions ? Offset.zero : const Offset(-3, 0),
-        selected: _createOpen,
-        onPressed: () => setState(() => _createOpen = !_createOpen),
-      ),
-    );
-    final uploadButton = _FilesToolbarButton(
-      label: 'Upload',
-      iconAssetName: 'arrow-up-from-line',
-      iconOnly: widget.iconActions,
-      fullWidth: widget.fullWidth,
-      width: widget.fullWidth ? null : (widget.iconActions ? 48 : 132),
-      onPressed: widget.onUpload,
+    final primaryActions = Row(
+      children: [
+        Expanded(
+          child: _FilesToolbarButton(label: 'New folder', iconAssetName: 'folder-plus', fullWidth: true, onPressed: widget.onCreateFolder),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _FilesToolbarButton(
+            label: 'New text file',
+            iconAssetName: 'file-plus-corner',
+            fullWidth: true,
+            onPressed: widget.onCreateTextFile,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _FilesToolbarButton(label: 'Upload', iconAssetName: 'arrow-up-from-line', fullWidth: true, onPressed: widget.onUpload),
+        ),
+      ],
     );
 
-    return Row(
-      mainAxisSize: MainAxisSize.max,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(child: createButton),
-        const SizedBox(width: 10),
-        Expanded(child: uploadButton),
+        primaryActions,
+        if (_showPreviewWebServerButton) ...[const SizedBox(height: 10), _buildPreviewWebServerButton(width: null)],
+        if (_showInstallWebServerButton) ...[const SizedBox(height: 10), _buildInstallWebServerButton(width: null)],
       ],
     );
   }
@@ -657,7 +763,11 @@ class _FilesToolbarButton extends StatefulWidget {
     this.width,
     this.contentOffset = Offset.zero,
     this.alert = false,
-    this.selected = false,
+    this.backgroundColor,
+    this.pressedBackgroundColor,
+    this.borderColor,
+    this.pressedBorderColor,
+    this.foregroundColor,
     this.onPressed,
   });
 
@@ -668,7 +778,11 @@ class _FilesToolbarButton extends StatefulWidget {
   final double? width;
   final Offset contentOffset;
   final bool alert;
-  final bool selected;
+  final Color? backgroundColor;
+  final Color? pressedBackgroundColor;
+  final Color? borderColor;
+  final Color? pressedBorderColor;
+  final Color? foregroundColor;
   final VoidCallback? onPressed;
 
   @override
@@ -698,10 +812,20 @@ class _FilesToolbarButtonState extends State<_FilesToolbarButton> {
       iconSize: 18,
       iconGap: 8,
       contentOffset: widget.contentOffset,
+      backgroundColor: widget.backgroundColor,
+      pressedBackgroundColor: widget.pressedBackgroundColor,
+      borderColor: widget.borderColor,
+      pressedBorderColor: widget.pressedBorderColor,
+      foregroundColor: widget.foregroundColor,
       onPressed: widget.onPressed,
     );
 
-    return SizedBox(width: widget.width, child: button);
+    final sizedButton = SizedBox(width: widget.width, child: button);
+    if (!widget.iconOnly) {
+      return sizedButton;
+    }
+
+    return Tooltip(message: widget.label, child: sizedButton);
   }
 }
 

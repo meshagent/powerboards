@@ -419,36 +419,39 @@ class _PbThreadPanelToggleState extends State<PbThreadPanelToggle> {
     final interactive = widget.onPressed != null;
     final active = _hovered || _pressed;
 
-    return MouseRegion(
-      cursor: interactive ? SystemMouseCursors.click : MouseCursor.defer,
-      onEnter: interactive ? (_) => setState(() => _hovered = true) : null,
-      onExit: interactive
-          ? (_) => setState(() {
-              _hovered = false;
-              _pressed = false;
-            })
-          : null,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: interactive ? (_) => setState(() => _pressed = true) : null,
-        onTapUp: interactive
-            ? (_) {
-                setState(() => _pressed = false);
-                widget.onPressed?.call();
-              }
+    return Tooltip(
+      message: widget.expanded ? 'Hide panel' : 'Show panel',
+      child: MouseRegion(
+        cursor: interactive ? SystemMouseCursors.click : MouseCursor.defer,
+        onEnter: interactive ? (_) => setState(() => _hovered = true) : null,
+        onExit: interactive
+            ? (_) => setState(() {
+                _hovered = false;
+                _pressed = false;
+              })
             : null,
-        onTapCancel: interactive ? () => setState(() => _pressed = false) : null,
-        child: SizedBox(
-          width: 38,
-          height: 38,
-          child: Center(
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 120),
-              scale: _pressed ? 0.96 : 1,
-              child: PbSvgIcon(
-                assetName: widget.expanded ? 'panel-right-close' : 'panel-right-open',
-                size: 18,
-                color: PbColors.customBrandInk.withValues(alpha: active ? 1 : 0.3),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: interactive ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: interactive
+              ? (_) {
+                  setState(() => _pressed = false);
+                  widget.onPressed?.call();
+                }
+              : null,
+          onTapCancel: interactive ? () => setState(() => _pressed = false) : null,
+          child: SizedBox(
+            width: 38,
+            height: 38,
+            child: Center(
+              child: AnimatedScale(
+                duration: const Duration(milliseconds: 120),
+                scale: _pressed ? 0.96 : 1,
+                child: PbSvgIcon(
+                  assetName: widget.expanded ? 'panel-right-close' : 'panel-right-open',
+                  size: 18,
+                  color: PbColors.customBrandInk.withValues(alpha: active ? 1 : 0.3),
+                ),
               ),
             ),
           ),

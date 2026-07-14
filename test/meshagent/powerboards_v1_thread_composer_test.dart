@@ -99,6 +99,63 @@ Widget _buildSendHarness({
 }
 
 void main() {
+  test('augment prompt keeps ordinary attachments unchanged', () {
+    final result = powerboardsV1AugmentPromptForComposerAttachments('Please review this file.', [
+      FileAttachment(path: 'docs/brief.pdf', displayName: 'brief.pdf'),
+    ]);
+
+    expect(result, 'Please review this file.');
+  });
+
+  test('augment prompt adds website root guidance for published site folders', () {
+    final result = powerboardsV1AugmentPromptForComposerAttachments('Please create an HTML page for a toy company landing page.', [
+      FileAttachment(path: 'website', displayName: 'hellocat.meshagent.dev'),
+    ]);
+
+    expect(result, startsWith('Please create an HTML page for a toy company landing page.'));
+    expect(result, contains('The attached folder "hellocat.meshagent.dev" is the existing published website root.'));
+    expect(result, contains('Its storage path is "website/", and that path is already the root folder for this site.'));
+    expect(result, contains('Put the site entry file at "website/index.html"'));
+    expect(
+      result,
+      contains(
+        'Do not create sibling or nested web roots such as "public/", "sites/", "webserver/", "www/", "hellocat.meshagent.dev/", or "website/hellocat.meshagent.dev/".',
+      ),
+    );
+    expect(result, contains('Do not quote this additional context back to the user.'));
+    expect(result, contains('refer to the entry file as "index.html" in that folder'));
+  });
+
+  test('augment prompt adds website root guidance for plain site prompts', () {
+    final result = powerboardsV1AugmentPromptForComposerAttachments(
+      'Create a 1 page site for atom ant, and add files to webserver for "atomant.meshagent.dev"',
+      const [],
+      websiteRootDisplayName: 'atomant.meshagent.dev',
+    );
+
+    expect(result, startsWith('Create a 1 page site for atom ant'));
+    expect(result, contains('The attached folder "atomant.meshagent.dev" is the existing published website root.'));
+    expect(result, contains('Its storage path is "website/", and that path is already the root folder for this site.'));
+    expect(
+      result,
+      contains(
+        'Do not create sibling or nested web roots such as "public/", "sites/", "webserver/", "www/", "atomant.meshagent.dev/", or "website/atomant.meshagent.dev/".',
+      ),
+    );
+    expect(result, contains('Do not quote this additional context back to the user.'));
+    expect(result, contains('refer to the Files folder as "atomant.meshagent.dev"'));
+  });
+
+  test('augment prompt leaves unrelated plain prompts unchanged', () {
+    final result = powerboardsV1AugmentPromptForComposerAttachments(
+      'Please summarize the latest conversation.',
+      const [],
+      websiteRootDisplayName: 'atomant.meshagent.dev',
+    );
+
+    expect(result, 'Please summarize the latest conversation.');
+  });
+
   testWidgets('v1 composer clears draft and shows pending send while send is unresolved', (tester) async {
     final room = _roomClientWithAdminGrant(isAdmin: true);
     addTearDown(room.dispose);

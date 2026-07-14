@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:meshagent/agent.dart';
@@ -7,6 +8,7 @@ import 'package:meshagent/protocol.dart';
 import 'package:meshagent/room_server_client.dart';
 import 'package:meshagent_flutter_dev/meshagent_flutter_dev.dart' as dev;
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/meshagent/route_service_match.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -18,6 +20,203 @@ import 'package:powerboards/meshagent/meshagent.dart';
 typedef ConfigureServiceTemplateDone = void Function(BuildContext context, String serviceId);
 
 const double _mobileConfigureFlowSectionGap = powerboardsMobileFlowDialogContentSectionGap * 3;
+const String powerboardsWebServerServiceId = 'meshagent.webserver';
+const String powerboardsWebServerIconAssetName = 'folder-code';
+const String powerboardsWebServerFolderName = 'website';
+const String powerboardsStorageFolderPlaceholderFileName = '.placeholder';
+const String powerboardsWebServerDescription = "Publish this room's website from files in its web server folder.";
+
+List<String> _powerboardsWebServerConfiguredDomains({List<String>? configuredDomains}) {
+  final rawDomains = configuredDomains ?? MeshagentConfig.current?.domains ?? const <String>[];
+  return [
+    for (final domain in rawDomains)
+      if (domain.trim().isNotEmpty) domain.trim(),
+  ];
+}
+
+String powerboardsWebServerDisplayHost(String rawValue, {String fallback = powerboardsWebServerFolderName}) {
+  final trimmed = rawValue.trim();
+  if (trimmed.isEmpty) {
+    return fallback;
+  }
+
+  final parsed = Uri.tryParse(trimmed.contains('://') ? trimmed : 'https://$trimmed');
+  final host = parsed?.host.trim();
+  if (host != null && host.isNotEmpty) {
+    return host;
+  }
+
+  return trimmed;
+}
+
+Uri? powerboardsWebServerSiteUri(String rawValue) {
+  final normalized = powerboardsWebServerDisplayHost(rawValue, fallback: '').trim();
+  if (normalized.isEmpty) {
+    return null;
+  }
+
+  return Uri.tryParse(normalized.contains('://') ? normalized : 'https://$normalized');
+}
+
+String? powerboardsWebServerRelativePath(String rawPath) {
+  final normalized = rawPath.trim().replaceAll('\\', '/');
+  if (normalized.isEmpty || normalized == powerboardsWebServerFolderName) {
+    return null;
+  }
+
+  const prefix = '$powerboardsWebServerFolderName/';
+  if (normalized.startsWith(prefix)) {
+    final relative = normalized.substring(prefix.length).trim();
+    return relative.isEmpty ? null : relative;
+  }
+
+  return normalized;
+}
+
+Uri? powerboardsWebServerEntryUri({required Uri? siteUri, required String? entryPath}) {
+  if (siteUri == null) {
+    return null;
+  }
+
+  final relativePath = entryPath == null ? null : powerboardsWebServerRelativePath(entryPath);
+  if (relativePath == null || relativePath.isEmpty) {
+    return siteUri;
+  }
+
+  final basePath = siteUri.path.isEmpty
+      ? '/'
+      : siteUri.path.endsWith('/')
+      ? siteUri.path
+      : '${siteUri.path}/';
+  return siteUri.replace(path: basePath).resolve(relativePath);
+}
+
+String? powerboardsWebServerDomainSuffix(String host, {List<String>? configuredDomains}) {
+  final normalizedHost = powerboardsWebServerDisplayHost(host, fallback: '').trim();
+  if (normalizedHost.isEmpty) {
+    return null;
+  }
+
+  final domains = _powerboardsWebServerConfiguredDomains(configuredDomains: configuredDomains)
+    ..sort((a, b) => b.length.compareTo(a.length));
+  for (final domain in domains) {
+    if (normalizedHost == domain || normalizedHost.endsWith('.$domain')) {
+      return domain;
+    }
+  }
+
+  final parts = normalizedHost.split('.');
+  if (parts.length > 1) {
+    return parts.skip(1).join('.');
+  }
+
+  return null;
+}
+
+String powerboardsWebServerSlugFromValue(
+  String rawValue, {
+  List<String>? configuredDomains,
+  String fallback = powerboardsWebServerFolderName,
+}) {
+  final host = powerboardsWebServerDisplayHost(rawValue, fallback: fallback);
+  final suffix = powerboardsWebServerDomainSuffix(host, configuredDomains: configuredDomains);
+  if (suffix == null || suffix.isEmpty) {
+    return host;
+  }
+
+  if (host == suffix) {
+    return fallback;
+  }
+
+  final suffixWithDot = '.$suffix';
+  if (host.endsWith(suffixWithDot)) {
+    final slug = host.substring(0, host.length - suffixWithDot.length).trim();
+    return slug.isEmpty ? fallback : slug;
+  }
+
+  return host;
+}
+
+String powerboardsWebServerDomainFromSlug(String slug, {String? currentValue, List<String>? configuredDomains}) {
+  final normalizedSlug = slug.trim().toLowerCase();
+  final currentHost = currentValue == null ? '' : powerboardsWebServerDisplayHost(currentValue, fallback: '');
+  final configured = _powerboardsWebServerConfiguredDomains(configuredDomains: configuredDomains);
+  final suffix =
+      powerboardsWebServerDomainSuffix(currentHost, configuredDomains: configuredDomains) ?? (configured.isEmpty ? null : configured.first);
+  if (suffix == null || suffix.isEmpty) {
+    return normalizedSlug;
+  }
+
+  return '$normalizedSlug.$suffix';
+}
+
+Future<String?> powerboardsPreserveFormerWebServerFolder({
+  required meshagent_client.Meshagent client,
+  required String projectId,
+  required String roomName,
+  required String preferredName,
+}) async {
+  final normalizedPreferredName = preferredName.trim().replaceAll(RegExp(r'[\\/]'), '-');
+  final baseName = normalizedPreferredName.isEmpty ? powerboardsWebServerFolderName : normalizedPreferredName;
+  final roomConnection = await client.connectRoom(projectId: projectId, roomName: roomName);
+  final roomClient = RoomClient(
+    protocolFactory: WebSocketClientProtocol.createFactory(url: roomConnection.roomUrl, token: roomConnection.jwt),
+  );
+
+  try {
+    roomClient.start();
+    await roomClient.ready;
+
+    if (!await roomClient.storage.exists(powerboardsWebServerFolderName)) {
+      return null;
+    }
+
+    var candidate = baseName;
+    var suffix = 2;
+    while (candidate != powerboardsWebServerFolderName && await roomClient.storage.exists(candidate)) {
+      candidate = '$baseName $suffix';
+      suffix += 1;
+    }
+
+    if (candidate == powerboardsWebServerFolderName) {
+      return candidate;
+    }
+
+    await roomClient.storage.move(powerboardsWebServerFolderName, candidate);
+    return candidate;
+  } finally {
+    roomClient.dispose();
+  }
+}
+
+Future<void> powerboardsEnsureWebServerFolderExists({
+  required meshagent_client.Meshagent client,
+  required String projectId,
+  required String roomName,
+}) async {
+  final roomConnection = await client.connectRoom(projectId: projectId, roomName: roomName);
+  final roomClient = RoomClient(
+    protocolFactory: WebSocketClientProtocol.createFactory(url: roomConnection.roomUrl, token: roomConnection.jwt),
+  );
+
+  try {
+    roomClient.start();
+    await roomClient.ready;
+
+    if (await roomClient.storage.exists(powerboardsWebServerFolderName)) {
+      return;
+    }
+
+    await roomClient.storage.uploadStream(
+      '$powerboardsWebServerFolderName/$powerboardsStorageFolderPlaceholderFileName',
+      Stream<Uint8List>.value(Uint8List(0)),
+      overwrite: true,
+      size: 0,
+    );
+  } finally {
+    roomClient.dispose();
+  }
+}
 
 String powerboardsDisplayServiceName(String rawName) {
   final trimmed = rawName.trim();
@@ -33,6 +232,34 @@ TextStyle powerboardsAgentCardTitleTextStyle(BuildContext context) {
   return powerboardsEmphasizedTitleStyle(color: theme.colorScheme.foreground);
 }
 
+String? powerboardsDisplayServiceDescription({String? serviceId, String? description}) {
+  final normalizedServiceId = serviceId?.trim() ?? '';
+  if (normalizedServiceId == powerboardsWebServerServiceId) {
+    return powerboardsWebServerDescription;
+  }
+
+  final trimmedDescription = description?.trim();
+  if (trimmedDescription == null || trimmedDescription.isEmpty) {
+    return null;
+  }
+
+  return trimmedDescription;
+}
+
+String? powerboardsDisplayServiceDescriptionForService(ServiceSpec service) {
+  return powerboardsDisplayServiceDescription(
+    serviceId: service.metadata.annotations['meshagent.service.id'],
+    description: service.metadata.description,
+  );
+}
+
+String? powerboardsDisplayServiceDescriptionForTemplate(ServiceTemplateSpec template) {
+  return powerboardsDisplayServiceDescription(
+    serviceId: template.metadata.annotations['meshagent.service.id'],
+    description: template.metadata.description,
+  );
+}
+
 ServiceTemplateSpec powerboardsDisplayServiceTemplateSpec(ServiceTemplateSpec manifest) {
   return ServiceTemplateSpec(
     version: manifest.version,
@@ -40,7 +267,7 @@ ServiceTemplateSpec powerboardsDisplayServiceTemplateSpec(ServiceTemplateSpec ma
     variables: manifest.variables,
     metadata: ServiceTemplateMetadata(
       name: powerboardsDisplayServiceName(manifest.metadata.name),
-      description: manifest.metadata.description,
+      description: powerboardsDisplayServiceDescriptionForTemplate(manifest),
       icon: manifest.metadata.icon,
       repo: manifest.metadata.repo,
       annotations: Map<String, String>.from(manifest.metadata.annotations),
@@ -58,6 +285,23 @@ TextStyle powerboardsAgentCardDescriptionTextStyle(BuildContext context) {
   return descriptionStyle.copyWith(color: descriptionStyle.color ?? theme.colorScheme.mutedForeground);
 }
 
+String? powerboardsServiceIconAssetName({ServiceSpec? service, ServiceTemplateSpec? template}) {
+  final agentTypeIconAssetName = service == null
+      ? (template == null ? null : serviceTemplateIconAssetName(template))
+      : serviceIconAssetName(service);
+  if (agentTypeIconAssetName != null) {
+    return agentTypeIconAssetName;
+  }
+
+  final serviceId =
+      service?.metadata.annotations['meshagent.service.id']?.trim() ?? template?.metadata.annotations['meshagent.service.id']?.trim() ?? '';
+  if (serviceId == powerboardsWebServerServiceId) {
+    return powerboardsWebServerIconAssetName;
+  }
+
+  return null;
+}
+
 class PowerboardsServiceNameCard extends StatelessWidget {
   const PowerboardsServiceNameCard({super.key, required this.manifest});
 
@@ -68,6 +312,7 @@ class PowerboardsServiceNameCard extends StatelessWidget {
     final theme = ShadTheme.of(context);
     final descriptionStyle = powerboardsAgentCardDescriptionTextStyle(context);
     final titleStyle = powerboardsAgentCardTitleTextStyle(context);
+    final iconAssetName = powerboardsServiceIconAssetName(template: manifest);
     final useV1VoiceIcon =
         !powerboardsUsesNativeMobileDialogLayout(context) &&
         powerboardsUsesDesktopUiPreview(context) &&
@@ -100,7 +345,9 @@ class PowerboardsServiceNameCard extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(color: theme.colorScheme.foreground, shape: BoxShape.circle),
             alignment: Alignment.center,
-            child: useV1VoiceIcon
+            child: iconAssetName != null
+                ? PbSvgIcon(assetName: iconAssetName, size: 22, color: theme.colorScheme.background)
+                : useV1VoiceIcon
                 ? PbSvgIcon(assetName: 'audio-lines', size: 22, color: theme.colorScheme.background)
                 : Icon(LucideIcons.bot, color: theme.colorScheme.background, size: 22),
           ),
@@ -135,6 +382,10 @@ class ConfigureServiceTemplateDialog extends StatefulWidget {
     required this.description,
     this.roomName,
     this.prefilledVars,
+    this.showServiceHeader = true,
+    this.showUninstallAction = true,
+    this.primaryActionLabel,
+    this.primaryProgressLabel,
   });
 
   final String template;
@@ -145,6 +396,10 @@ class ConfigureServiceTemplateDialog extends StatefulWidget {
   final String? roomName;
   final String title;
   final Widget? description;
+  final bool showServiceHeader;
+  final bool showUninstallAction;
+  final String? primaryActionLabel;
+  final String? primaryProgressLabel;
 
   @override
   State<ConfigureServiceTemplateDialog> createState() => _ConfigureServiceTemplateDialogState();
@@ -170,21 +425,25 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = powerboardsUsesNativeMobileDialogLayout(context);
+        final header = <Widget>[
+          if (widget.showServiceHeader) PowerboardsServiceNameCard(manifest: displayManifest),
+          if (widget.showServiceHeader && !isInstalled && !isMobile) ...[
+            SizedBox(height: isMobile ? _mobileConfigureFlowSectionGap : 12),
+            dev.ServiceInfoCard(manifest: displayManifest, desktopContentGroupGap: isMobile ? null : 24),
+          ],
+        ];
         final content = ConfigureServiceTemplate(
           template: widget.template,
-          header: [
-            PowerboardsServiceNameCard(manifest: displayManifest),
-            if (!isInstalled && !isMobile) ...[
-              SizedBox(height: isMobile ? _mobileConfigureFlowSectionGap : 12),
-              dev.ServiceInfoCard(manifest: displayManifest, desktopContentGroupGap: isMobile ? null : 24),
-            ],
-          ],
+          header: header,
           projectId: widget.projectId,
           serviceId: widget.serviceId,
           manifest: widget.manifest,
           roomName: widget.roomName,
           prefilledVars: widget.prefilledVars,
           mobileDialogChrome: _mobileChrome,
+          showUninstallAction: widget.showUninstallAction,
+          primaryActionLabel: widget.primaryActionLabel,
+          primaryProgressLabel: widget.primaryProgressLabel,
           onDone: (context, _) {
             Navigator.of(context).pop(true);
           },
@@ -233,6 +492,9 @@ class ConfigureServiceTemplate extends StatefulWidget {
     this.mobileDialogChrome,
     this.mobileOnBack,
     this.dialogChromeSignaturePrefix,
+    this.showUninstallAction = true,
+    this.primaryActionLabel,
+    this.primaryProgressLabel,
   });
 
   final ServiceTemplateSpec manifest;
@@ -247,6 +509,9 @@ class ConfigureServiceTemplate extends StatefulWidget {
   final ValueNotifier<PowerboardsDialogChrome>? mobileDialogChrome;
   final VoidCallback? mobileOnBack;
   final String? dialogChromeSignaturePrefix;
+  final bool showUninstallAction;
+  final String? primaryActionLabel;
+  final String? primaryProgressLabel;
 
   @override
   State<ConfigureServiceTemplate> createState() => _ConfigureServiceTemplateState();
@@ -344,6 +609,14 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
         routeRequests.add((domain: domain, port: port));
       }
 
+      final existingServiceRoutes = widget.serviceId == null
+          ? const <meshagent_client.Route>[]
+          : routesForService(
+              routes: await client.listRoomRoutes(projectId: projectId, roomName: roomName),
+              service: service,
+            );
+      final requestedRouteDomains = {for (final route in routeRequests) route.domain};
+
       if (routeRequests.isNotEmpty) {
         final room = await client.getRoom(projectId: projectId, name: roomName);
         for (final route in routeRequests) {
@@ -416,6 +689,13 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
               roomName: roomName,
             )
           : await client.createRoomServiceFromTemplate(projectId: projectId, template: widget.template, values: vars, roomName: roomName);
+
+      for (final route in existingServiceRoutes) {
+        if (requestedRouteDomains.contains(route.domain)) {
+          continue;
+        }
+        await client.deleteRoute(projectId: projectId, domain: route.domain);
+      }
 
       final savedServiceId = savedService.metadata.annotations['meshagent.service.id']?.trim();
       final resolvedServiceId = savedServiceId != null && savedServiceId.isNotEmpty ? savedServiceId : serviceId;
@@ -527,6 +807,10 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
     try {
       final client = getMeshagentClient();
       final roomName = _requireRoomName();
+      final serviceKindId = widget.manifest.metadata.annotations['meshagent.service.id']?.trim();
+      final preservedFolderName = serviceKindId == powerboardsWebServerServiceId
+          ? powerboardsWebServerSlugFromValue(widget.prefilledVars?['url'] ?? '')
+          : null;
 
       final domainsToDelete = await _domainsToDelete(client);
       if (domainsToDelete.isNotEmpty) {
@@ -583,6 +867,28 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
         }
       }
 
+      String? preservedFolderPath;
+      if (preservedFolderName != null) {
+        try {
+          preservedFolderPath = await powerboardsPreserveFormerWebServerFolder(
+            client: client,
+            projectId: widget.projectId,
+            roomName: roomName,
+            preferredName: preservedFolderName,
+          );
+        } catch (_) {
+          if (mounted) {
+            ShadToaster.of(context).show(
+              powerboardsToast(
+                title: 'Website removed',
+                description: 'The service was removed, but the website folder could not be renamed.',
+                destructive: true,
+              ),
+            );
+          }
+        }
+      }
+
       if (widget.manifest.agents.any((agent) => agent.annotations['meshagent.agent.schedule'] != null)) {
         try {
           await _deleteExistingTasks();
@@ -601,6 +907,11 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
 
       if (!mounted) {
         return;
+      }
+      if (preservedFolderPath != null && preservedFolderPath != powerboardsWebServerFolderName) {
+        ShadToaster.of(
+          context,
+        ).show(powerboardsToast(title: 'Website removed', description: 'The website files were kept as folder `$preservedFolderPath`.'));
       }
       widget.onDone(context, serviceId);
     } catch (error) {
@@ -658,10 +969,11 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
 
   List<Widget> _actions(BuildContext context) {
     final isInstalled = widget.serviceId != null;
-    final progressLabel = isInstalled ? 'Updating' : 'Installing';
+    final progressLabel = widget.primaryProgressLabel ?? (isInstalled ? 'Updating' : 'Installing');
+    final primaryLabel = widget.primaryActionLabel ?? (isInstalled ? 'Update' : 'Install');
 
     return [
-      if (isInstalled)
+      if (isInstalled && widget.showUninstallAction)
         ShadButton.outline(
           onPressed: _removing
               ? null
@@ -683,7 +995,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
                   _saveOrUpdate(_latestFormVars, _validateMobileForm);
                 }
               },
-        child: Text(_saving ? progressLabel : (isInstalled ? 'Update' : 'Install')),
+        child: Text(_saving ? progressLabel : primaryLabel),
       ),
     ];
   }

@@ -134,7 +134,7 @@ class PbFilesRowMenu extends StatelessWidget {
           if (onRename != null || onDelete != null) const PbMenuDivider(),
           if (onRename != null)
             PbMenuOption(
-              title: 'Rename',
+              title: item.renameActionLabelOverride ?? 'Rename',
               leadingIconAssetName: 'text-cursor',
               singleLine: true,
               onPressed: () => _runMenuAction(onRename, onDismiss),
