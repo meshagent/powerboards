@@ -10,7 +10,6 @@ import 'package:meshagent/room_server_client.dart';
 import 'package:powerboards/meshagent/agent_config.dart';
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
-import 'package:powerboards/meshagent/route_service_match.dart';
 
 const String installWebServerServiceToolName = 'install_webserver_service';
 const String saveWebServerSiteFilesToolName = 'save_webserver_site_files';
@@ -340,6 +339,25 @@ typedef SaveWebServerSiteFilesRunner = Future<SaveWebServerSiteFilesResult> Func
 typedef OpenWebServerFileRunner = Future<OpenWebServerFileResult> Function(OpenWebServerFileRequest request);
 typedef UninstallWebServerServiceRunner = Future<UninstallWebServerServiceResult> Function(UninstallWebServerServiceRequest request);
 
+mixin _PowerboardsToolResponseSentCallback on FunctionTool implements ToolResponseSentListener {
+  final Expando<FutureOr<void> Function()> _responseSentCallbacks = Expando<FutureOr<void> Function()>();
+
+  void deferCallbackUntilResponseSent<T>(Content response, FutureOr<void> Function(T value)? callback, T value) {
+    if (callback != null) {
+      _responseSentCallbacks[response] = () => callback(value);
+    }
+  }
+
+  @override
+  Future<void> onToolResponseSent(ToolContext context, Content response) async {
+    final callback = _responseSentCallbacks[response];
+    _responseSentCallbacks[response] = null;
+    if (callback != null) {
+      await callback();
+    }
+  }
+}
+
 List<BaseTool> powerboardsWebServerTools({
   required String projectId,
   required String roomName,
@@ -396,7 +414,7 @@ class InstallWebServerServiceToolkit extends Toolkit {
        );
 }
 
-class InstallWebServerServiceTool extends FunctionTool {
+class InstallWebServerServiceTool extends FunctionTool with _PowerboardsToolResponseSentCallback {
   InstallWebServerServiceTool({required this.projectId, required this.roomName, required this.install, this.onInstalled})
     : super(
         name: installWebServerServiceToolName,
@@ -433,11 +451,12 @@ class InstallWebServerServiceTool extends FunctionTool {
         ),
       );
 
+      final response = JsonContent(json: result.toJson());
       if (result.status == 'installed' || result.status == 'already_installed') {
-        _dispatchDeferredValueCallback(onInstalled, result);
+        deferCallbackUntilResponseSent(response, onInstalled, result);
       }
 
-      return JsonContent(json: result.toJson());
+      return response;
     } catch (error) {
       return JsonContent(
         json: InstallWebServerServiceResult(
@@ -486,7 +505,7 @@ class OpenWebServerFileTool extends FunctionTool {
   }
 }
 
-class SaveWebServerSiteFilesTool extends FunctionTool {
+class SaveWebServerSiteFilesTool extends FunctionTool with _PowerboardsToolResponseSentCallback {
   SaveWebServerSiteFilesTool({required this.projectId, required this.roomName, required this.save, this.onSaved})
     : super(
         name: saveWebServerSiteFilesToolName,
@@ -511,11 +530,12 @@ class SaveWebServerSiteFilesTool extends FunctionTool {
       final result = await save(
         SaveWebServerSiteFilesRequest(projectId: projectId, roomName: roomName, files: _siteFilesFromArguments(arguments['files'])),
       );
-      if (result.status == 'saved') {
-        _dispatchDeferredValueCallback(onSaved, result);
-      }
       final json = result.toJson();
-      return JsonContent(json: {'status': json['status'], 'assistant_reply': json['assistant_reply']});
+      final response = JsonContent(json: {'status': json['status'], 'assistant_reply': json['assistant_reply']});
+      if (result.status == 'saved') {
+        deferCallbackUntilResponseSent(response, onSaved, result);
+      }
+      return response;
     } catch (error) {
       final json = SaveWebServerSiteFilesResult(
         status: 'failed',
@@ -529,7 +549,7 @@ class SaveWebServerSiteFilesTool extends FunctionTool {
   }
 }
 
-class UninstallWebServerServiceTool extends FunctionTool {
+class UninstallWebServerServiceTool extends FunctionTool with _PowerboardsToolResponseSentCallback {
   UninstallWebServerServiceTool({required this.projectId, required this.roomName, required this.uninstall, this.onUninstalled})
     : super(
         name: uninstallWebServerServiceToolName,
@@ -551,10 +571,11 @@ class UninstallWebServerServiceTool extends FunctionTool {
   Future<Content> execute(ToolContext context, Map<String, dynamic> arguments) async {
     try {
       final result = await uninstall(UninstallWebServerServiceRequest(projectId: projectId, roomName: roomName));
+      final response = JsonContent(json: result.toJson());
       if (result.status == 'removed') {
-        _dispatchDeferredValueCallback(onUninstalled, result);
+        deferCallbackUntilResponseSent(response, onUninstalled, result);
       }
-      return JsonContent(json: result.toJson());
+      return response;
     } catch (error) {
       return JsonContent(
         json: UninstallWebServerServiceResult(
@@ -701,34 +722,14 @@ Future<UninstallWebServerServiceResult> uninstallPowerboardsWebServerService(
     );
   }
 
-  final serviceId = webServer.id;
-  if (serviceId == null || serviceId.trim().isEmpty) {
-    return const UninstallWebServerServiceResult(
-      status: 'blocked',
-      folderPath: '$powerboardsWebServerFolderName/',
-      siteLabel: powerboardsWebServerFolderName,
-      message: 'The Web server service is missing its service id, so I cannot uninstall it safely.',
-    );
-  }
-
   final domain = _webServerTemplateValues(webServer)['url']?.trim();
   final siteLabel = domain == null || domain.isEmpty ? powerboardsWebServerFolderName : domain;
   final archivedFolderName = powerboardsArchivedWebServerFolderName(siteLabel);
-  final routes = await client.listRoutes(projectId);
-  final matchedRoutes = routesForService(routes: routes, service: webServer);
-
-  await powerboardsDeleteRoutesThenService(
-    routes: matchedRoutes,
-    deleteRoute: (route) => client.deleteRoute(projectId: projectId, domain: route.domain),
-    deleteService: () => client.deleteRoomService(projectId: projectId, serviceId: serviceId, roomName: roomName),
-    observeServiceDeleted: () async {
-      return powerboardsWaitForRoomServiceRemoval(
-        serviceKindId: powerboardsWebServerServiceId,
-        loadServices: () => client.listRoomServices(projectId: projectId, roomName: roomName),
-        routeDomains: matchedRoutes.map((route) => route.domain),
-        loadRouteDomains: () async => (await client.listRoomRoutes(projectId: projectId, roomName: roomName)).map((route) => route.domain),
-      );
-    },
+  final removal = await powerboardsUninstallV1WebServerResources(
+    client: client,
+    projectId: projectId,
+    roomName: roomName,
+    serviceInstanceId: webServer.id,
   );
 
   String? preservedFolderPath;
@@ -750,7 +751,7 @@ Future<UninstallWebServerServiceResult> uninstallPowerboardsWebServerService(
     folderPath: '$powerboardsWebServerFolderName/',
     siteLabel: siteLabel,
     preservedFolderPath: preservedFolderPath,
-    removedDomains: matchedRoutes.map((route) => route.domain).where((domain) => domain.trim().isNotEmpty).toList(growable: false),
+    removedDomains: removal.removedDomains,
     message: 'Removed the Web server service from this room.',
   );
 }
@@ -1130,17 +1131,4 @@ List<({String domain, String port})> _routeRequestsForTemplate(meshagent.Service
     routeRequests.add((domain: domain, port: port));
   }
   return routeRequests;
-}
-
-void _dispatchDeferredValueCallback<T>(FutureOr<void> Function(T value)? callback, T value) {
-  if (callback == null) {
-    return;
-  }
-  unawaited(
-    Future<void>(() async {
-      try {
-        await callback(value);
-      } catch (_) {}
-    }),
-  );
 }

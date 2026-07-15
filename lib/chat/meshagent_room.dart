@@ -56,6 +56,7 @@ import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:powerboards/meshagent/tool_connection_scope.dart';
+import 'package:powerboards/meshagent/tools/install_webserver_service.dart';
 import 'package:powerboards/meshagent/tools/ui_toolkit.dart';
 import 'package:powerboards/meshagent/v1_file_preview_source.dart';
 import 'package:powerboards/meshagent/wait_for_agent_participant_builder.dart';
@@ -2942,8 +2943,11 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   });
 
   void _refreshServiceResources() {
-    services.refresh();
-    fileManagerServices.refresh();
+    unawaited(_refreshServiceResourcesAndWait());
+  }
+
+  Future<void> _refreshServiceResourcesAndWait() async {
+    await Future.wait<void>([services.refresh(), fileManagerServices.refresh()]);
   }
 
   @override
@@ -5014,7 +5018,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             : null,
         fileDropOverlayBuilder: chatDropOverlayBuilder,
         projectId: widget.projectId,
-        onServiceChanged: _refreshServiceResources,
+        onServiceChanged: _refreshServiceResourcesAndWait,
       ),
     );
 
@@ -7900,8 +7904,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                     enableV1WebServerTools: useDesktopUiPreview,
                                     projectId: widget.projectId,
                                     roomName: widget.room.roomName,
-                                    onWebServerServiceInstalled: (_) => _refreshServiceResources(),
-                                    onWebServerSiteFilesSaved: (_) => _refreshServiceResources(),
+                                    openWebServerFile: (request) => openPowerboardsWebServerFile(request, storage: widget.room.storage),
+                                    uninstallWebServerService: (request) =>
+                                        uninstallPowerboardsWebServerService(request, storage: widget.room.storage),
+                                    onWebServerServiceInstalled: (_) => _refreshServiceResourcesAndWait(),
+                                    onWebServerSiteFilesSaved: (_) => _refreshServiceResourcesAndWait(),
+                                    onWebServerServiceUninstalled: (_) => _refreshServiceResourcesAndWait(),
                                   ),
                                 ],
                                 builder: (context, error) {

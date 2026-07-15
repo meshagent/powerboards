@@ -14,6 +14,30 @@ void main() {
     );
   });
 
+  test('website folder deletion succeeds when another uninstall route already removed the folder', () async {
+    var deleteCalls = 0;
+
+    final deleted = await powerboardsV1DeleteFolderIfPresent(exists: () async => false, delete: () async => deleteCalls += 1);
+
+    expect(deleted, isFalse);
+    expect(deleteCalls, 0);
+  });
+
+  test('website folder deletion treats a concurrent removal as the completed state', () async {
+    var existsCalls = 0;
+
+    final deleted = await powerboardsV1DeleteFolderIfPresent(
+      exists: () async {
+        existsCalls += 1;
+        return existsCalls == 1;
+      },
+      delete: () async => throw StateError('Not found: website'),
+    );
+
+    expect(deleted, isFalse);
+    expect(existsCalls, 2);
+  });
+
   test('website preview uses route for app-like webserver folders', () {
     final entries = [
       meshagent_api.StorageEntry(

@@ -25,6 +25,15 @@ const String powerboardsWebServerIconAssetName = 'folder-code';
 const String powerboardsWebServerFolderName = 'website';
 const String powerboardsStorageFolderPlaceholderFileName = '.placeholder';
 const String powerboardsWebServerDescription = "Publish this room's website from files in its web server folder.";
+const int powerboardsV1WebServerRemovalStableObservations = 8;
+const int powerboardsV1WebServerRemovalMaxAttempts = 40;
+
+class PowerboardsWebServerResourceRemoval {
+  const PowerboardsWebServerResourceRemoval({required this.wasInstalled, required this.removedDomains});
+
+  final bool wasInstalled;
+  final List<String> removedDomains;
+}
 
 Future<void> powerboardsDeleteRoutesThenService<T>({
   required Iterable<T> routes,
@@ -48,15 +57,20 @@ Future<bool> powerboardsWaitForRoomServiceRemoval({
   Iterable<String> routeDomains = const <String>[],
   Future<Iterable<String>> Function()? loadRouteDomains,
   int maxAttempts = 20,
+  int requiredConsecutiveAbsentObservations = 1,
   Duration retryDelay = const Duration(milliseconds: 250),
   Future<void> Function(Duration delay) wait = Future<void>.delayed,
 }) async {
   final normalizedServiceKindId = serviceKindId.trim();
   final normalizedRouteDomains = routeDomains.map((domain) => domain.trim()).where((domain) => domain.isNotEmpty).toSet();
-  if (normalizedServiceKindId.isEmpty || maxAttempts <= 0) {
+  if (normalizedServiceKindId.isEmpty ||
+      maxAttempts <= 0 ||
+      requiredConsecutiveAbsentObservations <= 0 ||
+      requiredConsecutiveAbsentObservations > maxAttempts) {
     return false;
   }
 
+  var consecutiveAbsentObservations = 0;
   for (var attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       final services = await loadServices();
@@ -71,7 +85,12 @@ Future<bool> powerboardsWaitForRoomServiceRemoval({
         routeStillPresent = normalizedRouteDomains.any(currentRouteDomains.contains);
       }
       if (!stillPresent && !routeStillPresent) {
-        return true;
+        consecutiveAbsentObservations += 1;
+        if (consecutiveAbsentObservations >= requiredConsecutiveAbsentObservations) {
+          return true;
+        }
+      } else {
+        consecutiveAbsentObservations = 0;
       }
     } catch (_) {
       return false;
@@ -82,6 +101,67 @@ Future<bool> powerboardsWaitForRoomServiceRemoval({
     }
   }
   return false;
+}
+
+Future<PowerboardsWebServerResourceRemoval> powerboardsUninstallV1WebServerResources({
+  required meshagent_client.Meshagent client,
+  required String projectId,
+  required String roomName,
+  String? serviceInstanceId,
+}) async {
+  final normalizedProjectId = projectId.trim();
+  final normalizedRoomName = roomName.trim();
+  if (normalizedProjectId.isEmpty || normalizedRoomName.isEmpty) {
+    throw StateError('Web server room context is not available.');
+  }
+
+  final normalizedServiceInstanceId = serviceInstanceId?.trim();
+  final services = await client.listRoomServices(projectId: normalizedProjectId, roomName: normalizedRoomName);
+  ServiceSpec? webServer;
+  ServiceSpec? firstWebServer;
+  for (final service in services) {
+    if (service.metadata.annotations['meshagent.service.id'] != powerboardsWebServerServiceId) {
+      continue;
+    }
+    firstWebServer ??= service;
+    if (normalizedServiceInstanceId == null || normalizedServiceInstanceId.isEmpty || service.id?.trim() == normalizedServiceInstanceId) {
+      webServer = service;
+      break;
+    }
+  }
+  webServer ??= firstWebServer;
+  if (webServer == null) {
+    return const PowerboardsWebServerResourceRemoval(wasInstalled: false, removedDomains: <String>[]);
+  }
+
+  final serviceId = webServer.id?.trim();
+  if (serviceId == null || serviceId.isEmpty) {
+    throw StateError('The Web server service is missing its service id.');
+  }
+
+  final roomRoutes = await client.listRoomRoutes(projectId: normalizedProjectId, roomName: normalizedRoomName);
+  final matchedRoutes = routesForService(routes: roomRoutes, service: webServer);
+  final removedDomains = matchedRoutes.map((route) => route.domain.trim()).where((domain) => domain.isNotEmpty).toList(growable: false);
+
+  await powerboardsDeleteRoutesThenService(
+    routes: matchedRoutes,
+    deleteRoute: (route) => client.deleteRoute(projectId: normalizedProjectId, domain: route.domain),
+    deleteService: () => client.deleteRoomService(projectId: normalizedProjectId, serviceId: serviceId, roomName: normalizedRoomName),
+    observeServiceDeleted: () {
+      return powerboardsWaitForRoomServiceRemoval(
+        serviceKindId: powerboardsWebServerServiceId,
+        loadServices: () => client.listRoomServices(projectId: normalizedProjectId, roomName: normalizedRoomName),
+        routeDomains: removedDomains,
+        loadRouteDomains: () async {
+          return (await client.listRoomRoutes(projectId: normalizedProjectId, roomName: normalizedRoomName)).map((route) => route.domain);
+        },
+        maxAttempts: powerboardsV1WebServerRemovalMaxAttempts,
+        requiredConsecutiveAbsentObservations: powerboardsV1WebServerRemovalStableObservations,
+      );
+    },
+  );
+
+  return PowerboardsWebServerResourceRemoval(wasInstalled: true, removedDomains: removedDomains);
 }
 
 Future<bool> _powerboardsFolderIsEmptyOrPlaceholderOnly(StorageClient storage, String folderName) async {
@@ -1029,20 +1109,29 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
         throw RoomServerException('service id is required to uninstall');
       }
 
-      await powerboardsDeleteRoutesThenService(
-        routes: domainsToDelete,
-        deleteRoute: (domain) => client.deleteRoute(projectId: widget.projectId, domain: domain.domain),
-        deleteService: () => client.deleteRoomService(projectId: widget.projectId, serviceId: serviceId, roomName: roomName),
-        observeServiceDeleted: () async {
-          return powerboardsWaitForRoomServiceRemoval(
-            serviceKindId: serviceKindId ?? serviceId,
-            loadServices: () => client.listRoomServices(projectId: widget.projectId, roomName: roomName),
-            routeDomains: domainsToDelete.map((route) => route.domain),
-            loadRouteDomains: () async =>
-                (await client.listRoomRoutes(projectId: widget.projectId, roomName: roomName)).map((route) => route.domain),
-          );
-        },
-      );
+      if (preservedFolderName != null) {
+        await powerboardsUninstallV1WebServerResources(
+          client: client,
+          projectId: widget.projectId,
+          roomName: roomName,
+          serviceInstanceId: serviceId,
+        );
+      } else {
+        await powerboardsDeleteRoutesThenService(
+          routes: domainsToDelete,
+          deleteRoute: (domain) => client.deleteRoute(projectId: widget.projectId, domain: domain.domain),
+          deleteService: () => client.deleteRoomService(projectId: widget.projectId, serviceId: serviceId, roomName: roomName),
+          observeServiceDeleted: () async {
+            return powerboardsWaitForRoomServiceRemoval(
+              serviceKindId: serviceKindId ?? serviceId,
+              loadServices: () => client.listRoomServices(projectId: widget.projectId, roomName: roomName),
+              routeDomains: domainsToDelete.map((route) => route.domain),
+              loadRouteDomains: () async =>
+                  (await client.listRoomRoutes(projectId: widget.projectId, roomName: roomName)).map((route) => route.domain),
+            );
+          },
+        );
+      }
 
       String? preservedFolderPath;
       if (preservedFolderName != null) {

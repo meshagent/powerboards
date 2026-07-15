@@ -35,7 +35,8 @@ void main() {
       expect(tool.inputSchema['required'], ['site_name', 'domain', 'intent']);
 
       final result = await tool.execute(const ToolContext(), {'site_name': 'sunrise', 'domain': '', 'intent': 'install_only'});
-      await Future<void>.delayed(Duration.zero);
+      expect(refreshed, isNull);
+      await tool.onToolResponseSent(const ToolContext(), result);
 
       expect(request?.projectId, 'project-1');
       expect(request?.roomName, 'room-1');
@@ -214,7 +215,8 @@ void main() {
       expect(tool.inputSchema['properties'], isEmpty);
 
       final result = await tool.execute(const ToolContext(), {});
-      await Future<void>.delayed(Duration.zero);
+      expect(refreshed, isNull);
+      await tool.onToolResponseSent(const ToolContext(), result);
 
       expect(request?.projectId, 'project-1');
       expect(request?.roomName, 'room-1');
@@ -258,8 +260,9 @@ void main() {
       expect(result.json['assistant_reply'], 'The Web server service is not installed in this room.');
     });
 
-    test('returns tool output before service refresh callback completes', () async {
+    test('waits for response delivery before starting the service refresh callback', () async {
       final refreshCompleter = Completer<void>();
+      var refreshStarted = false;
       final tool = UninstallWebServerServiceTool(
         projectId: 'project-1',
         roomName: 'room-1',
@@ -272,11 +275,20 @@ void main() {
             message: 'Removed the Web server service from this room.',
           );
         },
-        onUninstalled: (_) => refreshCompleter.future,
+        onUninstalled: (_) {
+          refreshStarted = true;
+          return refreshCompleter.future;
+        },
       );
 
       final result = await tool.execute(const ToolContext(), {}).timeout(const Duration(milliseconds: 100)) as JsonContent;
+      expect(refreshStarted, isFalse);
+
+      final notification = tool.onToolResponseSent(const ToolContext(), result);
+      await Future<void>.delayed(Duration.zero);
+      expect(refreshStarted, isTrue);
       refreshCompleter.complete();
+      await notification;
 
       expect(result.json['status'], 'removed');
       expect(result.json['assistant_reply'], contains('Files were kept in Files at `website`.'));
@@ -383,6 +395,32 @@ void main() {
     expect(routeLoads, 3);
   });
 
+  test('V1 service removal observer rejects a transient absence before stable convergence', () async {
+    var loads = 0;
+    var waits = 0;
+    final webServer = ServiceSpec(
+      metadata: ServiceMetadata(name: 'web server', annotations: const {'meshagent.service.id': powerboardsWebServerServiceId}),
+    );
+
+    final removed = await powerboardsWaitForRoomServiceRemoval(
+      serviceKindId: powerboardsWebServerServiceId,
+      maxAttempts: 4,
+      requiredConsecutiveAbsentObservations: 2,
+      loadServices: () async {
+        loads += 1;
+        return switch (loads) {
+          2 => [webServer],
+          _ => const <ServiceSpec>[],
+        };
+      },
+      wait: (_) async => waits += 1,
+    );
+
+    expect(removed, isTrue);
+    expect(loads, 4);
+    expect(waits, 3);
+  });
+
   test('route and service deletion fails instead of reporting success before convergence', () async {
     expect(
       () => powerboardsDeleteRoutesThenService(
@@ -432,6 +470,39 @@ void main() {
           uninstallWebServerServiceToolName,
         ]),
       );
+    });
+
+    test('uses the registered V1 uninstall runner and refresh callback', () async {
+      UninstallWebServerServiceRequest? request;
+      UninstallWebServerServiceResult? refreshed;
+      final toolkit = powerboardsRoomUiToolkit(
+        context: _FakeBuildContext(),
+        enableV1WebServerTools: true,
+        projectId: 'project-1',
+        roomName: 'room-1',
+        uninstallWebServerService: (input) async {
+          request = input;
+          return const UninstallWebServerServiceResult(
+            status: 'removed',
+            folderPath: 'website/',
+            siteLabel: 'site.meshagent.dev',
+            preservedFolderPath: 'site.meshagent.dev',
+            removedDomains: ['site.meshagent.dev'],
+            message: 'removed',
+          );
+        },
+        onWebServerServiceUninstalled: (result) => refreshed = result,
+      );
+      final tool = toolkit.tools.firstWhere((tool) => tool.name == uninstallWebServerServiceToolName) as UninstallWebServerServiceTool;
+
+      final result = await tool.execute(const ToolContext(), const {}) as JsonContent;
+      expect(refreshed, isNull);
+      await tool.onToolResponseSent(const ToolContext(), result);
+
+      expect(request?.projectId, 'project-1');
+      expect(request?.roomName, 'room-1');
+      expect(refreshed?.status, 'removed');
+      expect(result.json['status'], 'removed');
     });
 
     test('registers webserver tools only when room context and the V1 flag are present', () {
@@ -514,17 +585,18 @@ void main() {
         ),
       );
 
-      Future<Content> execute(String tool, Map<String, dynamic> arguments) {
-        return controller.executeClientToolCall(
-          agent_sessions.AgentClientToolCallRequested(
-            threadId: 'thread-1',
-            turnId: 'turn-1',
-            requestId: 'request-$tool',
-            toolkit: 'powerboards',
-            tool: tool,
-            arguments: arguments,
-          ),
+      Future<Content> execute(String tool, Map<String, dynamic> arguments) async {
+        final request = agent_sessions.AgentClientToolCallRequested(
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          requestId: 'request-$tool',
+          toolkit: 'powerboards',
+          tool: tool,
+          arguments: arguments,
         );
+        final response = await controller.executeClientToolCall(request);
+        await controller.finishClientToolCallResponse(request, responseSent: true);
+        return response;
       }
 
       await execute(installWebServerServiceToolName, {'site_name': 'site', 'domain': '', 'intent': 'install_only'});
@@ -535,10 +607,41 @@ void main() {
       });
       final opened = await execute(openWebServerFileToolName, {'path': 'index.html'});
       await execute(uninstallWebServerServiceToolName, const {});
-      await Future<void>.delayed(Duration.zero);
 
       expect(opened, isA<LinkContent>());
       expect(refreshes, ['installed', 'saved', 'uninstalled']);
+    });
+
+    test('does not refresh mutating UI state when the client tool response was not sent', () async {
+      var refreshed = false;
+      final controller = ChatThreadController(room: null);
+      addTearDown(controller.dispose);
+      controller.addClientToolkit(
+        InstallWebServerServiceToolkit(
+          projectId: 'project-1',
+          roomName: 'room-1',
+          enableV1WebServerTools: true,
+          uninstall: (_) async => const UninstallWebServerServiceResult(
+            status: 'removed',
+            folderPath: 'website/',
+            siteLabel: 'site.meshagent.dev',
+            message: 'removed',
+          ),
+          onUninstalled: (_) => refreshed = true,
+        ),
+      );
+      final request = agent_sessions.AgentClientToolCallRequested(
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        requestId: 'request-uninstall-not-sent',
+        toolkit: 'powerboards',
+        tool: uninstallWebServerServiceToolName,
+      );
+
+      await controller.executeClientToolCall(request);
+      await controller.finishClientToolCallResponse(request, responseSent: false);
+
+      expect(refreshed, isFalse);
     });
 
     test('exposes webserver install and site file actions for chat turns', () {

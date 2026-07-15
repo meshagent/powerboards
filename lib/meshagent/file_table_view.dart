@@ -137,6 +137,23 @@ bool powerboardsV1IsCanonicalWebServerFolder({required bool usesDesktopV1FilesBr
   return usesDesktopV1FilesBrowser && isFolder && PendingStorageDeletes.normalizePath(fullPath) == powerboardsWebServerFolderName;
 }
 
+@visibleForTesting
+Future<bool> powerboardsV1DeleteFolderIfPresent({required Future<bool> Function() exists, required Future<void> Function() delete}) async {
+  if (!await exists()) {
+    return false;
+  }
+
+  try {
+    await delete();
+    return true;
+  } catch (_) {
+    if (!await exists()) {
+      return false;
+    }
+    rethrow;
+  }
+}
+
 class _V1WebsitePreviewState {
   const _V1WebsitePreviewState({required this.entryPath, this.previewHtml, this.previewUrl, required this.title})
     : assert(previewHtml != null || previewUrl != null);
@@ -4589,36 +4606,16 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     final client = powerboards_meshagent.getMeshagentClient();
-    final listedServices = await client.listRoomServices(projectId: projectId, roomName: roomName);
-    final service = listedServices.firstWhereOrNull(
-      (candidate) => candidate.metadata.annotations['meshagent.service.id'] == _webServerServiceId,
-    );
-    if (service != null) {
-      final serviceId = service.id?.trim();
-      if (serviceId == null || serviceId.isEmpty) {
-        throw StateError('The Web server service is missing its service id.');
-      }
-      final routes = await client.listRoutes(projectId);
-      final matchedRoutes = routesForService(routes: routes, service: service);
-
-      await powerboardsDeleteRoutesThenService(
-        routes: matchedRoutes,
-        deleteRoute: (route) => client.deleteRoute(projectId: projectId, domain: route.domain),
-        deleteService: () => client.deleteRoomService(projectId: projectId, serviceId: serviceId, roomName: roomName),
-        observeServiceDeleted: () async {
-          return powerboardsWaitForRoomServiceRemoval(
-            serviceKindId: _webServerServiceId,
-            loadServices: () => client.listRoomServices(projectId: projectId, roomName: roomName),
-            routeDomains: matchedRoutes.map((route) => route.domain),
-            loadRouteDomains: () async =>
-                (await client.listRoomRoutes(projectId: projectId, roomName: roomName)).map((route) => route.domain),
-          );
-        },
-      );
-    }
+    await powerboardsUninstallV1WebServerResources(client: client, projectId: projectId, roomName: roomName);
 
     try {
-      await _deleteFolder(folderPath);
+      final deleted = await powerboardsV1DeleteFolderIfPresent(
+        exists: () => widget.client.storage.exists(folderPath),
+        delete: () => _deleteFolder(folderPath),
+      );
+      if (!deleted) {
+        _removePath(folderPath, isFolder: true);
+      }
     } catch (error) {
       await _refreshWebServerState();
       throw StateError('The website service was removed, but the website folder could not be deleted: $error');

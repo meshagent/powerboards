@@ -16,8 +16,11 @@ UIToolkit powerboardsRoomUiToolkit({
   required String? roomName,
   InstallWebServerServiceRunner installWebServerService = installPowerboardsWebServerService,
   SaveWebServerSiteFilesRunner saveWebServerSiteFiles = savePowerboardsWebServerSiteFiles,
+  OpenWebServerFileRunner openWebServerFile = openPowerboardsWebServerFile,
+  UninstallWebServerServiceRunner uninstallWebServerService = uninstallPowerboardsWebServerService,
   FutureOr<void> Function(InstallWebServerServiceResult result)? onWebServerServiceInstalled,
   FutureOr<void> Function(SaveWebServerSiteFilesResult result)? onWebServerSiteFilesSaved,
+  FutureOr<void> Function(UninstallWebServerServiceResult result)? onWebServerServiceUninstalled,
 }) {
   return UIToolkit(
     context: context,
@@ -26,8 +29,11 @@ UIToolkit powerboardsRoomUiToolkit({
     roomName: enableV1WebServerTools ? roomName : null,
     installWebServerService: installWebServerService,
     saveWebServerSiteFiles: saveWebServerSiteFiles,
+    openWebServerFile: openWebServerFile,
+    uninstallWebServerService: uninstallWebServerService,
     onWebServerServiceInstalled: onWebServerServiceInstalled,
     onWebServerSiteFilesSaved: onWebServerSiteFilesSaved,
+    onWebServerServiceUninstalled: onWebServerServiceUninstalled,
   );
 }
 
@@ -39,8 +45,11 @@ class UIToolkit extends Toolkit {
     String? roomName,
     InstallWebServerServiceRunner installWebServerService = installPowerboardsWebServerService,
     SaveWebServerSiteFilesRunner saveWebServerSiteFiles = savePowerboardsWebServerSiteFiles,
+    OpenWebServerFileRunner openWebServerFile = openPowerboardsWebServerFile,
+    UninstallWebServerServiceRunner uninstallWebServerService = uninstallPowerboardsWebServerService,
     FutureOr<void> Function(InstallWebServerServiceResult result)? onWebServerServiceInstalled,
     FutureOr<void> Function(SaveWebServerSiteFilesResult result)? onWebServerSiteFilesSaved,
+    FutureOr<void> Function(UninstallWebServerServiceResult result)? onWebServerServiceUninstalled,
   }) : super(
          name: "ui",
          title: "ui tools",
@@ -59,8 +68,11 @@ class UIToolkit extends Toolkit {
                enableV1WebServerTools: enableV1WebServerTools,
                install: installWebServerService,
                saveSiteFiles: saveWebServerSiteFiles,
+               openFile: openWebServerFile,
+               uninstall: uninstallWebServerService,
                onInstalled: onWebServerServiceInstalled,
                onSaved: onWebServerSiteFilesSaved,
+               onUninstalled: onWebServerServiceUninstalled,
              ),
            ],
          ],

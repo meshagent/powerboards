@@ -316,7 +316,7 @@ class MeshagentThreadView extends StatefulWidget {
   final ValueChanged<String>? onComposerAttachmentRemoved;
   final ValueChanged<String>? onThreadAttachmentOpen;
   final FileDropOverlayBuilder? fileDropOverlayBuilder;
-  final VoidCallback? onServiceChanged;
+  final FutureOr<void> Function()? onServiceChanged;
 
   @override
   State createState() => _MeshagentThreadViewState();
