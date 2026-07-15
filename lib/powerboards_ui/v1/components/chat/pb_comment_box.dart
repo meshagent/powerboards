@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../../theme/pb_colors.dart';
 import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
+import '../menus/pb_menu_anchor.dart';
+import '../menus/pb_menu_card.dart';
+import '../menus/pb_menu_list.dart';
+import '../menus/pb_menu_option.dart';
 import '../primitives/pb_svg_icon.dart';
 
 class PbCommentBoxShell extends StatelessWidget {
@@ -52,6 +56,8 @@ class PbCommentBox extends StatefulWidget {
 }
 
 class _PbCommentBoxState extends State<PbCommentBox> {
+  bool _hovered = false;
+
   @override
   void initState() {
     super.initState();
@@ -96,69 +102,78 @@ class _PbCommentBoxState extends State<PbCommentBox> {
     final focused = widget.dropActive || widget.focusNode.hasFocus;
     final placeholder = widget.dropActive && widget.controller.text.trim().isEmpty ? widget.dropPlaceholder : widget.placeholder;
 
-    return CustomPaint(
-      foregroundPainter: widget.dropActive
-          ? const _DashedRoundRectPainter(color: PbColors.borderStateSelected, radius: PbRadii.medium)
-          : null,
-      child: Container(
-        key: const ValueKey('comment-box'),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(PbRadii.medium),
-          border: Border.all(color: focused ? PbColors.borderStateSelected : PbColors.borderSoft),
-          gradient: LinearGradient(
-            colors: widget.dropActive
-                ? const <Color>[PbColors.surfaceStateSelected, PbColors.surfaceStateSelected]
-                : const <Color>[PbColors.surfacePanel, PbColors.surfacePanelSoft],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: CustomPaint(
+        foregroundPainter: widget.dropActive
+            ? const _DashedRoundRectPainter(color: PbColors.borderStateSelected, radius: PbRadii.medium)
+            : null,
+        child: Container(
+          key: const ValueKey('comment-box'),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(PbRadii.medium),
+            border: Border.all(color: focused ? PbColors.borderStateSelected : PbColors.borderSoft),
+            gradient: LinearGradient(
+              colors: widget.dropActive
+                  ? const <Color>[PbColors.surfaceStateSelected, PbColors.surfaceStateSelected]
+                  : const <Color>[PbColors.surfacePanel, PbColors.surfacePanelSoft],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            boxShadow: focused
+                ? <BoxShadow>[
+                    BoxShadow(color: PbColors.borderStateSelected.withValues(alpha: 0.36), blurRadius: 0, spreadRadius: 3),
+                    ...PbShadows.card,
+                  ]
+                : _hovered
+                ? PbShadows.stateHover
+                : PbShadows.card,
           ),
-          boxShadow: focused
-              ? const <BoxShadow>[BoxShadow(color: Color.fromRGBO(199, 216, 255, 0.36), blurRadius: 0, spreadRadius: 3), ...PbShadows.card]
-              : PbShadows.card,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            if (widget.attachmentChips.isNotEmpty) ...<Widget>[
-              Wrap(spacing: 12, runSpacing: 10, children: widget.attachmentChips),
-              const SizedBox(height: 14),
-            ],
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 28, maxHeight: 168),
-              child: Material(
-                type: MaterialType.transparency,
-                child: TextField(
-                  key: const ValueKey('comment-box-input'),
-                  controller: widget.controller,
-                  focusNode: widget.focusNode,
-                  minLines: 1,
-                  maxLines: 6,
-                  readOnly: widget.readOnly || widget.dropActive,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  cursorColor: PbColors.customBrandInk,
-                  style: PowerboardsTypography.p.copyWith(color: PbColors.textBody),
-                  decoration: InputDecoration.collapsed(
-                    hintText: placeholder,
-                    hintStyle: PowerboardsTypography.p.copyWith(color: PbColors.textMuted),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (widget.attachmentChips.isNotEmpty) ...<Widget>[
+                Wrap(spacing: 12, runSpacing: 10, children: widget.attachmentChips),
+                const SizedBox(height: 14),
+              ],
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 28, maxHeight: 168),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: TextField(
+                    key: const ValueKey('comment-box-input'),
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    minLines: 1,
+                    maxLines: 6,
+                    readOnly: widget.readOnly || widget.dropActive,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    cursorColor: PbColors.textPrimary,
+                    style: PowerboardsTypography.p.copyWith(color: PbColors.textBody),
+                    decoration: InputDecoration.collapsed(
+                      hintText: placeholder,
+                      hintStyle: PowerboardsTypography.p.copyWith(color: PbColors.textMuted),
+                    ),
+                    onChanged: widget.onChanged,
                   ),
-                  onChanged: widget.onChanged,
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: <Widget>[
-                ...widget.leadingControls,
-                if (widget.trailingControl != null) const Spacer(),
-                if (widget.trailingControl != null) widget.trailingControl!,
-              ],
-            ),
-            if (widget.status != null) ...<Widget>[const SizedBox(height: 12), widget.status!],
-          ],
+              const SizedBox(height: 14),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: <Widget>[
+                  ...widget.leadingControls,
+                  if (widget.trailingControl != null) const Spacer(),
+                  if (widget.trailingControl != null) widget.trailingControl!,
+                ],
+              ),
+              if (widget.status != null) ...<Widget>[const SizedBox(height: 12), widget.status!],
+            ],
+          ),
         ),
       ),
     );
@@ -367,6 +382,123 @@ class PbComposerMenuButton extends StatelessWidget {
             child: const PbSvgIcon(assetName: 'chevron-down', size: 16, color: PbColors.customBrandInk),
           ),
         ],
+      ),
+    );
+  }
+}
+
+@immutable
+class PbComposerModelOption {
+  const PbComposerModelOption({required this.key, required this.label});
+
+  final String key;
+  final String label;
+}
+
+class PbComposerModelSelector extends StatefulWidget {
+  const PbComposerModelSelector({
+    super.key,
+    required this.selectedKey,
+    required this.options,
+    required this.onSelected,
+    this.active = true,
+  });
+
+  final String selectedKey;
+  final List<PbComposerModelOption> options;
+  final ValueChanged<String> onSelected;
+  final bool active;
+
+  @override
+  State<PbComposerModelSelector> createState() => _PbComposerModelSelectorState();
+}
+
+class _PbComposerModelSelectorState extends State<PbComposerModelSelector> {
+  bool _open = false;
+
+  @override
+  void didUpdateWidget(covariant PbComposerModelSelector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.active || widget.options.isEmpty) {
+      _open = false;
+    }
+  }
+
+  void _setOpen(bool open) {
+    if (_open == open) {
+      return;
+    }
+    setState(() => _open = open);
+  }
+
+  void _select(PbComposerModelOption option) {
+    if (option.key != widget.selectedKey) {
+      widget.onSelected(option.key);
+    }
+    _setOpen(false);
+  }
+
+  PbComposerModelOption? get _selectedOption {
+    for (final option in widget.options) {
+      if (option.key == widget.selectedKey) {
+        return option;
+      }
+    }
+    return widget.options.isEmpty ? null : widget.options.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = _selectedOption;
+    final enabled = widget.active && selected != null;
+
+    return PbMenuAnchor(
+      placement: PbMenuAnchorPlacement.bottomLeft,
+      gap: 8,
+      preferAboveWhenOverflow: true,
+      onDismiss: () => _setOpen(false),
+      panel: _open
+          ? PbMenuCard(
+              width: 240,
+              child: PbMenuList(
+                children: <Widget>[
+                  for (final option in widget.options)
+                    PbMenuOption(
+                      title: option.label,
+                      trailingIconAssetName: option.key == widget.selectedKey ? 'circle-check-big' : null,
+                      singleLine: true,
+                      selected: option.key == widget.selectedKey,
+                      selectedSurface: option.key == widget.selectedKey,
+                      onPressed: () => _select(option),
+                    ),
+                ],
+              ),
+            )
+          : null,
+      child: PbComposerActionSurface(
+        tooltip: 'Choose assistant model',
+        minHeight: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        active: widget.active,
+        onPressed: enabled ? () => _setOpen(!_open) : null,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const PbSvgIcon(assetName: 'bot', size: 18, color: PbColors.customBrandInk),
+            const SizedBox(width: 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 170),
+              child: Text(selected?.label ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: PowerboardsTypography.button),
+            ),
+            const SizedBox(width: 8),
+            AnimatedRotation(
+              turns: _open ? -0.5 : 0,
+              duration: PbMotion.chevron,
+              curve: Curves.easeOutCubic,
+              child: const PbSvgIcon(assetName: 'chevron-down', size: 16, color: PbColors.customBrandInk),
+            ),
+          ],
+        ),
       ),
     );
   }
