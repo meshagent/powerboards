@@ -104,6 +104,21 @@ const Map<String, TextStyle> _desktopV1ThreadCodeHighlightTheme = {
   'meta': TextStyle(color: _desktopV1ThreadCodeCommentColor),
 };
 
+String? powerboardsV1WebServerProductLinkStoragePath(Uri uri) {
+  final rawPath = uri.queryParameters['path']?.trim().replaceAll('\\', '/');
+  if (rawPath == null || rawPath.isEmpty) {
+    return null;
+  }
+  final segments = rawPath.split('/').map((segment) => segment.trim()).where((segment) => segment.isNotEmpty).toList(growable: false);
+  if (segments.isEmpty || segments.first != powerboardsWebServerFolderName) {
+    return null;
+  }
+  if (segments.any((segment) => segment == '.' || segment == '..' || segment.startsWith('.'))) {
+    return null;
+  }
+  return segments.join('/');
+}
+
 Uri powerboardsV1ThreadRouteUri({
   required Uri currentUri,
   required String pane,
@@ -364,13 +379,18 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
     if (uri.host == 'files' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'webserver') {
       if (powerboardsUsesDesktopUiPreview(context)) {
-        _openWebServerFolder(context);
+        _openWebServerFolder(context, storagePath: powerboardsV1WebServerProductLinkStoragePath(uri));
       }
       return true;
     }
     if (uri.host == 'preview' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'webserver') {
       if (powerboardsUsesDesktopUiPreview(context)) {
-        _openWebServerPreview(context);
+        final storagePath = powerboardsV1WebServerProductLinkStoragePath(uri);
+        if (storagePath == null) {
+          _openWebServerPreview(context);
+        } else {
+          _openThreadAttachment(storagePath);
+        }
       }
       return true;
     }
@@ -385,13 +405,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     return false;
   }
 
-  void _openWebServerFolder(BuildContext context) {
-    _replaceRoomRouteState(
-      context,
-      pane: 'files',
-      rawPath: '$powerboardsWebServerFolderName/',
-      removeQueryParameters: const {'webserver_preview'},
-    );
+  void _openWebServerFolder(BuildContext context, {String? storagePath}) {
+    final normalizedPath = storagePath?.trim();
+    final folderPath = normalizedPath == null || normalizedPath.isEmpty
+        ? '$powerboardsWebServerFolderName/'
+        : '${normalizedPath.replaceFirst(RegExp(r'/+$'), '')}/';
+    _replaceRoomRouteState(context, pane: 'files', rawPath: folderPath, removeQueryParameters: const {'webserver_preview'});
   }
 
   void _openWebServerPreview(BuildContext context) {
@@ -546,6 +565,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         onInstalled: (_) => widget.onServiceChanged?.call(),
         onSaved: (_) => widget.onServiceChanged?.call(),
         onUninstalled: (_) => widget.onServiceChanged?.call(),
+        listFiles: (request) => listPowerboardsWebServerFiles(request, storage: widget.client.storage),
         openFile: (request) => openPowerboardsWebServerFile(request, storage: widget.client.storage),
         uninstall: (request) => uninstallPowerboardsWebServerService(request, storage: widget.client.storage),
       ),

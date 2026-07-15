@@ -331,6 +331,59 @@ void main() {
     });
   });
 
+  group('ListWebServerFilesTool', () {
+    test('returns visible entries with clickable Powerboards links', () async {
+      ListWebServerFilesRequest? request;
+      final tool = ListWebServerFilesTool(
+        projectId: 'project-1',
+        roomName: 'room-1',
+        listFiles: (input) async {
+          request = input;
+          return const ListWebServerFilesResult(
+            status: 'listed',
+            folderPath: 'website',
+            entries: [
+              ListWebServerFilesEntry(name: 'assets', path: 'website/assets', isFolder: true),
+              ListWebServerFilesEntry(name: 'index.html', path: 'website/index.html', isFolder: false),
+            ],
+            message: 'Listed 2 visible webserver entries.',
+          );
+        },
+      );
+
+      final result = await tool.execute(const ToolContext(), {'path': ''}) as JsonContent;
+
+      expect(request?.projectId, 'project-1');
+      expect(request?.roomName, 'room-1');
+      expect(request?.path, isEmpty);
+      expect(result.json['folder_link'], 'powerboards://files/webserver');
+      expect(result.json['entries'], [
+        {'name': 'assets', 'path': 'website/assets', 'type': 'folder', 'link': 'powerboards://files/webserver?path=website%2Fassets'},
+        {
+          'name': 'index.html',
+          'path': 'website/index.html',
+          'type': 'file',
+          'link': 'powerboards://preview/webserver?path=website%2Findex.html',
+        },
+      ]);
+      expect(result.json['assistant_reply'], contains('[index.html](powerboards://preview/webserver?path=website%2Findex.html)'));
+    });
+
+    test('filters every hidden direct child including the placeholder', () {
+      final now = DateTime.utc(2026, 7, 14);
+      final entries = powerboardsVisibleWebServerEntries(
+        folderPath: 'website',
+        entries: [
+          StorageEntry(name: '.placeholder', isFolder: false, size: 0, createdAt: now, updatedAt: now),
+          StorageEntry(name: '.drafts', isFolder: true, size: null, createdAt: now, updatedAt: now),
+          StorageEntry(name: 'index.html', isFolder: false, size: 42, createdAt: now, updatedAt: now),
+        ],
+      );
+
+      expect(entries.map((entry) => entry.name), ['index.html']);
+    });
+  });
+
   test('webserver lifecycle removes routes before deleting the service', () async {
     final operations = <String>[];
 
@@ -469,6 +522,12 @@ void main() {
             createdFiles: ['index.html'],
             message: 'saved',
           ),
+          listFiles: (_) async => const ListWebServerFilesResult(
+            status: 'listed',
+            folderPath: 'website',
+            entries: [ListWebServerFilesEntry(name: 'index.html', path: 'website/index.html', isFolder: false)],
+            message: 'listed',
+          ),
           openFile: (_) async => const OpenWebServerFileResult(status: 'opened', path: 'website/index.html', message: 'opened'),
           uninstall: (_) async => const UninstallWebServerServiceResult(
             status: 'removed',
@@ -502,9 +561,11 @@ void main() {
           {'path': 'index.html', 'content': '<html></html>'},
         ],
       });
+      final listed = await execute(listWebServerFilesToolName, {'path': ''});
       final opened = await execute(openWebServerFileToolName, {'path': 'index.html'});
       await execute(uninstallWebServerServiceToolName, const {});
 
+      expect(listed, isA<JsonContent>());
       expect(opened, isA<LinkContent>());
       expect(refreshes, ['installed', 'saved', 'uninstalled']);
     });
@@ -560,6 +621,7 @@ void main() {
       expect(toolkit.tools.map((tool) => tool.name), [
         installWebServerServiceToolName,
         saveWebServerSiteFilesToolName,
+        listWebServerFilesToolName,
         openWebServerFileToolName,
         uninstallWebServerServiceToolName,
       ]);
@@ -573,6 +635,7 @@ void main() {
       expect(v1Toolkit.tools.map((tool) => tool.name), [
         installWebServerServiceToolName,
         saveWebServerSiteFilesToolName,
+        listWebServerFilesToolName,
         openWebServerFileToolName,
         uninstallWebServerServiceToolName,
       ]);

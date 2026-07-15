@@ -253,6 +253,22 @@ void main() {
     expect(nextUri.queryParameters.containsKey('webserver_preview'), isFalse);
   });
 
+  test('V1 webserver product links accept only paths inside the website root', () {
+    expect(
+      powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://preview/webserver?path=website%2Findex.html')),
+      'website/index.html',
+    );
+    expect(
+      powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://files/webserver?path=website%2Fassets')),
+      'website/assets',
+    );
+    expect(powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://preview/webserver?path=private.txt')), isNull);
+    expect(
+      powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://preview/webserver?path=website%2F..%2Fprivate.txt')),
+      isNull,
+    );
+  });
+
   testWidgets('composer attachment seed appears in the new thread composer', (tester) async {
     final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
