@@ -201,6 +201,49 @@ void main() {
     );
   });
 
+  test('V1 new-thread handoff selects the one thread added after send', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+
+    expect(
+      powerboardsV1NewThreadCandidatePath(
+        existingThreadPaths: const {'dataset://threads/old'},
+        startedAt: startedAt,
+        threads: [
+          (path: 'dataset://threads/old', createdAt: startedAt.subtract(const Duration(days: 1)).toIso8601String()),
+          (path: 'dataset://threads/new', createdAt: ''),
+        ],
+      ),
+      'dataset://threads/new',
+    );
+    expect(
+      powerboardsV1NewThreadCandidatePath(
+        existingThreadPaths: const {'dataset://threads/old'},
+        startedAt: startedAt,
+        threads: [
+          (path: 'dataset://threads/new-a', createdAt: startedAt.toIso8601String()),
+          (path: 'dataset://threads/new-b', createdAt: startedAt.toIso8601String()),
+        ],
+      ),
+      isNull,
+    );
+  });
+
+  test('V1 new-thread handoff uses creation time only when no thread snapshot was loaded', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+
+    expect(
+      powerboardsV1NewThreadCandidatePath(
+        existingThreadPaths: null,
+        startedAt: startedAt,
+        threads: [
+          (path: 'dataset://threads/old', createdAt: startedAt.subtract(const Duration(hours: 1)).toIso8601String()),
+          (path: 'dataset://threads/new', createdAt: startedAt.add(const Duration(seconds: 12)).toIso8601String()),
+        ],
+      ),
+      'dataset://threads/new',
+    );
+  });
+
   test('desktop preview resolves a pending agent thread to its one visible dataset thread', () {
     const pendingPath = 'agent://threads/webserver-service-installation';
     const visiblePath = 'dataset://agents/assistant/threads/webserver-service-installation';
