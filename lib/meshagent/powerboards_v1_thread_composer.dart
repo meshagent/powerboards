@@ -90,6 +90,21 @@ bool _powerboardsV1PromptLooksWebsiteRelated(String text, String label) {
       normalized.contains('site ');
 }
 
+@visibleForTesting
+bool powerboardsV1ThreadRequiresRecovery(String? errorMessage) {
+  final normalized = errorMessage?.trim().toLowerCase();
+  return normalized != null && normalized.contains('no tool output found for function call');
+}
+
+const String powerboardsV1ThreadRecoveryLink = 'powerboards://threads/new';
+
+String powerboardsV1ThreadRecoveryErrorText(String errorMessage) {
+  if (!powerboardsV1ThreadRequiresRecovery(errorMessage)) {
+    return errorMessage;
+  }
+  return '$errorMessage\n\n[Start a new thread]($powerboardsV1ThreadRecoveryLink)';
+}
+
 class PowerboardsV1ThreadComposer extends StatefulWidget {
   const PowerboardsV1ThreadComposer({
     super.key,
@@ -129,6 +144,10 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (powerboardsV1ThreadRequiresRecovery(widget.config.threadErrorMessage)) {
+      return KeyEventResult.ignored;
+    }
+
     if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed) {
       unawaited(_handleSend());
       return KeyEventResult.handled;
@@ -154,7 +173,7 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
   }
 
   Future<void> _handleSend() async {
-    if (_sending || !widget.config.sendEnabled) {
+    if (_sending || !widget.config.sendEnabled || powerboardsV1ThreadRequiresRecovery(widget.config.threadErrorMessage)) {
       return;
     }
 
@@ -213,10 +232,20 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (mounted && !powerboardsV1ThreadRequiresRecovery(widget.config.threadErrorMessage)) {
         _focusNode.requestFocus();
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant PowerboardsV1ThreadComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final requiresRecovery = powerboardsV1ThreadRequiresRecovery(widget.config.threadErrorMessage);
+    final previouslyRequiredRecovery = powerboardsV1ThreadRequiresRecovery(oldWidget.config.threadErrorMessage);
+    if (requiresRecovery && !previouslyRequiredRecovery) {
+      _focusNode.unfocus();
+    }
   }
 
   @override
@@ -227,8 +256,10 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
 
   @override
   Widget build(BuildContext context) {
+    final requiresRecovery = powerboardsV1ThreadRequiresRecovery(widget.config.threadErrorMessage);
+
     if (widget.config.audioInputEnabled || widget.config.automaticAudioTurnDetection) {
-      return widget.defaultInput;
+      return requiresRecovery ? _buildDisabledComposer(widget.defaultInput) : widget.defaultInput;
     }
 
     return AnimatedBuilder(
@@ -238,6 +269,7 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
         final allAttachmentsCompleted =
             attachments.isEmpty || attachments.every((attachment) => attachment.status == UploadStatus.completed);
         final canSend =
+            !requiresRecovery &&
             !_sending &&
             widget.config.sendEnabled &&
             allAttachmentsCompleted &&
@@ -245,11 +277,12 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
         final sendPending = _sending || (!widget.config.sendEnabled && widget.config.onCancelSend != null);
         final showMcpConnectors = _showMcpConnectors();
 
-        return PbCommentBoxShell(
+        final composer = PbCommentBoxShell(
           child: PbCommentBox(
             controller: widget.config.controller.textFieldController,
             focusNode: _focusNode,
             placeholder: _placeholderText,
+            readOnly: requiresRecovery,
             attachmentChips: <Widget>[for (final attachment in attachments) _buildAttachmentChip(attachment)],
             leadingControls: <Widget>[
               PowerboardsDesktopChatAttachButton(
@@ -277,10 +310,28 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
                 ),
             ],
             trailingControl: sendPending ? const _PendingSendButton() : PbComposerSendButton(active: canSend, onPressed: _handleSend),
-            onChanged: (value) => widget.config.onChanged?.call(value, widget.config.controller.attachmentUploads),
+            onChanged: requiresRecovery
+                ? null
+                : (value) => widget.config.onChanged?.call(value, widget.config.controller.attachmentUploads),
           ),
         );
+        return requiresRecovery ? _buildDisabledComposer(composer) : composer;
       },
+    );
+  }
+
+  Widget _buildDisabledComposer(Widget composer) {
+    return Semantics(
+      container: true,
+      enabled: false,
+      label: 'This thread can’t accept new messages',
+      child: Focus(
+        canRequestFocus: false,
+        descendantsAreFocusable: false,
+        child: AbsorbPointer(
+          child: Opacity(key: const Key('powerboards-v1-poisoned-thread-composer'), opacity: 0.5, child: composer),
+        ),
+      ),
     );
   }
 

@@ -46,7 +46,7 @@ RoomClient _roomClientWithAdminGrant({required bool isAdmin}) {
   );
 }
 
-Widget _buildHarness({required RoomClient room, required ChatThreadController controller}) {
+Widget _buildHarness({required RoomClient room, required ChatThreadController controller, String? threadErrorMessage}) {
   return ShadApp(
     home: Scaffold(
       body: PowerboardsV1ThreadComposer(
@@ -60,6 +60,7 @@ Widget _buildHarness({required RoomClient room, required ChatThreadController co
           sendEnabled: true,
           sendDisabledReason: null,
           readOnly: false,
+          threadErrorMessage: threadErrorMessage,
           onSend: (text, attachments) async {},
         ),
         defaultInput: const SizedBox.shrink(),
@@ -99,6 +100,18 @@ Widget _buildSendHarness({
 }
 
 void main() {
+  test('V1 thread recovery recognizes only missing tool output errors', () {
+    const poisonedError = 'Error from OpenAI websocket: No tool output found for function call call_example.';
+    expect(powerboardsV1ThreadRequiresRecovery(poisonedError), isTrue);
+    expect(powerboardsV1ThreadRequiresRecovery('Error from OpenAI websocket: unknown parameter'), isFalse);
+    expect(powerboardsV1ThreadRequiresRecovery(null), isFalse);
+    expect(powerboardsV1ThreadRecoveryErrorText(poisonedError), '$poisonedError\n\n[Start a new thread]($powerboardsV1ThreadRecoveryLink)');
+    expect(
+      powerboardsV1ThreadRecoveryErrorText('Error from OpenAI websocket: unknown parameter'),
+      'Error from OpenAI websocket: unknown parameter',
+    );
+  });
+
   test('augment prompt keeps ordinary attachments unchanged', () {
     final result = powerboardsV1AugmentPromptForComposerAttachments('Please review this file.', [
       FileAttachment(path: 'docs/brief.pdf', displayName: 'brief.pdf'),
@@ -203,6 +216,46 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Waiting for Assistant to be ready.'), findsNothing);
+  });
+
+  testWidgets('v1 composer remains visible but disabled for a poisoned thread', (tester) async {
+    final room = _roomClientWithAdminGrant(isAdmin: true);
+    addTearDown(room.dispose);
+    final controller = ChatThreadController(room: room);
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _buildHarness(
+        room: room,
+        controller: controller,
+        threadErrorMessage: 'Error from OpenAI websocket: No tool output found for function call call_example.',
+      ),
+    );
+    await tester.pump();
+
+    final disabledComposer = find.byKey(const Key('powerboards-v1-poisoned-thread-composer'));
+    expect(disabledComposer, findsOneWidget);
+    expect(tester.widget<Opacity>(disabledComposer).opacity, 0.5);
+    expect(find.byType(EditableText), findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('comment-box-input'))).readOnly, isTrue);
+    expect(find.text('Start a new thread to continue'), findsNothing);
+    expect(find.text('Start new thread'), findsNothing);
+  });
+
+  testWidgets('v1 composer stays available for ordinary thread errors', (tester) async {
+    final room = _roomClientWithAdminGrant(isAdmin: true);
+    addTearDown(room.dispose);
+    final controller = ChatThreadController(room: room);
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _buildHarness(room: room, controller: controller, threadErrorMessage: 'Error from OpenAI websocket: unknown parameter'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('powerboards-v1-poisoned-thread-composer')), findsNothing);
+    expect(find.byType(EditableText), findsOneWidget);
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('comment-box-input'))).readOnly, isFalse);
   });
 
   testWidgets('v1 MCP menu hides Add for non-admin users', (tester) async {

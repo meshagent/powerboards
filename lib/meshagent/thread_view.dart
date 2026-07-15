@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:powerboards/nav/delete_room_dialog.dart';
 import 'package:powerboards/nav/rename_room_dialog.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
@@ -276,6 +277,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.selectedThreadDisplayName,
     this.onSelectedThreadPathChanged,
     this.onSelectedThreadResolved,
+    this.onStartNewThreadRequested,
     this.emptyState,
     this.newThreadEmptyStateVerticalOffset = 0,
     this.hideChatInput = false,
@@ -314,6 +316,7 @@ class MeshagentThreadView extends StatefulWidget {
   final String? selectedThreadDisplayName;
   final ValueChanged<String?>? onSelectedThreadPathChanged;
   final void Function(String? path, String? displayName)? onSelectedThreadResolved;
+  final VoidCallback? onStartNewThreadRequested;
   final Widget? emptyState;
   final double newThreadEmptyStateVerticalOffset;
   final bool hideChatInput;
@@ -377,6 +380,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return false;
     }
 
+    if (uri.host == 'threads' && uri.pathSegments.length == 1 && uri.pathSegments.first == 'new') {
+      if (powerboardsUsesDesktopUiPreview(context)) {
+        _startNewThreadFromRecovery(context);
+      }
+      return true;
+    }
     if (uri.host == 'files' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'webserver') {
       if (powerboardsUsesDesktopUiPreview(context)) {
         _openWebServerFolder(context, storagePath: powerboardsV1WebServerProductLinkStoragePath(uri));
@@ -403,6 +412,51 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return true;
     }
     return false;
+  }
+
+  void _startNewThreadFromRecovery(BuildContext sourceContext) {
+    if (!mounted) {
+      return;
+    }
+    final startNewThread = widget.onStartNewThreadRequested;
+    if (startNewThread == null) {
+      _showThreadRecoveryFailureToast(sourceContext, canRetry: false);
+      return;
+    }
+
+    try {
+      startNewThread();
+    } catch (_) {
+      _showThreadRecoveryFailureToast(sourceContext, canRetry: true);
+    }
+  }
+
+  void _showThreadRecoveryFailureToast(BuildContext sourceContext, {required bool canRetry}) {
+    if (!mounted) {
+      return;
+    }
+    final toaster = ShadToaster.maybeOf(sourceContext) ?? ShadToaster.maybeOf(context);
+    if (toaster == null) {
+      return;
+    }
+
+    toaster.show(
+      powerboardsToast(
+        title: 'Unable to start a new thread',
+        description: canRetry ? 'Try again, or use New Thread in the sidebar.' : 'Use New Thread in the sidebar.',
+        destructive: true,
+        duration: const Duration(seconds: 8),
+        action: canRetry
+            ? PbTertiaryButton.solid(
+                label: 'Try again',
+                onPressed: () {
+                  toaster.hide();
+                  _startNewThreadFromRecovery(sourceContext);
+                },
+              )
+            : null,
+      ),
+    );
   }
 
   void _openWebServerFolder(BuildContext context, {String? storagePath}) {
@@ -971,6 +1025,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             suppressAgentOnlyChatContext: true,
             threadErrorSurfaceColor: PbColors.customAlertSoft,
             threadErrorTextColor: Color.lerp(PbColors.customAlert, PbColors.textBody, 0.18),
+            threadErrorTextResolver: powerboardsV1ThreadRecoveryErrorText,
             markdownHorizontalRuleColor: PbColors.borderSoft,
             markdownBlockquoteSideColor: PbColors.customBlue,
             markdownBlockquoteBackgroundColor: PbColors.surfaceAccentSoft,

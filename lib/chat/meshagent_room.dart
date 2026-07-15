@@ -3578,6 +3578,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     });
   }
 
+  void _startFreshDesktopPreviewThread(String? agentKey) {
+    if (!mounted || agentKey == null) {
+      return;
+    }
+
+    setState(() {
+      _pendingDesktopPreviewThreadPathByAgentKey.remove(agentKey);
+      _pendingDesktopPreviewThreadLabelByAgentKey.remove(agentKey);
+      _selectedThreadPathByAgentKey.remove(agentKey);
+      _selectedThreadLabelByAgentKey.remove(agentKey);
+      _newThreadResetVersion++;
+    });
+  }
+
   void _deferDesktopPreviewNewThreadSelection(String? agentKey, String? path, {String? displayName}) {
     if (agentKey == null) {
       return;
@@ -5030,6 +5044,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         selectedThreadDisplayName: resolvedSelectedThreadDisplayName ?? _selectedThreadLabelForAgentKey(agentKey),
         onSelectedThreadPathChanged: handleSelectedThreadPathChanged,
         onSelectedThreadResolved: handleSelectedThreadResolved,
+        onStartNewThreadRequested: deferDesktopPreviewNewThreadSelection && agentKey != null
+            ? () => _startFreshDesktopPreviewThread(agentKey)
+            : null,
         participantNames: [
           if (userEmail is String && userEmail.isNotEmpty) userEmail,
           if (agentName case final String agentParticipantName) agentParticipantName,
