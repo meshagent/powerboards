@@ -56,7 +56,6 @@ import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:powerboards/meshagent/tool_connection_scope.dart';
-import 'package:powerboards/meshagent/tools/install_webserver_service.dart';
 import 'package:powerboards/meshagent/tools/ui_toolkit.dart';
 import 'package:powerboards/meshagent/v1_file_preview_source.dart';
 import 'package:powerboards/meshagent/wait_for_agent_participant_builder.dart';
@@ -7898,20 +7897,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
                               return ToolConnectionScope(
                                 room: widget.room,
-                                tools: [
-                                  powerboardsRoomUiToolkit(
-                                    context: context,
-                                    enableV1WebServerTools: useDesktopUiPreview,
-                                    projectId: widget.projectId,
-                                    roomName: widget.room.roomName,
-                                    openWebServerFile: (request) => openPowerboardsWebServerFile(request, storage: widget.room.storage),
-                                    uninstallWebServerService: (request) =>
-                                        uninstallPowerboardsWebServerService(request, storage: widget.room.storage),
-                                    onWebServerServiceInstalled: (_) => _refreshServiceResourcesAndWait(),
-                                    onWebServerSiteFilesSaved: (_) => _refreshServiceResourcesAndWait(),
-                                    onWebServerServiceUninstalled: (_) => _refreshServiceResourcesAndWait(),
-                                  ),
-                                ],
+                                tools: [UIToolkit(context: context)],
                                 builder: (context, error) {
                                   final cs = ShadTheme.of(context).colorScheme;
 

@@ -13,6 +13,7 @@ import 'package:powerboards/meshagent/meshagent.dart';
 
 const String installWebServerServiceToolName = 'install_webserver_service';
 const String saveWebServerSiteFilesToolName = 'save_webserver_site_files';
+const String listWebServerFilesToolName = 'list_webserver_files';
 const String openWebServerFileToolName = 'open_webserver_file';
 const String uninstallWebServerServiceToolName = 'uninstall_webserver_service';
 

@@ -434,118 +434,15 @@ void main() {
   });
 
   group('UIToolkit', () {
-    test('keeps room webserver tools behind the V1 UI flag', () {
-      final legacyToolkit = powerboardsRoomUiToolkit(
-        context: _FakeBuildContext(),
-        enableV1WebServerTools: false,
-        projectId: 'project-1',
-        roomName: 'room-1',
-      );
-      final v1Toolkit = powerboardsRoomUiToolkit(
-        context: _FakeBuildContext(),
-        enableV1WebServerTools: true,
-        projectId: 'project-1',
-        roomName: 'room-1',
-      );
-
-      expect(
-        legacyToolkit.tools.map((tool) => tool.name),
-        isNot(
-          contains(
-            anyOf(
-              installWebServerServiceToolName,
-              saveWebServerSiteFilesToolName,
-              openWebServerFileToolName,
-              uninstallWebServerServiceToolName,
-            ),
-          ),
-        ),
-      );
-      expect(
-        v1Toolkit.tools.map((tool) => tool.name),
-        containsAll([
-          installWebServerServiceToolName,
-          saveWebServerSiteFilesToolName,
-          openWebServerFileToolName,
-          uninstallWebServerServiceToolName,
-        ]),
-      );
-    });
-
-    test('uses the registered V1 uninstall runner and refresh callback', () async {
-      UninstallWebServerServiceRequest? request;
-      UninstallWebServerServiceResult? refreshed;
-      final toolkit = powerboardsRoomUiToolkit(
-        context: _FakeBuildContext(),
-        enableV1WebServerTools: true,
-        projectId: 'project-1',
-        roomName: 'room-1',
-        uninstallWebServerService: (input) async {
-          request = input;
-          return const UninstallWebServerServiceResult(
-            status: 'removed',
-            folderPath: 'website/',
-            siteLabel: 'site.meshagent.dev',
-            preservedFolderPath: 'site.meshagent.dev',
-            removedDomains: ['site.meshagent.dev'],
-            message: 'removed',
-          );
-        },
-        onWebServerServiceUninstalled: (result) => refreshed = result,
-      );
-      final tool = toolkit.tools.firstWhere((tool) => tool.name == uninstallWebServerServiceToolName) as UninstallWebServerServiceTool;
-
-      final result = await tool.execute(const ToolContext(), const {}) as JsonContent;
-      expect(refreshed, isNull);
-      await tool.onToolResponseSent(const ToolContext(), result);
-
-      expect(request?.projectId, 'project-1');
-      expect(request?.roomName, 'room-1');
-      expect(refreshed?.status, 'removed');
-      expect(result.json['status'], 'removed');
-    });
-
-    test('registers webserver tools only when room context and the V1 flag are present', () {
-      final toolkit = UIToolkit(
-        context: _FakeBuildContext(),
-        enableV1WebServerTools: true,
-        projectId: 'project-1',
-        roomName: 'room-1',
-        installWebServerService: (_) async {
-          return const InstallWebServerServiceResult(
-            status: 'installed',
-            serviceId: 'meshagent.webserver',
-            folderPath: 'website/',
-            message: 'installed',
-          );
-        },
-      );
-
-      expect(
-        toolkit.tools.map((tool) => tool.name),
-        containsAll([
-          installWebServerServiceToolName,
-          saveWebServerSiteFilesToolName,
-          openWebServerFileToolName,
-          uninstallWebServerServiceToolName,
-        ]),
-      );
-    });
-
-    test('does not register install_webserver_service without room context', () {
+    test('keeps room-hosted UI tools separate from thread-owned webserver tools', () {
       final toolkit = UIToolkit(context: _FakeBuildContext());
+      final names = toolkit.tools.map((tool) => tool.name);
 
-      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(installWebServerServiceToolName)));
-      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(saveWebServerSiteFilesToolName)));
-    });
-
-    test('does not register webserver tools for a legacy room context', () {
-      final toolkit = UIToolkit(context: _FakeBuildContext(), projectId: 'project-1', roomName: 'room-1');
-
-      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(installWebServerServiceToolName)));
-      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(saveWebServerSiteFilesToolName)));
-      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(openWebServerFileToolName)));
-      expect(toolkit.tools.map((tool) => tool.name), isNot(contains(uninstallWebServerServiceToolName)));
+      expect(names, isNot(contains(installWebServerServiceToolName)));
+      expect(names, isNot(contains(saveWebServerSiteFilesToolName)));
+      expect(names, isNot(contains(listWebServerFilesToolName)));
+      expect(names, isNot(contains(openWebServerFileToolName)));
+      expect(names, isNot(contains(uninstallWebServerServiceToolName)));
     });
   });
 
