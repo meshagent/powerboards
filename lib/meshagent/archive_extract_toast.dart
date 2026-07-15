@@ -9,6 +9,7 @@ import 'package:powerboards/meshagent/archive_extract.dart';
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_archive_extract.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_progress_bar.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:powerboards/ui/powerboards_toasts.dart';
@@ -325,35 +326,7 @@ class _ArchiveExtractionProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress = value?.clamp(0.0, 1.0);
-    if (progress == null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(999),
-        child: const LinearProgressIndicator(minHeight: 6, backgroundColor: PbColors.borderFaint, color: PbColors.statusOnline),
-      );
-    }
-    final visualProgress = progress >= 1.0 ? 1.0 : math.max(progress, 0.05);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Container(
-          height: 6,
-          decoration: BoxDecoration(color: PbColors.borderFaint, borderRadius: BorderRadius.circular(999)),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            alignment: Alignment.centerLeft,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                width: constraints.maxWidth * visualProgress,
-                decoration: BoxDecoration(color: PbColors.statusOnline, borderRadius: BorderRadius.circular(999)),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    return PbProgressBar(value: value, height: 6, minVisualValue: 0.05);
   }
 }
 

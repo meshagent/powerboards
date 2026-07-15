@@ -96,6 +96,7 @@ const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
 const int _v1RecentlyOpenedFilesLimit = 7;
 const Duration _v1DeleteProcessingStep = Duration(milliseconds: 650);
 const Duration _v1SaveProcessingStep = Duration(milliseconds: 850);
+const Duration _v1LongActionToastDelay = Duration(milliseconds: 700);
 const Duration _v1BrowseHintToastDuration = Duration(days: 1);
 const Duration _downloadArchiveCleanupDelay = Duration(minutes: 5);
 const Offset _uploadProgressPopoverOffset = Offset(20, -20);
@@ -1070,6 +1071,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
   Timer? _v1PendingBrowseHintTimer;
+  final Map<String, DateTime> _v1DownloadUrlExpiresAtByPath = <String, DateTime>{};
 
   PendingStorageDeleteScope get _deleteScope => PendingStorageDeleteScope(projectId: widget.projectId, roomName: widget.client.roomName);
   bool get _effectiveV1FilesRoomPanelCollapsed => widget.v1RoomPanelCollapsed ?? _v1FilesRoomPanelCollapsed;
@@ -1324,6 +1326,48 @@ class _FileManagerViewState extends State<FileManagerView> {
     _saveV1FolderEntriesForSession(projectId: widget.projectId, roomName: widget.client.roomName, folderPath: folderPath, entries: entries);
   }
 
+  String _v1DownloadUrlCacheKey(String path) {
+    return path.split('/').where((segment) => segment.isNotEmpty).join('/');
+  }
+
+  bool _v1DownloadUrlCacheKeyMatchesPath(String key, String path) {
+    final normalizedPath = _v1DownloadUrlCacheKey(path);
+    if (normalizedPath.isEmpty) {
+      return true;
+    }
+
+    return key == normalizedPath || key.startsWith('$normalizedPath/');
+  }
+
+  void _clearV1DownloadUrlCacheForPath(String path) {
+    final normalizedPath = _v1DownloadUrlCacheKey(path);
+    if (normalizedPath.isEmpty) {
+      _v1DownloadUrlFuturesByPath.clear();
+      _v1DownloadUrlExpiresAtByPath.clear();
+      return;
+    }
+
+    _v1DownloadUrlFuturesByPath.removeWhere((key, _) => _v1DownloadUrlCacheKeyMatchesPath(key, normalizedPath));
+    _v1DownloadUrlExpiresAtByPath.removeWhere((key, _) => _v1DownloadUrlCacheKeyMatchesPath(key, normalizedPath));
+  }
+
+  void _moveV1DownloadUrlCache(String sourcePath, String destinationPath) {
+    final sourceKey = _v1DownloadUrlCacheKey(sourcePath);
+    final destinationKey = _v1DownloadUrlCacheKey(destinationPath);
+    if (sourceKey.isEmpty || destinationKey.isEmpty) {
+      _clearV1DownloadUrlCacheForPath(sourcePath);
+      _clearV1DownloadUrlCacheForPath(destinationPath);
+      return;
+    }
+
+    _v1DownloadUrlFuturesByPath.removeWhere((key, _) {
+      return _v1DownloadUrlCacheKeyMatchesPath(key, sourceKey) || _v1DownloadUrlCacheKeyMatchesPath(key, destinationKey);
+    });
+    _v1DownloadUrlExpiresAtByPath.removeWhere((key, _) {
+      return _v1DownloadUrlCacheKeyMatchesPath(key, sourceKey) || _v1DownloadUrlCacheKeyMatchesPath(key, destinationKey);
+    });
+  }
+
   void _bindController(FileManagerViewController? controller) {
     if (controller == null) {
       return;
@@ -1458,6 +1502,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onFileUpdated(String path) {
+    _clearV1DownloadUrlCacheForPath(path);
     final ready = storageEntries.state.asReady;
     if (ready == null) return; // ignore if loading/error
 
@@ -1495,6 +1540,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onFileDeleted(String path) {
+    _clearV1DownloadUrlCacheForPath(path);
     if (parentPath(path) != _folderSig.value) {
       return;
     }
@@ -1590,6 +1636,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onFileMoved(String sourcePath, String destinationPath) {
+    _moveV1DownloadUrlCache(sourcePath, destinationPath);
     _removeV1RecentlyOpenedPath(sourcePath);
     _moveSelectedPaths(sourcePath, destinationPath);
     _moveOptimisticPaths(sourcePath, destinationPath);
@@ -2458,7 +2505,27 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<String> _v1DownloadUrlForPath(String path) {
-    return _v1DownloadUrlFuturesByPath.putIfAbsent(path, () => widget.client.storage.downloadUrl(path));
+    final key = _v1DownloadUrlCacheKey(path);
+    final cached = _v1DownloadUrlFuturesByPath[key];
+    final expiresAt = _v1DownloadUrlExpiresAtByPath[key];
+    if (cached != null && expiresAt != null && expiresAt.isAfter(DateTime.now())) {
+      return cached;
+    }
+
+    _v1DownloadUrlFuturesByPath.remove(key);
+    _v1DownloadUrlExpiresAtByPath.remove(key);
+
+    late final Future<String> future;
+    future = widget.client.storage.downloadUrl(path).catchError((Object error, StackTrace stackTrace) {
+      if (identical(_v1DownloadUrlFuturesByPath[key], future)) {
+        _v1DownloadUrlFuturesByPath.remove(key);
+        _v1DownloadUrlExpiresAtByPath.remove(key);
+      }
+      return Future<String>.error(error, stackTrace);
+    });
+    _v1DownloadUrlFuturesByPath[key] = future;
+    _v1DownloadUrlExpiresAtByPath[key] = DateTime.now().add(powerboardsV1DownloadUrlCacheDuration);
+    return future;
   }
 
   Widget _v1StorageUrlPreview(PbFilesItemData item, String path, Widget Function(Uri url) builder) {
@@ -2930,6 +2997,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _removePath(String path, {isFolder = false}) {
+    _clearV1DownloadUrlCacheForPath(path);
     if (parentPath(path) != _folderSig.value) return;
 
     final entries = _currentFolderEntriesForMutation();
@@ -3408,6 +3476,20 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _shareFile(String path) async {
+    final toaster = ShadToaster.of(context);
+    Timer? progressTimer;
+    if (_usesDesktopV1FilesBrowser()) {
+      progressTimer = Timer(_v1LongActionToastDelay, () {
+        if (!mounted || !_usesDesktopV1FilesBrowser()) {
+          return;
+        }
+
+        toaster.show(
+          powerboardsToast(title: 'Preparing share', description: _displayNameForPath(path), duration: const Duration(seconds: 4)),
+        );
+      });
+    }
+
     try {
       await shareRemoteStorageFile(context: context, client: widget.client, path: path);
     } catch (error) {
@@ -3415,7 +3497,9 @@ class _FileManagerViewState extends State<FileManagerView> {
         return;
       }
 
-      ShadToaster.of(context).show(powerboardsToast(title: 'Unable to share file', description: '$error', destructive: true));
+      toaster.show(powerboardsToast(title: 'Unable to share file', description: '$error', destructive: true));
+    } finally {
+      progressTimer?.cancel();
     }
   }
 
@@ -3595,8 +3679,28 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final destinationPath = joinPaths(parentPath(fullPath), resolvedNextName);
     final toaster = ShadToaster.of(context);
+    final showV1Progress = _usesDesktopV1FilesBrowser();
+    var progressShown = false;
+    Timer? progressTimer;
 
     try {
+      if (showV1Progress) {
+        progressTimer = Timer(_v1LongActionToastDelay, () {
+          if (!mounted || !_usesDesktopV1FilesBrowser()) {
+            return;
+          }
+
+          progressShown = true;
+          toaster.show(
+            powerboardsToast(
+              title: isFolder ? 'Renaming folder' : 'Renaming file',
+              description: _displayNameForPath(fullPath),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        });
+      }
+
       if (await widget.client.storage.exists(destinationPath)) {
         if (!mounted) {
           return;
@@ -3619,6 +3723,15 @@ class _FileManagerViewState extends State<FileManagerView> {
         return;
       }
       _onFileMoved(fullPath, destinationPath);
+      if (progressShown) {
+        toaster.show(
+          powerboardsToast(
+            title: 'Renamed',
+            description: _renameConflictDisplayName(resolvedNextName, isFolder: isFolder),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -3627,6 +3740,8 @@ class _FileManagerViewState extends State<FileManagerView> {
       toaster.show(
         powerboardsToast(title: "Rename failed", description: "$error", destructive: true, duration: const Duration(seconds: 6)),
       );
+    } finally {
+      progressTimer?.cancel();
     }
   }
 
@@ -4528,7 +4643,11 @@ class _FileManagerViewState extends State<FileManagerView> {
           await _renamePath(fullPath, isFolder: isFolder);
           break;
         case _FileAction.download:
-          await _downloadFile(fullPath);
+          if (_usesDesktopV1FilesBrowser()) {
+            await _downloadV1FileWithToast(fullPath);
+          } else {
+            await _downloadFile(fullPath);
+          }
           break;
         case _FileAction.share:
           await _shareFile(fullPath);
@@ -5143,7 +5262,11 @@ class _FileManagerViewState extends State<FileManagerView> {
               icon: const Icon(LucideIcons.download),
               decoration: powerboardsAdaptiveIconButtonDecoration(context),
               onPressed: () {
-                _downloadFile(_openedFile!);
+                if (_usesDesktopV1FilesBrowser()) {
+                  unawaited(_downloadV1FileWithToast(_openedFile!));
+                } else {
+                  _downloadFile(_openedFile!);
+                }
               },
             ),
           ),

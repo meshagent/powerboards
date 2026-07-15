@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_progress_bar.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
@@ -77,6 +78,8 @@ void main() {
     expect(toastTheme?.textDirection, TextDirection.ltr);
     expect(toastTheme?.titleStyle?.fontSize, PowerboardsTypography.label.fontSize);
     expect(toastTheme?.descriptionStyle?.fontSize, PowerboardsTypography.meta.fontSize);
+    expect(toastTheme?.titleStyle?.backgroundColor, Colors.transparent);
+    expect(toastTheme?.descriptionStyle?.backgroundColor, Colors.transparent);
   });
 
   testWidgets('shrinks v1 toast width for responsive web preview widths', (tester) async {
@@ -104,6 +107,8 @@ void main() {
     expect(toastTheme?.backgroundColor, PbColors.surfacePanel);
     expect(toastTheme?.titleStyle?.color, PbColors.alert);
     expect(toastTheme?.descriptionStyle?.color, PbColors.textMuted);
+    expect(toastTheme?.titleStyle?.backgroundColor, Colors.transparent);
+    expect(toastTheme?.descriptionStyle?.backgroundColor, Colors.transparent);
   });
 
   test('powerboardsToast separates title and body text', () {
@@ -128,6 +133,37 @@ void main() {
     expect(toast.variant, ShadToastVariant.destructive);
   });
 
+  testWidgets('toast close button renders without an overlay-backed tooltip context', (tester) async {
+    late BuildContext toastContext;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) {
+          return ShadTheme(
+            data: ShadThemeData(),
+            child: ShadToaster(
+              child: Builder(
+                builder: (context) {
+                  toastContext = context;
+                  return child!;
+                },
+              ),
+            ),
+          );
+        },
+        home: const SizedBox.shrink(),
+      ),
+    );
+
+    ShadToaster.of(toastContext).show(powerboardsToast(title: 'Website removed', description: 'The website files were kept.'));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Website removed'), findsOneWidget);
+    expect(find.byTooltip('Close'), findsNothing);
+    expect(find.byType(PowerboardsToastCloseButton), findsOneWidget);
+  });
+
   testWidgets('keeps legacy desktop toast theme unchanged', (tester) async {
     final toastTheme = await pumpToastThemeProbe(
       tester,
@@ -137,6 +173,29 @@ void main() {
     );
 
     expect(toastTheme, isNull);
+  });
+
+  testWidgets('room lifecycle toast uses shared v1 progress bar for active deletes', (tester) async {
+    late ShadToast toast;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ShadTheme(
+          data: ShadThemeData(),
+          child: Builder(
+            builder: (context) {
+              toast = powerboardsRoomLifecycleToast(context, title: 'Deleting room', description: 'test room', showProgress: true);
+              return toast;
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(toast.variant, ShadToastVariant.primary);
+    expect(find.text('Deleting room'), findsOneWidget);
+    expect(find.text('test room'), findsOneWidget);
+    expect(find.byType(PbProgressBar), findsOneWidget);
   });
 
   testWidgets('keeps native mobile adaptive toast styling out of the v1 theme', (tester) async {
