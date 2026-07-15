@@ -426,13 +426,6 @@ class _DesktopPreviewThreadEntry {
   final String modifiedAt;
 }
 
-class _DesktopPreviewPendingThreadStart {
-  const _DesktopPreviewPendingThreadStart({required this.startedAt, required this.existingThreadPaths});
-
-  final DateTime startedAt;
-  final Set<String>? existingThreadPaths;
-}
-
 class _DesktopPreviewTranscriptRecord {
   const _DesktopPreviewTranscriptRecord({required this.data, required this.sortDate});
 
@@ -684,32 +677,51 @@ String? powerboardsDesktopPreviewActiveThreadValue({required String? selectedVal
 }
 
 @visibleForTesting
-String? powerboardsV1NewThreadCandidatePath({
-  required Set<String>? existingThreadPaths,
-  required DateTime startedAt,
-  required Iterable<({String path, String createdAt})> threads,
-}) {
-  final normalizedExistingPaths = existingThreadPaths?.map((path) => path.trim()).where((path) => path.isNotEmpty).toSet();
-  final normalizedThreads = threads
-      .map((thread) => (path: thread.path.trim(), createdAt: thread.createdAt.trim()))
-      .where((thread) => thread.path.isNotEmpty)
-      .toList(growable: false);
-  final unseenThreads = normalizedExistingPaths == null
-      ? normalizedThreads
-      : normalizedThreads.where((thread) => !normalizedExistingPaths.contains(thread.path)).toList(growable: false);
-  if (normalizedExistingPaths != null && unseenThreads.length == 1) {
-    return unseenThreads.single.path;
+String? powerboardsV1ThreadCreatedPendingStartMatcher(
+  agent_sessions.ThreadCreated message,
+  List<agent_sessions.PendingThreadStartCandidate> candidates,
+) {
+  if (message.thread.path.trim().isEmpty || candidates.isEmpty) {
+    return null;
   }
 
-  final earliest = startedAt.toUtc().subtract(const Duration(seconds: 5));
-  final latest = startedAt.toUtc().add(const Duration(minutes: 2));
-  final recentThreads = unseenThreads
-      .where((thread) {
-        final createdAt = DateTime.tryParse(thread.createdAt)?.toUtc();
-        return createdAt != null && !createdAt.isBefore(earliest) && !createdAt.isAfter(latest);
-      })
-      .toList(growable: false);
-  return recentThreads.length == 1 ? recentThreads.single.path : null;
+  final eventMessageId = message.messageId.trim();
+  if (eventMessageId.isNotEmpty) {
+    final directMatches = candidates.where((candidate) => candidate.messageId == eventMessageId).toList(growable: false);
+    if (directMatches.length == 1) {
+      return directMatches.single.messageId;
+    }
+  }
+
+  final eventSenderName = message.senderName?.trim();
+  if (eventSenderName != null && eventSenderName.isNotEmpty) {
+    final matches = candidates
+        .where((candidate) {
+          final candidateSenderName = candidate.senderName?.trim();
+          return candidateSenderName != null && candidateSenderName.isNotEmpty && candidateSenderName == eventSenderName;
+        })
+        .toList(growable: false);
+    if (matches.length == 1) {
+      return matches.single.messageId;
+    }
+  }
+
+  // The V1 composer serializes new-thread starts. Some ThreadCreated events
+  // carry a server message id or sender name that cannot be correlated back to
+  // the local StartThread request, so the sole pending request is the only
+  // deterministic handoff available.
+  return candidates.length == 1 ? candidates.single.messageId : null;
+}
+
+typedef PowerboardsAgentChatClientCacheKey = ({String agentName, bool usesV1SessionGuards});
+
+@visibleForTesting
+PowerboardsAgentChatClientCacheKey? powerboardsAgentChatClientCacheKey({required String? agentName, required bool usesDesktopUiPreview}) {
+  final normalizedAgentName = agentName?.trim();
+  if (normalizedAgentName == null || normalizedAgentName.isEmpty) {
+    return null;
+  }
+  return (agentName: normalizedAgentName, usesV1SessionGuards: usesDesktopUiPreview);
 }
 
 @visibleForTesting
@@ -2795,13 +2807,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final Map<String, String> _pendingDesktopPreviewThreadLabelByAgentKey = <String, String>{};
   final Map<String, Set<String>> _visibleDesktopPreviewThreadPathsByAgentKey = <String, Set<String>>{};
   final Set<String> _loadedDesktopPreviewThreadAgentKeys = <String>{};
-  final Map<String, _DesktopPreviewPendingThreadStart> _pendingDesktopPreviewThreadStartByAgentKey =
-      <String, _DesktopPreviewPendingThreadStart>{};
   final Map<String, List<String>> _composerAttachmentPathsByAgentKey = <String, List<String>>{};
   final Map<String, Map<String, String>> _composerAttachmentDisplayNamesByAgentKey = <String, Map<String, String>>{};
   final Map<String, int> _composerAttachmentSeedVersionByAgentKey = <String, int>{};
   final Map<String, PowerboardsFileAttachmentLink> _localThreadAttachmentLinksByKey = <String, PowerboardsFileAttachmentLink>{};
-  final Map<String, agent_sessions.MessagingChatClient> _agentChatClients = <String, agent_sessions.MessagingChatClient>{};
+  final Map<PowerboardsAgentChatClientCacheKey, agent_sessions.MessagingChatClient> _agentChatClients =
+      <PowerboardsAgentChatClientCacheKey, agent_sessions.MessagingChatClient>{};
   static const Duration _roomResourceTimeout = Duration(seconds: 30);
 
   final MeshagentRoomController controller = MeshagentRoomController();
@@ -2891,7 +2902,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _pendingDesktopPreviewThreadLabelByAgentKey.clear();
     _visibleDesktopPreviewThreadPathsByAgentKey.clear();
     _loadedDesktopPreviewThreadAgentKeys.clear();
-    _pendingDesktopPreviewThreadStartByAgentKey.clear();
     _composerAttachmentPathsByAgentKey.clear();
     _composerAttachmentDisplayNamesByAgentKey.clear();
     _composerAttachmentSeedVersionByAgentKey.clear();
@@ -3021,13 +3031,25 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   String _serviceSortKey(ServiceSpec s) => s.agents.firstOrNull?.name ?? s.metadata.name;
   int _compareServices(ServiceSpec a, ServiceSpec b) => _serviceSortKey(a).compareTo(_serviceSortKey(b));
 
-  agent_sessions.BaseChatClient? _agentChatClientFor(String? agentName) {
-    final normalized = agentName?.trim();
-    if (normalized == null || normalized.isEmpty) {
+  agent_sessions.BaseChatClient? _agentChatClientFor(BuildContext context, String? agentName) {
+    final cacheKey = powerboardsAgentChatClientCacheKey(
+      agentName: agentName,
+      usesDesktopUiPreview: powerboardsUsesDesktopUiPreview(context),
+    );
+    if (cacheKey == null) {
       return null;
     }
-    return _agentChatClients.putIfAbsent(normalized, () {
-      final chatClient = agent_sessions.MessagingChatClient(room: widget.room, agentName: normalized);
+    final existing = _agentChatClients[cacheKey];
+    if (existing != null) {
+      return existing;
+    }
+    return _agentChatClients.putIfAbsent(cacheKey, () {
+      final chatClient = agent_sessions.MessagingChatClient(
+        room: widget.room,
+        agentName: cacheKey.agentName,
+        threadCreatedPendingStartMatcher: cacheKey.usesV1SessionGuards ? powerboardsV1ThreadCreatedPendingStartMatcher : null,
+        deduplicateClientToolRequests: cacheKey.usesV1SessionGuards,
+      );
       unawaited(chatClient.start());
       return chatClient;
     });
@@ -3541,7 +3563,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     setState(() {
       _pendingDesktopPreviewThreadPathByAgentKey.remove(agentKey);
       _pendingDesktopPreviewThreadLabelByAgentKey.remove(agentKey);
-      _pendingDesktopPreviewThreadStartByAgentKey.remove(agentKey);
       if (resolvedPath == null) {
         _selectedThreadPathByAgentKey.remove(agentKey);
         _selectedThreadLabelByAgentKey.remove(agentKey);
@@ -3580,24 +3601,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         _pendingDesktopPreviewThreadLabelByAgentKey[agentKey] = normalizedName;
       }
     });
-  }
-
-  void _setDesktopPreviewThreadStartActivity(String? agentKey, bool active) {
-    if (!mounted || agentKey == null) {
-      return;
-    }
-    if (!active) {
-      _pendingDesktopPreviewThreadStartByAgentKey.remove(agentKey);
-      return;
-    }
-
-    final existingThreadPaths = _loadedDesktopPreviewThreadAgentKeys.contains(agentKey)
-        ? Set<String>.unmodifiable(_visibleDesktopPreviewThreadPathsByAgentKey[agentKey] ?? const <String>{})
-        : null;
-    _pendingDesktopPreviewThreadStartByAgentKey[agentKey] = _DesktopPreviewPendingThreadStart(
-      startedAt: DateTime.now().toUtc(),
-      existingThreadPaths: existingThreadPaths,
-    );
   }
 
   void _setComposerAttachmentSeed(String agentKey, Iterable<String> paths, {Map<String, String>? displayNamesByPath}) {
@@ -4994,7 +4997,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             bottom: 24,
           )
         : null;
-    final agentChatClient = _agentChatClientFor(agentName);
+    final agentChatClient = _agentChatClientFor(context, agentName);
     void handleSelectedThreadPathChanged(String? path) {
       if (deferDesktopPreviewNewThreadSelection && selectedThreadPath == null && path != null) {
         _deferDesktopPreviewNewThreadSelection(agentKey, path);
@@ -5027,9 +5030,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         selectedThreadDisplayName: resolvedSelectedThreadDisplayName ?? _selectedThreadLabelForAgentKey(agentKey),
         onSelectedThreadPathChanged: handleSelectedThreadPathChanged,
         onSelectedThreadResolved: handleSelectedThreadResolved,
-        onThreadStartActivityChanged: deferDesktopPreviewNewThreadSelection
-            ? (active) => _setDesktopPreviewThreadStartActivity(agentKey, active)
-            : null,
         participantNames: [
           if (userEmail is String && userEmail.isNotEmpty) userEmail,
           if (agentName case final String agentParticipantName) agentParticipantName,
@@ -6041,41 +6041,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _visibleDesktopPreviewThreadPathsByAgentKey[agentKey] = threads.map((thread) => thread.path).toSet();
   }
 
-  void _syncPendingDesktopPreviewThreadStartSelection(_MobileChatHeaderContext? chatContext, List<_DesktopPreviewThreadEntry> threads) {
-    final agentKey = chatContext?.agentKey;
-    if (agentKey == null) {
-      return;
-    }
-    if (chatContext?.selectedThreadPath != null) {
-      _pendingDesktopPreviewThreadStartByAgentKey.remove(agentKey);
-      return;
-    }
-
-    final pending = _pendingDesktopPreviewThreadStartByAgentKey[agentKey];
-    if (pending == null) {
-      return;
-    }
-    final candidatePath = powerboardsV1NewThreadCandidatePath(
-      existingThreadPaths: pending.existingThreadPaths,
-      startedAt: pending.startedAt,
-      threads: threads.map((thread) => (path: thread.path, createdAt: thread.createdAt)),
-    );
-    if (candidatePath == null) {
-      return;
-    }
-    final candidate = threads.firstWhereOrNull((thread) => thread.path == candidatePath);
-    if (candidate == null) {
-      return;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !identical(_pendingDesktopPreviewThreadStartByAgentKey[agentKey], pending)) {
-        return;
-      }
-      _setSelectedThreadPath(agentKey, candidate.path, displayName: candidate.name);
-    });
-  }
-
   void _syncPendingDesktopPreviewThreadSelection(_MobileChatHeaderContext? chatContext, List<_DesktopPreviewThreadEntry> threads) {
     final agentKey = chatContext?.agentKey;
     if (agentKey == null) {
@@ -6257,7 +6222,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     final rawChatContext = _resolveMobileChatHeaderContext(supported, selected);
     final threadListPath = rawChatContext?.threadListPath;
-    final threadListChatClient = _agentChatClientFor(rawChatContext?.agentName);
+    final enableV1ChatSessionGuards = powerboardsUsesDesktopUiPreview(context);
+    final threadListChatClient = _agentChatClientFor(context, rawChatContext?.agentName);
     final agentItems = _desktopPreviewAgentItems(supported, selected);
     final hasVisibleAgents = _hasVisibleAgents(supported);
     final voiceOnlyAgent = rawChatContext?.isVoiceOnly == true;
@@ -6267,9 +6233,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       agentName: rawChatContext?.agentName,
       threadListPath: threadListPath,
       chatClientFactory: (_, agentName) =>
-          _agentChatClientFor(agentName) ??
+          _agentChatClientFor(context, agentName) ??
           threadListChatClient ??
-          agent_sessions.MessagingChatClient(room: widget.room, agentName: agentName),
+          agent_sessions.MessagingChatClient(
+            room: widget.room,
+            agentName: agentName,
+            threadCreatedPendingStartMatcher: enableV1ChatSessionGuards ? powerboardsV1ThreadCreatedPendingStartMatcher : null,
+            deduplicateClientToolRequests: enableV1ChatSessionGuards,
+          ),
       disposeChatClient: false,
       builder: (context, threads, threadListLoaded) {
         final chatContext = _desktopPreviewChatContextForVisibleThreads(rawChatContext, threads, threadListLoaded: threadListLoaded);
@@ -6277,7 +6248,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads, threadListLoaded: threadListLoaded);
         final selectedThreadDisplayName = _desktopPreviewSelectedThreadDisplayName(chatContext, threads);
         final selectedThreadTitleResolving = chatContext?.selectedThreadPath != null && !threadListLoaded;
-        _syncPendingDesktopPreviewThreadStartSelection(chatContext, threads);
         _syncPendingDesktopPreviewThreadSelection(chatContext, threads);
         if (selectedThreadDisplayName != null) {
           _syncDesktopPreviewVisibleThreadSelection(chatContext, selectedThreadDisplayName);

@@ -276,7 +276,6 @@ class MeshagentThreadView extends StatefulWidget {
     this.selectedThreadDisplayName,
     this.onSelectedThreadPathChanged,
     this.onSelectedThreadResolved,
-    this.onThreadStartActivityChanged,
     this.emptyState,
     this.newThreadEmptyStateVerticalOffset = 0,
     this.hideChatInput = false,
@@ -315,7 +314,6 @@ class MeshagentThreadView extends StatefulWidget {
   final String? selectedThreadDisplayName;
   final ValueChanged<String?>? onSelectedThreadPathChanged;
   final void Function(String? path, String? displayName)? onSelectedThreadResolved;
-  final ValueChanged<bool>? onThreadStartActivityChanged;
   final Widget? emptyState;
   final double newThreadEmptyStateVerticalOffset;
   final bool hideChatInput;
@@ -882,7 +880,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       selectedThreadDisplayName: widget.selectedThreadDisplayName,
       onSelectedThreadPathChanged: widget.onSelectedThreadPathChanged,
       onSelectedThreadResolved: widget.onSelectedThreadResolved,
-      onThreadStartActivityChanged: widget.onThreadStartActivityChanged,
       newThreadResetVersion: widget.newThreadResetVersion,
       participantNames: widget.participantNames,
       initialMessage: widget.initialMessageText == null

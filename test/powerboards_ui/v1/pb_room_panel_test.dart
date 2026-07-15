@@ -201,47 +201,93 @@ void main() {
     );
   });
 
-  test('V1 new-thread handoff selects the one thread added after send', () {
+  test('V1 new-thread handoff matches the sole pending start from the same sender', () {
     final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+    final message = agent_sessions.ThreadCreated(
+      senderName: 'Dinesh',
+      thread: agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: startedAt.add(const Duration(seconds: 12)).toIso8601String(),
+        modifiedAt: startedAt.add(const Duration(seconds: 12)).toIso8601String(),
+      ),
+    );
 
     expect(
-      powerboardsV1NewThreadCandidatePath(
-        existingThreadPaths: const {'dataset://threads/old'},
-        startedAt: startedAt,
-        threads: [
-          (path: 'dataset://threads/old', createdAt: startedAt.subtract(const Duration(days: 1)).toIso8601String()),
-          (path: 'dataset://threads/new', createdAt: ''),
-        ],
-      ),
-      'dataset://threads/new',
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+      ]),
+      'client-message-1',
     );
-    expect(
-      powerboardsV1NewThreadCandidatePath(
-        existingThreadPaths: const {'dataset://threads/old'},
-        startedAt: startedAt,
-        threads: [
-          (path: 'dataset://threads/new-a', createdAt: startedAt.toIso8601String()),
-          (path: 'dataset://threads/new-b', createdAt: startedAt.toIso8601String()),
-        ],
+  });
+
+  test('V1 new-thread handoff refuses ambiguous pending starts', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+    final message = agent_sessions.ThreadCreated(
+      senderName: 'Dinesh',
+      thread: agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: startedAt.toIso8601String(),
+        modifiedAt: startedAt.toIso8601String(),
       ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-2', senderName: 'Dinesh'),
+      ]),
       isNull,
     );
   });
 
-  test('V1 new-thread handoff uses creation time only when no thread snapshot was loaded', () {
-    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+  test('V1 new-thread handoff uses the sole pending start when server correlation is unavailable', () {
+    final message = agent_sessions.ThreadCreated(
+      thread: const agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: '2026-07-15T03:24:00Z',
+        modifiedAt: '2026-07-15T03:24:00Z',
+      ),
+    );
 
     expect(
-      powerboardsV1NewThreadCandidatePath(
-        existingThreadPaths: null,
-        startedAt: startedAt,
-        threads: [
-          (path: 'dataset://threads/old', createdAt: startedAt.subtract(const Duration(hours: 1)).toIso8601String()),
-          (path: 'dataset://threads/new', createdAt: startedAt.add(const Duration(seconds: 12)).toIso8601String()),
-        ],
-      ),
-      'dataset://threads/new',
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+      ]),
+      'client-message-1',
     );
+  });
+
+  test('V1 new-thread handoff prefers an exact event message id', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+    final message = agent_sessions.ThreadCreated(
+      messageId: 'client-message-2',
+      thread: agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: startedAt.subtract(const Duration(days: 1)).toIso8601String(),
+        modifiedAt: startedAt.subtract(const Duration(days: 1)).toIso8601String(),
+      ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-2', senderName: 'Dinesh'),
+      ]),
+      'client-message-2',
+    );
+  });
+
+  test('V1 and legacy chat clients cannot share the same cache entry', () {
+    final v1Key = powerboardsAgentChatClientCacheKey(agentName: ' Assistant ', usesDesktopUiPreview: true);
+    final legacyKey = powerboardsAgentChatClientCacheKey(agentName: 'Assistant', usesDesktopUiPreview: false);
+
+    expect(v1Key, (agentName: 'Assistant', usesV1SessionGuards: true));
+    expect(legacyKey, (agentName: 'Assistant', usesV1SessionGuards: false));
+    expect(v1Key, isNot(legacyKey));
   });
 
   test('desktop preview resolves a pending agent thread to its one visible dataset thread', () {
