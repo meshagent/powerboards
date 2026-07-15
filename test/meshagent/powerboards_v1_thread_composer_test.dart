@@ -212,6 +212,32 @@ void main() {
     expect(find.text('Add...'), findsOneWidget);
   });
 
+  testWidgets('v1 MCP submenu stacks without overflow at narrow widths', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(480, 760));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final room = _roomClientWithAdminGrant(isAdmin: false);
+    addTearDown(room.dispose);
+    final controller = ChatThreadController(room: room);
+    addTearDown(controller.dispose);
+    controller.setMcpConnectorSelected(OpenAIConnectors.gmail, true);
+
+    await tester.pumpWidget(_buildHarness(room: room, controller: controller));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Attach files'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect MCPs'));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Connect MCPs'), findsOneWidget);
+
+    await tester.binding.setSurfaceSize(const Size(1000, 760));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Connect MCPs'), findsOneWidget);
+  });
+
   testWidgets('v1 model selector appears only when the assistant has multiple models', (tester) async {
     final room = _roomClientWithAdminGrant(isAdmin: false);
     addTearDown(room.dispose);

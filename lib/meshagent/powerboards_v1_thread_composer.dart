@@ -480,12 +480,14 @@ class _PowerboardsV1McpAttachMenuPanelState extends State<_PowerboardsV1McpAttac
   Widget build(BuildContext context) {
     final canAddMcpServices = widget.room.apiGrant?.admin != null;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        PbMenuCard(
-          width: 240,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.hasBoundedWidth ? constraints.maxWidth : 528.0;
+        final showSideBySide = _mcpSubmenuOpen && availableWidth >= 528;
+        final primaryWidth = availableWidth < 240 ? availableWidth : 240.0;
+        final submenuWidth = availableWidth < 280 ? availableWidth : 280.0;
+        final primaryMenu = PbMenuCard(
+          width: primaryWidth,
           child: PbMenuList(
             children: <Widget>[
               PbMenuOption(
@@ -512,43 +514,56 @@ class _PowerboardsV1McpAttachMenuPanelState extends State<_PowerboardsV1McpAttac
                 ),
             ],
           ),
-        ),
-        if (_mcpSubmenuOpen) ...<Widget>[
-          const SizedBox(width: 8),
-          PbMenuCard(
-            width: 280,
-            child: PbMenuList(
-              children: <Widget>[
-                if (_loading && _availableConnectors.isEmpty)
-                  const _McpInfoCard(text: 'Loading connectors...')
-                else if (_loadError != null)
-                  PbMenuOption(
-                    title: 'Unable to load connectors',
-                    leadingIconAssetName: 'rotate-ccw',
-                    singleLine: true,
-                    onPressed: () => _refresh(force: true),
-                  )
-                else if (_availableConnectors.isEmpty)
-                  const _McpInfoCard(text: 'No connectors are configured for this room')
-                else
-                  for (final connector in _availableConnectors) _buildConnectorOption(connector),
-                if (canAddMcpServices) ...<Widget>[
-                  const PbMenuDivider(),
-                  PbMenuOption(
-                    title: 'Add...',
-                    leadingIconAssetName: 'plus',
-                    singleLine: true,
-                    onPressed: () {
-                      unawaited(_addConnector());
-                      widget.actions.closeMenu();
-                    },
-                  ),
-                ],
+        );
+        final submenu = PbMenuCard(
+          width: submenuWidth,
+          child: PbMenuList(
+            children: <Widget>[
+              if (_loading && _availableConnectors.isEmpty)
+                const _McpInfoCard(text: 'Loading connectors...')
+              else if (_loadError != null)
+                PbMenuOption(
+                  title: 'Unable to load connectors',
+                  leadingIconAssetName: 'rotate-ccw',
+                  singleLine: true,
+                  onPressed: () => _refresh(force: true),
+                )
+              else if (_availableConnectors.isEmpty)
+                const _McpInfoCard(text: 'No connectors are configured for this room')
+              else
+                for (final connector in _availableConnectors) _buildConnectorOption(connector),
+              if (canAddMcpServices) ...<Widget>[
+                const PbMenuDivider(),
+                PbMenuOption(
+                  title: 'Add...',
+                  leadingIconAssetName: 'plus',
+                  singleLine: true,
+                  onPressed: () {
+                    unawaited(_addConnector());
+                    widget.actions.closeMenu();
+                  },
+                ),
               ],
-            ),
+            ],
           ),
-        ],
-      ],
+        );
+
+        if (!_mcpSubmenuOpen) {
+          return primaryMenu;
+        }
+        if (showSideBySide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[primaryMenu, const SizedBox(width: 8), submenu],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[primaryMenu, const SizedBox(height: 8), submenu],
+        );
+      },
     );
   }
 

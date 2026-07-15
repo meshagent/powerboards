@@ -6130,7 +6130,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                       ],
                     )
                   : threadPanel;
-
               Widget buildRoomPanel({bool responsiveOverlay = false, bool resizing = false}) {
                 void selectThreadFromRoomPanel(String? path, {String? displayName}) {
                   _selectDesktopPreviewThread(chatContext, path, displayName: displayName);
@@ -6236,44 +6235,40 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 );
               }
 
-              if (responsivePanel) {
-                if (_desktopPreviewRoomPanelOverlayOpen) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) {
-                      _desktopPreviewRoomPanelOverlayController.show();
-                    }
-                  });
-                }
-
-                return OverlayPortal(
-                  controller: _desktopPreviewRoomPanelOverlayController,
-                  overlayChildBuilder: (context) => Positioned.fill(child: buildRoomPanel(responsiveOverlay: true)),
-                  child: ColoredBox(color: PbColors.surfacePanelWash, child: effectiveThreadPanel),
-                );
-              }
-
-              if (_desktopPreviewRoomPanelOverlayOpen) {
+              if (responsivePanel && _desktopPreviewRoomPanelOverlayOpen) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) {
-                    if (_desktopPreviewRoomPanelOverlayController.isShowing) {
-                      _desktopPreviewRoomPanelOverlayController.hide();
-                    }
-                    setState(() => _desktopPreviewRoomPanelOverlayOpen = false);
+                  if (mounted && !_desktopPreviewRoomPanelOverlayController.isShowing) {
+                    _desktopPreviewRoomPanelOverlayController.show();
                   }
+                });
+              } else if (!responsivePanel && (_desktopPreviewRoomPanelOverlayOpen || _desktopPreviewRoomPanelOverlayController.isShowing)) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) {
+                    return;
+                  }
+                  if (_desktopPreviewRoomPanelOverlayController.isShowing) {
+                    _desktopPreviewRoomPanelOverlayController.hide();
+                  }
+                  setState(() => _desktopPreviewRoomPanelOverlayOpen = false);
                 });
               }
 
-              return ColoredBox(
-                color: PbColors.surfacePanelWash,
-                child: PbRoomPanelMount(
-                  activeTab: _desktopPreviewRoomPanelTab,
-                  filePreviewOpen: _desktopPreviewFilePreviewOpen,
-                  filePreviewFullscreen: _desktopPreviewFilePreviewFullscreen,
-                  roomPanelCollapsed: _desktopPreviewRoomPanelCollapsed,
-                  panelWidth: _desktopPreviewRoomPanelWidth,
-                  onPanelWidthChanged: _setDesktopPreviewRoomPanelWidth,
-                  threadPanel: effectiveThreadPanel,
-                  roomPanelBuilder: (context, resizing) => buildRoomPanel(resizing: resizing),
+              return OverlayPortal(
+                controller: _desktopPreviewRoomPanelOverlayController,
+                overlayChildBuilder: (context) =>
+                    responsivePanel ? Positioned.fill(child: buildRoomPanel(responsiveOverlay: true)) : const SizedBox.shrink(),
+                child: ColoredBox(
+                  color: PbColors.surfacePanelWash,
+                  child: PbRoomPanelMount(
+                    activeTab: _desktopPreviewRoomPanelTab,
+                    filePreviewOpen: _desktopPreviewFilePreviewOpen,
+                    filePreviewFullscreen: _desktopPreviewFilePreviewFullscreen,
+                    roomPanelCollapsed: responsivePanel || _desktopPreviewRoomPanelCollapsed,
+                    panelWidth: _desktopPreviewRoomPanelWidth,
+                    onPanelWidthChanged: _setDesktopPreviewRoomPanelWidth,
+                    threadPanel: effectiveThreadPanel,
+                    roomPanelBuilder: (context, resizing) => buildRoomPanel(resizing: resizing),
+                  ),
                 ),
               );
             },

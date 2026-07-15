@@ -915,6 +915,43 @@ void main() {
     expect(tester.getSize(find.byKey(roomPanelKey)).width, 560);
   });
 
+  testWidgets('room panel collapse preserves state in the thread panel', (tester) async {
+    late StateSetter setHarnessState;
+    var collapsed = false;
+    const draftFieldKey = Key('thread-draft-field');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1000,
+            height: 640,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                setHarnessState = setState;
+                return PbRoomPanelMount(
+                  roomPanelCollapsed: collapsed,
+                  threadPanel: const TextField(key: draftFieldKey),
+                  roomPanel: const SizedBox.expand(),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byKey(draftFieldKey), 'preserved draft');
+
+    setHarnessState(() => collapsed = true);
+    await tester.pump();
+    expect(find.text('preserved draft'), findsOneWidget);
+
+    setHarnessState(() => collapsed = false);
+    await tester.pump();
+    expect(find.text('preserved draft'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('file preview uses supplied app viewer child before spec fallback content', (tester) async {
     final file = PbAttachmentListItemData.fromFileName(title: 'preview_rules.dart');
 

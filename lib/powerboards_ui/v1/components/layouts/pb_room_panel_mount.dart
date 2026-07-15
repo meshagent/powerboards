@@ -172,17 +172,11 @@ class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
         final workspaceWidth = constraints.maxWidth;
         final currentPanelWidth = _effectivePanelWidth;
         final panelWidth = _clampWidth(workspaceWidth, currentPanelWidth);
-        final roomPanel = _buildRoomPanel(context);
+        final filePreviewFullscreen = widget.filePreviewFullscreen;
+        final roomPanelVisible = !filePreviewFullscreen && !widget.roomPanelCollapsed;
+        final roomPanel = filePreviewFullscreen || roomPanelVisible ? _buildRoomPanel(context) : null;
 
-        if (widget.filePreviewFullscreen) {
-          return SizedBox.expand(child: roomPanel);
-        }
-
-        if (widget.roomPanelCollapsed) {
-          return SizedBox.expand(child: widget.threadPanel);
-        }
-
-        if (widget.panelWidth == null && panelWidth != currentPanelWidth) {
+        if (roomPanelVisible && widget.panelWidth == null && panelWidth != currentPanelWidth) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               _commitWidth(panelWidth);
@@ -193,45 +187,47 @@ class _PbRoomPanelMountState extends State<PbRoomPanelMount> {
         return Stack(
           fit: StackFit.expand,
           children: [
-            Row(
-              children: [
-                Expanded(child: widget.threadPanel),
-                SizedBox(
-                  width: panelWidth,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Positioned.fill(child: roomPanel),
-                      Positioned(
-                        top: 0,
-                        bottom: 0,
-                        left: -(_roomPanelResizeHandleWidth / 2),
-                        width: _roomPanelResizeHandleWidth,
-                        child: _RoomPanelResizer(
-                          active: _resizing || _hovered || _focused,
-                          value: panelWidth,
-                          min: _roomPanelMinWidth,
-                          max: _maxWidth(workspaceWidth),
-                          onFocusChanged: (focused) => setState(() => _focused = focused),
-                          onHoverChanged: (hovered) {
-                            if (_resizing) {
-                              return;
-                            }
+            Positioned(top: 0, bottom: 0, left: 0, right: roomPanelVisible ? panelWidth : 0, child: widget.threadPanel),
+            if (filePreviewFullscreen)
+              Positioned.fill(child: roomPanel!)
+            else if (roomPanelVisible)
+              Positioned(
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: panelWidth,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(child: roomPanel!),
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      left: -(_roomPanelResizeHandleWidth / 2),
+                      width: _roomPanelResizeHandleWidth,
+                      child: _RoomPanelResizer(
+                        active: _resizing || _hovered || _focused,
+                        value: panelWidth,
+                        min: _roomPanelMinWidth,
+                        max: _maxWidth(workspaceWidth),
+                        onFocusChanged: (focused) => setState(() => _focused = focused),
+                        onHoverChanged: (hovered) {
+                          if (_resizing) {
+                            return;
+                          }
 
-                            setState(() => _hovered = hovered);
-                          },
-                          onKeyEvent: (node, event) => _handleKeyEvent(node, event, workspaceWidth),
-                          onDragStart: (globalX) => _startResize(globalX, panelWidth),
-                          onDragEnd: _stopResize,
-                          onDragUpdate: (globalX) => _updateResize(workspaceWidth, globalX),
-                        ),
+                          setState(() => _hovered = hovered);
+                        },
+                        onKeyEvent: (node, event) => _handleKeyEvent(node, event, workspaceWidth),
+                        onDragStart: (globalX) => _startResize(globalX, panelWidth),
+                        onDragEnd: _stopResize,
+                        onDragUpdate: (globalX) => _updateResize(workspaceWidth, globalX),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            if (_resizing) const Positioned.fill(child: _RoomPanelResizeShield()),
+              ),
+            if (_resizing && roomPanelVisible) const Positioned.fill(child: _RoomPanelResizeShield()),
           ],
         );
       },
