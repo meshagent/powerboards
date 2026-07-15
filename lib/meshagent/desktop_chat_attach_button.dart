@@ -38,6 +38,16 @@ BoxConstraints? _desktopAttachDialogConstraints(BuildContext context, BoxConstra
   return BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height);
 }
 
+class PowerboardsV1AttachMenuActions {
+  const PowerboardsV1AttachMenuActions({required this.onUploadFile, required this.onAddFromRoom, required this.closeMenu});
+
+  final VoidCallback onUploadFile;
+  final VoidCallback? onAddFromRoom;
+  final VoidCallback closeMenu;
+}
+
+typedef PowerboardsV1AttachMenuPanelBuilder = Widget Function(BuildContext context, PowerboardsV1AttachMenuActions actions);
+
 class PowerboardsDesktopChatAttachButton extends StatefulWidget {
   const PowerboardsDesktopChatAttachButton({
     required this.controller,
@@ -49,6 +59,7 @@ class PowerboardsDesktopChatAttachButton extends StatefulWidget {
     this.showMcpConnectors = false,
     this.showMcpMenuItem = true,
     this.useV1Menu = false,
+    this.v1MenuPanelBuilder,
     this.triggerBuilder,
   });
 
@@ -60,6 +71,7 @@ class PowerboardsDesktopChatAttachButton extends StatefulWidget {
   final bool showMcpConnectors;
   final bool showMcpMenuItem;
   final bool useV1Menu;
+  final PowerboardsV1AttachMenuPanelBuilder? v1MenuPanelBuilder;
   final Widget Function(BuildContext context, VoidCallback onPressed)? triggerBuilder;
 
   @override
@@ -418,38 +430,47 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
   }
 
   Widget _buildV1AttachButton(BuildContext context) {
+    final menuActions = PowerboardsV1AttachMenuActions(
+      closeMenu: () => _setV1MenuOpen(false),
+      onUploadFile: () {
+        _setV1MenuOpen(false);
+        unawaited(_onSelectAttachment());
+      },
+      onAddFromRoom: widget.controller.room == null
+          ? null
+          : () {
+              _setV1MenuOpen(false);
+              unawaited(_onBrowseFiles());
+            },
+    );
+
     return PbMenuAnchor(
       placement: PbMenuAnchorPlacement.bottomLeft,
       gap: 10,
       preferAboveWhenOverflow: true,
       onDismiss: () => _setV1MenuOpen(false),
       panel: _v1MenuOpen
-          ? PbMenuCard(
-              width: 240,
-              child: PbMenuList(
-                children: <Widget>[
-                  PbMenuOption(
-                    title: 'Upload a file...',
-                    leadingIconAssetName: 'paperclip',
-                    singleLine: true,
-                    onPressed: () {
-                      _setV1MenuOpen(false);
-                      unawaited(_onSelectAttachment());
-                    },
+          ? widget.v1MenuPanelBuilder?.call(context, menuActions) ??
+                PbMenuCard(
+                  width: 240,
+                  child: PbMenuList(
+                    children: <Widget>[
+                      PbMenuOption(
+                        title: 'Upload a file...',
+                        leadingIconAssetName: 'paperclip',
+                        singleLine: true,
+                        onPressed: menuActions.onUploadFile,
+                      ),
+                      if (menuActions.onAddFromRoom != null)
+                        PbMenuOption(
+                          title: 'Add from room...',
+                          leadingIconAssetName: 'folder-plus',
+                          singleLine: true,
+                          onPressed: menuActions.onAddFromRoom,
+                        ),
+                    ],
                   ),
-                  if (widget.controller.room != null)
-                    PbMenuOption(
-                      title: 'Add from room...',
-                      leadingIconAssetName: 'folder-plus',
-                      singleLine: true,
-                      onPressed: () {
-                        _setV1MenuOpen(false);
-                        unawaited(_onBrowseFiles());
-                      },
-                    ),
-                ],
-              ),
-            )
+                )
           : null,
       child:
           widget.triggerBuilder?.call(context, () => _setV1MenuOpen(!_v1MenuOpen)) ??

@@ -6,13 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:path/path.dart' as path;
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
+import 'package:powerboards/meshagent/powerboards_v1_model_controller_scope.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_comment_box.dart';
-import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_anchor.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_divider.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_list.dart';
@@ -22,6 +23,23 @@ import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+
+String powerboardsV1ModelLabel(DatasetChatModelOption option, Iterable<DatasetChatModelOption> models) {
+  String providerLabel(DatasetChatModelOption model) {
+    final friendlyName = model.providerFriendlyName.trim();
+    return friendlyName.isEmpty ? model.provider : friendlyName;
+  }
+
+  final provider = providerLabel(option);
+  final matchingProviderCount = models.where((model) => providerLabel(model) == provider).length;
+  if (matchingProviderCount < 2) {
+    return provider;
+  }
+
+  final friendlyModelName = option.modelFriendlyName?.trim();
+  final model = friendlyModelName == null || friendlyModelName.isEmpty ? option.model : friendlyModelName;
+  return '$provider / $model';
+}
 
 class PowerboardsV1ThreadComposer extends StatefulWidget {
   const PowerboardsV1ThreadComposer({
@@ -154,6 +172,8 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
       return widget.defaultInput;
     }
 
+    final modelController = PowerboardsV1ModelControllerScope.maybeOf(context);
+
     return AnimatedBuilder(
       animation: widget.config.controller,
       builder: (context, _) {
@@ -167,6 +187,10 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
             (widget.config.controller.text.trim().isNotEmpty || attachments.isNotEmpty);
         final sendPending = _sending || (!widget.config.sendEnabled && widget.config.onCancelSend != null);
         final showMcpConnectors = _showMcpConnectors();
+        final availableModels = modelController?.models ?? const <DatasetChatModelOption>[];
+        final activeModel = modelController?.activeModel;
+        final showModelSelector = availableModels.length >= 2 && activeModel != null;
+        final sendControl = sendPending ? const _PendingSendButton() : PbComposerSendButton(active: canSend, onPressed: _handleSend);
 
         return PbCommentBoxShell(
           child: PbCommentBox(
@@ -184,22 +208,52 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
                 showMcpConnectors: false,
                 showMcpMenuItem: false,
                 useV1Menu: true,
+                v1MenuPanelBuilder: showMcpConnectors
+                    ? (context, actions) => _PowerboardsV1McpAttachMenuPanel(
+                        actions: actions,
+                        controller: widget.config.controller,
+                        room: widget.room,
+                        projectId: widget.projectId,
+                        agentName: widget.agentName?.trim(),
+                      )
+                    : null,
                 triggerBuilder: (context, onPressed) => PbComposerIconButton(
                   tooltip: 'Attach files',
                   onPressed: onPressed,
                   child: const PbSvgIcon(assetName: 'plus', size: 18, color: PbColors.customBrandInk),
                 ),
               ),
-              if (showMcpConnectors) const SizedBox(width: 10),
-              if (showMcpConnectors)
-                _PowerboardsV1McpControl(
-                  controller: widget.config.controller,
-                  room: widget.room,
-                  projectId: widget.projectId,
-                  agentName: widget.agentName?.trim(),
+              for (final connector in widget.config.controller.selectedMcpConnectors) ...<Widget>[
+                const SizedBox(width: 8),
+                PbComposerMcpPill(
+                  label: connector.name,
+                  onRemove: () => widget.config.controller.setMcpConnectorSelected(connector, false),
                 ),
+              ],
             ],
-            trailingControl: sendPending ? const _PendingSendButton() : PbComposerSendButton(active: canSend, onPressed: _handleSend),
+            trailingControl: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (showModelSelector) ...<Widget>[
+                  PbComposerModelSelector(
+                    selectedKey: activeModel.key,
+                    options: <PbComposerModelOption>[
+                      for (final model in availableModels)
+                        PbComposerModelOption(key: model.key, label: powerboardsV1ModelLabel(model, availableModels)),
+                    ],
+                    active: modelController!.canChange,
+                    onSelected: (key) {
+                      final nextModel = availableModels.firstWhereOrNull((model) => model.key == key);
+                      if (nextModel != null) {
+                        unawaited(modelController.changeModel(nextModel));
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                sendControl,
+              ],
+            ),
             onChanged: (value) => widget.config.onChanged?.call(value, widget.config.controller.attachmentUploads),
           ),
         );
@@ -268,20 +322,27 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
   }
 }
 
-class _PowerboardsV1McpControl extends StatefulWidget {
-  const _PowerboardsV1McpControl({required this.controller, required this.room, required this.projectId, required this.agentName});
+class _PowerboardsV1McpAttachMenuPanel extends StatefulWidget {
+  const _PowerboardsV1McpAttachMenuPanel({
+    required this.actions,
+    required this.controller,
+    required this.room,
+    required this.projectId,
+    required this.agentName,
+  });
 
+  final PowerboardsV1AttachMenuActions actions;
   final ChatThreadController controller;
   final RoomClient room;
   final String projectId;
   final String? agentName;
 
   @override
-  State<_PowerboardsV1McpControl> createState() => _PowerboardsV1McpControlState();
+  State<_PowerboardsV1McpAttachMenuPanel> createState() => _PowerboardsV1McpAttachMenuPanelState();
 }
 
-class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
-  bool _open = false;
+class _PowerboardsV1McpAttachMenuPanelState extends State<_PowerboardsV1McpAttachMenuPanel> {
+  bool _mcpSubmenuOpen = false;
   bool _loading = false;
   Object? _loadError;
   String? _connectingConnectorName;
@@ -415,11 +476,11 @@ class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
     await _refresh(force: true);
   }
 
-  void _setOpen(bool open) {
-    if (_open == open) {
+  void _setMcpSubmenuOpen(bool open) {
+    if (_mcpSubmenuOpen == open) {
       return;
     }
-    setState(() => _open = open);
+    setState(() => _mcpSubmenuOpen = open);
     if (open) {
       unawaited(_refresh(force: true));
     }
@@ -427,64 +488,92 @@ class _PowerboardsV1McpControlState extends State<_PowerboardsV1McpControl> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedConnectors = widget.controller.selectedMcpConnectors;
     final canAddMcpServices = widget.room.apiGrant?.admin != null;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        PbMenuAnchor(
-          placement: PbMenuAnchorPlacement.bottomLeft,
-          gap: 10,
-          preferAboveWhenOverflow: true,
-          onDismiss: () => _setOpen(false),
-          panel: _open
-              ? PbMenuCard(
-                  width: 280,
-                  child: PbMenuList(
-                    children: <Widget>[
-                      if (_loading && _availableConnectors.isEmpty)
-                        const _McpInfoCard(text: 'Loading connectors...')
-                      else if (_loadError != null)
-                        PbMenuOption(
-                          title: 'Unable to load connectors',
-                          leadingIconAssetName: 'rotate-ccw',
-                          singleLine: true,
-                          onPressed: () => _refresh(force: true),
-                        )
-                      else if (_availableConnectors.isEmpty)
-                        const _McpInfoCard(text: 'No connectors are configured for this room')
-                      else
-                        for (final connector in _availableConnectors) _buildConnectorOption(connector),
-                      if (canAddMcpServices) ...<Widget>[
-                        const PbMenuDivider(),
-                        PbMenuOption(
-                          title: 'Add...',
-                          leadingIconAssetName: 'plus',
-                          singleLine: true,
-                          onPressed: () {
-                            _setOpen(false);
-                            unawaited(_addConnector());
-                          },
-                        ),
-                      ],
-                    ],
-                  ),
-                )
-              : null,
-          child: PbComposerMenuButton(
-            label: 'MCP',
-            iconAssetName: 'plug',
-            open: _open,
-            tooltip: 'Choose MCP',
-            onPressed: () => _setOpen(!_open),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.hasBoundedWidth ? constraints.maxWidth : 528.0;
+        final showSideBySide = _mcpSubmenuOpen && availableWidth >= 528;
+        final primaryWidth = availableWidth < 240 ? availableWidth : 240.0;
+        final submenuWidth = availableWidth < 280 ? availableWidth : 280.0;
+        final primaryMenu = PbMenuCard(
+          width: primaryWidth,
+          child: PbMenuList(
+            children: <Widget>[
+              PbMenuOption(
+                title: 'Connect MCPs',
+                leadingIconAssetName: 'plug',
+                trailingIconAssetName: 'chevron-right',
+                singleLine: true,
+                selected: _mcpSubmenuOpen,
+                selectedSurface: _mcpSubmenuOpen,
+                onPressed: () => _setMcpSubmenuOpen(!_mcpSubmenuOpen),
+              ),
+              PbMenuOption(
+                title: 'Upload a file...',
+                leadingIconAssetName: 'paperclip',
+                singleLine: true,
+                onPressed: widget.actions.onUploadFile,
+              ),
+              if (widget.actions.onAddFromRoom != null)
+                PbMenuOption(
+                  title: 'Add from room...',
+                  leadingIconAssetName: 'arrow-down-to-line',
+                  singleLine: true,
+                  onPressed: widget.actions.onAddFromRoom,
+                ),
+            ],
           ),
-        ),
-        for (final connector in selectedConnectors) ...<Widget>[
-          const SizedBox(width: 8),
-          PbComposerMcpPill(label: connector.name, onRemove: () => widget.controller.setMcpConnectorSelected(connector, false)),
-        ],
-      ],
+        );
+        final submenu = PbMenuCard(
+          width: submenuWidth,
+          child: PbMenuList(
+            children: <Widget>[
+              if (_loading && _availableConnectors.isEmpty)
+                const _McpInfoCard(text: 'Loading connectors...')
+              else if (_loadError != null)
+                PbMenuOption(
+                  title: 'Unable to load connectors',
+                  leadingIconAssetName: 'rotate-ccw',
+                  singleLine: true,
+                  onPressed: () => _refresh(force: true),
+                )
+              else if (_availableConnectors.isEmpty)
+                const _McpInfoCard(text: 'No connectors are configured for this room')
+              else
+                for (final connector in _availableConnectors) _buildConnectorOption(connector),
+              if (canAddMcpServices) ...<Widget>[
+                const PbMenuDivider(),
+                PbMenuOption(
+                  title: 'Add...',
+                  leadingIconAssetName: 'plus',
+                  singleLine: true,
+                  onPressed: () {
+                    unawaited(_addConnector());
+                    widget.actions.closeMenu();
+                  },
+                ),
+              ],
+            ],
+          ),
+        );
+
+        if (!_mcpSubmenuOpen) {
+          return primaryMenu;
+        }
+        if (showSideBySide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[primaryMenu, const SizedBox(width: 8), submenu],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[primaryMenu, const SizedBox(height: 8), submenu],
+        );
+      },
     );
   }
 

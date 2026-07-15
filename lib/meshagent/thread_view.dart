@@ -38,6 +38,7 @@ import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
+import 'package:powerboards/meshagent/powerboards_v1_model_controller_scope.dart';
 import 'package:powerboards/meshagent/powerboards_v1_thread_composer.dart';
 import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
@@ -888,6 +889,12 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       showCenteredComposerTitle: !usesCenteredDesktopPreviewComposer,
       hideChatInput: widget.hideChatInput,
       showThreadList: false,
+      datasetThreadWrapperBuilder: usesDesktopUiPreview
+          ? (context, path, thread, modelController) => PowerboardsV1ModelControllerScope(controller: modelController, child: thread)
+          : null,
+      datasetNewThreadWrapperBuilder: usesDesktopUiPreview
+          ? (context, newThread, modelController) => PowerboardsV1ModelControllerScope(controller: modelController, child: newThread)
+          : null,
     );
 
     final scopedChatBotView = usesDesktopUiPreview
