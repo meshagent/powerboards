@@ -30,6 +30,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat_bot_view.dart';
 import 'package:meshagent_flutter_shadcn/chat_bubble_markdown_config.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
+import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
@@ -43,6 +44,7 @@ import 'package:powerboards/meshagent/powerboards_v1_thread_composer.dart';
 import 'package:powerboards/meshagent/room_lifecycle_errors.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
+import 'package:powerboards/meshagent/tools/install_webserver_service.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
 
@@ -104,6 +106,40 @@ const Map<String, TextStyle> _desktopV1ThreadCodeHighlightTheme = {
   'deletion': TextStyle(color: _desktopV1ThreadCodeCommentColor),
   'meta': TextStyle(color: _desktopV1ThreadCodeCommentColor),
 };
+
+String? powerboardsV1WebServerProductLinkStoragePath(Uri uri) {
+  final rawPath = uri.queryParameters['path']?.trim().replaceAll('\\', '/');
+  if (rawPath == null || rawPath.isEmpty) {
+    return null;
+  }
+  final segments = rawPath.split('/').map((segment) => segment.trim()).where((segment) => segment.isNotEmpty).toList(growable: false);
+  if (segments.isEmpty || segments.first != powerboardsWebServerFolderName) {
+    return null;
+  }
+  if (segments.any((segment) => segment == '.' || segment == '..' || segment.startsWith('.'))) {
+    return null;
+  }
+  return segments.join('/');
+}
+
+Uri powerboardsV1ThreadRouteUri({
+  required Uri currentUri,
+  required String pane,
+  String? rawPath,
+  Map<String, String> extraQueryParameters = const {},
+  Set<String> removeQueryParameters = const {},
+}) {
+  final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters)
+    ..['pane'] = pane
+    ..addAll(extraQueryParameters);
+  for (final parameter in removeQueryParameters) {
+    updatedQueryParameters.remove(parameter);
+  }
+  if (rawPath != null) {
+    updatedQueryParameters['p'] = rawPath;
+  }
+  return currentUri.replace(queryParameters: updatedQueryParameters);
+}
 
 EdgeInsets? _desktopV1ThreadMarkdownHeadingPadding(String tag) {
   return switch (tag) {
@@ -298,11 +334,13 @@ class MeshagentThreadView extends StatefulWidget {
     this.onThreadAttachmentsChanged,
     this.composerAttachmentSeedVersion = 0,
     this.composerAttachmentPaths = const [],
+    this.composerAttachmentDisplayNamesByPath = const {},
     this.onComposerAttachmentSeedCleared,
     this.onComposerAttachmentOpen,
     this.onComposerAttachmentRemoved,
     this.onThreadAttachmentOpen,
     this.fileDropOverlayBuilder,
+    this.onServiceChanged,
   });
 
   final String projectId;
@@ -333,11 +371,13 @@ class MeshagentThreadView extends StatefulWidget {
   final PowerboardsThreadAttachmentsChanged? onThreadAttachmentsChanged;
   final int composerAttachmentSeedVersion;
   final List<String> composerAttachmentPaths;
+  final Map<String, String> composerAttachmentDisplayNamesByPath;
   final VoidCallback? onComposerAttachmentSeedCleared;
   final ValueChanged<String>? onComposerAttachmentOpen;
   final ValueChanged<String>? onComposerAttachmentRemoved;
   final ValueChanged<String>? onThreadAttachmentOpen;
   final FileDropOverlayBuilder? fileDropOverlayBuilder;
+  final FutureOr<void> Function()? onServiceChanged;
 
   @override
   State createState() => _MeshagentThreadViewState();
@@ -348,6 +388,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const double _mobileThreadEmptyStateWidthMax = 600;
 
   late final ChatThreadController _chatController;
+  String? _powerboardsClientToolkitSignature;
   String? _lastRestoredThreadScrollOffsetValue;
   final Set<String> _reportedAttachmentKeys = <String>{};
   int _lastAppliedComposerAttachmentSeedVersion = 0;
@@ -378,11 +419,81 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   bool _handleMarkdownLink(BuildContext context, String url) {
-    return powerboardsHandleChatLink(
+    if (powerboardsHandleChatLink(
       url: url,
       onOpenFolder: _openFolderContext,
       onOpenFilePreview: (path) =>
           _openThreadAttachment(powerboardsResolveChatFilePreviewPath(path, activeFolderStoragePath: _activeFolderContextStoragePath)),
+    )) {
+      return true;
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'powerboards') {
+      return false;
+    }
+
+    if (uri.host == 'files' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'webserver') {
+      if (powerboardsUsesDesktopUiPreview(context)) {
+        _openWebServerFolder(context, storagePath: powerboardsV1WebServerProductLinkStoragePath(uri));
+      }
+      return true;
+    }
+    if (uri.host == 'preview' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'webserver') {
+      if (powerboardsUsesDesktopUiPreview(context)) {
+        final storagePath = powerboardsV1WebServerProductLinkStoragePath(uri);
+        if (storagePath == null) {
+          _openWebServerPreview(context);
+        } else {
+          _openThreadAttachment(storagePath);
+        }
+      }
+      return true;
+    }
+    if (uri.host == 'copy') {
+      final text = uri.queryParameters['text']?.trim();
+      if (text == null || text.isEmpty) {
+        return true;
+      }
+      Clipboard.setData(ClipboardData(text: text));
+      return true;
+    }
+    return false;
+  }
+
+  void _openWebServerFolder(BuildContext context, {String? storagePath}) {
+    final normalizedPath = storagePath?.trim();
+    final folderPath = normalizedPath == null || normalizedPath.isEmpty
+        ? '$powerboardsWebServerFolderName/'
+        : '${normalizedPath.replaceFirst(RegExp(r'/+$'), '')}/';
+    _replaceRoomRouteState(context, pane: 'files', rawPath: folderPath, removeQueryParameters: const {'webserver_preview'});
+  }
+
+  void _openWebServerPreview(BuildContext context) {
+    _replaceRoomRouteState(
+      context,
+      pane: 'files',
+      rawPath: '$powerboardsWebServerFolderName/',
+      extraQueryParameters: const {'webserver_preview': '1'},
+    );
+  }
+
+  void _replaceRoomRouteState(
+    BuildContext context, {
+    required String pane,
+    String? rawPath,
+    Map<String, String> extraQueryParameters = const {},
+    Set<String> removeQueryParameters = const {},
+  }) {
+    final state = PathRouteMatch.of(context);
+    context.go(
+      powerboardsV1ThreadRouteUri(
+        currentUri: state.uri,
+        pane: pane,
+        rawPath: rawPath,
+        extraQueryParameters: extraQueryParameters,
+        removeQueryParameters: removeQueryParameters,
+      ).toString(),
     );
   }
 
@@ -467,12 +578,14 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _configurePowerboardsClientToolkit();
     _scheduleComposerAttachmentSeed();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _configurePowerboardsClientToolkit();
     _restoreThreadScrollOffsetFromRoute();
   }
 
@@ -481,6 +594,39 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     _chatController.removeListener(_onChatControllerChanged);
     _chatController.dispose();
     super.dispose();
+  }
+
+  void _configurePowerboardsClientToolkit() {
+    final projectId = widget.projectId.trim();
+    final roomName = widget.client.roomName?.trim();
+    final enableV1WebServerTools = powerboardsUsesDesktopUiPreview(context);
+    if (!enableV1WebServerTools || projectId.isEmpty || roomName == null || roomName.isEmpty) {
+      if (_powerboardsClientToolkitSignature != null) {
+        _chatController.removeClientToolkit('powerboards');
+        _powerboardsClientToolkitSignature = null;
+      }
+      return;
+    }
+
+    final signature = '$projectId\n$roomName';
+    if (_powerboardsClientToolkitSignature == signature) {
+      return;
+    }
+
+    _chatController.addClientToolkit(
+      InstallWebServerServiceToolkit(
+        projectId: projectId,
+        roomName: roomName,
+        enableV1WebServerTools: true,
+        onInstalled: (_) => widget.onServiceChanged?.call(),
+        onSaved: (_) => widget.onServiceChanged?.call(),
+        onUninstalled: (_) => widget.onServiceChanged?.call(),
+        listFiles: (request) => listPowerboardsWebServerFiles(request, storage: widget.client.storage),
+        openFile: (request) => openPowerboardsWebServerFile(request, storage: widget.client.storage),
+        uninstall: (request) => uninstallPowerboardsWebServerService(request, storage: widget.client.storage),
+      ),
+    );
+    _powerboardsClientToolkitSignature = signature;
   }
 
   String _currentParticipantDisplayName() {
@@ -568,9 +714,16 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return folderContext.displayName;
     }
 
-    final normalized = path.trim();
+    final normalized = powerboardsStorageAttachmentPathFromUrl(path).trim();
     if (normalized.isEmpty) {
       return normalized;
+    }
+
+    final explicitDisplayName =
+        widget.composerAttachmentDisplayNamesByPath[normalized] ?? widget.composerAttachmentDisplayNamesByPath[path.trim()];
+    final normalizedExplicitDisplayName = explicitDisplayName?.trim();
+    if (normalizedExplicitDisplayName != null && normalizedExplicitDisplayName.isNotEmpty) {
+      return normalizedExplicitDisplayName;
     }
 
     final segments = normalized.split('/').where((segment) => segment.trim().isNotEmpty).toList(growable: false);
@@ -840,7 +993,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       onAttachmentOpen: _openComposerAttachment,
       onAttachmentRemoved: (attachment) {
         widget.onComposerAttachmentRemoved?.call(attachment.path);
-        _clearComposerAttachmentSeedIfAttachmentsMatch([attachment.path]);
       },
       selectedThreadPath: widget.selectedThreadPath,
       selectedThreadDisplayName: widget.selectedThreadDisplayName,

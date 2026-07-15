@@ -74,6 +74,7 @@ void main() {
     expect(toastTheme?.closeIconPosition, powerboardsToastCloseIconPosition);
     expect(toastTheme?.constraints?.minWidth, 380);
     expect(toastTheme?.constraints?.maxWidth, 380);
+    expect(toastTheme?.canMerge, isTrue);
     expect(toastTheme?.showCloseIconOnlyWhenHovered, isFalse);
     expect(toastTheme?.textDirection, TextDirection.ltr);
     expect(toastTheme?.titleStyle?.fontSize, PowerboardsTypography.label.fontSize);
@@ -105,6 +106,7 @@ void main() {
     );
 
     expect(toastTheme?.backgroundColor, PbColors.surfacePanel);
+    expect(toastTheme?.canMerge, isFalse);
     expect(toastTheme?.titleStyle?.color, PbColors.alert);
     expect(toastTheme?.descriptionStyle?.color, PbColors.textMuted);
     expect(toastTheme?.titleStyle?.backgroundColor, Colors.transparent);

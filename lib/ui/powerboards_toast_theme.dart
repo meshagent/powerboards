@@ -38,6 +38,7 @@ ShadToastTheme _powerboardsV1ToastTheme(BuildContext context, {required bool des
   final toastWidth = math.min(_powerboardsV1ToastMaxWidth, math.max(0.0, screenWidth - (_powerboardsV1ToastOffset.dx * 2)));
 
   return ShadToastTheme(
+    canMerge: !destructive,
     alignment: Alignment.bottomLeft,
     offset: _powerboardsV1ToastOffset,
     backgroundColor: PbColors.surfacePanel,

@@ -704,6 +704,107 @@ String powerboardsDesktopPreviewAttachmentThreadScopeSignature({required String?
 }
 
 @visibleForTesting
+String? powerboardsDesktopPreviewActiveThreadValue({required String? selectedValue, required String? pendingValue}) {
+  final normalizedSelected = selectedValue?.trim();
+  if (normalizedSelected != null && normalizedSelected.isNotEmpty) {
+    return normalizedSelected;
+  }
+  final normalizedPending = pendingValue?.trim();
+  return normalizedPending == null || normalizedPending.isEmpty ? null : normalizedPending;
+}
+
+@visibleForTesting
+String? powerboardsV1ThreadCreatedPendingStartMatcher(
+  agent_sessions.ThreadCreated message,
+  List<agent_sessions.PendingThreadStartCandidate> candidates,
+) {
+  if (message.thread.path.trim().isEmpty || candidates.isEmpty) {
+    return null;
+  }
+
+  final eventMessageId = message.messageId.trim();
+  if (eventMessageId.isNotEmpty) {
+    final directMatches = candidates.where((candidate) => candidate.messageId == eventMessageId).toList(growable: false);
+    if (directMatches.length == 1) {
+      return directMatches.single.messageId;
+    }
+  }
+
+  final eventSenderName = message.senderName?.trim();
+  if (eventSenderName != null && eventSenderName.isNotEmpty) {
+    final matches = candidates
+        .where((candidate) {
+          final candidateSenderName = candidate.senderName?.trim();
+          return candidateSenderName != null && candidateSenderName.isNotEmpty && candidateSenderName == eventSenderName;
+        })
+        .toList(growable: false);
+    if (matches.length == 1) {
+      return matches.single.messageId;
+    }
+  }
+
+  // The V1 composer serializes new-thread starts. Some ThreadCreated events
+  // carry a server message id or sender name that cannot be correlated back to
+  // the local StartThread request, so the sole pending request is the only
+  // deterministic handoff available.
+  return candidates.length == 1 ? candidates.single.messageId : null;
+}
+
+typedef PowerboardsAgentChatClientCacheKey = ({String agentName, bool usesV1SessionGuards});
+
+@visibleForTesting
+PowerboardsAgentChatClientCacheKey? powerboardsAgentChatClientCacheKey({required String? agentName, required bool usesDesktopUiPreview}) {
+  final normalizedAgentName = agentName?.trim();
+  if (normalizedAgentName == null || normalizedAgentName.isEmpty) {
+    return null;
+  }
+  return (agentName: normalizedAgentName, usesV1SessionGuards: usesDesktopUiPreview);
+}
+
+@visibleForTesting
+String? powerboardsDesktopPreviewVisiblePathForPendingThread({
+  required String? pendingThreadPath,
+  required Iterable<String> visibleThreadPaths,
+}) {
+  final pendingPath = pendingThreadPath?.trim();
+  if (pendingPath == null || pendingPath.isEmpty) {
+    return null;
+  }
+
+  final visiblePaths = visibleThreadPaths.map((path) => path.trim()).where((path) => path.isNotEmpty).toList(growable: false);
+  if (visiblePaths.contains(pendingPath)) {
+    return pendingPath;
+  }
+
+  String? threadId(String path) {
+    final uri = Uri.tryParse(path);
+    if (uri == null) {
+      return null;
+    }
+
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme.isNotEmpty && scheme != 'agent' && scheme != 'dataset') {
+      return null;
+    }
+
+    final segments = <String>[if (uri.host.isNotEmpty) uri.host, ...uri.pathSegments.where((segment) => segment.isNotEmpty)];
+    final threadsIndex = segments.lastIndexWhere((segment) => segment == 'threads' || segment == '.threads');
+    if (threadsIndex < 0 || threadsIndex + 1 >= segments.length) {
+      return null;
+    }
+    final suffix = segments.sublist(threadsIndex + 1).join('/');
+    return suffix.endsWith('.thread') ? suffix.substring(0, suffix.length - '.thread'.length) : suffix;
+  }
+
+  final pendingThreadId = threadId(pendingPath);
+  if (pendingThreadId == null) {
+    return null;
+  }
+  final matches = visiblePaths.where((path) => threadId(path) == pendingThreadId).toList(growable: false);
+  return matches.length == 1 ? matches.single : null;
+}
+
+@visibleForTesting
 bool powerboardsDesktopPreviewShouldLoadThreadAttachments({required PbRoomPanelTab selectedTab, required bool filePreviewOpen}) {
   return selectedTab == PbRoomPanelTab.files || filePreviewOpen;
 }
@@ -2742,10 +2843,14 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final Map<String, String> _selectedThreadLabelByAgentKey = <String, String>{};
   final Map<String, String> _pendingDesktopPreviewThreadPathByAgentKey = <String, String>{};
   final Map<String, String> _pendingDesktopPreviewThreadLabelByAgentKey = <String, String>{};
+  final Map<String, Set<String>> _visibleDesktopPreviewThreadPathsByAgentKey = <String, Set<String>>{};
+  final Set<String> _loadedDesktopPreviewThreadAgentKeys = <String>{};
   final Map<String, List<String>> _composerAttachmentPathsByAgentKey = <String, List<String>>{};
+  final Map<String, Map<String, String>> _composerAttachmentDisplayNamesByAgentKey = <String, Map<String, String>>{};
   final Map<String, int> _composerAttachmentSeedVersionByAgentKey = <String, int>{};
   final Map<String, PowerboardsFileAttachmentLink> _localThreadAttachmentLinksByKey = <String, PowerboardsFileAttachmentLink>{};
-  final Map<String, agent_sessions.MessagingChatClient> _agentChatClients = <String, agent_sessions.MessagingChatClient>{};
+  final Map<PowerboardsAgentChatClientCacheKey, agent_sessions.MessagingChatClient> _agentChatClients =
+      <PowerboardsAgentChatClientCacheKey, agent_sessions.MessagingChatClient>{};
   static const Duration _roomResourceTimeout = Duration(seconds: 30);
 
   final MeshagentRoomController controller = MeshagentRoomController();
@@ -2831,7 +2936,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   void _clearRoomScopedThreadSelectionState() {
     _selectedThreadPathByAgentKey.clear();
     _selectedThreadLabelByAgentKey.clear();
+    _pendingDesktopPreviewThreadPathByAgentKey.clear();
+    _pendingDesktopPreviewThreadLabelByAgentKey.clear();
+    _visibleDesktopPreviewThreadPathsByAgentKey.clear();
+    _loadedDesktopPreviewThreadAgentKeys.clear();
     _composerAttachmentPathsByAgentKey.clear();
+    _composerAttachmentDisplayNamesByAgentKey.clear();
     _composerAttachmentSeedVersionByAgentKey.clear();
     _newThreadResetVersion++;
   }
@@ -2931,6 +3041,21 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     services.sort(_compareServices);
     return services;
   });
+  late final fileManagerServices = Resource<List<ServiceSpec>>(() async {
+    final services = await getMeshagentClient()
+        .listRoomServices(projectId: widget.projectId, roomName: widget.room.roomName!)
+        .timeout(_roomResourceTimeout, onTimeout: () => throw TimeoutException("Timed out while loading room services."));
+    services.sort(_compareServices);
+    return services;
+  });
+
+  void _refreshServiceResources() {
+    unawaited(_refreshServiceResourcesAndWait());
+  }
+
+  Future<void> _refreshServiceResourcesAndWait() async {
+    await Future.wait<void>([services.refresh(), fileManagerServices.refresh()]);
+  }
 
   @override
   void dispose() {
@@ -2959,13 +3084,25 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   String _serviceSortKey(ServiceSpec s) => s.agents.firstOrNull?.name ?? s.metadata.name;
   int _compareServices(ServiceSpec a, ServiceSpec b) => _serviceSortKey(a).compareTo(_serviceSortKey(b));
 
-  agent_sessions.BaseChatClient? _agentChatClientFor(String? agentName) {
-    final normalized = agentName?.trim();
-    if (normalized == null || normalized.isEmpty) {
+  agent_sessions.BaseChatClient? _agentChatClientFor(BuildContext context, String? agentName) {
+    final cacheKey = powerboardsAgentChatClientCacheKey(
+      agentName: agentName,
+      usesDesktopUiPreview: powerboardsUsesDesktopUiPreview(context),
+    );
+    if (cacheKey == null) {
       return null;
     }
-    return _agentChatClients.putIfAbsent(normalized, () {
-      final chatClient = agent_sessions.MessagingChatClient(room: widget.room, agentName: normalized);
+    final existing = _agentChatClients[cacheKey];
+    if (existing != null) {
+      return existing;
+    }
+    return _agentChatClients.putIfAbsent(cacheKey, () {
+      final chatClient = agent_sessions.MessagingChatClient(
+        room: widget.room,
+        agentName: cacheKey.agentName,
+        threadCreatedPendingStartMatcher: cacheKey.usesV1SessionGuards ? powerboardsV1ThreadCreatedPendingStartMatcher : null,
+        deduplicateClientToolRequests: cacheKey.usesV1SessionGuards,
+      );
       unawaited(chatClient.start());
       return chatClient;
     });
@@ -2973,6 +3110,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   String _serviceId(ServiceSpec s) => s.metadata.annotations["meshagent.service.id"] ?? "";
   String _serviceType(ServiceSpec s) => s.agents.firstOrNull?.annotations["meshagent.agent.type"] ?? "[Unspecified]";
+
   String? _serviceAgentName(ServiceSpec service) {
     final name = service.agents.firstOrNull?.name;
     if (name == null) {
@@ -3413,12 +3551,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return null;
     }
 
-    final inMemory = _selectedThreadPathByAgentKey[agentKey];
-    if (inMemory != null) {
-      return inMemory;
-    }
-
-    return null;
+    return powerboardsDesktopPreviewActiveThreadValue(
+      selectedValue: _selectedThreadPathByAgentKey[agentKey],
+      pendingValue: _pendingDesktopPreviewThreadPathByAgentKey[agentKey],
+    );
   }
 
   // ignore: unused_element
@@ -3427,12 +3563,10 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return null;
     }
 
-    final stored = _selectedThreadLabelByAgentKey[agentKey];
-    if (stored != null && stored.trim().isNotEmpty) {
-      return stored;
-    }
-
-    return null;
+    return powerboardsDesktopPreviewActiveThreadValue(
+      selectedValue: _selectedThreadLabelByAgentKey[agentKey],
+      pendingValue: _pendingDesktopPreviewThreadLabelByAgentKey[agentKey],
+    );
   }
 
   void _setSelectedThreadPath(String? agentKey, String? path, {String? displayName}) {
@@ -3513,7 +3647,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
   }
 
-  Future<void> _setComposerAttachmentSeed(String agentKey, Iterable<String> paths, {bool isFolder = false}) async {
+  Future<void> _setComposerAttachmentSeed(
+    String agentKey,
+    Iterable<String> paths, {
+    bool isFolder = false,
+    Map<String, String>? displayNamesByPath,
+  }) async {
     final normalizedPaths = <String>[];
     if (isFolder) {
       for (final path in paths) {
@@ -3531,20 +3670,69 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
+    final normalizedPathSet = normalizedPaths.map((path) => powerboardsFolderChatContextFromDataUrl(path)?.storagePath ?? path).toSet();
+    final normalizedDisplayNamesByPath = <String, String>{};
+    if (displayNamesByPath != null) {
+      for (final entry in displayNamesByPath.entries) {
+        final normalizedPath = powerboardsStorageAttachmentPathFromUrl(entry.key);
+        final normalizedDisplayName = entry.value.trim();
+        if (normalizedPathSet.contains(normalizedPath) && normalizedDisplayName.isNotEmpty) {
+          normalizedDisplayNamesByPath[normalizedPath] = normalizedDisplayName;
+        }
+      }
+    }
+
     setState(() {
       _composerAttachmentPathsByAgentKey[agentKey] = normalizedPaths;
+      if (normalizedDisplayNamesByPath.isEmpty) {
+        _composerAttachmentDisplayNamesByAgentKey.remove(agentKey);
+      } else {
+        _composerAttachmentDisplayNamesByAgentKey[agentKey] = normalizedDisplayNamesByPath;
+      }
       _composerAttachmentSeedVersionByAgentKey[agentKey] = ++_composerAttachmentSeedRevision;
     });
   }
 
   void _clearComposerAttachmentSeed(String agentKey) {
-    if (!_composerAttachmentPathsByAgentKey.containsKey(agentKey) && !_composerAttachmentSeedVersionByAgentKey.containsKey(agentKey)) {
+    if (!_composerAttachmentPathsByAgentKey.containsKey(agentKey) &&
+        !_composerAttachmentDisplayNamesByAgentKey.containsKey(agentKey) &&
+        !_composerAttachmentSeedVersionByAgentKey.containsKey(agentKey)) {
       return;
     }
 
     setState(() {
       _composerAttachmentPathsByAgentKey.remove(agentKey);
+      _composerAttachmentDisplayNamesByAgentKey.remove(agentKey);
       _composerAttachmentSeedVersionByAgentKey.remove(agentKey);
+    });
+  }
+
+  void _removeComposerAttachmentSeedPath(String agentKey, String path) {
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
+    final currentPaths = _composerAttachmentPathsByAgentKey[agentKey];
+    if (normalizedPath.isEmpty || currentPaths == null || currentPaths.isEmpty) {
+      return;
+    }
+
+    final nextPaths = currentPaths.where((candidate) => candidate != normalizedPath).toList(growable: false);
+    if (nextPaths.length == currentPaths.length) {
+      return;
+    }
+    if (nextPaths.isEmpty) {
+      _clearComposerAttachmentSeed(agentKey);
+      return;
+    }
+
+    setState(() {
+      _composerAttachmentPathsByAgentKey[agentKey] = nextPaths;
+      final displayNames = Map<String, String>.from(_composerAttachmentDisplayNamesByAgentKey[agentKey] ?? const {});
+      displayNames.remove(normalizedPath);
+      if (displayNames.isEmpty) {
+        _composerAttachmentDisplayNamesByAgentKey.remove(agentKey);
+      } else {
+        _composerAttachmentDisplayNamesByAgentKey[agentKey] = displayNames;
+      }
+      _composerAttachmentSeedVersionByAgentKey[agentKey] = ++_composerAttachmentSeedRevision;
     });
   }
 
@@ -3954,7 +4142,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   Future<void> showManageAgents() async {
     await showManageAgentsSurface(context: context, projectId: widget.projectId, room: widget.room);
     if (!mounted) return;
-    services.refresh();
+    _refreshServiceResources();
   }
 
   ShadToasterState? _rootOrRoomToaster() {
@@ -4272,6 +4460,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   void _showFilesPane(BuildContext context) {
+    _refreshServiceResources();
     controller.showFiles();
     _replaceRoomRouteState(context, pane: _MobileRoomPane.files);
   }
@@ -4566,9 +4755,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               context: context,
               room: widget.room,
               projectId: widget.projectId,
-              onServiceChanged: () {
-                services.refresh();
-              },
+              onServiceChanged: _refreshServiceResources,
             );
           },
         )
@@ -4846,7 +5033,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             description: Text("$error"),
             trailing: ShadButton.outline(
               onPressed: () {
-                services.refresh();
+                _refreshServiceResources();
                 canViewStorage.refresh();
                 canViewDeveloperLogs.refresh();
                 isOwner.refresh();
@@ -4928,6 +5115,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             : null);
     final agentKey = selectedAgentRouteId;
     final composerAttachmentPaths = agentKey == null ? const <String>[] : _composerAttachmentPathsByAgentKey[agentKey] ?? const <String>[];
+    final composerAttachmentDisplayNamesByPath = agentKey == null
+        ? const <String, String>{}
+        : _composerAttachmentDisplayNamesByAgentKey[agentKey] ?? const <String, String>{};
     final composerAttachmentSeedVersion = agentKey == null ? 0 : _composerAttachmentSeedVersionByAgentKey[agentKey] ?? 0;
     final normalizedSelectedThreadDisplayName = selectedThreadDisplayName?.trim();
     final resolvedSelectedThreadDisplayName = normalizedSelectedThreadDisplayName == null || normalizedSelectedThreadDisplayName.isEmpty
@@ -4947,7 +5137,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             bottom: 24,
           )
         : null;
-    final agentChatClient = _agentChatClientFor(agentName);
+    final agentChatClient = _agentChatClientFor(context, agentName);
     void handleSelectedThreadPathChanged(String? path) {
       if (deferDesktopPreviewNewThreadSelection && selectedThreadPath == null && path != null) {
         _deferDesktopPreviewNewThreadSelection(agentKey, path);
@@ -5002,14 +5192,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         onOpenMeet: () => _showMeetingPane(context),
         onThreadAttachmentsChanged: _recordLocalThreadAttachments,
         composerAttachmentPaths: composerAttachmentPaths,
+        composerAttachmentDisplayNamesByPath: composerAttachmentDisplayNamesByPath,
         composerAttachmentSeedVersion: composerAttachmentSeedVersion,
         onComposerAttachmentSeedCleared: agentKey == null ? null : () => _clearComposerAttachmentSeed(agentKey),
         onComposerAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) => _openDesktopPreviewAttachment(path, threadName: currentThreadLabel, fromComposerAttachment: true)
             : null,
-        onComposerAttachmentRemoved: !isMobile && powerboardsUsesDesktopUiPreview(context)
-            ? _closeDesktopPreviewAttachmentPreviewIfRemoved
-            : null,
+        onComposerAttachmentRemoved: agentKey == null
+            ? null
+            : (path) {
+                _removeComposerAttachmentSeedPath(agentKey, path);
+                if (!isMobile && powerboardsUsesDesktopUiPreview(context)) {
+                  _closeDesktopPreviewAttachmentPreviewIfRemoved(path);
+                }
+              },
         onThreadAttachmentOpen: !isMobile && powerboardsUsesDesktopUiPreview(context)
             ? (path) {
                 final effectiveThreadPath = selectedThreadPath ?? documentPath;
@@ -5028,6 +5224,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             : null,
         fileDropOverlayBuilder: chatDropOverlayBuilder,
         projectId: widget.projectId,
+        onServiceChanged: _refreshServiceResourcesAndWait,
       ),
     );
 
@@ -5338,10 +5535,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
               child: FileManagerView(
                 client: widget.room,
                 projectId: widget.projectId,
-                services: services,
+                services: fileManagerServices,
+                onServiceChanged: _refreshServiceResources,
                 hideSystem: true,
                 mobileShellOwnsHeader: isMobile && !embedMobileChrome,
                 showDesktopSidetrayToggle: showDesktopSidetrayToggle,
+                canInstallServices: isOwner.state.value == true,
                 controller: _filesHeaderController,
                 desktopHeaderLeadingActions: isMobile || !meetingSessionActive ? const [] : _meetingHeaderPrimaryControls(context),
                 desktopHeaderActions: isMobile ? const [] : actions,
@@ -5353,13 +5552,15 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                 v1RoomPanelWidth: usesDesktopUiPreview ? _desktopPreviewRoomPanelWidth : null,
                 onV1RoomPanelWidthChanged: usesDesktopUiPreview ? _setDesktopPreviewRoomPanelWidth : null,
                 onV1FilePromptRequested: usesDesktopUiPreview
-                    ? (action, filePath, {required isFolder, required responsiveHandoff}) => _handleDesktopPreviewFilePromptRequested(
-                        context,
-                        action: action,
-                        filePath: filePath,
-                        isFolder: isFolder,
-                        responsiveHandoff: responsiveHandoff,
-                      )
+                    ? (action, filePath, {required isFolder, required responsiveHandoff, fileDisplayName}) =>
+                          _handleDesktopPreviewFilePromptRequested(
+                            context,
+                            action: action,
+                            filePath: filePath,
+                            isFolder: isFolder,
+                            responsiveHandoff: responsiveHandoff,
+                            fileDisplayName: fileDisplayName,
+                          )
                     : null,
               ),
             ),
@@ -5969,6 +6170,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     });
   }
 
+  void _trackDesktopPreviewVisibleThreads(
+    _MobileChatHeaderContext? chatContext,
+    List<_DesktopPreviewThreadEntry> threads, {
+    required bool threadListLoaded,
+  }) {
+    final agentKey = chatContext?.agentKey;
+    if (agentKey == null || !threadListLoaded) {
+      return;
+    }
+    _loadedDesktopPreviewThreadAgentKeys.add(agentKey);
+    _visibleDesktopPreviewThreadPathsByAgentKey[agentKey] = threads.map((thread) => thread.path).toSet();
+  }
+
   void _syncPendingDesktopPreviewThreadSelection(_MobileChatHeaderContext? chatContext, List<_DesktopPreviewThreadEntry> threads) {
     final agentKey = chatContext?.agentKey;
     if (agentKey == null) {
@@ -5976,19 +6190,23 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     final pendingPath = _pendingDesktopPreviewThreadPathByAgentKey[agentKey];
-    if (pendingPath == null || !threads.any((thread) => thread.path == pendingPath)) {
+    final visiblePath = powerboardsDesktopPreviewVisiblePathForPendingThread(
+      pendingThreadPath: pendingPath,
+      visibleThreadPaths: threads.map((thread) => thread.path),
+    );
+    if (pendingPath == null || visiblePath == null) {
       return;
     }
 
     final pendingLabel = _pendingDesktopPreviewThreadLabelByAgentKey[agentKey];
-    final listedLabel = threads.firstWhereOrNull((thread) => thread.path == pendingPath)?.name;
+    final listedLabel = threads.firstWhereOrNull((thread) => thread.path == visiblePath)?.name;
     final displayName = pendingLabel ?? listedLabel;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _pendingDesktopPreviewThreadPathByAgentKey[agentKey] != pendingPath) {
         return;
       }
 
-      _setSelectedThreadPath(agentKey, pendingPath, displayName: displayName);
+      _setSelectedThreadPath(agentKey, visiblePath, displayName: displayName);
     });
   }
 
@@ -6146,7 +6364,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
     final rawChatContext = _resolveMobileChatHeaderContext(supported, selected);
     final threadListPath = rawChatContext?.threadListPath;
-    final threadListChatClient = _agentChatClientFor(rawChatContext?.agentName);
+    final enableV1ChatSessionGuards = powerboardsUsesDesktopUiPreview(context);
+    final threadListChatClient = _agentChatClientFor(context, rawChatContext?.agentName);
     final agentItems = _desktopPreviewAgentItems(supported, selected);
     final hasVisibleAgents = _hasVisibleAgents(supported);
     final voiceOnlyAgent = rawChatContext?.isVoiceOnly == true;
@@ -6156,12 +6375,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       agentName: rawChatContext?.agentName,
       threadListPath: threadListPath,
       chatClientFactory: (_, agentName) =>
-          _agentChatClientFor(agentName) ??
+          _agentChatClientFor(context, agentName) ??
           threadListChatClient ??
-          agent_sessions.MessagingChatClient(room: widget.room, agentName: agentName),
+          agent_sessions.MessagingChatClient(
+            room: widget.room,
+            agentName: agentName,
+            threadCreatedPendingStartMatcher: enableV1ChatSessionGuards ? powerboardsV1ThreadCreatedPendingStartMatcher : null,
+            deduplicateClientToolRequests: enableV1ChatSessionGuards,
+          ),
       disposeChatClient: false,
       builder: (context, threads, threadListLoaded) {
         final chatContext = _desktopPreviewChatContextForVisibleThreads(rawChatContext, threads, threadListLoaded: threadListLoaded);
+        _trackDesktopPreviewVisibleThreads(chatContext, threads, threadListLoaded: threadListLoaded);
         final selectedThreadTitle = _desktopPreviewSelectedThreadTitle(chatContext, threads, threadListLoaded: threadListLoaded);
         final selectedThreadDisplayName = _desktopPreviewSelectedThreadDisplayName(chatContext, threads);
         final selectedThreadTitleResolving = chatContext?.selectedThreadPath != null && !threadListLoaded;
@@ -6231,9 +6456,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                 context: context,
                                 room: widget.room,
                                 projectId: widget.projectId,
-                                onServiceChanged: () {
-                                  services.refresh();
-                                },
+                                onServiceChanged: _refreshServiceResources,
                               ),
                             );
                           },
@@ -7449,6 +7672,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     String? preferredAgentKey,
     bool isFolder = false,
     bool responsiveHandoff = false,
+    String? fileDisplayName,
   }) async {
     if (!mounted || !context.mounted) {
       return;
@@ -7470,8 +7694,19 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
+    final normalizedFileDisplayName = fileDisplayName?.trim();
+    final composerAttachmentDisplayNamesByPath = normalizedFileDisplayName == null || normalizedFileDisplayName.isEmpty
+        ? null
+        : <String, String>{filePath: normalizedFileDisplayName};
+
     if (!powerboardsFilePromptShouldShowPreview(isFolder: isFolder, responsiveHandoff: responsiveHandoff)) {
-      await _handoffResponsiveDesktopPreviewFilePrompt(context, agentKey: agentKey, filePath: filePath, isFolder: isFolder);
+      await _handoffResponsiveDesktopPreviewFilePrompt(
+        context,
+        agentKey: agentKey,
+        filePath: filePath,
+        isFolder: isFolder,
+        displayNamesByPath: composerAttachmentDisplayNamesByPath,
+      );
       return;
     }
 
@@ -7488,7 +7723,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _desktopPreviewFilePreviewFullscreen = false;
       _desktopPreviewComposerAttachmentPreviewPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     });
-    await _setComposerAttachmentSeed(agentKey, [filePath], isFolder: isFolder);
+    await _setComposerAttachmentSeed(agentKey, [filePath], isFolder: isFolder, displayNamesByPath: composerAttachmentDisplayNamesByPath);
     setPreviewFilePreviewFullscreen(false);
 
     if (!mounted || !context.mounted) {
@@ -7502,6 +7737,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     required String agentKey,
     required String filePath,
     required bool isFolder,
+    Map<String, String>? displayNamesByPath,
   }) async {
     final normalizedPath = powerboardsStorageAttachmentPathFromUrl(filePath);
     if (normalizedPath.isEmpty && !isFolder) {
@@ -7513,7 +7749,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       _selectedThreadLabelByAgentKey.remove(agentKey);
       _newThreadResetVersion++;
     });
-    await _setComposerAttachmentSeed(agentKey, [normalizedPath], isFolder: isFolder);
+    await _setComposerAttachmentSeed(agentKey, [normalizedPath], isFolder: isFolder, displayNamesByPath: displayNamesByPath);
 
     if (!mounted || !context.mounted) {
       return;
@@ -7658,6 +7894,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       filePath: path,
       preferredAgentKey: agentKey,
       responsiveHandoff: responsiveHandoff,
+      fileDisplayName: file.title,
     );
   }
 
@@ -7930,9 +8167,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                     context: context,
                                                     room: widget.room,
                                                     projectId: widget.projectId,
-                                                    onServiceChanged: () {
-                                                      services.refresh();
-                                                    },
+                                                    onServiceChanged: _refreshServiceResources,
                                                   );
                                                 },
                                                 child: Text("Install an Agent"),
@@ -7967,9 +8202,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                       context: context,
                                                       room: widget.room,
                                                       projectId: widget.projectId,
-                                                      onServiceChanged: () {
-                                                        services.refresh();
-                                                      },
+                                                      onServiceChanged: _refreshServiceResources,
                                                     );
                                                   },
                                                   child: Text("Install an Agent"),
@@ -8162,7 +8395,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                                                               selectedService: selected.service,
                                                               selectedAgentRouteId: selected.routeId,
                                                               services: supported,
-                                                              onOpen: services.refresh,
+                                                              onOpen: _refreshServiceResources,
                                                               onManageAgents: isOwner.state.value != true ? null : showManageAgents,
                                                               showRoomBreadcrumb: true,
                                                             ),

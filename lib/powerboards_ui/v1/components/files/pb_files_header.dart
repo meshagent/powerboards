@@ -107,16 +107,21 @@ class PbFilesToolbar extends StatelessWidget {
     super.key,
     required this.hasSelection,
     required this.selectedCount,
+    required this.currentPath,
     required this.filterController,
     required this.filterEnabled,
     required this.responsiveMode,
     required this.padding,
     required this.onFilterChanged,
     required this.onCreateFolder,
+    this.onInstallWebServer,
     required this.onCreateTextFile,
     required this.onUpload,
     this.onAskCurrentFolder,
     this.trailingAction,
+    this.showWebServerPreview = false,
+    this.webServerPreviewActive = false,
+    this.onPreviewWebServer,
     required this.onClearSelection,
     required this.onDeleteSelection,
     required this.onDownloadSelection,
@@ -124,16 +129,21 @@ class PbFilesToolbar extends StatelessWidget {
 
   final bool hasSelection;
   final int selectedCount;
+  final String currentPath;
   final TextEditingController filterController;
   final bool filterEnabled;
   final PbFilesResponsiveMode responsiveMode;
   final PbFilesPanelPadding padding;
   final ValueChanged<String> onFilterChanged;
   final VoidCallback onCreateFolder;
+  final VoidCallback? onInstallWebServer;
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
   final VoidCallback? onAskCurrentFolder;
   final PbFilesToolbarTrailingAction? trailingAction;
+  final bool showWebServerPreview;
+  final bool webServerPreviewActive;
+  final VoidCallback? onPreviewWebServer;
   final VoidCallback onClearSelection;
   final VoidCallback onDeleteSelection;
   final VoidCallback onDownloadSelection;
@@ -145,11 +155,27 @@ class PbFilesToolbar extends StatelessWidget {
         final stackedActions =
             responsiveMode == PbFilesResponsiveMode.mobile ||
             responsiveMode == PbFilesResponsiveMode.overlay && constraints.maxWidth <= PbBreakpoints.shellMobile;
+        final webServerTrailingAction = showWebServerPreview
+            ? PbFilesToolbarTrailingAction(
+                label: 'Preview',
+                iconAssetName: 'globe',
+                onPressed: onPreviewWebServer,
+                width: 134,
+                backgroundColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.surfacePanelSoft,
+                pressedBackgroundColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.surfacePanelSoft,
+                borderColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.borderSoft,
+                pressedBorderColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.borderSoft,
+                foregroundColor: webServerPreviewActive ? PbColors.textInverse : PbColors.textMuted,
+              )
+            : currentPath.isEmpty && onInstallWebServer != null
+            ? PbFilesToolbarTrailingAction(label: 'New website', iconAssetName: 'folder-code', onPressed: onInstallWebServer, width: 164)
+            : null;
+        final resolvedTrailingAction = trailingAction ?? webServerTrailingAction;
         final availableWidth = math.max(0, constraints.maxWidth - padding.left - padding.right).toDouble();
         final actionLayout = _FilesToolbarActionLayout.resolve(
           maxWidth: availableWidth,
           stackedActions: stackedActions,
-          trailingAction: trailingAction,
+          trailingAction: resolvedTrailingAction,
         );
         final compactSelectionActions = constraints.maxWidth < 960 && !stackedActions;
         final createActions = _FilesCreateActions(
@@ -160,7 +186,7 @@ class PbFilesToolbar extends StatelessWidget {
           onCreateTextFile: onCreateTextFile,
           onUpload: onUpload,
           onAskCurrentFolder: onAskCurrentFolder,
-          trailingAction: trailingAction,
+          trailingAction: resolvedTrailingAction,
         );
         final filterField = PbMenuFilterField(
           placeholder: 'Filter...',

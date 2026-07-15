@@ -216,6 +216,156 @@ void main() {
     expect(title, 'New Chat');
   });
 
+  test('desktop preview activates a newly created pending thread before the thread list catches up', () {
+    expect(
+      powerboardsDesktopPreviewActiveThreadValue(
+        selectedValue: null,
+        pendingValue: 'dataset://agents/assistant/threads/webserver-service-installation',
+      ),
+      'dataset://agents/assistant/threads/webserver-service-installation',
+    );
+    expect(
+      powerboardsDesktopPreviewActiveThreadValue(
+        selectedValue: 'dataset://agents/assistant/threads/selected',
+        pendingValue: 'dataset://agents/assistant/threads/pending',
+      ),
+      'dataset://agents/assistant/threads/selected',
+    );
+  });
+
+  test('V1 new-thread handoff matches the sole pending start from the same sender', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+    final message = agent_sessions.ThreadCreated(
+      senderName: 'Dinesh',
+      thread: agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: startedAt.add(const Duration(seconds: 12)).toIso8601String(),
+        modifiedAt: startedAt.add(const Duration(seconds: 12)).toIso8601String(),
+      ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+      ]),
+      'client-message-1',
+    );
+  });
+
+  test('V1 new-thread handoff refuses ambiguous pending starts', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+    final message = agent_sessions.ThreadCreated(
+      senderName: 'Dinesh',
+      thread: agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: startedAt.toIso8601String(),
+        modifiedAt: startedAt.toIso8601String(),
+      ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-2', senderName: 'Dinesh'),
+      ]),
+      isNull,
+    );
+  });
+
+  test('V1 new-thread handoff uses the sole pending start when server correlation is unavailable', () {
+    final message = agent_sessions.ThreadCreated(
+      thread: const agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: '2026-07-15T03:24:00Z',
+        modifiedAt: '2026-07-15T03:24:00Z',
+      ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+      ]),
+      'client-message-1',
+    );
+  });
+
+  test('V1 new-thread handoff prefers an exact event message id', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+    final message = agent_sessions.ThreadCreated(
+      messageId: 'client-message-2',
+      thread: agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: startedAt.subtract(const Duration(days: 1)).toIso8601String(),
+        modifiedAt: startedAt.subtract(const Duration(days: 1)).toIso8601String(),
+      ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-2', senderName: 'Dinesh'),
+      ]),
+      'client-message-2',
+    );
+  });
+
+  test('V1 and legacy chat clients cannot share the same cache entry', () {
+    final v1Key = powerboardsAgentChatClientCacheKey(agentName: ' Assistant ', usesDesktopUiPreview: true);
+    final legacyKey = powerboardsAgentChatClientCacheKey(agentName: 'Assistant', usesDesktopUiPreview: false);
+
+    expect(v1Key, (agentName: 'Assistant', usesV1SessionGuards: true));
+    expect(legacyKey, (agentName: 'Assistant', usesV1SessionGuards: false));
+    expect(v1Key, isNot(legacyKey));
+  });
+
+  test('desktop preview resolves a pending agent thread to its one visible dataset thread', () {
+    const pendingPath = 'agent://threads/webserver-service-installation';
+    const visiblePath = 'dataset://agents/assistant/threads/webserver-service-installation';
+
+    expect(
+      powerboardsDesktopPreviewVisiblePathForPendingThread(pendingThreadPath: pendingPath, visibleThreadPaths: const [visiblePath]),
+      visiblePath,
+    );
+    expect(
+      powerboardsDesktopPreviewVisiblePathForPendingThread(
+        pendingThreadPath: pendingPath,
+        visibleThreadPaths: const [
+          'dataset://agents/assistant/threads/webserver-service-installation',
+          'dataset://agents/assistant/threads/webserver-service-installation',
+        ],
+      ),
+      isNull,
+    );
+    expect(
+      powerboardsDesktopPreviewVisiblePathForPendingThread(
+        pendingThreadPath: 'room:///unrelated/webserver-service-installation',
+        visibleThreadPaths: const [visiblePath],
+      ),
+      isNull,
+    );
+  });
+
+  test('desktop preview resolves live storage thread paths to the visible dataset thread', () {
+    const visiblePath = 'dataset://agents/assistant/threads/webserver-service-installation';
+
+    for (final pendingPath in const [
+      'agents/assistant/threads/webserver-service-installation.thread',
+      '/agents/assistant/threads/webserver-service-installation.thread',
+      '.threads/webserver-service-installation.thread',
+      '/threads/webserver-service-installation',
+    ]) {
+      expect(
+        powerboardsDesktopPreviewVisiblePathForPendingThread(pendingThreadPath: pendingPath, visibleThreadPaths: const [visiblePath]),
+        visiblePath,
+        reason: pendingPath,
+      );
+    }
+  });
+
   test('desktop preview uses remembered title while selected thread list is loading', () {
     final title = powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads(
       selectedThreadPath: 'dataset://agents/assistant/threads/testing-screenshot-upload',

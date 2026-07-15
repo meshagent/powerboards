@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_header.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 
 void main() {
   String labelForPath(String path) {
@@ -96,11 +97,16 @@ void main() {
     WidgetTester tester, {
     required double width,
     required PbFilesResponsiveMode responsiveMode,
+    String currentPath = '',
     required VoidCallback onCreateFolder,
+    VoidCallback? onInstallWebServer,
     required VoidCallback onCreateTextFile,
     required VoidCallback onUpload,
     VoidCallback? onAskCurrentFolder,
     PbFilesToolbarTrailingAction? trailingAction,
+    bool showWebServerPreview = false,
+    bool webServerPreviewActive = false,
+    VoidCallback? onPreviewWebServer,
     bool hasSelection = false,
     int selectedCount = 0,
   }) async {
@@ -122,16 +128,21 @@ void main() {
               child: PbFilesToolbar(
                 hasSelection: hasSelection,
                 selectedCount: selectedCount,
+                currentPath: currentPath,
                 filterController: filterController,
                 filterEnabled: true,
                 responsiveMode: responsiveMode,
                 padding: const PbFilesPanelPadding(left: 0, right: 0),
                 onFilterChanged: (_) {},
                 onCreateFolder: onCreateFolder,
+                onInstallWebServer: onInstallWebServer,
                 onCreateTextFile: onCreateTextFile,
                 onUpload: onUpload,
                 onAskCurrentFolder: onAskCurrentFolder,
                 trailingAction: trailingAction,
+                showWebServerPreview: showWebServerPreview,
+                webServerPreviewActive: webServerPreviewActive,
+                onPreviewWebServer: onPreviewWebServer,
                 onClearSelection: () {},
                 onDeleteSelection: () {},
                 onDownloadSelection: () {},
@@ -425,5 +436,55 @@ void main() {
     );
 
     expect(find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent'), findsNothing);
+  });
+
+  testWidgets('files toolbar exposes the website install action only at the Files root', (tester) async {
+    var installs = 0;
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onInstallWebServer: () => installs += 1,
+      onCreateTextFile: () {},
+      onUpload: () {},
+    );
+
+    await tester.tap(find.text('New website'));
+    expect(installs, 1);
+
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      currentPath: 'nested',
+      onCreateFolder: () {},
+      onInstallWebServer: () => installs += 1,
+      onCreateTextFile: () {},
+      onUpload: () {},
+    );
+    expect(find.text('New website'), findsNothing);
+  });
+
+  testWidgets('files toolbar styles and invokes the active website preview action', (tester) async {
+    var previews = 0;
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      currentPath: 'website',
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      showWebServerPreview: true,
+      webServerPreviewActive: true,
+      onPreviewWebServer: () => previews += 1,
+    );
+
+    final previewFinder = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Preview');
+    final previewButton = tester.widget<PbButton>(previewFinder);
+    expect(previewButton.backgroundColor, PbColors.statusOnline);
+    await tester.tap(previewFinder);
+    expect(previews, 1);
   });
 }

@@ -860,7 +860,7 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
         'Browse folder',
         if (widget.onAskAgent != null) 'Ask agent',
         if (widget.onDownload != null) 'Download as zip',
-        if (widget.onRename != null) 'Rename',
+        if (widget.onRename != null) widget.item.renameActionLabelOverride ?? 'Rename',
         if (widget.onDelete != null) 'Delete',
       ],
       PbFilesItemKind.file => [
@@ -869,7 +869,7 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
         if (widget.onShare != null) 'Share',
         if (widget.showExtract) pbArchiveExtractMenuLabel,
         if (widget.onDownload != null) 'Download',
-        if (widget.onRename != null) 'Rename',
+        if (widget.onRename != null) widget.item.renameActionLabelOverride ?? 'Rename',
         if (widget.onDelete != null) 'Delete',
       ],
     };

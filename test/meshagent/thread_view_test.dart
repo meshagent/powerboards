@@ -124,10 +124,16 @@ class _FakeDocumentRuntime extends DocumentRuntime {
 }
 
 class _ThreadViewHarness extends StatefulWidget {
-  const _ThreadViewHarness({required this.room, this.composerAttachmentPaths = const [], this.composerAttachmentSeedVersion = 0});
+  const _ThreadViewHarness({
+    required this.room,
+    this.composerAttachmentPaths = const [],
+    this.composerAttachmentDisplayNamesByPath = const {},
+    this.composerAttachmentSeedVersion = 0,
+  });
 
   final RoomClient room;
   final List<String> composerAttachmentPaths;
+  final Map<String, String> composerAttachmentDisplayNamesByPath;
   final int composerAttachmentSeedVersion;
 
   @override
@@ -152,6 +158,7 @@ class _ThreadViewHarnessState extends State<_ThreadViewHarness> {
         });
       },
       composerAttachmentPaths: widget.composerAttachmentPaths,
+      composerAttachmentDisplayNamesByPath: widget.composerAttachmentDisplayNamesByPath,
       composerAttachmentSeedVersion: widget.composerAttachmentSeedVersion,
     );
   }
@@ -364,6 +371,60 @@ void main() {
     await tester.pump();
 
     expect(find.text('brief.pdf'), findsOneWidget);
+  });
+
+  test('webserver folder links clear stale preview query parameters', () {
+    final nextUri = powerboardsV1ThreadRouteUri(
+      currentUri: Uri.parse('/p/project/r/room?pane=chat&webserver_preview=1&thread=abc'),
+      pane: 'files',
+      rawPath: 'website/',
+      removeQueryParameters: const {'webserver_preview'},
+    );
+
+    expect(nextUri.queryParameters['pane'], 'files');
+    expect(nextUri.queryParameters['p'], 'website/');
+    expect(nextUri.queryParameters['thread'], 'abc');
+    expect(nextUri.queryParameters.containsKey('webserver_preview'), isFalse);
+  });
+
+  test('V1 webserver product links accept only paths inside the website root', () {
+    expect(
+      powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://preview/webserver?path=website%2Findex.html')),
+      'website/index.html',
+    );
+    expect(
+      powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://files/webserver?path=website%2Fassets')),
+      'website/assets',
+    );
+    expect(powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://preview/webserver?path=private.txt')), isNull);
+    expect(
+      powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://preview/webserver?path=website%2F..%2Fprivate.txt')),
+      isNull,
+    );
+  });
+
+  testWidgets('composer attachment seed uses the provided display name', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        child: Scaffold(
+          body: SizedBox.expand(
+            child: _ThreadViewHarness(
+              room: room,
+              composerAttachmentPaths: const ['room:///website'],
+              composerAttachmentDisplayNamesByPath: const {'website': 'hellotimber.meshagent.dev'},
+              composerAttachmentSeedVersion: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('hellotimber.meshagent.dev'), findsOneWidget);
   });
 
   testWidgets('Files root folder context appears in the new thread composer', (tester) async {
