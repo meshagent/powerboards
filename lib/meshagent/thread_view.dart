@@ -619,7 +619,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
         roomName: roomName,
         enableV1WebServerTools: true,
         onInstalled: (_) => widget.onServiceChanged?.call(),
-        onSaved: (_) => widget.onServiceChanged?.call(),
         onUninstalled: (_) => widget.onServiceChanged?.call(),
         listFiles: (request) => listPowerboardsWebServerFiles(request, storage: widget.client.storage),
         openFile: (request) => openPowerboardsWebServerFile(request, storage: widget.client.storage),

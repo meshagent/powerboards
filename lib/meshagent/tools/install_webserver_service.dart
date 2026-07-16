@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
@@ -12,7 +11,6 @@ import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 
 const String installWebServerServiceToolName = 'install_webserver_service';
-const String saveWebServerSiteFilesToolName = 'save_webserver_site_files';
 const String listWebServerFilesToolName = 'list_webserver_files';
 const String openWebServerFileToolName = 'open_webserver_file';
 const String uninstallWebServerServiceToolName = 'uninstall_webserver_service';
@@ -44,49 +42,15 @@ const Map<String, dynamic> installWebServerServiceOutputSchema = {
     },
     'service_id': {'type': 'string'},
     'folder_path': {'type': 'string'},
-    'storage_path': {'type': 'string'},
+    'storage_path': {
+      'type': 'string',
+      'description': 'Room storage folder where website files must be written, including the trailing slash.',
+    },
     'site_label': {'type': 'string'},
-    'entry_file_path': {'type': 'string'},
+    'entry_file_path': {'type': 'string', 'description': 'Room storage path for the website entry file.'},
     'domain': {'type': 'string'},
     'public_url_status': {'type': 'string'},
     'message': {'type': 'string'},
-    'assistant_reply': {'type': 'string'},
-  },
-};
-
-const Map<String, dynamic> saveWebServerSiteFilesInputSchema = {
-  'type': 'object',
-  'additionalProperties': false,
-  'required': ['files'],
-  'properties': {
-    'files': {
-      'type': 'array',
-      'minItems': 1,
-      'items': {
-        'type': 'object',
-        'additionalProperties': false,
-        'required': ['path', 'content'],
-        'properties': {
-          'path': {
-            'type': 'string',
-            'description': 'Path relative to the webserver root, such as index.html, styles.css, or assets/logo.svg.',
-          },
-          'content': {'type': 'string', 'description': 'UTF-8 file content to save.'},
-        },
-      },
-    },
-  },
-};
-
-const Map<String, dynamic> saveWebServerSiteFilesOutputSchema = {
-  'type': 'object',
-  'additionalProperties': false,
-  'required': ['status', 'assistant_reply'],
-  'properties': {
-    'status': {
-      'type': 'string',
-      'enum': ['saved', 'blocked', 'failed'],
-    },
     'assistant_reply': {'type': 'string'},
   },
 };
@@ -259,65 +223,6 @@ class InstallWebServerServiceResult {
   }
 }
 
-class SaveWebServerSiteFile {
-  const SaveWebServerSiteFile({required this.path, required this.content});
-
-  final String path;
-  final String content;
-}
-
-class SaveWebServerSiteFilesRequest {
-  const SaveWebServerSiteFilesRequest({required this.projectId, required this.roomName, required this.files});
-
-  final String projectId;
-  final String roomName;
-  final List<SaveWebServerSiteFile> files;
-}
-
-class SaveWebServerSiteFilesResult {
-  const SaveWebServerSiteFilesResult({
-    required this.status,
-    required this.folderPath,
-    required this.siteLabel,
-    required this.createdFiles,
-    required this.message,
-    this.domain,
-  });
-
-  final String status;
-  final String folderPath;
-  final String siteLabel;
-  final List<String> createdFiles;
-  final String message;
-  final String? domain;
-
-  Map<String, dynamic> toJson() {
-    final normalizedDomain = domain?.trim();
-    return {
-      'status': status,
-      'folder_path': folderPath,
-      'site_label': siteLabel,
-      'created_files': createdFiles,
-      if (normalizedDomain != null && normalizedDomain.isNotEmpty) 'domain': normalizedDomain,
-      'message': message,
-      'assistant_reply': _assistantReply(normalizedDomain),
-    };
-  }
-
-  String _assistantReply(String? domain) {
-    if (status != 'saved') {
-      return message;
-    }
-    return [
-      'Created the website in `$siteLabel`.',
-      '',
-      _webServerDomainLinkLine(domain, entryFilePath: '$powerboardsWebServerFolderName/index.html'),
-      '- Location: [Go to files](powerboards://files/webserver)',
-      '- Preview: [Open to view](powerboards://preview/webserver)',
-    ].where((line) => line.isNotEmpty).join('\n');
-  }
-}
-
 class UninstallWebServerServiceRequest {
   const UninstallWebServerServiceRequest({required this.projectId, required this.roomName});
 
@@ -436,7 +341,6 @@ class UninstallWebServerServiceResult {
 }
 
 typedef InstallWebServerServiceRunner = Future<InstallWebServerServiceResult> Function(InstallWebServerServiceRequest request);
-typedef SaveWebServerSiteFilesRunner = Future<SaveWebServerSiteFilesResult> Function(SaveWebServerSiteFilesRequest request);
 typedef ListWebServerFilesRunner = Future<ListWebServerFilesResult> Function(ListWebServerFilesRequest request);
 typedef OpenWebServerFileRunner = Future<OpenWebServerFileResult> Function(OpenWebServerFileRequest request);
 typedef UninstallWebServerServiceRunner = Future<UninstallWebServerServiceResult> Function(UninstallWebServerServiceRequest request);
@@ -465,12 +369,10 @@ List<BaseTool> powerboardsWebServerTools({
   required String roomName,
   required bool enableV1WebServerTools,
   InstallWebServerServiceRunner install = installPowerboardsWebServerService,
-  SaveWebServerSiteFilesRunner saveSiteFiles = savePowerboardsWebServerSiteFiles,
   ListWebServerFilesRunner listFiles = listPowerboardsWebServerFiles,
   OpenWebServerFileRunner openFile = openPowerboardsWebServerFile,
   UninstallWebServerServiceRunner uninstall = uninstallPowerboardsWebServerService,
   FutureOr<void> Function(InstallWebServerServiceResult result)? onInstalled,
-  FutureOr<void> Function(SaveWebServerSiteFilesResult result)? onSaved,
   FutureOr<void> Function(UninstallWebServerServiceResult result)? onUninstalled,
 }) {
   if (!enableV1WebServerTools) {
@@ -479,7 +381,6 @@ List<BaseTool> powerboardsWebServerTools({
 
   return [
     InstallWebServerServiceTool(projectId: projectId, roomName: roomName, install: install, onInstalled: onInstalled),
-    SaveWebServerSiteFilesTool(projectId: projectId, roomName: roomName, save: saveSiteFiles, onSaved: onSaved),
     ListWebServerFilesTool(projectId: projectId, roomName: roomName, listFiles: listFiles),
     OpenWebServerFileTool(projectId: projectId, roomName: roomName, openFile: openFile),
     UninstallWebServerServiceTool(projectId: projectId, roomName: roomName, uninstall: uninstall, onUninstalled: onUninstalled),
@@ -492,12 +393,10 @@ class InstallWebServerServiceToolkit extends Toolkit {
     required String roomName,
     required bool enableV1WebServerTools,
     InstallWebServerServiceRunner install = installPowerboardsWebServerService,
-    SaveWebServerSiteFilesRunner saveSiteFiles = savePowerboardsWebServerSiteFiles,
     ListWebServerFilesRunner listFiles = listPowerboardsWebServerFiles,
     OpenWebServerFileRunner openFile = openPowerboardsWebServerFile,
     UninstallWebServerServiceRunner uninstall = uninstallPowerboardsWebServerService,
     FutureOr<void> Function(InstallWebServerServiceResult result)? onInstalled,
-    FutureOr<void> Function(SaveWebServerSiteFilesResult result)? onSaved,
     FutureOr<void> Function(UninstallWebServerServiceResult result)? onUninstalled,
   }) : super(
          name: 'powerboards',
@@ -508,12 +407,10 @@ class InstallWebServerServiceToolkit extends Toolkit {
            roomName: roomName,
            enableV1WebServerTools: enableV1WebServerTools,
            install: install,
-           saveSiteFiles: saveSiteFiles,
            listFiles: listFiles,
            openFile: openFile,
            uninstall: uninstall,
            onInstalled: onInstalled,
-           onSaved: onSaved,
            onUninstalled: onUninstalled,
          ),
          rules: const [],
@@ -526,15 +423,17 @@ class InstallWebServerServiceTool extends FunctionTool with _PowerboardsToolResp
         name: installWebServerServiceToolName,
         title: 'Install Web server service',
         description:
-            'Install the PowerBoards Web server service in the current room and ensure the website folder exists. '
+            'Install the PowerBoards Web server service in the current room and return storage_path, the writable room storage folder '
+            'where the website files belong, plus entry_file_path for the main page. '
             'Use this when the user asks to install web hosting, install a web server service, create a web server, '
             'or prepare the room for a website. This is a PowerBoards product action, not a Linux package install. '
             'Do not use shell, apt, nginx, systemd, container-local ports, or private container URLs for this request. '
-            'When reporting success, send assistant_reply exactly once as the full user-facing response. Do not prepend, append, '
-            'summarize, repeat, list service_id, list mounted paths, or include implementation details unless the user asks for debugging details. '
+            'For install-only requests, send assistant_reply exactly once as the full user-facing response. Do not prepend, append, '
+            'summarize, repeat, list service_id, or include implementation details unless the user asks for debugging details. '
             'Keep the powerboards:// links exactly as provided in assistant_reply so PowerBoards can open the Files folder and preview. '
-            'This only installs website hosting; it does not create site files. If the user asked to create a website and supplied enough details, '
-            'call save_webserver_site_files after this tool succeeds instead of ending the turn with the install-only follow-up.',
+            'This only installs website hosting; it does not create site files. If the user asked to create or edit a website and supplied enough '
+            'details, use the room storage write_file tool to write files directly under storage_path after this tool succeeds. Do not end the turn '
+            'after installation and do not ask the user to copy or upload files that can be written with the room storage tools.',
         inputSchema: installWebServerServiceInputSchema,
         outputSchema: installWebServerServiceOutputSchema,
       );
@@ -645,50 +544,6 @@ class OpenWebServerFileTool extends FunctionTool {
       return JsonContent(json: result.toJson());
     } catch (error) {
       return JsonContent(json: {'status': 'failed', 'path': '', 'message': 'Unable to provide the webserver file: $error'});
-    }
-  }
-}
-
-class SaveWebServerSiteFilesTool extends FunctionTool with _PowerboardsToolResponseSentCallback {
-  SaveWebServerSiteFilesTool({required this.projectId, required this.roomName, required this.save, this.onSaved})
-    : super(
-        name: saveWebServerSiteFilesToolName,
-        title: 'Save Web server site files',
-        description:
-            'Create or update website files in the current room Web server root. Use this after install_webserver_service succeeds when the user asks '
-            'to create, make, build, or edit a website. Save the main page as index.html unless the user asks for another entry file. '
-            'Do not create nested roots like website/, public/, webserver/, sites/, or www/. Pass paths relative to the webserver root. '
-            'When reporting success, send assistant_reply exactly once as the full user-facing response. Do not prepend, append, summarize, or repeat it.',
-        inputSchema: saveWebServerSiteFilesInputSchema,
-        outputSchema: saveWebServerSiteFilesOutputSchema,
-      );
-
-  final String projectId;
-  final String roomName;
-  final SaveWebServerSiteFilesRunner save;
-  final FutureOr<void> Function(SaveWebServerSiteFilesResult result)? onSaved;
-
-  @override
-  Future<Content> execute(ToolContext context, Map<String, dynamic> arguments) async {
-    try {
-      final result = await save(
-        SaveWebServerSiteFilesRequest(projectId: projectId, roomName: roomName, files: _siteFilesFromArguments(arguments['files'])),
-      );
-      final json = result.toJson();
-      final response = JsonContent(json: {'status': json['status'], 'assistant_reply': json['assistant_reply']});
-      if (result.status == 'saved') {
-        deferCallbackUntilResponseSent(response, onSaved, result);
-      }
-      return response;
-    } catch (error) {
-      final json = SaveWebServerSiteFilesResult(
-        status: 'failed',
-        folderPath: '$powerboardsWebServerFolderName/',
-        siteLabel: powerboardsWebServerFolderName,
-        createdFiles: const [],
-        message: 'Unable to save the website files: $error',
-      ).toJson();
-      return JsonContent(json: {'status': json['status'], 'assistant_reply': json['assistant_reply']});
     }
   }
 }
@@ -1054,80 +909,6 @@ Future<OpenWebServerFileResult> openPowerboardsWebServerFile(OpenWebServerFileRe
   }
 }
 
-Future<SaveWebServerSiteFilesResult> savePowerboardsWebServerSiteFiles(SaveWebServerSiteFilesRequest request) async {
-  final projectId = request.projectId.trim();
-  final roomName = request.roomName.trim();
-  if (projectId.isEmpty || roomName.isEmpty) {
-    return const SaveWebServerSiteFilesResult(
-      status: 'blocked',
-      folderPath: '$powerboardsWebServerFolderName/',
-      siteLabel: powerboardsWebServerFolderName,
-      createdFiles: [],
-      message: 'I need a current PowerBoards room before I can create website files.',
-    );
-  }
-  if (request.files.isEmpty) {
-    return const SaveWebServerSiteFilesResult(
-      status: 'blocked',
-      folderPath: '$powerboardsWebServerFolderName/',
-      siteLabel: powerboardsWebServerFolderName,
-      createdFiles: [],
-      message: 'I need at least one website file to save.',
-    );
-  }
-
-  final client = getMeshagentClient();
-  final services = await client.listRoomServices(projectId: projectId, roomName: roomName);
-  final webServer = services.firstWhereOrNull(_isWebServerService);
-  if (webServer == null) {
-    return const SaveWebServerSiteFilesResult(
-      status: 'blocked',
-      folderPath: '$powerboardsWebServerFolderName/',
-      siteLabel: powerboardsWebServerFolderName,
-      createdFiles: [],
-      message: 'The Web server service must be installed before I can create website files.',
-    );
-  }
-
-  await powerboardsEnsureWebServerFolderExists(client: client, projectId: projectId, roomName: roomName);
-  final domain = _webServerTemplateValues(webServer)['url'];
-  final siteLabel = domain == null || domain.trim().isEmpty ? powerboardsWebServerFolderName : domain.trim();
-  final roomConnection = await client.connectRoom(projectId: projectId, roomName: roomName);
-  final roomClient = RoomClient(
-    protocolFactory: meshagent.WebSocketClientProtocol.createFactory(url: roomConnection.roomUrl, token: roomConnection.jwt),
-  );
-  final createdFiles = <String>[];
-
-  try {
-    roomClient.start();
-    await roomClient.ready;
-    for (final file in request.files) {
-      final relativePath = _normalizeWebServerSiteFilePath(file.path);
-      final storagePath = '$powerboardsWebServerFolderName/$relativePath';
-      final bytes = Uint8List.fromList(utf8.encode(file.content));
-      await roomClient.storage.uploadStream(
-        storagePath,
-        Stream<Uint8List>.value(bytes),
-        overwrite: true,
-        size: bytes.length,
-        mimeType: _mimeTypeForSiteFile(relativePath),
-      );
-      createdFiles.add(relativePath);
-    }
-  } finally {
-    roomClient.dispose();
-  }
-
-  return SaveWebServerSiteFilesResult(
-    status: 'saved',
-    folderPath: '$powerboardsWebServerFolderName/',
-    siteLabel: siteLabel,
-    createdFiles: createdFiles,
-    domain: domain,
-    message: 'Created ${createdFiles.length} website file${createdFiles.length == 1 ? '' : 's'}.',
-  );
-}
-
 bool _isWebServerService(meshagent.ServiceSpec service) {
   return service.metadata.annotations['meshagent.service.id'] == powerboardsWebServerServiceId;
 }
@@ -1143,16 +924,6 @@ String? _trimmedOrNull(Object? value) {
 String _webServerInstallIntent(Object? value) {
   final normalized = value is String ? value.trim() : '';
   return normalized == 'create_website' ? 'create_website' : 'install_only';
-}
-
-List<SaveWebServerSiteFile> _siteFilesFromArguments(Object? value) {
-  if (value is! List) {
-    return const [];
-  }
-  return value
-      .whereType<Map>()
-      .map((file) => SaveWebServerSiteFile(path: (file['path'] ?? '').toString(), content: (file['content'] ?? '').toString()))
-      .toList(growable: false);
 }
 
 String? _normalizeRequestedWebServerFilePath(String rawPath) {
@@ -1243,48 +1014,6 @@ Future<String?> _findWebServerFilePath(StorageClient storage, String requestedPa
           return left.toLowerCase().compareTo(right.toLowerCase());
         });
   return sameStem.firstOrNull;
-}
-
-String _normalizeWebServerSiteFilePath(String rawPath) {
-  var normalized = rawPath.trim().replaceAll('\\', '/');
-  while (normalized.startsWith('/')) {
-    normalized = normalized.substring(1);
-  }
-  if (normalized.startsWith('$powerboardsWebServerFolderName/')) {
-    normalized = normalized.substring(powerboardsWebServerFolderName.length + 1);
-  }
-  final segments = normalized.split('/').map((segment) => segment.trim()).where((segment) => segment.isNotEmpty).toList(growable: false);
-  if (segments.isEmpty) {
-    throw ArgumentError('Website file path must not be empty.');
-  }
-  if (segments.any((segment) => segment == '.' || segment == '..')) {
-    throw ArgumentError('Website file path must stay inside the webserver root.');
-  }
-  const disallowedRootFolders = {'public', 'sites', 'webserver', 'www', powerboardsWebServerFolderName};
-  if (segments.length > 1 && disallowedRootFolders.contains(segments.first.toLowerCase())) {
-    throw ArgumentError('Save files directly in the existing webserver root, not in ${segments.first}/.');
-  }
-  return segments.join('/');
-}
-
-String? _mimeTypeForSiteFile(String path) {
-  final lower = path.toLowerCase();
-  if (lower.endsWith('.html') || lower.endsWith('.htm')) {
-    return 'text/html; charset=utf-8';
-  }
-  if (lower.endsWith('.css')) {
-    return 'text/css; charset=utf-8';
-  }
-  if (lower.endsWith('.js')) {
-    return 'text/javascript; charset=utf-8';
-  }
-  if (lower.endsWith('.svg')) {
-    return 'image/svg+xml';
-  }
-  if (lower.endsWith('.json')) {
-    return 'application/json; charset=utf-8';
-  }
-  return null;
 }
 
 Map<String, String> _webServerTemplateValues(meshagent.ServiceSpec service) {

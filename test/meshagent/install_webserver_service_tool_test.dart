@@ -31,6 +31,8 @@ void main() {
 
       expect(tool.inputSchema['additionalProperties'], isFalse);
       expect(tool.inputSchema['required'], ['site_name', 'domain', 'intent']);
+      expect(tool.description, startsWith('Install the PowerBoards Web server service in the current room and return storage_path'));
+      expect(tool.description, contains('write_file'));
 
       final result = await tool.execute(const ToolContext(), {'site_name': 'sunrise', 'domain': '', 'intent': 'install_only'});
       expect(refreshed, isNull);
@@ -123,68 +125,6 @@ void main() {
       expect(result.json['service_id'], 'meshagent.webserver');
       expect(result.json['site_label'], 'website/');
       expect(result.json['message'], contains('boom'));
-    });
-  });
-
-  group('SaveWebServerSiteFilesTool', () {
-    test('returns only the canonical website reply after saving files', () async {
-      SaveWebServerSiteFilesRequest? request;
-      final tool = SaveWebServerSiteFilesTool(
-        projectId: 'project-1',
-        roomName: 'room-1',
-        save: (input) async {
-          request = input;
-          return const SaveWebServerSiteFilesResult(
-            status: 'saved',
-            folderPath: 'website/',
-            siteLabel: 'sunrise.meshagent.dev',
-            createdFiles: ['index.html'],
-            domain: 'sunrise.meshagent.dev',
-            message: 'Created 1 website file.',
-          );
-        },
-      );
-
-      expect(tool.inputSchema['additionalProperties'], isFalse);
-      expect(tool.inputSchema['required'], ['files']);
-
-      final result = await tool.execute(const ToolContext(), {
-        'files': [
-          {'path': 'index.html', 'content': '<!doctype html><title>Sunrise</title>'},
-        ],
-      });
-
-      expect(request?.projectId, 'project-1');
-      expect(request?.roomName, 'room-1');
-      expect(request?.files.single.path, 'index.html');
-      expect(request?.files.single.content, contains('Sunrise'));
-      expect(result, isA<JsonContent>());
-      expect((result as JsonContent).json['status'], 'saved');
-      expect(result.json.keys, {'status', 'assistant_reply'});
-      expect(result.json['assistant_reply'], contains('Created the website in `sunrise.meshagent.dev`.'));
-      expect(result.json['assistant_reply'], isNot(contains('- `index.html`')));
-      expect(
-        result.json['assistant_reply'],
-        contains('- Domain: [sunrise.meshagent.dev](https://sunrise.meshagent.dev/index.html) - [Copy]'),
-      );
-      expect(result.json['assistant_reply'], contains('- Location: [Go to files](powerboards://files/webserver)'));
-      expect(result.json['assistant_reply'], contains('- Preview: [Open to view](powerboards://preview/webserver)'));
-    });
-
-    test('returns failed JSON instead of throwing when saver fails', () async {
-      final tool = SaveWebServerSiteFilesTool(projectId: 'project-1', roomName: 'room-1', save: (_) async => throw StateError('boom'));
-
-      final result =
-          await tool.execute(const ToolContext(), {
-                'files': [
-                  {'path': 'index.html', 'content': '<html></html>'},
-                ],
-              })
-              as JsonContent;
-
-      expect(result.json['status'], 'failed');
-      expect(result.json.keys, {'status', 'assistant_reply'});
-      expect(result.json['assistant_reply'], contains('boom'));
     });
   });
 
@@ -490,7 +430,6 @@ void main() {
       final names = toolkit.tools.map((tool) => tool.name);
 
       expect(names, isNot(contains(installWebServerServiceToolName)));
-      expect(names, isNot(contains(saveWebServerSiteFilesToolName)));
       expect(names, isNot(contains(listWebServerFilesToolName)));
       expect(names, isNot(contains(openWebServerFileToolName)));
       expect(names, isNot(contains(uninstallWebServerServiceToolName)));
@@ -498,7 +437,7 @@ void main() {
   });
 
   group('InstallWebServerServiceToolkit', () {
-    test('exposes webserver install and site file actions for chat turns', () {
+    test('exposes webserver service actions without a dedicated file writer', () {
       final toolkit = InstallWebServerServiceToolkit(
         projectId: 'project-1',
         roomName: 'room-1',
@@ -516,7 +455,6 @@ void main() {
       expect(toolkit.name, 'powerboards');
       expect(toolkit.tools.map((tool) => tool.name), [
         installWebServerServiceToolName,
-        saveWebServerSiteFilesToolName,
         listWebServerFilesToolName,
         openWebServerFileToolName,
         uninstallWebServerServiceToolName,
@@ -530,7 +468,6 @@ void main() {
       expect(legacyToolkit.tools, isEmpty);
       expect(v1Toolkit.tools.map((tool) => tool.name), [
         installWebServerServiceToolName,
-        saveWebServerSiteFilesToolName,
         listWebServerFilesToolName,
         openWebServerFileToolName,
         uninstallWebServerServiceToolName,
