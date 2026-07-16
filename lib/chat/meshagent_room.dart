@@ -2859,7 +2859,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   int _composerAttachmentSeedRevision = 0;
   String _lastRoomStatusText = "Connecting to room";
   String? _resolvedRoomDisplayName;
-  String? _lastPersistedMobileAgentRouteId;
   String? _lastSyncedRoutePath;
   _MobileRoomPane? _lastSyncedRoutePane;
   PbRoomPanelTab _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
@@ -3034,10 +3033,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   late final services = Resource<List<ServiceSpec>>(() async {
-    final services = (await widget.room.services.list().timeout(
-      _roomResourceTimeout,
-      onTimeout: () => throw TimeoutException("Timed out while loading room services."),
-    )).services.where(hasAgentMetadata).toList();
+    final services =
+        (await getMeshagentClient()
+                .listRoomServices(projectId: widget.projectId, roomName: widget.room.roomName!)
+                .timeout(_roomResourceTimeout, onTimeout: () => throw TimeoutException("Timed out while loading room services.")))
+            .where(hasAgentMetadata)
+            .toList();
     services.sort(_compareServices);
     return services;
   });
@@ -3145,7 +3146,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       ..remove(filePreviewOriginQueryParameter);
     var nextPath = currentUri.path;
     if (agentKey != null) {
-      _persistSelectedRoomAgentRouteId(agentKey);
       final pid = fromUUID(widget.projectId);
       nextPath = _isBaseRouteId(agentKey) ? '/p/$pid/r/${widget.room.roomName}' : '/p/$pid/r/${widget.room.roomName}/a/$agentKey';
     }
@@ -3437,56 +3437,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     }
 
     return _developmentParticipants(supported).isNotEmpty;
-  }
-
-  bool get _canPersistRoomContextSelection {
-    final roomName = widget.room.roomName;
-    return roomName != null && roomName.trim().isNotEmpty;
-  }
-
-  String? get _roomNameForSelectionPersistence {
-    final roomName = widget.room.roomName;
-    if (roomName == null) {
-      return null;
-    }
-
-    final trimmed = roomName.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
-  String? _persistedSelectedRoomAgentRouteId() {
-    final roomName = _roomNameForSelectionPersistence;
-    if (roomName == null) {
-      return null;
-    }
-
-    final stored = getLastSelectedRoomAgent(widget.projectId, roomName);
-    if (stored == null) {
-      return null;
-    }
-
-    final trimmed = stored.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
-  void _persistSelectedRoomAgentRouteId(String? routeId) {
-    if (!_canPersistRoomContextSelection || routeId == _lastPersistedMobileAgentRouteId) {
-      return;
-    }
-
-    final roomName = _roomNameForSelectionPersistence;
-    if (roomName == null) {
-      return;
-    }
-
-    if (routeId == null || routeId.trim().isEmpty) {
-      clearLastSelectedRoomAgent(widget.projectId, roomName);
-      _lastPersistedMobileAgentRouteId = null;
-      return;
-    }
-
-    setLastSelectedRoomAgent(widget.projectId, roomName, routeId);
-    _lastPersistedMobileAgentRouteId = routeId;
   }
 
   _ResolvedAgentSelection _resolveSelectedAgent(List<ServiceSpec> supported, {String? requestedRouteId}) {
@@ -3788,19 +3738,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     return '.threads/main.thread';
   }
 
-  String? _preferredMobileAgentRouteId(BuildContext context) {
-    final explicitRouteId = widget.service;
-    if (explicitRouteId != null) {
-      return explicitRouteId;
-    }
-
-    if (_usesMobileRoomLayout(context) || powerboardsUsesDesktopUiPreview(context)) {
-      return _persistedSelectedRoomAgentRouteId();
-    }
-
-    return null;
-  }
-
   List<_MobileRoomContextAgentOption> _mobileRoomContextAgentOptions(List<ServiceSpec> supported) {
     final options = <_MobileRoomContextAgentOption>[];
 
@@ -3876,7 +3813,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     String? displayName,
   }) {
     _setSelectedThreadPath(agentOption.routeId, threadPath, displayName: displayName);
-    _persistSelectedRoomAgentRouteId(agentOption.routeId);
 
     if (agentOption.routeId != currentChatContext.agentKey) {
       _navigateToAgentRoute(context, agentOption.routeId);
@@ -6302,7 +6238,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    _persistSelectedRoomAgentRouteId(routeId);
     _navigateToAgentRoute(sourceContext, routeId);
   }
 
@@ -7249,12 +7184,12 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
             final all = services.state.value!;
             final supported = _supportedServices(all);
-            final selected = _resolveSelectedAgent(supported, requestedRouteId: _preferredMobileAgentRouteId(context));
+            final selected = _resolveSelectedAgent(supported);
             final service = selected.service;
             final developmentParticipant = selected.developmentParticipant;
 
             if (service == null && developmentParticipant == null) {
-              final requestedRouteId = _preferredMobileAgentRouteId(context);
+              final requestedRouteId = widget.service;
               final requestedDevelopmentParticipantName = requestedRouteId == null ? null : developmentAgentNameFromRoute(requestedRouteId);
               final requestedLegacyDevelopmentParticipantId = requestedRouteId == null
                   ? null
@@ -8124,10 +8059,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                               final canViewStorageAllowed = canViewStorage.state.value == true;
                               final filesVisible = canViewStorageAllowed && controller.isFilesShown;
                               final supported = _supportedServices(services.state.value!);
-                              final selected = _resolveSelectedAgent(supported, requestedRouteId: _preferredMobileAgentRouteId(context));
-                              if (isMobile) {
-                                _persistSelectedRoomAgentRouteId(selected.routeId);
-                              }
+                              final selected = _resolveSelectedAgent(supported);
                               final roomCreateChatContext = _resolveMobileChatHeaderContext(supported, selected);
                               final meetingSessionActive = _isMeetingSessionActive(context);
                               final voiceSessionActive = meeting.isConnected && !meetingSessionActive;
