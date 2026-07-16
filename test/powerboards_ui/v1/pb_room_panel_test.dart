@@ -141,6 +141,31 @@ RuntimeDocument _threadDocumentWithJson(List<Map<String, dynamic>> children) {
 }
 
 void main() {
+  test('chat file-link recovery is file-type agnostic', () {
+    const extensions = <String>['md', 'png', 'jpg', 'pdf', 'zip', 'mp4', 'mp3', 'csv', 'json', 'docx', 'unknown'];
+    for (final extension in extensions) {
+      final name = 'sample.$extension';
+      expect(powerboardsUniqueChatFilePreviewCandidate(name, <String>['folder/$name']), 'folder/$name', reason: extension);
+    }
+
+    expect(powerboardsUniqueChatFilePreviewCandidate('sample.png', const <String>['one/sample.png', 'two/sample.png']), isNull);
+  });
+
+  test('chat file-link recovery accepts only a space-boundary filename completion', () {
+    expect(powerboardsChatFileNameMatchesLinkPath('Screenshot 2026-06-02 at 10.06.10 AM.png', 'Screenshot'), isTrue);
+    expect(powerboardsChatFileNameMatchesLinkPath('Screenshot.png', 'Screenshot'), isFalse);
+    expect(powerboardsChatFileNameMatchesLinkPath('Screenshot-old.png', 'Screenshot'), isFalse);
+
+    expect(
+      powerboardsUniqueChatFilePreviewCandidate('stuff/Screenshot', const <String>['stuff/Screenshot 2026-06-02 at 10.06.10 AM.png']),
+      'stuff/Screenshot 2026-06-02 at 10.06.10 AM.png',
+    );
+    expect(
+      powerboardsUniqueChatFilePreviewCandidate('stuff/Screenshot', const <String>['stuff/Screenshot one.png', 'stuff/Screenshot two.png']),
+      isNull,
+    );
+  });
+
   test('scoped value helper falls back when the local scope is unavailable', () {
     expect(powerboardsPreferScopedValue<String>(scopedValue: 'scoped', fallbackValue: 'fallback'), 'scoped');
     expect(powerboardsPreferScopedValue<String>(scopedValue: null, fallbackValue: 'fallback'), 'fallback');
@@ -166,6 +191,13 @@ void main() {
     );
   });
 
+  test('folder prompts never request a file preview pane', () {
+    expect(powerboardsFilePromptShouldShowPreview(isFolder: true, responsiveHandoff: false), isFalse);
+    expect(powerboardsFilePromptShouldShowPreview(isFolder: true, responsiveHandoff: true), isFalse);
+    expect(powerboardsFilePromptShouldShowPreview(isFolder: false, responsiveHandoff: true), isFalse);
+    expect(powerboardsFilePromptShouldShowPreview(isFolder: false, responsiveHandoff: false), isTrue);
+  });
+
   test('preview rail keeps voice session inactive while a disconnect is still settling', () {
     expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: true, pendingVoiceSessionDisconnect: true), isFalse);
     expect(powerboardsResolvePreviewRailVoiceSessionActive(actualVoiceSessionActive: false, pendingVoiceSessionDisconnect: true), isFalse);
@@ -182,6 +214,156 @@ void main() {
     );
 
     expect(title, 'New Chat');
+  });
+
+  test('desktop preview activates a newly created pending thread before the thread list catches up', () {
+    expect(
+      powerboardsDesktopPreviewActiveThreadValue(
+        selectedValue: null,
+        pendingValue: 'dataset://agents/assistant/threads/webserver-service-installation',
+      ),
+      'dataset://agents/assistant/threads/webserver-service-installation',
+    );
+    expect(
+      powerboardsDesktopPreviewActiveThreadValue(
+        selectedValue: 'dataset://agents/assistant/threads/selected',
+        pendingValue: 'dataset://agents/assistant/threads/pending',
+      ),
+      'dataset://agents/assistant/threads/selected',
+    );
+  });
+
+  test('V1 new-thread handoff matches the sole pending start from the same sender', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+    final message = agent_sessions.ThreadCreated(
+      senderName: 'Dinesh',
+      thread: agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: startedAt.add(const Duration(seconds: 12)).toIso8601String(),
+        modifiedAt: startedAt.add(const Duration(seconds: 12)).toIso8601String(),
+      ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+      ]),
+      'client-message-1',
+    );
+  });
+
+  test('V1 new-thread handoff refuses ambiguous pending starts', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+    final message = agent_sessions.ThreadCreated(
+      senderName: 'Dinesh',
+      thread: agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: startedAt.toIso8601String(),
+        modifiedAt: startedAt.toIso8601String(),
+      ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-2', senderName: 'Dinesh'),
+      ]),
+      isNull,
+    );
+  });
+
+  test('V1 new-thread handoff uses the sole pending start when server correlation is unavailable', () {
+    final message = agent_sessions.ThreadCreated(
+      thread: const agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: '2026-07-15T03:24:00Z',
+        modifiedAt: '2026-07-15T03:24:00Z',
+      ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+      ]),
+      'client-message-1',
+    );
+  });
+
+  test('V1 new-thread handoff prefers an exact event message id', () {
+    final startedAt = DateTime.utc(2026, 7, 15, 3, 24);
+    final message = agent_sessions.ThreadCreated(
+      messageId: 'client-message-2',
+      thread: agent_sessions.AgentThreadListEntry(
+        path: 'dataset://threads/new',
+        name: 'New thread',
+        createdAt: startedAt.subtract(const Duration(days: 1)).toIso8601String(),
+        modifiedAt: startedAt.subtract(const Duration(days: 1)).toIso8601String(),
+      ),
+    );
+
+    expect(
+      powerboardsV1ThreadCreatedPendingStartMatcher(message, [
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-1', senderName: 'Dinesh'),
+        const agent_sessions.PendingThreadStartCandidate(messageId: 'client-message-2', senderName: 'Dinesh'),
+      ]),
+      'client-message-2',
+    );
+  });
+
+  test('V1 and legacy chat clients cannot share the same cache entry', () {
+    final v1Key = powerboardsAgentChatClientCacheKey(agentName: ' Assistant ', usesDesktopUiPreview: true);
+    final legacyKey = powerboardsAgentChatClientCacheKey(agentName: 'Assistant', usesDesktopUiPreview: false);
+
+    expect(v1Key, (agentName: 'Assistant', usesV1SessionGuards: true));
+    expect(legacyKey, (agentName: 'Assistant', usesV1SessionGuards: false));
+    expect(v1Key, isNot(legacyKey));
+  });
+
+  test('desktop preview resolves a pending agent thread to its one visible dataset thread', () {
+    const pendingPath = 'agent://threads/webserver-service-installation';
+    const visiblePath = 'dataset://agents/assistant/threads/webserver-service-installation';
+
+    expect(
+      powerboardsDesktopPreviewVisiblePathForPendingThread(pendingThreadPath: pendingPath, visibleThreadPaths: const [visiblePath]),
+      visiblePath,
+    );
+    expect(
+      powerboardsDesktopPreviewVisiblePathForPendingThread(
+        pendingThreadPath: pendingPath,
+        visibleThreadPaths: const [
+          'dataset://agents/assistant/threads/webserver-service-installation',
+          'dataset://agents/assistant/threads/webserver-service-installation',
+        ],
+      ),
+      isNull,
+    );
+    expect(
+      powerboardsDesktopPreviewVisiblePathForPendingThread(
+        pendingThreadPath: 'room:///unrelated/webserver-service-installation',
+        visibleThreadPaths: const [visiblePath],
+      ),
+      isNull,
+    );
+  });
+
+  test('desktop preview resolves live storage thread paths to the visible dataset thread', () {
+    const visiblePath = 'dataset://agents/assistant/threads/webserver-service-installation';
+
+    for (final pendingPath in const [
+      'agents/assistant/threads/webserver-service-installation.thread',
+      '/agents/assistant/threads/webserver-service-installation.thread',
+      '.threads/webserver-service-installation.thread',
+      '/threads/webserver-service-installation',
+    ]) {
+      expect(
+        powerboardsDesktopPreviewVisiblePathForPendingThread(pendingThreadPath: pendingPath, visibleThreadPaths: const [visiblePath]),
+        visiblePath,
+        reason: pendingPath,
+      );
+    }
   });
 
   test('desktop preview uses remembered title while selected thread list is loading', () {
@@ -326,6 +508,14 @@ void main() {
 
     expect(powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(null), isEmpty);
     expect(powerboardsDesktopPreviewAttachmentThreadPathsForSelectedThread(''), isEmpty);
+  });
+
+  test('desktop preview opens sync documents only for storage thread paths', () {
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('agents/assistant/threads/legacy.thread'), isTrue);
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('/agents/assistant/threads/legacy.thread'), isTrue);
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('dataset://agents/assistant/threads/selected'), isFalse);
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('agent://threads/selected'), isFalse);
+    expect(powerboardsDesktopPreviewUsesSyncThreadDocument('tmp://agents/assistant/threads/selected'), isFalse);
   });
 
   test('desktop preview attachment scope signature is stable for the same selected thread', () {
@@ -913,6 +1103,43 @@ void main() {
 
     expect(committedWidth, isNull);
     expect(tester.getSize(find.byKey(roomPanelKey)).width, 560);
+  });
+
+  testWidgets('room panel collapse preserves state in the thread panel', (tester) async {
+    late StateSetter setHarnessState;
+    var collapsed = false;
+    const draftFieldKey = Key('thread-draft-field');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1000,
+            height: 640,
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                setHarnessState = setState;
+                return PbRoomPanelMount(
+                  roomPanelCollapsed: collapsed,
+                  threadPanel: const TextField(key: draftFieldKey),
+                  roomPanel: const SizedBox.expand(),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.enterText(find.byKey(draftFieldKey), 'preserved draft');
+
+    setHarnessState(() => collapsed = true);
+    await tester.pump();
+    expect(find.text('preserved draft'), findsOneWidget);
+
+    setHarnessState(() => collapsed = false);
+    await tester.pump();
+    expect(find.text('preserved draft'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('file preview uses supplied app viewer child before spec fallback content', (tester) async {

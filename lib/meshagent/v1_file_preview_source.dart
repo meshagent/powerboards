@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -49,6 +50,7 @@ typedef PowerboardsV1PreviewTextSaver = Future<void> Function(String path, Strin
 typedef PowerboardsV1PreviewDownloadUrl = Future<String> Function(String path);
 typedef PowerboardsV1UnavailablePreviewBuilder = Widget Function(BuildContext context, PbAttachmentListItemData file, String? subtitle);
 
+const Duration powerboardsV1DownloadUrlCacheDuration = Duration(minutes: 50);
 const int _powerboardsV1PdfPreviewCacheEntryLimit = 4;
 const int _powerboardsV1PdfPreviewCacheByteLimit = 80 * 1024 * 1024;
 
@@ -1126,10 +1128,25 @@ class _V1StorageUrlPreview extends StatefulWidget {
 }
 
 class _V1StorageUrlPreviewState extends State<_V1StorageUrlPreview> {
+  Timer? _urlRefreshTimer;
   late Future<String> _urlFuture = _loadUrl();
 
   Future<String> _loadUrl() {
+    _scheduleUrlRefresh();
     return (widget.downloadUrl ?? widget.room.storage.downloadUrl)(widget.path);
+  }
+
+  void _scheduleUrlRefresh() {
+    _urlRefreshTimer?.cancel();
+    _urlRefreshTimer = Timer(powerboardsV1DownloadUrlCacheDuration, () {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _urlFuture = _loadUrl();
+      });
+    });
   }
 
   @override
@@ -1138,6 +1155,12 @@ class _V1StorageUrlPreviewState extends State<_V1StorageUrlPreview> {
     if (oldWidget.room != widget.room || oldWidget.path != widget.path || oldWidget.downloadUrl != widget.downloadUrl) {
       _urlFuture = _loadUrl();
     }
+  }
+
+  @override
+  void dispose() {
+    _urlRefreshTimer?.cancel();
+    super.dispose();
   }
 
   @override

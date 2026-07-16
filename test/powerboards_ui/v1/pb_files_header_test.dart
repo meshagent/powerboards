@@ -3,6 +3,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_header.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 
 void main() {
   String labelForPath(String path) {
@@ -95,10 +97,24 @@ void main() {
     WidgetTester tester, {
     required double width,
     required PbFilesResponsiveMode responsiveMode,
+    String currentPath = '',
     required VoidCallback onCreateFolder,
+    VoidCallback? onInstallWebServer,
     required VoidCallback onCreateTextFile,
     required VoidCallback onUpload,
+    VoidCallback? onAskCurrentFolder,
+    PbFilesToolbarTrailingAction? trailingAction,
+    bool showWebServerPreview = false,
+    bool webServerPreviewActive = false,
+    VoidCallback? onPreviewWebServer,
+    bool hasSelection = false,
+    int selectedCount = 0,
   }) async {
+    tester.view.physicalSize = Size(width, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final filterController = TextEditingController();
     addTearDown(filterController.dispose);
 
@@ -110,16 +126,23 @@ void main() {
             child: SizedBox(
               width: width,
               child: PbFilesToolbar(
-                hasSelection: false,
-                selectedCount: 0,
+                hasSelection: hasSelection,
+                selectedCount: selectedCount,
+                currentPath: currentPath,
                 filterController: filterController,
                 filterEnabled: true,
                 responsiveMode: responsiveMode,
                 padding: const PbFilesPanelPadding(left: 0, right: 0),
                 onFilterChanged: (_) {},
                 onCreateFolder: onCreateFolder,
+                onInstallWebServer: onInstallWebServer,
                 onCreateTextFile: onCreateTextFile,
                 onUpload: onUpload,
+                onAskCurrentFolder: onAskCurrentFolder,
+                trailingAction: trailingAction,
+                showWebServerPreview: showWebServerPreview,
+                webServerPreviewActive: webServerPreviewActive,
+                onPreviewWebServer: onPreviewWebServer,
                 onClearSelection: () {},
                 onDeleteSelection: () {},
                 onDownloadSelection: () {},
@@ -150,6 +173,7 @@ void main() {
     expect(find.text('New folder'), findsOneWidget);
     expect(find.text('New text file'), findsOneWidget);
     expect(find.text('Upload'), findsOneWidget);
+    expect(find.text('Ask agent'), findsOneWidget);
 
     await tester.tap(find.text('New folder'));
     await tester.tap(find.text('New text file'));
@@ -158,6 +182,153 @@ void main() {
     expect(folderCreates, 1);
     expect(textFileCreates, 1);
     expect(uploads, 1);
+  });
+
+  testWidgets('files toolbar runs Ask agent for the currently viewed folder', (tester) async {
+    var asks = 0;
+
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      onAskCurrentFolder: () => asks += 1,
+    );
+
+    final askAgentFinder = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent');
+    expect(askAgentFinder, findsOneWidget);
+    await tester.tap(askAgentFinder);
+    expect(asks, 1);
+  });
+
+  testWidgets('files toolbar keeps Ask agent immediately before a trailing website action', (tester) async {
+    var asks = 0;
+    var websites = 0;
+
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      onAskCurrentFolder: () => asks += 1,
+      trailingAction: PbFilesToolbarTrailingAction(label: 'New website', iconAssetName: 'folder-plus', onPressed: () => websites += 1),
+    );
+
+    final uploadRect = tester.getRect(find.text('Upload'));
+    final askRect = tester.getRect(find.text('Ask agent'));
+    final websiteRect = tester.getRect(find.text('New website'));
+    final filterRect = tester.getRect(find.text('Filter...'));
+    expect(uploadRect.left, lessThan(askRect.left));
+    expect(askRect.left, lessThan(websiteRect.left));
+    expect(websiteRect.left, lessThan(filterRect.left));
+    expect(askRect.top, websiteRect.top);
+
+    await tester.tap(find.text('Ask agent'));
+    await tester.tap(find.text('New website'));
+    expect(asks, 1);
+    expect(websites, 1);
+  });
+
+  testWidgets('five-action toolbar combines creation actions before crowding the filter', (tester) async {
+    var folderCreates = 0;
+
+    await pumpToolbar(
+      tester,
+      width: 900,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () => folderCreates += 1,
+      onCreateTextFile: () {},
+      onUpload: () {},
+      onAskCurrentFolder: () {},
+      trailingAction: const PbFilesToolbarTrailingAction(label: 'New website', iconAssetName: 'folder-plus', onPressed: null),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Create'), findsOneWidget);
+    expect(find.text('New folder'), findsNothing);
+    expect(find.text('New text file'), findsNothing);
+
+    final createRect = tester.getRect(find.text('Create'));
+    final uploadRect = tester.getRect(find.text('Upload'));
+    final askRect = tester.getRect(find.text('Ask agent'));
+    final websiteRect = tester.getRect(find.text('New website'));
+    final filterRect = tester.getRect(find.text('Filter...'));
+    expect(createRect.left, lessThan(uploadRect.left));
+    expect(uploadRect.left, lessThan(askRect.left));
+    expect(askRect.left, lessThan(websiteRect.left));
+    expect(websiteRect.left, lessThan(filterRect.left));
+    expect((createRect.center.dy - filterRect.center.dy).abs(), lessThanOrEqualTo(1));
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New folder'));
+    await tester.pumpAndSettle();
+    expect(folderCreates, 1);
+  });
+
+  testWidgets('five-action toolbar progressively compacts buttons without wrapping the filter', (tester) async {
+    await pumpToolbar(
+      tester,
+      width: 650,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      onAskCurrentFolder: () {},
+      trailingAction: const PbFilesToolbarTrailingAction(label: 'New website', iconAssetName: 'folder-plus', onPressed: null),
+    );
+
+    expect(tester.takeException(), isNull);
+    final createButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Create');
+    final uploadButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Upload');
+    final askButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent');
+    final websiteButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'New website');
+    expect(createButton, findsOneWidget);
+    expect(uploadButton, findsOneWidget);
+    expect(askButton, findsOneWidget);
+    expect(websiteButton, findsOneWidget);
+
+    final createRect = tester.getRect(createButton);
+    final uploadRect = tester.getRect(uploadButton);
+    final askRect = tester.getRect(askButton);
+    final websiteRect = tester.getRect(websiteButton);
+    final filterRect = tester.getRect(find.text('Filter...'));
+    expect(createRect.left, lessThan(uploadRect.left));
+    expect(uploadRect.left, lessThan(askRect.left));
+    expect(askRect.left, lessThan(websiteRect.left));
+    expect(websiteRect.left, lessThan(filterRect.left));
+    expect((websiteRect.center.dy - filterRect.center.dy).abs(), lessThanOrEqualTo(1));
+  });
+
+  testWidgets('stacked v1 toolbar includes the trailing website action after Ask agent', (tester) async {
+    await pumpToolbar(
+      tester,
+      width: 560,
+      responsiveMode: PbFilesResponsiveMode.overlay,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      onAskCurrentFolder: () {},
+      trailingAction: const PbFilesToolbarTrailingAction(label: 'New website', iconAssetName: 'folder-plus', onPressed: null),
+    );
+
+    expect(tester.takeException(), isNull);
+    final createRect = tester.getRect(find.text('Create'));
+    final uploadRect = tester.getRect(find.text('Upload'));
+    final askRect = tester.getRect(find.text('Ask agent'));
+    final websiteRect = tester.getRect(find.text('New website'));
+    final filterRect = tester.getRect(find.text('Filter...'));
+    expect(createRect.top, uploadRect.top);
+    expect(uploadRect.top, askRect.top);
+    expect(askRect.top, websiteRect.top);
+    expect(createRect.left, lessThan(uploadRect.left));
+    expect(uploadRect.left, lessThan(askRect.left));
+    expect(askRect.left, lessThan(websiteRect.left));
+    expect(filterRect.top, greaterThan(websiteRect.bottom));
   });
 
   testWidgets('files toolbar uses wide create actions in shell-mobile overlay mode', (tester) async {
@@ -176,6 +347,7 @@ void main() {
 
     expect(find.text('Create'), findsOneWidget);
     expect(find.text('Upload'), findsOneWidget);
+    expect(find.text('Ask agent'), findsOneWidget);
     expect(find.text('New folder'), findsNothing);
     expect(find.text('New text file'), findsNothing);
 
@@ -215,6 +387,7 @@ void main() {
 
     expect(find.text('Create'), findsOneWidget);
     expect(find.text('Upload'), findsOneWidget);
+    expect(find.text('Ask agent'), findsOneWidget);
     expect(find.text('New folder'), findsNothing);
     expect(find.text('New text file'), findsNothing);
 
@@ -233,5 +406,85 @@ void main() {
     await tester.tap(find.text('New text file'));
     await tester.pumpAndSettle();
     expect(textFileCreates, 1);
+  });
+
+  testWidgets('files toolbar hides Ask agent for a single selection', (tester) async {
+    await pumpToolbar(
+      tester,
+      width: 900,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      hasSelection: true,
+      selectedCount: 1,
+    );
+
+    expect(find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent'), findsNothing);
+  });
+
+  testWidgets('files toolbar hides Ask agent for multiple selections', (tester) async {
+    await pumpToolbar(
+      tester,
+      width: 900,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      hasSelection: true,
+      selectedCount: 2,
+    );
+
+    expect(find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent'), findsNothing);
+  });
+
+  testWidgets('files toolbar exposes the website install action only at the Files root', (tester) async {
+    var installs = 0;
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onInstallWebServer: () => installs += 1,
+      onCreateTextFile: () {},
+      onUpload: () {},
+    );
+
+    await tester.tap(find.text('New website'));
+    expect(installs, 1);
+
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      currentPath: 'nested',
+      onCreateFolder: () {},
+      onInstallWebServer: () => installs += 1,
+      onCreateTextFile: () {},
+      onUpload: () {},
+    );
+    expect(find.text('New website'), findsNothing);
+  });
+
+  testWidgets('files toolbar styles and invokes the active website preview action', (tester) async {
+    var previews = 0;
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      currentPath: 'website',
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      showWebServerPreview: true,
+      webServerPreviewActive: true,
+      onPreviewWebServer: () => previews += 1,
+    );
+
+    final previewFinder = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Preview');
+    final previewButton = tester.widget<PbButton>(previewFinder);
+    expect(previewButton.backgroundColor, PbColors.statusOnline);
+    await tester.tap(previewFinder);
+    expect(previews, 1);
   });
 }

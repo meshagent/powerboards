@@ -9,10 +9,16 @@ import 'package:meshagent/runtime.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/chat/new_chat_thread.dart';
+import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
+import 'package:meshagent_flutter_shadcn/thread_typography.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
+import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -118,10 +124,16 @@ class _FakeDocumentRuntime extends DocumentRuntime {
 }
 
 class _ThreadViewHarness extends StatefulWidget {
-  const _ThreadViewHarness({required this.room, this.composerAttachmentPaths = const [], this.composerAttachmentSeedVersion = 0});
+  const _ThreadViewHarness({
+    required this.room,
+    this.composerAttachmentPaths = const [],
+    this.composerAttachmentDisplayNamesByPath = const {},
+    this.composerAttachmentSeedVersion = 0,
+  });
 
   final RoomClient room;
   final List<String> composerAttachmentPaths;
+  final Map<String, String> composerAttachmentDisplayNamesByPath;
   final int composerAttachmentSeedVersion;
 
   @override
@@ -146,6 +158,7 @@ class _ThreadViewHarnessState extends State<_ThreadViewHarness> {
         });
       },
       composerAttachmentPaths: widget.composerAttachmentPaths,
+      composerAttachmentDisplayNamesByPath: widget.composerAttachmentDisplayNamesByPath,
       composerAttachmentSeedVersion: widget.composerAttachmentSeedVersion,
     );
   }
@@ -231,6 +244,112 @@ void main() {
     );
   });
 
+  test('composer attachment seed matching preserves nested and root folder identities', () {
+    final nestedFolder = powerboardsFolderChatContextDataUrl('content/research');
+    final rootFolder = powerboardsFolderChatContextDataUrl('');
+
+    expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [nestedFolder], attachmentPaths: [nestedFolder]), isTrue);
+    expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [rootFolder]), isTrue);
+    expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [nestedFolder]), isFalse);
+  });
+
+  test('folder and file chat links dispatch to Files navigation and file preview', () {
+    String? openedFolder;
+    String? previewedFile;
+
+    expect(
+      powerboardsHandleChatLink(
+        url: 'powerboards://files?path=content%2Fresearch',
+        onOpenFolder: (path) => openedFolder = path,
+        onOpenFilePreview: (path) => previewedFile = path,
+      ),
+      isTrue,
+    );
+    expect(openedFolder, 'content/research');
+    expect(previewedFile, isNull);
+
+    expect(
+      powerboardsHandleChatLink(
+        url: 'powerboards://preview?path=content%2Fresearch%2Fnotes.md',
+        onOpenFolder: (path) => openedFolder = path,
+        onOpenFilePreview: (path) => previewedFile = path,
+      ),
+      isTrue,
+    );
+    expect(previewedFile, 'content/research/notes.md');
+    expect(
+      powerboardsHandleChatLink(
+        url: 'powerboards://preview?path=documents%2FScreenshot% 2026-06-02%20at%2010.06.10%20AM.png',
+        onOpenFolder: (path) => openedFolder = path,
+        onOpenFilePreview: (path) => previewedFile = path,
+      ),
+      isTrue,
+    );
+    expect(previewedFile, 'documents/Screenshot 2026-06-02 at 10.06.10 AM.png');
+    expect(
+      powerboardsHandleChatLink(
+        url: 'https://example.com',
+        onOpenFolder: (path) => openedFolder = path,
+        onOpenFilePreview: (path) => previewedFile = path,
+      ),
+      isFalse,
+    );
+  });
+
+  testWidgets('rendered folder file links preserve spaced filenames for preview dispatch', (tester) async {
+    Future<String?> tapRenderedLink(String destination) async {
+      String? tappedUrl;
+      await tester.pumpWidget(
+        _buildResponsiveTestApp(
+          child: ThreadTypographyOverride(
+            markdownTextTransformer: powerboardsCanonicalizeMalformedPreviewMarkdownLinks,
+            markdownLinkHandler: (context, url) {
+              tappedUrl = url;
+              return true;
+            },
+            child: Scaffold(
+              body: MarkdownViewer(markdown: '[Screenshot 2026-06-02 at 10.06.10 AM.png]($destination)', padding: EdgeInsets.zero),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final link = find.byWidgetPredicate(
+        (widget) => widget is RichText && widget.text.toPlainText().contains('Screenshot 2026-06-02 at 10.06.10 AM.png'),
+      );
+      expect(link, findsOneWidget);
+      await tester.tap(link);
+      await tester.pump();
+      return tappedUrl;
+    }
+
+    expect(
+      await tapRenderedLink('powerboards://preview?path=stuff%2FScreenshot%202026-06-02%20at%2010.06.10%20AM.png'),
+      'powerboards://preview?path=stuff%2FScreenshot%202026-06-02%20at%2010.06.10%20AM.png',
+    );
+    for (final destination in <String>[
+      'powerboards://preview?path=stuff%2FScreenshot% 2026-06-02%20at%2010.06.10%20AM.png',
+      'powerboards://preview?path=stuff/Screenshot 2026-06-02 at 10.06.10 AM.md',
+      'powerboards://preview?path=stuff%2FScreenshot%202026-06-02%20at%2010.06.10 AM.png',
+    ]) {
+      final tappedUrl = await tapRenderedLink(destination);
+      expect(tappedUrl, isNotNull);
+      String? previewedFile;
+      expect(powerboardsHandleChatLink(url: tappedUrl!, onOpenFolder: (_) {}, onOpenFilePreview: (path) => previewedFile = path), isTrue);
+      expect(
+        previewedFile,
+        destination.endsWith('.md')
+            ? 'stuff/Screenshot 2026-06-02 at 10.06.10 AM.md'
+            : destination.contains(' ')
+            ? 'stuff/Screenshot 2026-06-02 at 10.06.10 AM.png'
+            : 'stuff/Screenshot 2026-06-02 at 10.06.10 AM.png',
+      );
+    }
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('composer attachment seed appears in the new thread composer', (tester) async {
     final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
     addTearDown(room.dispose);
@@ -252,6 +371,131 @@ void main() {
     await tester.pump();
 
     expect(find.text('brief.pdf'), findsOneWidget);
+  });
+
+  test('webserver folder links clear stale preview query parameters', () {
+    final nextUri = powerboardsV1ThreadRouteUri(
+      currentUri: Uri.parse('/p/project/r/room?pane=chat&webserver_preview=1&thread=abc'),
+      pane: 'files',
+      rawPath: 'website/',
+      removeQueryParameters: const {'webserver_preview'},
+    );
+
+    expect(nextUri.queryParameters['pane'], 'files');
+    expect(nextUri.queryParameters['p'], 'website/');
+    expect(nextUri.queryParameters['thread'], 'abc');
+    expect(nextUri.queryParameters.containsKey('webserver_preview'), isFalse);
+  });
+
+  test('V1 webserver product links accept only paths inside the website root', () {
+    expect(
+      powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://preview/webserver?path=website%2Findex.html')),
+      'website/index.html',
+    );
+    expect(
+      powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://files/webserver?path=website%2Fassets')),
+      'website/assets',
+    );
+    expect(powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://preview/webserver?path=private.txt')), isNull);
+    expect(
+      powerboardsV1WebServerProductLinkStoragePath(Uri.parse('powerboards://preview/webserver?path=website%2F..%2Fprivate.txt')),
+      isNull,
+    );
+  });
+
+  testWidgets('composer attachment seed uses the provided display name', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        child: Scaffold(
+          body: SizedBox.expand(
+            child: _ThreadViewHarness(
+              room: room,
+              composerAttachmentPaths: const ['room:///website'],
+              composerAttachmentDisplayNamesByPath: const {'website': 'hellotimber.meshagent.dev'},
+              composerAttachmentSeedVersion: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('hellotimber.meshagent.dev'), findsOneWidget);
+  });
+
+  testWidgets('Files root folder context appears in the new thread composer', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final previousMode = powerboardsUiModeSignal.value;
+    powerboardsUiModeSignal.value = PowerboardsUiMode.v1;
+    addTearDown(() => powerboardsUiModeSignal.value = previousMode);
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        child: Scaffold(
+          body: SizedBox.expand(
+            child: _ThreadViewHarness(
+              room: room,
+              composerAttachmentPaths: [powerboardsFolderChatContextDataUrl('')],
+              composerAttachmentSeedVersion: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Files'), findsOneWidget);
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'folder'), findsOneWidget);
+  });
+
+  testWidgets('wrapped folder context renders as a folder card in a thread', (tester) async {
+    final wrappedContext = 'room:///${powerboardsFolderChatContextDataUrl('')}';
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Builder(
+          builder: (context) {
+            return powerboardsFolderThreadAttachmentBuilder(context, wrappedContext)!;
+          },
+        ),
+      ),
+    );
+
+    final card = tester.widget<PbFolderThreadAttachmentCard>(find.byType(PbFolderThreadAttachmentCard));
+    expect(card.title, 'Files');
+    expect(find.text('Files'), findsOneWidget);
+    expect(find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'folder'), findsOneWidget);
+    expect(find.textContaining('base64'), findsNothing);
+  });
+
+  testWidgets('folder thread renderer leaves ordinary files to the existing file preview renderer', (tester) async {
+    Widget? folderAttachment;
+    Widget? malformedPercentPngAttachment;
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Builder(
+          builder: (context) {
+            folderAttachment = powerboardsFolderThreadAttachmentBuilder(context, 'scratch.md');
+            malformedPercentPngAttachment = powerboardsFolderThreadAttachmentBuilder(context, 'Screenshot% image.png');
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+
+    expect(folderAttachment, isNull);
+    expect(malformedPercentPngAttachment, isNull);
+    expect(find.byType(PbFolderThreadAttachmentCard), findsNothing);
   });
 
   testWidgets('switches from the new thread view to the selected thread when the parent selection changes', (tester) async {

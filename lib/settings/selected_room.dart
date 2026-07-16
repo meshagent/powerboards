@@ -17,19 +17,3 @@ String? getLastSelectedRoom(String projectId) {
 
   return localStorage.getItem(key);
 }
-
-String _lastSelectedRoomAgentKey(String projectId, String roomName) {
-  return 'lastSelectedRoomAgent::$projectId::$roomName';
-}
-
-void setLastSelectedRoomAgent(String projectId, String roomName, String agentRouteId) {
-  localStorage.setItem(_lastSelectedRoomAgentKey(projectId, roomName), agentRouteId);
-}
-
-void clearLastSelectedRoomAgent(String projectId, String roomName) {
-  localStorage.removeItem(_lastSelectedRoomAgentKey(projectId, roomName));
-}
-
-String? getLastSelectedRoomAgent(String projectId, String roomName) {
-  return localStorage.getItem(_lastSelectedRoomAgentKey(projectId, roomName));
-}

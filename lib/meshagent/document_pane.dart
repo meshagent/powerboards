@@ -262,7 +262,7 @@ class _DocumentPane extends State<DocumentPane> {
   }
 
   Future<void> _download() async {
-    final url = await widget.room.storage.downloadUrl(widget.path);
+    final url = await widget.room.storage.downloadUrl(widget.path, download: true);
     launchUrl(Uri.parse(url));
   }
 

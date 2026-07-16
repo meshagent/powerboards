@@ -124,6 +124,13 @@ class PbFilesRowMenu extends StatelessWidget {
               singleLine: true,
               onPressed: () => _runMenuAction(onBrowseFolder, onDismiss),
             ),
+          if (onAskAgent != null)
+            PbMenuOption(
+              title: 'Ask agent',
+              leadingIconAssetName: 'message-square-plus',
+              singleLine: true,
+              onPressed: () => _runMenuAction(onAskAgent, onDismiss),
+            ),
           if (onDownload != null)
             PbMenuOption(
               title: 'Download as zip',
@@ -134,7 +141,7 @@ class PbFilesRowMenu extends StatelessWidget {
           if (onRename != null || onDelete != null) const PbMenuDivider(),
           if (onRename != null)
             PbMenuOption(
-              title: 'Rename',
+              title: item.renameActionLabelOverride ?? 'Rename',
               leadingIconAssetName: 'text-cursor',
               singleLine: true,
               onPressed: () => _runMenuAction(onRename, onDismiss),
