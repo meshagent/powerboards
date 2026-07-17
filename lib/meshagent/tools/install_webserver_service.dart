@@ -10,7 +10,8 @@ import 'package:powerboards/meshagent/agent_config.dart';
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 
-const String installWebServerServiceToolName = 'install_webserver_service';
+const String installWebServerServiceToolName = 'install_live_website_preview';
+const String publishWebsiteToolName = 'publish_website';
 const String listWebServerFilesToolName = 'list_webserver_files';
 const String openWebServerFileToolName = 'open_webserver_file';
 const String uninstallWebServerServiceToolName = 'uninstall_webserver_service';
@@ -18,16 +19,61 @@ const String uninstallWebServerServiceToolName = 'uninstall_webserver_service';
 const Map<String, dynamic> installWebServerServiceInputSchema = {
   'type': 'object',
   'additionalProperties': false,
-  'required': ['site_name', 'domain', 'intent'],
+  'required': ['site_name', 'domain', 'access', 'intent'],
   'properties': {
     'site_name': {'type': 'string', 'description': 'Optional short site name or slug. Use an empty string when omitted.'},
     'domain': {'type': 'string', 'description': 'Optional full domain for the website route. Use an empty string when omitted.'},
+    'access': {
+      'type': 'string',
+      'enum': ['private', 'public'],
+      'description': 'Use private unless the user explicitly asks for a publicly accessible preview.',
+    },
     'intent': {
       'type': 'string',
       'enum': ['install_only', 'create_website'],
       'description':
           'Use install_only when the user only asks to install or prepare hosting. Use create_website when the user asks to make, create, build, or edit a website.',
     },
+  },
+};
+
+const Map<String, dynamic> publishWebsiteInputSchema = {
+  'type': 'object',
+  'additionalProperties': false,
+  'required': ['domain', 'path', 'access'],
+  'properties': {
+    'domain': {'type': 'string', 'description': 'Full domain for the published website.'},
+    'path': {
+      'type': 'string',
+      'description':
+          'Absolute room-mounted path to the packaged website tar file. It must start with /data/; use a new /data/published/website-{MMDDYYHHMMSS}.tar path by default.',
+    },
+    'access': {
+      'type': 'string',
+      'enum': ['private', 'public'],
+      'description': 'Use private unless the user explicitly asks for a publicly accessible website.',
+    },
+  },
+};
+
+const Map<String, dynamic> publishWebsiteOutputSchema = {
+  'type': 'object',
+  'additionalProperties': false,
+  'required': ['status', 'service_id', 'domain', 'path', 'access', 'message', 'assistant_reply'],
+  'properties': {
+    'status': {
+      'type': 'string',
+      'enum': ['published', 'updated', 'needs_input', 'not_found', 'blocked', 'failed'],
+    },
+    'service_id': {'type': 'string'},
+    'domain': {'type': 'string'},
+    'path': {'type': 'string'},
+    'access': {
+      'type': 'string',
+      'enum': ['private', 'public'],
+    },
+    'message': {'type': 'string'},
+    'assistant_reply': {'type': 'string'},
   },
 };
 
@@ -141,6 +187,7 @@ class InstallWebServerServiceRequest {
     required this.roomName,
     this.siteName,
     this.domain,
+    this.access = 'private',
     this.intent = 'install_only',
   });
 
@@ -148,7 +195,49 @@ class InstallWebServerServiceRequest {
   final String roomName;
   final String? siteName;
   final String? domain;
+  final String access;
   final String intent;
+}
+
+class PublishWebsiteRequest {
+  const PublishWebsiteRequest({
+    required this.projectId,
+    required this.roomName,
+    required this.domain,
+    required this.path,
+    this.access = 'private',
+  });
+
+  final String projectId;
+  final String roomName;
+  final String domain;
+  final String path;
+  final String access;
+}
+
+class PublishWebsiteResult {
+  const PublishWebsiteResult({required this.status, required this.domain, required this.path, required this.access, required this.message});
+
+  final String status;
+  final String domain;
+  final String path;
+  final String access;
+  final String message;
+
+  Map<String, dynamic> toJson() {
+    final normalizedDomain = domain.trim();
+    return {
+      'status': status,
+      'service_id': powerboardsPublishedWebsiteServiceId,
+      'domain': normalizedDomain,
+      'path': path,
+      'access': access,
+      'message': message,
+      'assistant_reply': status == 'published' || status == 'updated'
+          ? 'The published website is ready at [https://$normalizedDomain](https://$normalizedDomain).'
+          : message,
+    };
+  }
 }
 
 class InstallWebServerServiceResult {
@@ -341,6 +430,7 @@ class UninstallWebServerServiceResult {
 }
 
 typedef InstallWebServerServiceRunner = Future<InstallWebServerServiceResult> Function(InstallWebServerServiceRequest request);
+typedef PublishWebsiteRunner = Future<PublishWebsiteResult> Function(PublishWebsiteRequest request);
 typedef ListWebServerFilesRunner = Future<ListWebServerFilesResult> Function(ListWebServerFilesRequest request);
 typedef OpenWebServerFileRunner = Future<OpenWebServerFileResult> Function(OpenWebServerFileRequest request);
 typedef UninstallWebServerServiceRunner = Future<UninstallWebServerServiceResult> Function(UninstallWebServerServiceRequest request);
@@ -369,10 +459,12 @@ List<BaseTool> powerboardsWebServerTools({
   required String roomName,
   required bool enableV1WebServerTools,
   InstallWebServerServiceRunner install = installPowerboardsWebServerService,
+  PublishWebsiteRunner publish = publishPowerboardsWebsite,
   ListWebServerFilesRunner listFiles = listPowerboardsWebServerFiles,
   OpenWebServerFileRunner openFile = openPowerboardsWebServerFile,
   UninstallWebServerServiceRunner uninstall = uninstallPowerboardsWebServerService,
   FutureOr<void> Function(InstallWebServerServiceResult result)? onInstalled,
+  FutureOr<void> Function(PublishWebsiteResult result)? onPublished,
   FutureOr<void> Function(UninstallWebServerServiceResult result)? onUninstalled,
 }) {
   if (!enableV1WebServerTools) {
@@ -381,6 +473,7 @@ List<BaseTool> powerboardsWebServerTools({
 
   return [
     InstallWebServerServiceTool(projectId: projectId, roomName: roomName, install: install, onInstalled: onInstalled),
+    PublishWebsiteTool(projectId: projectId, roomName: roomName, publish: publish, onPublished: onPublished),
     ListWebServerFilesTool(projectId: projectId, roomName: roomName, listFiles: listFiles),
     OpenWebServerFileTool(projectId: projectId, roomName: roomName, openFile: openFile),
     UninstallWebServerServiceTool(projectId: projectId, roomName: roomName, uninstall: uninstall, onUninstalled: onUninstalled),
@@ -393,10 +486,12 @@ class InstallWebServerServiceToolkit extends Toolkit {
     required String roomName,
     required bool enableV1WebServerTools,
     InstallWebServerServiceRunner install = installPowerboardsWebServerService,
+    PublishWebsiteRunner publish = publishPowerboardsWebsite,
     ListWebServerFilesRunner listFiles = listPowerboardsWebServerFiles,
     OpenWebServerFileRunner openFile = openPowerboardsWebServerFile,
     UninstallWebServerServiceRunner uninstall = uninstallPowerboardsWebServerService,
     FutureOr<void> Function(InstallWebServerServiceResult result)? onInstalled,
+    FutureOr<void> Function(PublishWebsiteResult result)? onPublished,
     FutureOr<void> Function(UninstallWebServerServiceResult result)? onUninstalled,
   }) : super(
          name: 'powerboards',
@@ -407,10 +502,12 @@ class InstallWebServerServiceToolkit extends Toolkit {
            roomName: roomName,
            enableV1WebServerTools: enableV1WebServerTools,
            install: install,
+           publish: publish,
            listFiles: listFiles,
            openFile: openFile,
            uninstall: uninstall,
            onInstalled: onInstalled,
+           onPublished: onPublished,
            onUninstalled: onUninstalled,
          ),
          rules: const [],
@@ -421,12 +518,13 @@ class InstallWebServerServiceTool extends FunctionTool with _PowerboardsToolResp
   InstallWebServerServiceTool({required this.projectId, required this.roomName, required this.install, this.onInstalled})
     : super(
         name: installWebServerServiceToolName,
-        title: 'Install Web server service',
+        title: 'Install live website preview',
         description:
-            'Install the PowerBoards Web server service in the current room and return storage_path, the writable room storage folder '
+            'Install the PowerBoards live website preview in the current room and return storage_path, the writable room storage folder '
             'where the website files belong, plus entry_file_path for the main page. '
-            'Use this when the user asks to install web hosting, install a web server service, create a web server, '
-            'or prepare the room for a website. This is a PowerBoards product action, not a Linux package install. '
+            'Use this when the user wants to build or iteratively preview a website whose latest room files should appear immediately. '
+            'The access option controls whether the preview is private to signed-in room members or public to anyone with the link, and defaults to private. '
+            'This is a PowerBoards product action, not a Linux package install. '
             'Do not use shell, apt, nginx, systemd, container-local ports, or private container URLs for this request. '
             'For install-only requests, send assistant_reply exactly once as the full user-facing response. Do not prepend, append, '
             'summarize, repeat, list service_id, or include implementation details unless the user asks for debugging details. '
@@ -452,6 +550,7 @@ class InstallWebServerServiceTool extends FunctionTool with _PowerboardsToolResp
           roomName: roomName,
           siteName: _trimmedOrNull(arguments['site_name']),
           domain: _trimmedOrNull(arguments['domain']),
+          access: _websiteAccess(arguments['access']),
           intent: _webServerInstallIntent(arguments['intent']),
         ),
       );
@@ -470,6 +569,61 @@ class InstallWebServerServiceTool extends FunctionTool with _PowerboardsToolResp
           folderPath: '$powerboardsWebServerFolderName/',
           message: 'Unable to install the Web server service: $error',
           intent: _webServerInstallIntent(arguments['intent']),
+        ).toJson(),
+      );
+    }
+  }
+}
+
+class PublishWebsiteTool extends FunctionTool with _PowerboardsToolResponseSentCallback {
+  PublishWebsiteTool({required this.projectId, required this.roomName, required this.publish, this.onPublished})
+    : super(
+        name: publishWebsiteToolName,
+        title: 'Publish website',
+        description:
+            'Publish a stable website release from a packaged website file already stored in the current room. '
+            'Use this after a site is ready to share as a fixed release; unlike the live website preview, later edits to individual source files '
+            'do not change the published release until this tool is run again with an updated package. '
+            'Unless the user instructs otherwise, tar the website files from /website and place the archive at '
+            '/published/website-{MMDDYYHHMMSS}.tar using the current timestamp, with the contents of /website at the archive root, '
+            'before invoking this tool. Create a new archive for every publish and retain older archives. '
+            "The room's content is mounted into the /data folder, so path must start with /data/. "
+            'The tool verifies that file in room storage, then creates or updates the published website service. '
+            'The access option controls whether the site is private to signed-in room members or public to anyone with the link, and defaults to private.',
+        inputSchema: publishWebsiteInputSchema,
+        outputSchema: publishWebsiteOutputSchema,
+      );
+
+  final String projectId;
+  final String roomName;
+  final PublishWebsiteRunner publish;
+  final FutureOr<void> Function(PublishWebsiteResult result)? onPublished;
+
+  @override
+  Future<Content> execute(ToolContext context, Map<String, dynamic> arguments) async {
+    try {
+      final result = await publish(
+        PublishWebsiteRequest(
+          projectId: projectId,
+          roomName: roomName,
+          domain: (arguments['domain'] ?? '').toString(),
+          path: (arguments['path'] ?? '').toString(),
+          access: _websiteAccess(arguments['access']),
+        ),
+      );
+      final response = JsonContent(json: result.toJson());
+      if (result.status == 'published' || result.status == 'updated') {
+        deferCallbackUntilResponseSent(response, onPublished, result);
+      }
+      return response;
+    } catch (error) {
+      return JsonContent(
+        json: PublishWebsiteResult(
+          status: 'failed',
+          domain: (arguments['domain'] ?? '').toString().trim(),
+          path: (arguments['path'] ?? '').toString().trim(),
+          access: _websiteAccess(arguments['access']),
+          message: 'Unable to publish the website: $error',
         ).toJson(),
       );
     }
@@ -604,7 +758,29 @@ Future<InstallWebServerServiceResult> installPowerboardsWebServerService(Install
   final existing = await client.listRoomServices(projectId: projectId, roomName: roomName);
   final existingWebServer = existing.firstWhereOrNull(_isWebServerService);
   if (existingWebServer != null) {
-    final existingDomain = _webServerTemplateValues(existingWebServer)['url'];
+    final existingValues = _webServerTemplateValues(existingWebServer);
+    final existingDomain = existingValues['url'];
+    final requestedAccess = _websiteAccess(request.access);
+    final configuredAccess = existingValues['access'];
+    if (configuredAccess == null || _websiteAccess(configuredAccess) != requestedAccess) {
+      final template = await _loadWebServerTemplate();
+      final existingId = existingWebServer.id?.trim();
+      if (template == null || existingId == null || existingId.isEmpty) {
+        return const InstallWebServerServiceResult(
+          status: 'blocked',
+          serviceId: powerboardsWebServerServiceId,
+          folderPath: '$powerboardsWebServerFolderName/',
+          message: 'The live website preview access setting could not be updated right now.',
+        );
+      }
+      await client.updateRoomServiceFromTemplate(
+        projectId: projectId,
+        roomName: roomName,
+        serviceId: existingId,
+        template: template.template,
+        values: {...existingValues, 'access': requestedAccess},
+      );
+    }
     await powerboardsPrepareWebServerFolderForDomain(client: client, projectId: projectId, roomName: roomName, domain: existingDomain);
     return InstallWebServerServiceResult(
       status: 'already_installed',
@@ -627,7 +803,13 @@ Future<InstallWebServerServiceResult> installPowerboardsWebServerService(Install
     );
   }
 
-  final values = _webServerInstallValues(template.parsed, roomName: roomName, siteName: request.siteName, domain: request.domain);
+  final values = _webServerInstallValues(
+    template.parsed,
+    roomName: roomName,
+    siteName: request.siteName,
+    domain: request.domain,
+    access: request.access,
+  );
   final routeValue = values['url'];
   if (routeValue == null || routeValue.trim().isEmpty) {
     return const InstallWebServerServiceResult(
@@ -692,6 +874,168 @@ Future<InstallWebServerServiceResult> installPowerboardsWebServerService(Install
     message: 'The Web server service is installed and the website folder is ready.',
     intent: request.intent,
   );
+}
+
+Future<PublishWebsiteResult> publishPowerboardsWebsite(PublishWebsiteRequest request, {StorageClient? storage}) async {
+  final projectId = request.projectId.trim();
+  final roomName = request.roomName.trim();
+  final domain = _normalizeDomain(request.domain) ?? '';
+  final access = _websiteAccess(request.access);
+  final publishedPath = powerboardsNormalizePublishedWebsitePath(request.path);
+  if (projectId.isEmpty || roomName.isEmpty) {
+    return PublishWebsiteResult(
+      status: 'blocked',
+      domain: domain,
+      path: request.path.trim(),
+      access: access,
+      message: 'I need a current PowerBoards room before I can publish the website.',
+    );
+  }
+  if (domain.isEmpty || publishedPath == null) {
+    return PublishWebsiteResult(
+      status: 'needs_input',
+      domain: domain,
+      path: request.path.trim(),
+      access: access,
+      message: domain.isEmpty
+          ? 'I need a domain before I can publish the website.'
+          : 'The packaged website path must start with /data/ and point to a .tar file in the room.',
+    );
+  }
+
+  Future<bool> pathExists(StorageClient activeStorage) async {
+    final entry = await activeStorage.stat(publishedPath.storagePath);
+    return entry != null && !entry.isFolder;
+  }
+
+  final exists = storage != null
+      ? await pathExists(storage)
+      : await _withRoomStorage(projectId: projectId, roomName: roomName, action: pathExists);
+  if (!exists) {
+    return PublishWebsiteResult(
+      status: 'not_found',
+      domain: domain,
+      path: publishedPath.containerPath,
+      access: access,
+      message: 'I could not find `${publishedPath.containerPath}` in this room.',
+    );
+  }
+
+  final template = await _loadServiceTemplate(powerboardsPublishedWebsiteServiceId);
+  if (template == null) {
+    return PublishWebsiteResult(
+      status: 'blocked',
+      domain: domain,
+      path: publishedPath.containerPath,
+      access: access,
+      message: 'The published website service template is not available right now.',
+    );
+  }
+
+  final client = getMeshagentClient();
+  final services = await client.listRoomServices(projectId: projectId, roomName: roomName);
+  final existing = services.firstWhereOrNull(
+    (service) => service.metadata.annotations['meshagent.service.id'] == powerboardsPublishedWebsiteServiceId,
+  );
+  final values = <String, String>{'url': domain, 'path': publishedPath.containerPath, 'access': access};
+  final renderedTemplate = await client.renderTemplate(template: template.template, values: values);
+  final routeRequests = _routeRequestsForTemplate(renderedTemplate, values);
+  final room = await client.getRoom(projectId: projectId, name: roomName);
+  for (final route in routeRequests) {
+    try {
+      final current = await client.getRoute(projectId: projectId, domain: route.domain);
+      if (current.roomName != room.name) {
+        return PublishWebsiteResult(
+          status: 'blocked',
+          domain: domain,
+          path: publishedPath.containerPath,
+          access: access,
+          message: 'The domain $domain is already assigned to another room.',
+        );
+      }
+      await client.updateRoute(
+        projectId: projectId,
+        domain: route.domain,
+        roomName: room.name,
+        port: route.port,
+        annotations: const {'meshagent.service.id': powerboardsPublishedWebsiteServiceId},
+      );
+    } on meshagent.NotFoundException {
+      await client.createRoute(
+        projectId: projectId,
+        domain: route.domain,
+        roomName: room.name,
+        port: route.port,
+        annotations: const {'meshagent.service.id': powerboardsPublishedWebsiteServiceId},
+      );
+    }
+  }
+
+  final existingId = existing?.id?.trim();
+  if (existingId != null && existingId.isNotEmpty) {
+    await client.updateRoomServiceFromTemplate(
+      projectId: projectId,
+      roomName: roomName,
+      serviceId: existingId,
+      template: template.template,
+      values: values,
+    );
+  } else {
+    await client.createRoomServiceFromTemplate(projectId: projectId, roomName: roomName, template: template.template, values: values);
+  }
+
+  final oldDomain = existing == null ? null : _webServerTemplateValues(existing)['url']?.trim();
+  if (oldDomain != null && oldDomain.isNotEmpty && oldDomain != domain) {
+    await client.deleteRoute(projectId: projectId, domain: oldDomain);
+  }
+
+  return PublishWebsiteResult(
+    status: existing == null ? 'published' : 'updated',
+    domain: domain,
+    path: publishedPath.containerPath,
+    access: access,
+    message: existing == null ? 'Published the website.' : 'Updated the published website.',
+  );
+}
+
+Future<T> _withRoomStorage<T>({
+  required String projectId,
+  required String roomName,
+  required Future<T> Function(StorageClient storage) action,
+}) async {
+  final client = getMeshagentClient();
+  final roomConnection = await client.connectRoom(projectId: projectId, roomName: roomName);
+  final roomClient = RoomClient(
+    protocolFactory: meshagent.WebSocketClientProtocol.createFactory(url: roomConnection.roomUrl, token: roomConnection.jwt),
+  );
+  try {
+    roomClient.start();
+    await roomClient.ready;
+    return await action(roomClient.storage);
+  } finally {
+    roomClient.dispose();
+  }
+}
+
+({String containerPath, String storagePath})? powerboardsNormalizePublishedWebsitePath(String rawPath) {
+  final normalized = rawPath.trim().replaceAll('\\', '/');
+  if (!normalized.startsWith('/data/')) {
+    return null;
+  }
+  final segments = normalized
+      .substring('/data/'.length)
+      .split('/')
+      .map((segment) => segment.trim())
+      .where((segment) => segment.isNotEmpty)
+      .toList(growable: false);
+  if (segments.isEmpty || segments.any((segment) => segment == '.' || segment == '..')) {
+    return null;
+  }
+  final storagePath = segments.join('/');
+  if (!storagePath.toLowerCase().endsWith('.tar')) {
+    return null;
+  }
+  return (containerPath: '/data/$storagePath', storagePath: storagePath);
 }
 
 Future<UninstallWebServerServiceResult> uninstallPowerboardsWebServerService(
@@ -926,6 +1270,10 @@ String _webServerInstallIntent(Object? value) {
   return normalized == 'create_website' ? 'create_website' : 'install_only';
 }
 
+String _websiteAccess(Object? value) {
+  return value is String && value.trim().toLowerCase() == 'public' ? 'public' : 'private';
+}
+
 String? _normalizeRequestedWebServerFilePath(String rawPath) {
   var normalized = rawPath.trim().replaceAll('\\', '/');
   while (normalized.startsWith('/')) {
@@ -1041,6 +1389,10 @@ String _webServerDomainLinkLine(String? domain, {String? entryFilePath}) {
 }
 
 Future<ServiceDirectoryEntry?> _loadWebServerTemplate() async {
+  return _loadServiceTemplate(powerboardsWebServerServiceId);
+}
+
+Future<ServiceDirectoryEntry?> _loadServiceTemplate(String serviceId) async {
   final serverUrl = MeshagentConfig.current?.serverUrl;
   if (serverUrl == null) {
     return null;
@@ -1052,9 +1404,7 @@ Future<ServiceDirectoryEntry?> _loadWebServerTemplate() async {
   }
 
   final directory = await ServiceDirectoryPage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  return directory.templates.firstWhereOrNull(
-    (entry) => entry.parsed.metadata.annotations['meshagent.service.id'] == powerboardsWebServerServiceId,
-  );
+  return directory.templates.firstWhereOrNull((entry) => entry.parsed.metadata.annotations['meshagent.service.id'] == serviceId);
 }
 
 Map<String, String> _webServerInstallValues(
@@ -1062,6 +1412,7 @@ Map<String, String> _webServerInstallValues(
   required String roomName,
   String? siteName,
   String? domain,
+  String access = 'private',
 }) {
   final routeVariables =
       template.variables?.where((variable) => variable.type == 'route').toList() ?? const <meshagent.ServiceTemplateVariable>[];
@@ -1078,7 +1429,7 @@ Map<String, String> _webServerInstallValues(
     return const <String, String>{};
   }
 
-  return {routeVariable.name: resolvedDomain};
+  return {routeVariable.name: resolvedDomain, 'access': _websiteAccess(access)};
 }
 
 String? _normalizeDomain(String? value) {

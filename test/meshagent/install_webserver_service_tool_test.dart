@@ -30,11 +30,17 @@ void main() {
       );
 
       expect(tool.inputSchema['additionalProperties'], isFalse);
-      expect(tool.inputSchema['required'], ['site_name', 'domain', 'intent']);
-      expect(tool.description, startsWith('Install the PowerBoards Web server service in the current room and return storage_path'));
+      expect(tool.name, 'install_live_website_preview');
+      expect(tool.inputSchema['required'], ['site_name', 'domain', 'access', 'intent']);
+      expect(tool.description, startsWith('Install the PowerBoards live website preview in the current room and return storage_path'));
       expect(tool.description, contains('write_file'));
 
-      final result = await tool.execute(const ToolContext(), {'site_name': 'sunrise', 'domain': '', 'intent': 'install_only'});
+      final result = await tool.execute(const ToolContext(), {
+        'site_name': 'sunrise',
+        'domain': '',
+        'access': 'public',
+        'intent': 'install_only',
+      });
       expect(refreshed, isNull);
       await tool.onToolResponseSent(const ToolContext(), result);
 
@@ -42,6 +48,7 @@ void main() {
       expect(request?.roomName, 'room-1');
       expect(request?.siteName, 'sunrise');
       expect(request?.domain, isNull);
+      expect(request?.access, 'public');
       expect(request?.intent, 'install_only');
       expect(refreshed?.status, 'installed');
       expect(result, isA<JsonContent>());
@@ -125,6 +132,62 @@ void main() {
       expect(result.json['service_id'], 'meshagent.webserver');
       expect(result.json['site_label'], 'website/');
       expect(result.json['message'], contains('boom'));
+    });
+  });
+
+  group('PublishWebsiteTool', () {
+    test('requires a domain, /data path, and access mode', () async {
+      PublishWebsiteRequest? request;
+      PublishWebsiteResult? refreshed;
+      final tool = PublishWebsiteTool(
+        projectId: 'project-1',
+        roomName: 'room-1',
+        publish: (input) async {
+          request = input;
+          return const PublishWebsiteResult(
+            status: 'published',
+            domain: 'release.meshagent.dev',
+            path: '/data/releases/site.tar',
+            access: 'private',
+            message: 'Published the website.',
+          );
+        },
+        onPublished: (result) => refreshed = result,
+      );
+
+      expect(tool.name, publishWebsiteToolName);
+      expect(tool.inputSchema['required'], ['domain', 'path', 'access']);
+      expect(tool.description, contains("mounted into the /data folder"));
+      expect(tool.description, contains('unlike the live website preview'));
+      expect(tool.description, contains('tar the website files from /website'));
+      expect(tool.description, contains('/published/website-{MMDDYYHHMMSS}.tar'));
+      expect(tool.description, contains('retain older archives'));
+
+      final result = await tool.execute(const ToolContext(), {
+        'domain': 'release.meshagent.dev',
+        'path': '/data/releases/site.tar',
+        'access': 'private',
+      });
+      expect(refreshed, isNull);
+      await tool.onToolResponseSent(const ToolContext(), result);
+
+      expect(request?.projectId, 'project-1');
+      expect(request?.roomName, 'room-1');
+      expect(request?.path, '/data/releases/site.tar');
+      expect(request?.access, 'private');
+      expect(refreshed?.status, 'published');
+      expect((result as JsonContent).json['service_id'], powerboardsPublishedWebsiteServiceId);
+      expect(result.json['assistant_reply'], contains('https://release.meshagent.dev'));
+    });
+
+    test('maps /data tar paths to room storage and rejects unsafe or non-tar paths', () {
+      expect(powerboardsNormalizePublishedWebsitePath('/data/published/website-071726143005.tar'), (
+        containerPath: '/data/published/website-071726143005.tar',
+        storagePath: 'published/website-071726143005.tar',
+      ));
+      expect(powerboardsNormalizePublishedWebsitePath('/published/site.tar'), isNull);
+      expect(powerboardsNormalizePublishedWebsitePath('/data/published/site.zip'), isNull);
+      expect(powerboardsNormalizePublishedWebsitePath('/data/../site.tar'), isNull);
     });
   });
 
@@ -455,6 +518,7 @@ void main() {
       expect(toolkit.name, 'powerboards');
       expect(toolkit.tools.map((tool) => tool.name), [
         installWebServerServiceToolName,
+        publishWebsiteToolName,
         listWebServerFilesToolName,
         openWebServerFileToolName,
         uninstallWebServerServiceToolName,
@@ -468,6 +532,7 @@ void main() {
       expect(legacyToolkit.tools, isEmpty);
       expect(v1Toolkit.tools.map((tool) => tool.name), [
         installWebServerServiceToolName,
+        publishWebsiteToolName,
         listWebServerFilesToolName,
         openWebServerFileToolName,
         uninstallWebServerServiceToolName,
