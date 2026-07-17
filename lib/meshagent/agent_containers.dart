@@ -21,10 +21,11 @@ typedef ConfigureServiceTemplateDone = void Function(BuildContext context, Strin
 
 const double _mobileConfigureFlowSectionGap = powerboardsMobileFlowDialogContentSectionGap * 3;
 const String powerboardsWebServerServiceId = 'meshagent.webserver';
+const String powerboardsPublishedWebsiteServiceId = 'meshagent.published-website';
 const String powerboardsWebServerIconAssetName = 'folder-code';
 const String powerboardsWebServerFolderName = 'website';
 const String powerboardsStorageFolderPlaceholderFileName = '.placeholder';
-const String powerboardsWebServerDescription = "Publish this room's website from files in its web server folder.";
+const String powerboardsWebServerDescription = "Preview this room's website from live files in its website folder.";
 const int powerboardsV1WebServerRemovalStableObservations = 8;
 const int powerboardsV1WebServerRemovalMaxAttempts = 40;
 
