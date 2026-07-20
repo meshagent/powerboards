@@ -28,7 +28,6 @@ import 'meshagent/meshagent.dart';
 import 'meshagent/room_lifecycle_errors.dart';
 import 'nav/chrome_visibility.dart';
 import 'nav/nav.dart';
-import 'pdf/pdf_backend.dart';
 import 'theme/theme.dart';
 import 'ui/incoming_share_watcher.dart';
 import 'ui/powerboards_breakpoints.dart';
@@ -118,7 +117,6 @@ void main() async {
   SolidartConfig.assertSignalBuilderWithoutDependencies = false;
 
   WidgetsFlutterBinding.ensureInitialized();
-  configurePowerboardsPdfBackend();
 
   // If SERVER_URL is in the environment, it means the config was complied in. Use it.
   const serverUrl = String.fromEnvironment("SERVER_URL");
