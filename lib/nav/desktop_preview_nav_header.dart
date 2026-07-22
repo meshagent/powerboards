@@ -7,6 +7,8 @@ import 'package:meshagent_flutter_desktop_updater/meshagent_flutter_desktop_upda
 import 'package:powerboards/meshagent/project.dart';
 import 'package:powerboards/nav/nav_rooms.dart';
 import 'package:powerboards/powerboards_ui/active.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_people_here_menu.dart';
+import 'package:powerboards/powerboards_ui/v1/preview/preview_room_rail_menu.dart';
 import 'package:powerboards/settings/shared_profiles.dart';
 import 'package:powerboards/settings/shared_profiles_dialog.dart';
 import 'package:powerboards/settings/ui_mode.dart';
@@ -57,7 +59,7 @@ class DesktopPreviewNavHeader extends StatefulWidget {
   State<DesktopPreviewNavHeader> createState() => _DesktopPreviewNavHeaderState();
 }
 
-enum _DesktopPreviewNavMenu { none, room, account }
+enum _DesktopPreviewNavMenu { none, room, whoIsHere, account }
 
 class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
   late final TextEditingController _projectFilterController;
@@ -182,6 +184,12 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
     }
 
     return roomDisplayName(room);
+  }
+
+  List<PbPresenceMember> _presenceMembersFromNames(List<String> names) {
+    return names
+        .map((name) => PbPresenceMember(displayName: name, initials: pbPresenceInitialsFromDisplayName(name)))
+        .toList(growable: false);
   }
 
   String? get _selectedRoomFallbackLabel {
@@ -326,21 +334,33 @@ class _DesktopPreviewNavHeaderState extends State<DesktopPreviewNavHeader> {
           final resolvedRoomValue = currentRoom != null ? _roomDisplayName(currentRoom) : (_selectedRoomFallbackLabel ?? 'Select room');
           final showRoomSwitcher = rooms.isNotEmpty || ((widget.selectedRoom?.trim().isNotEmpty) ?? false);
 
-          return PbPrimaryHeader(
-            shellMobile: widget.shellMobile,
-            shellIconOnly: widget.shellIconOnly,
-            showRoomSwitcher: showRoomSwitcher,
-            roomValue: resolvedRoomValue,
-            roomSelected: _openMenu == _DesktopPreviewNavMenu.room,
-            avatarSelected: _openMenu == _DesktopPreviewNavMenu.account,
-            avatarInitials: widget.avatarInitials,
-            roomMenu: showRoomSwitcher && _openMenu == _DesktopPreviewNavMenu.room ? _buildRoomMenu() : null,
-            avatarMenu: _openMenu == _DesktopPreviewNavMenu.account ? _buildAccountMenu() : null,
-            onRoomPressed: showRoomSwitcher ? () => _toggleMenu(_DesktopPreviewNavMenu.room) : null,
-            onAvatarPressed: () => _toggleMenu(_DesktopPreviewNavMenu.account),
-            onRoomDismissRequested: _closeMenu,
-            onAvatarDismissRequested: _closeMenu,
-            onSharePressed: widget.onSharePressed,
+          return ValueListenableBuilder<PreviewRoomRailMenuBridge?>(
+            valueListenable: previewRoomRailMenuBridgeListenable,
+            builder: (context, bridge, _) {
+              final presenceMembers = _presenceMembersFromNames(bridge?.whoIsHereNames ?? const <String>[]);
+
+              return PbPrimaryHeader(
+                shellMobile: widget.shellMobile,
+                shellIconOnly: widget.shellIconOnly,
+                showRoomSwitcher: showRoomSwitcher,
+                roomValue: resolvedRoomValue,
+                roomSelected: _openMenu == _DesktopPreviewNavMenu.room,
+                avatarSelected: _openMenu == _DesktopPreviewNavMenu.account,
+                avatarInitials: widget.avatarInitials,
+                presenceMembers: presenceMembers,
+                presenceSelected: _openMenu == _DesktopPreviewNavMenu.whoIsHere,
+                roomMenu: showRoomSwitcher && _openMenu == _DesktopPreviewNavMenu.room ? _buildRoomMenu() : null,
+                presenceMenu: _openMenu == _DesktopPreviewNavMenu.whoIsHere ? PbPeopleHereMenu(members: presenceMembers) : null,
+                avatarMenu: _openMenu == _DesktopPreviewNavMenu.account ? _buildAccountMenu() : null,
+                onRoomPressed: showRoomSwitcher ? () => _toggleMenu(_DesktopPreviewNavMenu.room) : null,
+                onAvatarPressed: () => _toggleMenu(_DesktopPreviewNavMenu.account),
+                onPresencePressed: presenceMembers.isEmpty ? null : () => _toggleMenu(_DesktopPreviewNavMenu.whoIsHere),
+                onRoomDismissRequested: _closeMenu,
+                onAvatarDismissRequested: _closeMenu,
+                onPresenceDismissRequested: _closeMenu,
+                onSharePressed: widget.onSharePressed,
+              );
+            },
           );
         },
       ),

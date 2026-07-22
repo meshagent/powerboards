@@ -4286,6 +4286,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final canShowManageAgents = isOwner.state.value == true;
     final showConsoleToggle = canViewDeveloperLogs.state.value == true;
     final showShutdown = isOwner.state.value == true;
+    final whoIsHereNames = _whoIsHereNamesForParticipants(widget.room.messaging.remoteParticipants);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
@@ -4305,7 +4306,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         showShutdown: showShutdown,
         meetActive: resolvedMeetActive,
         consoleLabel: 'Developer console',
-        whoIsHereNames: const [],
+        whoIsHereNames: whoIsHereNames,
         onRenamePressed: () => unawaited(_renameCurrentRoomFromPreviewRail()),
         onPermissionsPressed: () => unawaited(_openCurrentRoomPermissionsFromPreviewRail()),
         onManageAgentsPressed: () => unawaited(showManageAgents()),
@@ -4323,6 +4324,32 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       );
       exposePreviewRoomRailMenuBridge(_previewRoomRailMenuBridge);
     });
+  }
+
+  List<String> _whoIsHereNamesForParticipants(Iterable<RemoteParticipant> participants) {
+    final localNameAttribute = widget.room.localParticipant?.getAttribute("name");
+    final localName = localNameAttribute is String ? localNameAttribute.trim().toLowerCase() : null;
+    final namesByNormalizedName = <String, String>{};
+
+    for (final participant in participants) {
+      if (participant.role == 'agent') {
+        continue;
+      }
+
+      final name = participantDisplayName(participant);
+      if (name == null) {
+        continue;
+      }
+
+      final normalizedName = name.toLowerCase();
+      if (normalizedName == localName) {
+        continue;
+      }
+
+      namesByNormalizedName.putIfAbsent(normalizedName, () => name);
+    }
+
+    return namesByNormalizedName.values.sorted((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
   }
 
   Widget _buildAgentsActionRow(BuildContext context) {
