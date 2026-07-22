@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -10,7 +11,10 @@ import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+
+const Duration _v1LongActionToastDelay = Duration(milliseconds: 700);
 
 class PowerboardsMobileChatAttachButton extends StatefulWidget {
   const PowerboardsMobileChatAttachButton({
@@ -32,6 +36,11 @@ class PowerboardsMobileChatAttachButton extends StatefulWidget {
 
 class _PowerboardsMobileChatAttachButtonState extends State<PowerboardsMobileChatAttachButton> {
   static const double _flowDialogBodyHorizontalInset = 24.0;
+
+  String _importFileDisplayName(String sourcePath) {
+    final segments = sourcePath.split('/').where((segment) => segment.isNotEmpty).toList();
+    return segments.isEmpty ? sourcePath : segments.last;
+  }
 
   Future<String> _resolveImportedPath({required RoomClient destinationRoom, required String requestedPath}) async {
     String candidate = requestedPath.split('/').last;
@@ -276,19 +285,60 @@ class _PowerboardsMobileChatAttachButtonState extends State<PowerboardsMobileCha
       },
     );
 
+    var importedCount = 0;
+    String? lastImportedDisplayName;
     try {
       if (selectedFiles == null || selectedFiles.isEmpty) {
         return;
       }
+      if (!mounted) {
+        return;
+      }
 
+      final showImportProgress = !identical(selectedRoomClient, destinationRoom);
+      final toaster = showImportProgress ? ShadToaster.maybeOf(context) : null;
+      Timer? progressTimer;
+      var progressShown = false;
       for (final filePath in selectedFiles) {
         if (identical(selectedRoomClient, destinationRoom)) {
           widget.controller.attachFile(filePath);
           continue;
         }
 
-        final importedPath = await _importFile(sourceRoom: selectedRoomClient, destinationRoom: destinationRoom, sourcePath: filePath);
-        widget.controller.attachFile(importedPath);
+        final importDisplayName = _importFileDisplayName(filePath);
+        progressTimer?.cancel();
+        progressTimer = Timer(_v1LongActionToastDelay, () {
+          if (!mounted) {
+            return;
+          }
+
+          progressShown = true;
+          toaster?.show(powerboardsToast(title: 'Importing file', description: importDisplayName, duration: const Duration(seconds: 4)));
+        });
+        try {
+          final importedPath = await _importFile(sourceRoom: selectedRoomClient, destinationRoom: destinationRoom, sourcePath: filePath);
+          widget.controller.attachFile(importedPath);
+          importedCount += 1;
+          lastImportedDisplayName = importDisplayName;
+        } finally {
+          progressTimer.cancel();
+        }
+      }
+
+      if (showImportProgress && progressShown && importedCount > 0 && mounted) {
+        toaster?.show(
+          powerboardsToast(
+            title: 'File${importedCount == 1 ? '' : 's'} attached',
+            description: importedCount == 1 ? lastImportedDisplayName : '$importedCount files imported',
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ShadToaster.maybeOf(context)?.show(
+          powerboardsToast(title: 'Unable to attach file', description: '$error', destructive: true, duration: const Duration(seconds: 6)),
+        );
       }
     } finally {
       if (!identical(selectedRoomClient, destinationRoom)) {

@@ -78,19 +78,50 @@ class PbFilesHeader extends StatelessWidget {
   }
 }
 
+class PbFilesToolbarTrailingAction {
+  const PbFilesToolbarTrailingAction({
+    required this.label,
+    required this.iconAssetName,
+    required this.onPressed,
+    this.width = 164,
+    this.backgroundColor,
+    this.pressedBackgroundColor,
+    this.borderColor,
+    this.pressedBorderColor,
+    this.foregroundColor,
+  });
+
+  final String label;
+  final String iconAssetName;
+  final VoidCallback? onPressed;
+  final double width;
+  final Color? backgroundColor;
+  final Color? pressedBackgroundColor;
+  final Color? borderColor;
+  final Color? pressedBorderColor;
+  final Color? foregroundColor;
+}
+
 class PbFilesToolbar extends StatelessWidget {
   const PbFilesToolbar({
     super.key,
     required this.hasSelection,
     required this.selectedCount,
+    required this.currentPath,
     required this.filterController,
     required this.filterEnabled,
     required this.responsiveMode,
     required this.padding,
     required this.onFilterChanged,
     required this.onCreateFolder,
+    this.onInstallWebServer,
     required this.onCreateTextFile,
     required this.onUpload,
+    this.onAskCurrentFolder,
+    this.trailingAction,
+    this.showWebServerPreview = false,
+    this.webServerPreviewActive = false,
+    this.onPreviewWebServer,
     required this.onClearSelection,
     required this.onDeleteSelection,
     required this.onDownloadSelection,
@@ -98,14 +129,21 @@ class PbFilesToolbar extends StatelessWidget {
 
   final bool hasSelection;
   final int selectedCount;
+  final String currentPath;
   final TextEditingController filterController;
   final bool filterEnabled;
   final PbFilesResponsiveMode responsiveMode;
   final PbFilesPanelPadding padding;
   final ValueChanged<String> onFilterChanged;
   final VoidCallback onCreateFolder;
+  final VoidCallback? onInstallWebServer;
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
+  final VoidCallback? onAskCurrentFolder;
+  final PbFilesToolbarTrailingAction? trailingAction;
+  final bool showWebServerPreview;
+  final bool webServerPreviewActive;
+  final VoidCallback? onPreviewWebServer;
   final VoidCallback onClearSelection;
   final VoidCallback onDeleteSelection;
   final VoidCallback onDownloadSelection;
@@ -117,13 +155,38 @@ class PbFilesToolbar extends StatelessWidget {
         final stackedActions =
             responsiveMode == PbFilesResponsiveMode.mobile ||
             responsiveMode == PbFilesResponsiveMode.overlay && constraints.maxWidth <= PbBreakpoints.shellMobile;
-        final iconActions = constraints.maxWidth < 620 && !stackedActions;
+        final webServerTrailingAction = showWebServerPreview
+            ? PbFilesToolbarTrailingAction(
+                label: 'Preview',
+                iconAssetName: 'globe',
+                onPressed: onPreviewWebServer,
+                width: 134,
+                backgroundColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.surfacePanelSoft,
+                pressedBackgroundColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.surfacePanelSoft,
+                borderColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.borderSoft,
+                pressedBorderColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.borderSoft,
+                foregroundColor: webServerPreviewActive ? PbColors.textInverse : PbColors.textMuted,
+              )
+            : currentPath.isEmpty && onInstallWebServer != null
+            ? PbFilesToolbarTrailingAction(label: 'New website', iconAssetName: 'folder-code', onPressed: onInstallWebServer, width: 164)
+            : null;
+        final resolvedTrailingAction = trailingAction ?? webServerTrailingAction;
+        final availableWidth = math.max(0, constraints.maxWidth - padding.left - padding.right).toDouble();
+        final actionLayout = _FilesToolbarActionLayout.resolve(
+          maxWidth: availableWidth,
+          stackedActions: stackedActions,
+          trailingAction: resolvedTrailingAction,
+        );
+        final compactSelectionActions = constraints.maxWidth < 960 && !stackedActions;
         final createActions = _FilesCreateActions(
-          iconActions: iconActions,
+          combineCreateActions: actionLayout.combineCreateActions,
+          iconOnlyActions: actionLayout.iconOnlyActions,
           fullWidth: stackedActions,
           onCreateFolder: onCreateFolder,
           onCreateTextFile: onCreateTextFile,
           onUpload: onUpload,
+          onAskCurrentFolder: onAskCurrentFolder,
+          trailingAction: resolvedTrailingAction,
         );
         final filterField = PbMenuFilterField(
           placeholder: 'Filter...',
@@ -164,6 +227,7 @@ class PbFilesToolbar extends StatelessWidget {
                       if (hasSelection)
                         _FilesSelectionActions(
                           selectedCount: selectedCount,
+                          iconOnly: compactSelectionActions,
                           onDeleteSelection: onDeleteSelection,
                           onClearSelection: onClearSelection,
                           onDownloadSelection: onDownloadSelection,
@@ -184,6 +248,103 @@ class PbFilesToolbar extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+enum _FilesToolbarAction { create, createFolder, createTextFile, upload, askAgent, trailing }
+
+class _FilesToolbarActionLayout {
+  const _FilesToolbarActionLayout({required this.combineCreateActions, required this.iconOnlyActions});
+
+  static const _filterGap = 10.0;
+  static const _minimumFilterWidth = 220.0;
+  static const _actionGap = 10.0;
+  static const _iconButtonWidth = 48.0;
+  static const _fullWidths = <_FilesToolbarAction, double>{
+    _FilesToolbarAction.create: 132,
+    _FilesToolbarAction.createFolder: 148,
+    _FilesToolbarAction.createTextFile: 164,
+    _FilesToolbarAction.upload: 132,
+    _FilesToolbarAction.askAgent: 148,
+  };
+
+  final bool combineCreateActions;
+  final Set<_FilesToolbarAction> iconOnlyActions;
+
+  static _FilesToolbarActionLayout resolve({
+    required double maxWidth,
+    required bool stackedActions,
+    required PbFilesToolbarTrailingAction? trailingAction,
+  }) {
+    if (trailingAction == null) {
+      return _FilesToolbarActionLayout(
+        combineCreateActions: stackedActions,
+        iconOnlyActions: !stackedActions && maxWidth < 620
+            ? const <_FilesToolbarAction>{
+                _FilesToolbarAction.createFolder,
+                _FilesToolbarAction.createTextFile,
+                _FilesToolbarAction.upload,
+                _FilesToolbarAction.askAgent,
+              }
+            : const <_FilesToolbarAction>{},
+      );
+    }
+
+    if (stackedActions) {
+      return const _FilesToolbarActionLayout(combineCreateActions: true, iconOnlyActions: <_FilesToolbarAction>{});
+    }
+
+    const directActions = <_FilesToolbarAction>[
+      _FilesToolbarAction.createFolder,
+      _FilesToolbarAction.createTextFile,
+      _FilesToolbarAction.upload,
+      _FilesToolbarAction.askAgent,
+      _FilesToolbarAction.trailing,
+    ];
+    if (_fits(maxWidth, directActions, const <_FilesToolbarAction>{}, trailingAction)) {
+      return const _FilesToolbarActionLayout(combineCreateActions: false, iconOnlyActions: <_FilesToolbarAction>{});
+    }
+
+    const combinedActions = <_FilesToolbarAction>[
+      _FilesToolbarAction.create,
+      _FilesToolbarAction.upload,
+      _FilesToolbarAction.askAgent,
+      _FilesToolbarAction.trailing,
+    ];
+    final iconOnly = <_FilesToolbarAction>{};
+    for (final action in const <_FilesToolbarAction>[
+      _FilesToolbarAction.trailing,
+      _FilesToolbarAction.askAgent,
+      _FilesToolbarAction.upload,
+      _FilesToolbarAction.create,
+    ]) {
+      if (_fits(maxWidth, combinedActions, iconOnly, trailingAction)) {
+        break;
+      }
+      iconOnly.add(action);
+    }
+
+    return _FilesToolbarActionLayout(combineCreateActions: true, iconOnlyActions: Set.unmodifiable(iconOnly));
+  }
+
+  static bool _fits(
+    double maxWidth,
+    List<_FilesToolbarAction> actions,
+    Set<_FilesToolbarAction> iconOnly,
+    PbFilesToolbarTrailingAction trailingAction,
+  ) {
+    final actionWidth = actions.fold<double>(
+      0,
+      (sum, action) =>
+          sum +
+          (iconOnly.contains(action)
+              ? _iconButtonWidth
+              : action == _FilesToolbarAction.trailing
+              ? trailingAction.width
+              : _fullWidths[action]!),
+    );
+    final actionGaps = math.max(0, actions.length - 1) * _actionGap;
+    return actionWidth + actionGaps + _filterGap + _minimumFilterWidth <= maxWidth;
   }
 }
 
@@ -437,18 +598,24 @@ class _FilesBreadcrumbSeparator extends StatelessWidget {
 
 class _FilesCreateActions extends StatefulWidget {
   const _FilesCreateActions({
-    required this.iconActions,
+    required this.combineCreateActions,
+    required this.iconOnlyActions,
     required this.fullWidth,
     required this.onCreateFolder,
     required this.onCreateTextFile,
     required this.onUpload,
+    this.onAskCurrentFolder,
+    this.trailingAction,
   });
 
-  final bool iconActions;
+  final bool combineCreateActions;
+  final Set<_FilesToolbarAction> iconOnlyActions;
   final bool fullWidth;
   final VoidCallback onCreateFolder;
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
+  final VoidCallback? onAskCurrentFolder;
+  final PbFilesToolbarTrailingAction? trailingAction;
 
   @override
   State<_FilesCreateActions> createState() => _FilesCreateActionsState();
@@ -456,6 +623,10 @@ class _FilesCreateActions extends StatefulWidget {
 
 class _FilesCreateActionsState extends State<_FilesCreateActions> {
   bool _createOpen = false;
+
+  bool _iconOnly(_FilesToolbarAction action) {
+    return widget.iconOnlyActions.contains(action);
+  }
 
   void _closeCreateMenu() {
     if (_createOpen) {
@@ -465,38 +636,54 @@ class _FilesCreateActionsState extends State<_FilesCreateActions> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.fullWidth) {
+    if (!widget.combineCreateActions) {
+      final createFolderIconOnly = _iconOnly(_FilesToolbarAction.createFolder);
+      final createTextFileIconOnly = _iconOnly(_FilesToolbarAction.createTextFile);
+      final uploadIconOnly = _iconOnly(_FilesToolbarAction.upload);
+      final askAgentIconOnly = _iconOnly(_FilesToolbarAction.askAgent);
+      final trailingAction = widget.trailingAction;
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           _FilesToolbarButton(
             label: 'New folder',
             iconAssetName: 'folder-plus',
-            iconOnly: widget.iconActions,
-            width: widget.iconActions ? 48 : 148,
-            contentOffset: widget.iconActions ? Offset.zero : const Offset(-2, 0),
+            iconOnly: createFolderIconOnly,
+            width: createFolderIconOnly ? 48 : 148,
+            contentOffset: createFolderIconOnly ? Offset.zero : const Offset(-2, 0),
             onPressed: widget.onCreateFolder,
           ),
           const SizedBox(width: 10),
           _FilesToolbarButton(
             label: 'New text file',
             iconAssetName: 'file-plus-corner',
-            iconOnly: widget.iconActions,
-            width: widget.iconActions ? 48 : 164,
-            contentOffset: widget.iconActions ? Offset.zero : const Offset(-2, 0),
+            iconOnly: createTextFileIconOnly,
+            width: createTextFileIconOnly ? 48 : 164,
+            contentOffset: createTextFileIconOnly ? Offset.zero : const Offset(-2, 0),
             onPressed: widget.onCreateTextFile,
           ),
           const SizedBox(width: 10),
           _FilesToolbarButton(
             label: 'Upload',
             iconAssetName: 'arrow-up-from-line',
-            iconOnly: widget.iconActions,
-            width: widget.iconActions ? 48 : 132,
+            iconOnly: uploadIconOnly,
+            width: uploadIconOnly ? 48 : 132,
             onPressed: widget.onUpload,
           ),
+          const SizedBox(width: 10),
+          _FilesToolbarButton(
+            label: 'Ask agent',
+            iconAssetName: 'message-square-plus',
+            iconOnly: askAgentIconOnly,
+            width: askAgentIconOnly ? 48 : 148,
+            onPressed: widget.onAskCurrentFolder,
+          ),
+          if (trailingAction != null) ...[const SizedBox(width: 10), _buildTrailingAction(trailingAction, fullWidth: false)],
         ],
       );
     }
+
+    final createIconOnly = _iconOnly(_FilesToolbarAction.create);
 
     final createButton = PbMenuAnchor(
       placement: PbMenuAnchorPlacement.bottomLeft,
@@ -533,30 +720,65 @@ class _FilesCreateActionsState extends State<_FilesCreateActions> {
       child: _FilesToolbarButton(
         label: 'Create',
         iconAssetName: 'plus',
-        iconOnly: widget.iconActions,
+        iconOnly: createIconOnly,
         fullWidth: widget.fullWidth,
-        width: widget.fullWidth ? null : (widget.iconActions ? 48 : 132),
-        contentOffset: widget.iconActions ? Offset.zero : const Offset(-3, 0),
+        width: widget.fullWidth ? null : (createIconOnly ? 48 : 132),
+        contentOffset: createIconOnly ? Offset.zero : const Offset(-3, 0),
         selected: _createOpen,
         onPressed: () => setState(() => _createOpen = !_createOpen),
       ),
     );
+    final uploadIconOnly = _iconOnly(_FilesToolbarAction.upload);
     final uploadButton = _FilesToolbarButton(
       label: 'Upload',
       iconAssetName: 'arrow-up-from-line',
-      iconOnly: widget.iconActions,
+      iconOnly: uploadIconOnly,
       fullWidth: widget.fullWidth,
-      width: widget.fullWidth ? null : (widget.iconActions ? 48 : 132),
+      width: widget.fullWidth ? null : (uploadIconOnly ? 48 : 132),
       onPressed: widget.onUpload,
     );
+    final askAgentIconOnly = _iconOnly(_FilesToolbarAction.askAgent);
+    final askAgentButton = _FilesToolbarButton(
+      label: 'Ask agent',
+      iconAssetName: 'message-square-plus',
+      iconOnly: askAgentIconOnly,
+      fullWidth: widget.fullWidth,
+      width: widget.fullWidth ? null : (askAgentIconOnly ? 48 : 148),
+      onPressed: widget.onAskCurrentFolder,
+    );
+
+    final buttons = <Widget>[
+      createButton,
+      uploadButton,
+      askAgentButton,
+      if (widget.trailingAction case final trailingAction?) _buildTrailingAction(trailingAction, fullWidth: widget.fullWidth),
+    ];
 
     return Row(
       mainAxisSize: MainAxisSize.max,
       children: [
-        Expanded(child: createButton),
-        const SizedBox(width: 10),
-        Expanded(child: uploadButton),
+        for (var index = 0; index < buttons.length; index++) ...[
+          if (index > 0) const SizedBox(width: 10),
+          if (widget.fullWidth) Expanded(child: buttons[index]) else buttons[index],
+        ],
       ],
+    );
+  }
+
+  Widget _buildTrailingAction(PbFilesToolbarTrailingAction action, {required bool fullWidth}) {
+    final iconOnly = _iconOnly(_FilesToolbarAction.trailing);
+    return _FilesToolbarButton(
+      label: action.label,
+      iconAssetName: action.iconAssetName,
+      iconOnly: iconOnly,
+      fullWidth: fullWidth,
+      width: fullWidth ? null : (iconOnly ? 48 : action.width),
+      backgroundColor: action.backgroundColor,
+      pressedBackgroundColor: action.pressedBackgroundColor,
+      borderColor: action.borderColor,
+      pressedBorderColor: action.pressedBorderColor,
+      foregroundColor: action.foregroundColor,
+      onPressed: action.onPressed,
     );
   }
 }
@@ -569,6 +791,7 @@ class _FilesSelectionActions extends StatelessWidget {
     required this.onDownloadSelection,
     this.stretch = false,
     this.showCount = true,
+    this.iconOnly = false,
   });
 
   final int selectedCount;
@@ -577,6 +800,7 @@ class _FilesSelectionActions extends StatelessWidget {
   final VoidCallback onDownloadSelection;
   final bool stretch;
   final bool showCount;
+  final bool iconOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -590,13 +814,17 @@ class _FilesSelectionActions extends StatelessWidget {
     final clearButton = _FilesToolbarButton(
       label: 'Clear selection',
       iconAssetName: 'circle-x',
+      iconOnly: iconOnly,
       fullWidth: stretch,
+      width: iconOnly ? 48 : null,
       onPressed: onClearSelection,
     );
     final downloadButton = _FilesToolbarButton(
       label: 'Download',
       iconAssetName: 'arrow-down-to-line',
+      iconOnly: iconOnly,
       fullWidth: stretch,
+      width: iconOnly ? 48 : null,
       onPressed: onDownloadSelection,
     );
     final buttons = Row(
@@ -658,6 +886,11 @@ class _FilesToolbarButton extends StatefulWidget {
     this.contentOffset = Offset.zero,
     this.alert = false,
     this.selected = false,
+    this.backgroundColor,
+    this.pressedBackgroundColor,
+    this.borderColor,
+    this.pressedBorderColor,
+    this.foregroundColor,
     this.onPressed,
   });
 
@@ -669,6 +902,11 @@ class _FilesToolbarButton extends StatefulWidget {
   final Offset contentOffset;
   final bool alert;
   final bool selected;
+  final Color? backgroundColor;
+  final Color? pressedBackgroundColor;
+  final Color? borderColor;
+  final Color? pressedBorderColor;
+  final Color? foregroundColor;
   final VoidCallback? onPressed;
 
   @override
@@ -698,10 +936,20 @@ class _FilesToolbarButtonState extends State<_FilesToolbarButton> {
       iconSize: 18,
       iconGap: 8,
       contentOffset: widget.contentOffset,
+      backgroundColor: widget.backgroundColor,
+      pressedBackgroundColor: widget.pressedBackgroundColor,
+      borderColor: widget.borderColor,
+      pressedBorderColor: widget.pressedBorderColor,
+      foregroundColor: widget.foregroundColor,
       onPressed: widget.onPressed,
     );
 
-    return SizedBox(width: widget.width, child: button);
+    final sizedButton = SizedBox(width: widget.width, child: button);
+    if (!widget.iconOnly) {
+      return sizedButton;
+    }
+
+    return Tooltip(message: widget.label, child: sizedButton);
   }
 }
 

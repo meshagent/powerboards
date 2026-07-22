@@ -6,6 +6,8 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:meshagent/meshagent.dart' as meshagent_api;
 import 'package:path/path.dart' as p;
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -33,6 +35,8 @@ import 'package:meshagent_flutter_shadcn/viewers/file.dart';
 
 import 'package:powerboards/meshagent/archive_extract.dart';
 import 'package:powerboards/meshagent/archive_extract_toast.dart';
+import 'package:powerboards/meshagent/agent_config.dart';
+import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
@@ -40,7 +44,10 @@ import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
+import 'package:powerboards/meshagent/install_agent.dart';
+import 'package:powerboards/meshagent/meshagent.dart' as powerboards_meshagent;
 import 'package:powerboards/meshagent/path.dart';
+import 'package:powerboards/meshagent/route_service_match.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/meshagent/v1_file_preview_source.dart';
@@ -51,6 +58,8 @@ import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_tar
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_side_pane.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_upload_progress_popover.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_website_preview_document.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_website_preview_pane.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_files_page.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
@@ -96,9 +105,99 @@ const List<String> _fileSizeUnits = <String>['B', 'KB', 'MB', 'GB', 'TB'];
 const int _v1RecentlyOpenedFilesLimit = 7;
 const Duration _v1DeleteProcessingStep = Duration(milliseconds: 650);
 const Duration _v1SaveProcessingStep = Duration(milliseconds: 850);
+const Duration _v1LongActionToastDelay = Duration(milliseconds: 700);
 const Duration _v1BrowseHintToastDuration = Duration(days: 1);
-const Duration _downloadArchiveCleanupDelay = Duration(minutes: 5);
+const Duration _downloadArchiveCleanupDelay = Duration(seconds: 30);
 const Offset _uploadProgressPopoverOffset = Offset(20, -20);
+const String _webServerFolderName = powerboardsWebServerFolderName;
+const String _webServerServiceId = powerboardsWebServerServiceId;
+const String _webServerFolderIconAssetName = 'folder-code';
+const String _webServerUrlVariableName = 'url';
+const String _webServerPreviewQueryParameter = 'webserver_preview';
+const String _v1DownloadArchiveStagingFolder = '.powerboards-downloads';
+const Set<String> _websitePreviewIgnoredDirectoryNames = <String>{'.cache', '.git', '.npm', '.pnpm-store', 'node_modules'};
+const Set<String> _websitePreviewAppProjectFileNames = <String>{
+  'angular.json',
+  'astro.config.js',
+  'astro.config.mjs',
+  'next.config.js',
+  'next.config.mjs',
+  'package.json',
+  'remotion.config.js',
+  'remotion.config.mjs',
+  'vite.config.js',
+  'vite.config.mjs',
+};
+const Set<String> _websitePreviewAppProjectFolderNames = <String>{'node_modules', 'src'};
+
+typedef PowerboardsV1FilePromptRequested =
+    FutureOr<void> Function(
+      ChatFilePromptAction action,
+      String filePath, {
+      required bool isFolder,
+      required bool responsiveHandoff,
+      String? fileDisplayName,
+    });
+
+@visibleForTesting
+bool powerboardsV1IsCanonicalWebServerFolder({required bool usesDesktopV1FilesBrowser, required String fullPath, required bool isFolder}) {
+  return usesDesktopV1FilesBrowser && isFolder && PendingStorageDeletes.normalizePath(fullPath) == powerboardsWebServerFolderName;
+}
+
+@visibleForTesting
+Future<bool> powerboardsV1DeleteFolderIfPresent({required Future<bool> Function() exists, required Future<void> Function() delete}) async {
+  if (!await exists()) {
+    return false;
+  }
+
+  try {
+    await delete();
+    return true;
+  } catch (_) {
+    if (!await exists()) {
+      return false;
+    }
+    rethrow;
+  }
+}
+
+class _V1WebsitePreviewState {
+  const _V1WebsitePreviewState({required this.entryPath, this.previewHtml, this.previewUrl, required this.title})
+    : assert(previewHtml != null || previewUrl != null);
+
+  final String entryPath;
+  final String? previewHtml;
+  final Uri? previewUrl;
+  final String title;
+}
+
+@visibleForTesting
+bool powerboardsWebsitePreviewShouldUseRoute(Iterable<StorageEntry> entries) {
+  var appFileSignals = 0;
+  var hasAppFolderSignal = false;
+  for (final entry in entries) {
+    final normalizedName = entry.name.trim().toLowerCase();
+    if (normalizedName.isEmpty) {
+      continue;
+    }
+    if (entry.isFolder) {
+      hasAppFolderSignal = hasAppFolderSignal || _websitePreviewAppProjectFolderNames.contains(normalizedName);
+      continue;
+    }
+    if (_websitePreviewAppProjectFileNames.contains(normalizedName)) {
+      appFileSignals += 1;
+    }
+  }
+  return appFileSignals > 0 && hasAppFolderSignal;
+}
+
+@visibleForTesting
+Future<void> powerboardsRefreshFilesWebServerState({
+  Resource<List<ServiceSpec>>? services,
+  required Resource<List<meshagent_api.Route>> roomRoutes,
+}) async {
+  await Future.wait<void>([if (services != null) services.refresh(), roomRoutes.refresh()]);
+}
 
 class _V1FilesBrowseHintToastDescription extends StatelessWidget {
   const _V1FilesBrowseHintToastDescription();
@@ -632,6 +731,16 @@ String _archiveSafeStem(String value) {
 }
 
 @visibleForTesting
+bool powerboardsV1IsDownloadArchiveStagingPath(String path) {
+  final normalized = PendingStorageDeletes.normalizePath(path);
+  return normalized == _v1DownloadArchiveStagingFolder || normalized.startsWith('$_v1DownloadArchiveStagingFolder/');
+}
+
+String _v1DownloadArchiveStagingPath(String archiveFileName) {
+  return joinPaths(_v1DownloadArchiveStagingFolder, archiveFileName);
+}
+
+@visibleForTesting
 String powerboardsDownloadArchiveFileName({required String baseName, required int itemCount, required DateTime createdAt}) {
   final stem = _archiveSafeStem(baseName);
   final countSuffix = itemCount > 1 ? '-$itemCount-items' : '';
@@ -743,6 +852,18 @@ void powerboardsV1SaveFolderEntriesForTesting({
 @visibleForTesting
 void powerboardsV1ClearFolderEntriesSessionCache() {
   _v1FolderEntriesBySession.clear();
+}
+
+@visibleForTesting
+bool powerboardsV1LiveFolderEntriesMatchRoute({
+  required String routeFolder,
+  required String activeFolder,
+  required String? loadedFolderPath,
+}) {
+  final normalizedRouteFolder = PendingStorageDeletes.normalizePath(routeFolder);
+  final normalizedActiveFolder = PendingStorageDeletes.normalizePath(activeFolder);
+  final normalizedLoadedFolder = loadedFolderPath == null ? null : PendingStorageDeletes.normalizePath(loadedFolderPath);
+  return normalizedRouteFolder == normalizedActiveFolder && normalizedLoadedFolder == normalizedActiveFolder;
 }
 
 @visibleForTesting
@@ -986,11 +1107,13 @@ class FileManagerView extends StatefulWidget {
   final double desktopHeaderActionMinimumLeadingWidth;
   final double desktopHeaderActionReserve;
   final bool showDesktopSidetrayToggle;
+  final bool canInstallServices;
   final bool? v1RoomPanelCollapsed;
   final ValueChanged<bool>? onV1RoomPanelCollapsedChanged;
   final double? v1RoomPanelWidth;
   final ValueChanged<double>? onV1RoomPanelWidthChanged;
-  final FutureOr<void> Function(ChatFilePromptAction action, String filePath, {required bool responsiveHandoff})? onV1FilePromptRequested;
+  final PowerboardsV1FilePromptRequested? onV1FilePromptRequested;
+  final VoidCallback? onServiceChanged;
 
   const FileManagerView({
     super.key,
@@ -1006,11 +1129,13 @@ class FileManagerView extends StatefulWidget {
     this.desktopHeaderActionMinimumLeadingWidth = 0,
     this.desktopHeaderActionReserve = desktopPaneHeaderActionReserve,
     this.showDesktopSidetrayToggle = true,
+    this.canInstallServices = false,
     this.v1RoomPanelCollapsed,
     this.onV1RoomPanelCollapsedChanged,
     this.v1RoomPanelWidth,
     this.onV1RoomPanelWidthChanged,
     this.onV1FilePromptRequested,
+    this.onServiceChanged,
   });
 
   @override
@@ -1037,6 +1162,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   MeshDocument? _threadIndexDocument;
   String? _threadIndexPath;
   Map<String, String> _threadDisplayNamesByPath = const <String, String>{};
+  bool _installingWebServer = false;
 
   late StreamSubscription<RoomEvent> roomSub;
 
@@ -1057,6 +1183,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   bool _v1FilesKeyboardBrowseArmed = false;
   final ValueNotifier<bool> _v1FilesDropTargetActive = ValueNotifier(false);
   PbFilesItemData? _v1PreviewFile;
+  _V1WebsitePreviewState? _v1WebsitePreview;
   String? _v1PreviewDraftPath;
   String? _v1PreviewDraftText;
   List<PbFilesItemData> _v1RecentlyOpenedFiles = const <PbFilesItemData>[];
@@ -1064,9 +1191,11 @@ class _FileManagerViewState extends State<FileManagerView> {
   final Set<String> _v1ExtractingArchivePaths = <String>{};
   final Map<String, PbFilesItemData> _v1FileStateRowsById = <String, PbFilesItemData>{};
   final Map<String, Future<String>> _v1DownloadUrlFuturesByPath = <String, Future<String>>{};
+  String? _v1LoadedFolderPath;
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
   Timer? _v1PendingBrowseHintTimer;
+  final Map<String, DateTime> _v1DownloadUrlExpiresAtByPath = <String, DateTime>{};
 
   PendingStorageDeleteScope get _deleteScope => PendingStorageDeleteScope(projectId: widget.projectId, roomName: widget.client.roomName);
   bool get _effectiveV1FilesRoomPanelCollapsed => widget.v1RoomPanelCollapsed ?? _v1FilesRoomPanelCollapsed;
@@ -1137,6 +1266,11 @@ class _FileManagerViewState extends State<FileManagerView> {
           (target) =>
               _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _v1PathForItem(_v1PreviewFile!)),
         );
+    final closesWebsitePreview =
+        _v1WebsitePreview != null &&
+        targets.any(
+          (target) => _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _v1WebsitePreview!.entryPath),
+        );
     final closesOpenedFile =
         _openedFile != null &&
         targets.any((target) => _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _openedFile!));
@@ -1151,7 +1285,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final stateRowKeys = keys.toSet();
     final stateRowsChanged = stateRowKeys.any(_v1FileStateRowsById.containsKey);
 
-    if (closesPreviewFile || closesOpenedFile || recentFilesChanged || stateRowsChanged) {
+    if (closesPreviewFile || closesWebsitePreview || closesOpenedFile || recentFilesChanged || stateRowsChanged) {
       setState(() {
         if (stateRowsChanged) {
           _v1FileStateRowsById.removeWhere((key, _) => stateRowKeys.contains(key));
@@ -1161,7 +1295,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           _replaceV1RecentlyOpenedFiles(nextRecentlyOpenedFiles);
         }
 
-        if (closesPreviewFile || closesOpenedFile) {
+        if (closesPreviewFile || closesWebsitePreview || closesOpenedFile) {
           if (_v1PreviewDraftPath != null &&
               targets.any(
                 (target) => _v1DeleteCoversPath(deletePath: target.path, isFolder: target.isFolder, candidatePath: _v1PreviewDraftPath!),
@@ -1169,6 +1303,7 @@ class _FileManagerViewState extends State<FileManagerView> {
             _clearV1PreviewDraft();
           }
           _v1PreviewFile = null;
+          _v1WebsitePreview = null;
           _v1FilePreviewFullscreen = false;
           _v1FilesRoomPanelOverlayOpen = false;
           _v1RestoreRoomPanelOverlayOnPreviewClose = false;
@@ -1196,6 +1331,15 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   late final storageEntries = Resource<List<StorageEntry>>(() => _getChildren(_folderSig.value), source: _folderSig);
+  late final roomRoutes = Resource<List<meshagent_api.Route>>(() async {
+    final projectId = widget.projectId;
+    final roomName = widget.client.roomName?.trim();
+    if (projectId == null || roomName == null || roomName.isEmpty) {
+      return const <meshagent_api.Route>[];
+    }
+
+    return await powerboards_meshagent.getMeshagentClient().listRoomRoutes(projectId: projectId, roomName: roomName);
+  });
 
   List<StorageEntry> _storageEntriesSnapshot() {
     return storageEntries.state.when(
@@ -1294,6 +1438,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     _visibleSortedEntries.dispose();
 
     storageEntries.dispose();
+    roomRoutes.dispose();
     _sortSig.dispose();
     _selectedSig.dispose();
     _folderSig.dispose();
@@ -1319,6 +1464,48 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   void _saveV1FolderEntries(String folderPath, List<StorageEntry> entries) {
     _saveV1FolderEntriesForSession(projectId: widget.projectId, roomName: widget.client.roomName, folderPath: folderPath, entries: entries);
+  }
+
+  String _v1DownloadUrlCacheKey(String path) {
+    return path.split('/').where((segment) => segment.isNotEmpty).join('/');
+  }
+
+  bool _v1DownloadUrlCacheKeyMatchesPath(String key, String path) {
+    final normalizedPath = _v1DownloadUrlCacheKey(path);
+    if (normalizedPath.isEmpty) {
+      return true;
+    }
+
+    return key == normalizedPath || key.startsWith('$normalizedPath/');
+  }
+
+  void _clearV1DownloadUrlCacheForPath(String path) {
+    final normalizedPath = _v1DownloadUrlCacheKey(path);
+    if (normalizedPath.isEmpty) {
+      _v1DownloadUrlFuturesByPath.clear();
+      _v1DownloadUrlExpiresAtByPath.clear();
+      return;
+    }
+
+    _v1DownloadUrlFuturesByPath.removeWhere((key, _) => _v1DownloadUrlCacheKeyMatchesPath(key, normalizedPath));
+    _v1DownloadUrlExpiresAtByPath.removeWhere((key, _) => _v1DownloadUrlCacheKeyMatchesPath(key, normalizedPath));
+  }
+
+  void _moveV1DownloadUrlCache(String sourcePath, String destinationPath) {
+    final sourceKey = _v1DownloadUrlCacheKey(sourcePath);
+    final destinationKey = _v1DownloadUrlCacheKey(destinationPath);
+    if (sourceKey.isEmpty || destinationKey.isEmpty) {
+      _clearV1DownloadUrlCacheForPath(sourcePath);
+      _clearV1DownloadUrlCacheForPath(destinationPath);
+      return;
+    }
+
+    _v1DownloadUrlFuturesByPath.removeWhere((key, _) {
+      return _v1DownloadUrlCacheKeyMatchesPath(key, sourceKey) || _v1DownloadUrlCacheKeyMatchesPath(key, destinationKey);
+    });
+    _v1DownloadUrlExpiresAtByPath.removeWhere((key, _) {
+      return _v1DownloadUrlCacheKeyMatchesPath(key, sourceKey) || _v1DownloadUrlCacheKeyMatchesPath(key, destinationKey);
+    });
   }
 
   void _bindController(FileManagerViewController? controller) {
@@ -1368,9 +1555,12 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final folderChanged = _location.folder != next.folder;
     final openedFileChanged = _location.openedFile != next.openedFile;
+    final closesPreviewForFolder = next.openedFile == null && (folderChanged || openedFileChanged);
 
     if (folderChanged) {
       _folderSig.value = next.folder;
+      _v1LoadedFolderPath = null;
+      _v1WebsitePreview = null;
       _selectedSig.value = <String>{};
       _forceShowSelect = false;
       unawaited(_rebindThreadIndexDocument());
@@ -1385,6 +1575,15 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     setState(() {
+      if (closesPreviewForFolder) {
+        if (_v1PreviewFile != null) {
+          _clearV1PreviewDraftForItem(_v1PreviewFile);
+        }
+        _v1PreviewFile = null;
+        _v1FilePreviewFullscreen = false;
+        _v1FilesRoomPanelOverlayOpen = false;
+        _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      }
       if (openedFileChanged) {
         _tab = 'preview';
       }
@@ -1393,6 +1592,9 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
       _location = next;
     });
+    if (closesPreviewForFolder) {
+      setPreviewFilePreviewFullscreen(false);
+    }
   }
 
   void _onRoomEvent(RoomEvent event) {
@@ -1442,6 +1644,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onFileUpdated(String path) {
+    _clearV1DownloadUrlCacheForPath(path);
     final ready = storageEntries.state.asReady;
     if (ready == null) return; // ignore if loading/error
 
@@ -1479,6 +1682,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onFileDeleted(String path) {
+    _clearV1DownloadUrlCacheForPath(path);
     if (parentPath(path) != _folderSig.value) {
       return;
     }
@@ -1491,8 +1695,10 @@ class _FileManagerViewState extends State<FileManagerView> {
     next.removeWhere((e) => e.name == name);
     _v1FileStateRowsById.removeWhere((_, item) => _v1StateRowMatchesPath(item, path, isFolder: false));
     final previewFile = _v1PreviewFile;
-    if (previewFile != null && _v1PathForItem(previewFile) == path) {
+    final closesWebsitePreview = _v1WebsitePreview?.entryPath == path;
+    if ((previewFile != null && _v1PathForItem(previewFile) == path) || closesWebsitePreview) {
       _v1PreviewFile = null;
+      _v1WebsitePreview = null;
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelOverlayOpen = false;
       _v1RestoreRoomPanelOverlayOnPreviewClose = false;
@@ -1574,6 +1780,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _onFileMoved(String sourcePath, String destinationPath) {
+    _moveV1DownloadUrlCache(sourcePath, destinationPath);
     _removeV1RecentlyOpenedPath(sourcePath);
     _moveSelectedPaths(sourcePath, destinationPath);
     _moveOptimisticPaths(sourcePath, destinationPath);
@@ -1771,9 +1978,11 @@ class _FileManagerViewState extends State<FileManagerView> {
     final creatorInitials = _creatorInitialsForName(creator);
 
     if (entry.isFolder) {
+      final isWebsiteFolder = folder.isEmpty && entry.name == _webServerFolderName;
+      final presentAsWebServer = isWebsiteFolder && _hasInstalledWebServer;
       return PbFilesItemData(
         id: key,
-        title: entry.name,
+        title: presentAsWebServer ? _webServerDisplayLabel() : entry.name,
         type: PbAttachmentFileType.folder.defaultDisplayLabel,
         sizeLabel: sizeLabel,
         sizeSort: sizeSort,
@@ -1786,6 +1995,8 @@ class _FileManagerViewState extends State<FileManagerView> {
         folderPath: fullPath,
         fileType: PbAttachmentFileType.folder,
         kind: PbFilesItemKind.folder,
+        iconAssetNameOverride: presentAsWebServer ? _webServerFolderIconAssetName : null,
+        renameActionLabelOverride: presentAsWebServer ? 'Rename' : null,
       );
     }
 
@@ -1903,8 +2114,9 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  bool _v1EntryCanEnableFilter(StorageEntry entry) {
-    final path = _FilePathKey.pathForEntry(_folderSig.value, entry);
+  bool _v1EntryCanEnableFilter(StorageEntry entry, {String? folderPath}) {
+    final currentFolder = folderPath ?? _folderSig.value;
+    final path = _FilePathKey.pathForEntry(currentFolder, entry);
     if (widget.hideSystem && entry.name.startsWith('.')) {
       return false;
     }
@@ -1913,21 +2125,21 @@ class _FileManagerViewState extends State<FileManagerView> {
       return false;
     }
 
-    final key = _FilePathKey.keyForEntry(_folderSig.value, entry);
+    final key = _FilePathKey.keyForEntry(currentFolder, entry);
     return !_v1FileStateRowsById.containsKey(key);
   }
 
-  bool _v1FilterEnabled(List<StorageEntry> entries) {
-    return entries.any(_v1EntryCanEnableFilter);
+  bool _v1FilterEnabled(List<StorageEntry> entries, {String? folderPath}) {
+    return entries.any((entry) => _v1EntryCanEnableFilter(entry, folderPath: folderPath));
   }
 
-  void _clearV1FilterIfUnavailable(bool filterEnabled) {
+  void _clearV1FilterIfUnavailable(bool filterEnabled, {String? folderPath}) {
     if (filterEnabled || _v1FilterController.text.isEmpty) {
       return;
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _v1FilterEnabled(_storageEntriesSnapshot()) || _v1FilterController.text.isEmpty) {
+      if (!mounted || _v1FilterEnabled(_storageEntriesSnapshot(), folderPath: folderPath) || _v1FilterController.text.isEmpty) {
         return;
       }
 
@@ -1936,19 +2148,21 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  List<PbFilesItemData> _v1VisibleItems(List<StorageEntry> entries) {
+  List<PbFilesItemData> _v1VisibleItems(List<StorageEntry> entries, {String? folderPath}) {
+    final currentFolder = folderPath ?? _folderSig.value;
     final query = _v1FilterController.text.trim().toLowerCase();
     final pendingDeleteItemsForFolder = PendingStorageDeletes.entriesFor(
       _deleteScope,
-    ).where((pendingDelete) => parentPath(pendingDelete.path) == _folderSig.value).map(_v1ProcessingDeleteItem).toList();
+    ).where((pendingDelete) => parentPath(pendingDelete.path) == currentFolder).map(_v1ProcessingDeleteItem).toList();
     final pendingDeleteItems = pendingDeleteItemsForFolder.where((item) => query.isEmpty || item.filterText.contains(query)).toList();
-    final stateRowsForFolder = _v1FileStateRowsById.values.where((item) => item.parentPath == _folderSig.value).toList();
+    final stateRowsForFolder = _v1FileStateRowsById.values.where((item) => item.parentPath == currentFolder).toList();
     final stateRows = stateRowsForFolder.where((item) => query.isEmpty || item.filterText.contains(query)).toList();
     final replacementRowIds = {for (final item in pendingDeleteItemsForFolder) item.id, for (final item in stateRowsForFolder) item.id};
     final items = entries
         .where((entry) => !widget.hideSystem || !entry.name.startsWith('.'))
-        .where((entry) => !_isDeletePending(_FilePathKey.pathForEntry(_folderSig.value, entry), entry.isFolder))
-        .where((entry) => !replacementRowIds.contains(_FilePathKey.keyForEntry(_folderSig.value, entry)))
+        .where((entry) => !powerboardsV1IsDownloadArchiveStagingPath(_FilePathKey.pathForEntry(currentFolder, entry)))
+        .where((entry) => !_isDeletePending(_FilePathKey.pathForEntry(currentFolder, entry), entry.isFolder))
+        .where((entry) => !replacementRowIds.contains(_FilePathKey.keyForEntry(currentFolder, entry)))
         .map(_v1ItemForEntry)
         .where((item) => query.isEmpty || item.filterText.contains(query))
         .toList();
@@ -2156,6 +2370,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     setState(() {
       _discardV1PreviewDraftIfDifferent(item);
+      _v1WebsitePreview = null;
       _v1PreviewFile = item;
       _v1FilePreviewFullscreen = openFullscreen;
       _v1RestoreRoomPanelOverlayOnPreviewClose = restoreOverlayOnClose && (openOverlay || openFullscreen);
@@ -2196,6 +2411,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         _clearV1PreviewDraft();
       }
       _v1PreviewFile = null;
+      _v1WebsitePreview = null;
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelOverlayOpen = restoreRoomPanelOverlay;
       _v1RestoreRoomPanelOverlayOnPreviewClose = false;
@@ -2213,7 +2429,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final clearOpenedFileRoute = openedFile != null && !_usesAdaptiveMobileLayout(context) && powerboardsUsesDesktopUiPreview(context);
     final previewFile = _v1PreviewFile;
 
-    if (previewFile == null && !clearOpenedFileRoute) {
+    if (previewFile == null && _v1WebsitePreview == null && !clearOpenedFileRoute) {
       _clearV1KeyboardPreviewNavigation();
       return;
     }
@@ -2224,6 +2440,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         _clearV1PreviewDraft();
       }
       _v1PreviewFile = null;
+      _v1WebsitePreview = null;
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelOverlayOpen = false;
       _v1RestoreRoomPanelOverlayOnPreviewClose = false;
@@ -2279,6 +2496,7 @@ class _FileManagerViewState extends State<FileManagerView> {
         _tab = 'preview';
       }
       _v1PreviewFile = null;
+      _v1WebsitePreview = null;
       _v1FilePreviewFullscreen = false;
       _v1FilesRoomPanelCollapsed = true;
       _v1FilesRoomPanelOverlayOpen = false;
@@ -2442,7 +2660,27 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<String> _v1DownloadUrlForPath(String path) {
-    return _v1DownloadUrlFuturesByPath.putIfAbsent(path, () => widget.client.storage.downloadUrl(path));
+    final key = _v1DownloadUrlCacheKey(path);
+    final cached = _v1DownloadUrlFuturesByPath[key];
+    final expiresAt = _v1DownloadUrlExpiresAtByPath[key];
+    if (cached != null && expiresAt != null && expiresAt.isAfter(DateTime.now())) {
+      return cached;
+    }
+
+    _v1DownloadUrlFuturesByPath.remove(key);
+    _v1DownloadUrlExpiresAtByPath.remove(key);
+
+    late final Future<String> future;
+    future = widget.client.storage.downloadUrl(path).catchError((Object error, StackTrace stackTrace) {
+      if (identical(_v1DownloadUrlFuturesByPath[key], future)) {
+        _v1DownloadUrlFuturesByPath.remove(key);
+        _v1DownloadUrlExpiresAtByPath.remove(key);
+      }
+      return Future<String>.error(error, stackTrace);
+    });
+    _v1DownloadUrlFuturesByPath[key] = future;
+    _v1DownloadUrlExpiresAtByPath[key] = DateTime.now().add(powerboardsV1DownloadUrlCacheDuration);
+    return future;
   }
 
   Widget _v1StorageUrlPreview(PbFilesItemData item, String path, Widget Function(Uri url) builder) {
@@ -2664,8 +2902,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
   }
 
-  List<ChatFilePromptAction> _filePromptActionsForPath(String fullPath, {required bool isFolder}) {
-    if (isFolder || widget.services?.state.isReady != true) {
+  List<ChatFilePromptAction> _filePromptActionsForPath(String fullPath, {required bool isFolder, bool allowFolder = false}) {
+    if (isFolder && !allowFolder || widget.services?.state.isReady != true) {
       return const <ChatFilePromptAction>[];
     }
 
@@ -2674,11 +2912,11 @@ class _FileManagerViewState extends State<FileManagerView> {
       return actions;
     }
 
-    final fallback = _fallbackFilePromptAction();
+    final fallback = _fallbackFilePromptAction(isFolder: isFolder);
     return fallback == null ? const <ChatFilePromptAction>[] : [fallback];
   }
 
-  ChatFilePromptAction? _fallbackFilePromptAction() {
+  ChatFilePromptAction? _fallbackFilePromptAction({required bool isFolder}) {
     if (widget.services?.state.isReady != true) {
       return null;
     }
@@ -2696,7 +2934,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
       final agentName = rawAgentName.trim();
       if (agentName.isNotEmpty) {
-        return defaultChatFilePromptAction(agentName: agentName);
+        return isFolder ? defaultChatFolderPromptAction(agentName: agentName) : defaultChatFilePromptAction(agentName: agentName);
       }
     }
 
@@ -2708,21 +2946,21 @@ class _FileManagerViewState extends State<FileManagerView> {
 
       final agentName = ma.participantDisplayName(participant);
       if (agentName != null) {
-        return defaultChatFilePromptAction(agentName: agentName);
+        return isFolder ? defaultChatFolderPromptAction(agentName: agentName) : defaultChatFilePromptAction(agentName: agentName);
       }
     }
 
     return null;
   }
 
-  Future<void> _openManageAgentsForFilePrompt() async {
+  Future<void> _openManageAgentsForFilePrompt({required bool isFolder}) async {
     final projectId = widget.projectId?.trim();
     if (projectId == null || projectId.isEmpty) {
       if (mounted) {
         ShadToaster.of(context).show(
           powerboardsToast(
             title: "No chat agent available",
-            description: "Install a chat agent before asking about files.",
+            description: "Install a chat agent before asking about this ${isFolder ? 'folder' : 'file'}.",
             destructive: true,
           ),
         );
@@ -2746,22 +2984,33 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Future<void> _startDefaultFilePrompt(
     String fullPath, {
+    required bool isFolder,
     PbFilesItemData? recentlyOpenedItem,
     required bool cleanupSurfacesAfterHandoff,
+    String? fileDisplayName,
   }) async {
-    final action = _filePromptActionsForPath(fullPath, isFolder: false).firstOrNull;
+    final action = _filePromptActionsForPath(fullPath, isFolder: isFolder, allowFolder: true).firstOrNull;
     if (action == null) {
-      await _openManageAgentsForFilePrompt();
+      await _openManageAgentsForFilePrompt(isFolder: isFolder);
       return;
     }
 
     final callback = widget.onV1FilePromptRequested;
     if (callback != null) {
-      await callback(action, fullPath, responsiveHandoff: cleanupSurfacesAfterHandoff);
+      await callback(
+        action,
+        fullPath,
+        isFolder: isFolder,
+        responsiveHandoff: cleanupSurfacesAfterHandoff,
+        fileDisplayName: fileDisplayName,
+      );
       if (!mounted) {
         return;
       }
-      _finishV1FilePromptHandoff(recentlyOpenedItem: recentlyOpenedItem, cleanupSurfaces: cleanupSurfacesAfterHandoff);
+      _finishV1FilePromptHandoff(
+        recentlyOpenedItem: isFolder ? null : recentlyOpenedItem,
+        cleanupSurfaces: isFolder || cleanupSurfacesAfterHandoff,
+      );
       return;
     }
 
@@ -2910,6 +3159,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _removePath(String path, {isFolder = false}) {
+    _clearV1DownloadUrlCacheForPath(path);
     if (parentPath(path) != _folderSig.value) return;
 
     final entries = _currentFolderEntriesForMutation();
@@ -3036,6 +3286,19 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _openEntry(String path, bool isFolder) {
     _clearV1KeyboardPreviewNavigation();
 
+    if (isFolder && (_v1PreviewFile != null || _v1FilePreviewFullscreen || _v1FilesRoomPanelOverlayOpen)) {
+      setState(() {
+        if (_v1PreviewFile != null) {
+          _clearV1PreviewDraftForItem(_v1PreviewFile);
+        }
+        _v1PreviewFile = null;
+        _v1FilePreviewFullscreen = false;
+        _v1FilesRoomPanelOverlayOpen = false;
+        _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+      });
+      setPreviewFilePreviewFullscreen(false);
+    }
+
     final state = PathRouteMatch.of(context);
     final currentUri = state.uri;
 
@@ -3078,6 +3341,9 @@ class _FileManagerViewState extends State<FileManagerView> {
   Future<List<StorageEntry>> _getChildren(String folderPath) async {
     final entries = await widget.client.storage.list(folderPath);
     _saveV1FolderEntries(folderPath, entries);
+    if (_folderSig.value == folderPath) {
+      _v1LoadedFolderPath = folderPath;
+    }
     return entries;
   }
 
@@ -3298,7 +3564,8 @@ class _FileManagerViewState extends State<FileManagerView> {
       itemCount: items.length,
       createdAt: DateTime.now(),
     );
-    final archivePath = joinPaths(currentFolder, archiveFileName);
+    final archivePath = _v1DownloadArchiveStagingPath(archiveFileName);
+    final archiveContainerPath = p.posix.join('/data', archivePath);
     final toaster = ShadToaster.of(context);
 
     toaster.show(
@@ -3311,11 +3578,69 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     String? containerId;
     try {
+      await _ensureV1DownloadArchiveStagingFolder();
       containerId = await widget.client.containers.run(
         image: "docker.io/joshkeegan/zip:latest",
-        command: powerboardsDownloadArchiveCommand(archiveFileName: archiveFileName, itemNames: itemNames),
+        command: powerboardsDownloadArchiveCommand(archiveFileName: archiveContainerPath, itemNames: itemNames),
         mountPath: "/data",
         workingDir: "/data/$currentFolder",
+        private: true,
+      );
+
+      final returnCode = await widget.client.containers.waitForExit(containerId: containerId);
+      if (!mounted) {
+        return;
+      }
+
+      if (returnCode != 0) {
+        toaster.show(
+          powerboardsToast(
+            title: 'Download failed',
+            description: 'Couldn’t prepare the zip archive. (Error code: $returnCode)',
+            destructive: true,
+            duration: const Duration(seconds: 8),
+          ),
+        );
+        return;
+      }
+
+      await _downloadFile(archivePath, throwOnLaunchFailure: true);
+      if (!mounted) {
+        return;
+      }
+
+      toaster.show(powerboardsToast(title: 'Downloading', description: archiveFileName, duration: const Duration(seconds: 4)));
+      _scheduleDownloadArchiveCleanup(archivePath);
+    } catch (error) {
+      _showDownloadFailure(error);
+    } finally {
+      try {
+        if (containerId != null) {
+          await widget.client.containers.deleteContainer(containerId: containerId);
+        }
+      } catch (error) {
+        debugPrint("Failed to clean up download archive container: $error");
+      }
+    }
+  }
+
+  Future<void> _downloadV1WebsiteArchive() async {
+    final archiveBaseName = _webServerDisplayLabel();
+    final archiveFileName = powerboardsDownloadArchiveFileName(baseName: archiveBaseName, itemCount: 1, createdAt: DateTime.now());
+    final archivePath = _v1DownloadArchiveStagingPath(archiveFileName);
+    final archiveContainerPath = p.posix.join('/data', archivePath);
+    final toaster = ShadToaster.of(context);
+
+    toaster.show(powerboardsToast(title: 'Preparing download', description: 'Website as zip', duration: const Duration(seconds: 5)));
+
+    String? containerId;
+    try {
+      await _ensureV1DownloadArchiveStagingFolder();
+      containerId = await widget.client.containers.run(
+        image: "docker.io/joshkeegan/zip:latest",
+        command: powerboardsDownloadArchiveCommand(archiveFileName: archiveContainerPath, itemNames: const [_webServerFolderName]),
+        mountPath: "/data",
+        workingDir: "/data",
         private: true,
       );
 
@@ -3374,7 +3699,34 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
+  Future<void> _ensureV1DownloadArchiveStagingFolder() async {
+    if (await widget.client.storage.exists(_v1DownloadArchiveStagingFolder)) {
+      return;
+    }
+
+    await widget.client.storage.uploadStream(
+      joinPaths(_v1DownloadArchiveStagingFolder, placeholderFileName),
+      Stream<Uint8List>.value(Uint8List(0)),
+      overwrite: true,
+      size: 0,
+    );
+  }
+
   Future<void> _shareFile(String path) async {
+    final toaster = ShadToaster.of(context);
+    Timer? progressTimer;
+    if (_usesDesktopV1FilesBrowser()) {
+      progressTimer = Timer(_v1LongActionToastDelay, () {
+        if (!mounted || !_usesDesktopV1FilesBrowser()) {
+          return;
+        }
+
+        toaster.show(
+          powerboardsToast(title: 'Preparing share', description: _displayNameForPath(path), duration: const Duration(seconds: 4)),
+        );
+      });
+    }
+
     try {
       await shareRemoteStorageFile(context: context, client: widget.client, path: path);
     } catch (error) {
@@ -3382,7 +3734,9 @@ class _FileManagerViewState extends State<FileManagerView> {
         return;
       }
 
-      ShadToaster.of(context).show(powerboardsToast(title: 'Unable to share file', description: '$error', destructive: true));
+      toaster.show(powerboardsToast(title: 'Unable to share file', description: '$error', destructive: true));
+    } finally {
+      progressTimer?.cancel();
     }
   }
 
@@ -3451,6 +3805,43 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
     if (trimmed == '.' || trimmed == '..') {
       return 'Enter a valid name';
+    }
+    return null;
+  }
+
+  String? _webServerDomainSuffix() {
+    final currentValue = _webServerRouteDomain() ?? _webServerUrlValue();
+    if (currentValue == null || currentValue.isEmpty) {
+      final configuredDomains = powerboards_meshagent.MeshagentConfig.current?.domains ?? const <String>[];
+      return configuredDomains.firstWhereOrNull((domain) => domain.trim().isNotEmpty)?.trim();
+    }
+
+    return powerboardsWebServerDomainSuffix(currentValue, configuredDomains: powerboards_meshagent.MeshagentConfig.current?.domains);
+  }
+
+  String _webServerEditableSlug() {
+    final currentValue = _webServerRouteDomain() ?? _webServerUrlValue();
+    if (currentValue == null || currentValue.isEmpty) {
+      return _webServerFolderName;
+    }
+
+    return powerboardsWebServerSlugFromValue(currentValue, configuredDomains: powerboards_meshagent.MeshagentConfig.current?.domains);
+  }
+
+  String? _validateWebServerSlugInput(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return 'Name cannot be empty';
+    }
+    if (trimmed.contains('/') || trimmed.contains('\\')) {
+      return 'Enter a name, not a path';
+    }
+    if (trimmed.contains('.')) {
+      return 'Enter only the name before the domain';
+    }
+    final normalized = trimmed.toLowerCase();
+    if (!RegExp(r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$').hasMatch(normalized)) {
+      return 'Use lowercase letters, numbers, or hyphens';
     }
     return null;
   }
@@ -3528,6 +3919,11 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   Future<void> _renamePath(String fullPath, {required bool isFolder}) async {
+    if (_isWebServerFolderPath(fullPath, isFolder: isFolder)) {
+      await _openWebServerUrlDialog();
+      return;
+    }
+
     final usesThreadDisplayNameRename = _usesThreadDisplayNameRename(fullPath, isFolder: isFolder);
     final currentName = p.basename(fullPath);
     final nextName = await _promptRenamePath(fullPath, isFolder: isFolder);
@@ -3562,8 +3958,28 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     final destinationPath = joinPaths(parentPath(fullPath), resolvedNextName);
     final toaster = ShadToaster.of(context);
+    final showV1Progress = _usesDesktopV1FilesBrowser();
+    var progressShown = false;
+    Timer? progressTimer;
 
     try {
+      if (showV1Progress) {
+        progressTimer = Timer(_v1LongActionToastDelay, () {
+          if (!mounted || !_usesDesktopV1FilesBrowser()) {
+            return;
+          }
+
+          progressShown = true;
+          toaster.show(
+            powerboardsToast(
+              title: isFolder ? 'Renaming folder' : 'Renaming file',
+              description: _displayNameForPath(fullPath),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        });
+      }
+
       if (await widget.client.storage.exists(destinationPath)) {
         if (!mounted) {
           return;
@@ -3586,6 +4002,15 @@ class _FileManagerViewState extends State<FileManagerView> {
         return;
       }
       _onFileMoved(fullPath, destinationPath);
+      if (progressShown) {
+        toaster.show(
+          powerboardsToast(
+            title: 'Renamed',
+            description: _renameConflictDisplayName(resolvedNextName, isFolder: isFolder),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -3594,6 +4019,8 @@ class _FileManagerViewState extends State<FileManagerView> {
       toaster.show(
         powerboardsToast(title: "Rename failed", description: "$error", destructive: true, duration: const Duration(seconds: 6)),
       );
+    } finally {
+      progressTimer?.cancel();
     }
   }
 
@@ -3739,7 +4166,661 @@ class _FileManagerViewState extends State<FileManagerView> {
     await _uploadFile(Stream.empty(), fileName, 0);
   }
 
+  Future<void> _createOrOpenWebServerFolder() async {
+    final placeholderPath = joinPaths(_webServerFolderName, placeholderFileName);
+    await _uploadFile(Stream.empty(), placeholderPath, 0);
+    if (!mounted) {
+      return;
+    }
+
+    _openEntry(_webServerFolderName, true);
+  }
+
+  bool get _canInstallWebServerFromFiles {
+    final roomName = widget.client.roomName?.trim();
+    return widget.canInstallServices && widget.projectId != null && roomName != null && roomName.isNotEmpty;
+  }
+
+  ServiceSpec? _currentWebServerService() {
+    if (widget.services?.state.isReady != true) {
+      return null;
+    }
+
+    final services = widget.services?.state.value;
+    if (services == null) {
+      return null;
+    }
+
+    return services.firstWhereOrNull((service) => service.metadata.annotations['meshagent.service.id'] == _webServerServiceId);
+  }
+
+  Map<String, String> _webServerTemplateValues(ServiceSpec service) {
+    final raw = service.metadata.annotations['meshagent.service.template.values'];
+    if (raw == null || raw.trim().isEmpty) {
+      return const <String, String>{};
+    }
+
+    try {
+      return (jsonDecode(raw) as Map).map((key, value) => MapEntry(key.toString(), value?.toString() ?? ''));
+    } catch (_) {
+      return const <String, String>{};
+    }
+  }
+
+  String? _webServerUrlValue() {
+    final service = _currentWebServerService();
+    if (service == null) {
+      return null;
+    }
+
+    final values = _webServerTemplateValues(service);
+    final url = values[_webServerUrlVariableName]?.trim();
+    if (url == null || url.isEmpty) {
+      return null;
+    }
+
+    return url;
+  }
+
+  String? _webServerRouteDomain() {
+    final service = _currentWebServerService();
+    final routes = roomRoutes.state.asReady?.value;
+    if (service == null || routes == null || routes.isEmpty) {
+      return null;
+    }
+
+    final matchedRoutes = routesForService(routes: routes, service: service);
+    final preferredDomain = _webServerUrlValue();
+    final matchingPreferredRoute = preferredDomain == null
+        ? null
+        : matchedRoutes.firstWhereOrNull((route) => route.domain.trim() == _webServerLabelFromUrlValue(preferredDomain));
+    final domain = (matchingPreferredRoute ?? matchedRoutes.firstOrNull)?.domain.trim();
+    if (domain == null || domain.isEmpty) {
+      return null;
+    }
+
+    return domain;
+  }
+
+  String _webServerLabelFromUrlValue(String url) {
+    return powerboardsWebServerDisplayHost(url, fallback: _webServerFolderName);
+  }
+
+  String _webServerDisplayLabel() {
+    final routeDomain = _webServerRouteDomain();
+    if (routeDomain != null && routeDomain.isNotEmpty) {
+      return routeDomain;
+    }
+
+    final url = _webServerUrlValue();
+    if (url == null || url.isEmpty) {
+      return _webServerFolderName;
+    }
+
+    return _webServerLabelFromUrlValue(url);
+  }
+
+  Uri? _webServerSiteUri() {
+    final routeDomain = _webServerRouteDomain();
+    if (routeDomain == null || routeDomain.isEmpty) {
+      return null;
+    }
+
+    final normalized = routeDomain.trim();
+    return Uri.tryParse(normalized.contains('://') ? normalized : 'https://$normalized');
+  }
+
+  bool _isWebServerFolderRoot(String path) {
+    return PendingStorageDeletes.normalizePath(path) == _webServerFolderName;
+  }
+
+  bool _isWebServerPreviewHtmlEntry(StorageEntry entry) {
+    if (entry.isFolder) {
+      return false;
+    }
+
+    final normalized = entry.name.trim().toLowerCase();
+    return normalized.endsWith('.html') || normalized.endsWith('.htm');
+  }
+
+  String? _webServerPreviewEntryPathFromEntries(Iterable<StorageEntry> entries) {
+    final htmlEntries = entries.where(_isWebServerPreviewHtmlEntry).toList(growable: false);
+    if (htmlEntries.isEmpty) {
+      return null;
+    }
+
+    final preferred = htmlEntries.firstWhereOrNull((entry) => entry.name.trim().toLowerCase() == 'index.html');
+    final entry = preferred ?? htmlEntries.sortedBy((entry) => entry.name.toLowerCase()).first;
+    return joinPaths(_webServerFolderName, entry.name);
+  }
+
+  Future<List<String>> _listWebsitePreviewFilePaths(String folderPath) async {
+    final entries = await widget.client.storage.list(folderPath);
+    final paths = <String>[];
+    for (final entry in entries) {
+      final entryPath = joinPaths(folderPath, entry.name);
+      if (entry.isFolder) {
+        if (_websitePreviewIgnoredDirectoryNames.contains(entry.name.trim().toLowerCase())) {
+          continue;
+        }
+        paths.addAll(await _listWebsitePreviewFilePaths(entryPath));
+        continue;
+      }
+
+      paths.add(entryPath);
+    }
+    return paths;
+  }
+
+  Future<String> _buildWebsitePreviewHtml({required String entryPath}) async {
+    final websiteRootPath = p.posix.split(entryPath).first;
+    final filePaths = await _listWebsitePreviewFilePaths(websiteRootPath);
+    final urlEntries = await Future.wait(filePaths.map((path) async => MapEntry(path, await widget.client.storage.downloadUrl(path))));
+    final textPaths = filePaths.where((path) {
+      final extension = p.extension(path).toLowerCase();
+      return extension == '.html' || extension == '.htm' || extension == '.css';
+    });
+    final textEntries = await Future.wait(
+      textPaths.map((path) async {
+        final file = await widget.client.storage.download(path);
+        return MapEntry(path, utf8.decode(file.data));
+      }),
+    );
+    final textContentByPath = Map<String, String>.fromEntries(textEntries);
+    final entryHtml = textContentByPath[entryPath];
+    if (entryHtml == null) {
+      throw StateError('Unable to load website preview entry: $entryPath');
+    }
+
+    return buildPbWebsitePreviewHtml(
+      entryPath: entryPath,
+      html: entryHtml,
+      textContentByPath: textContentByPath,
+      urlByPath: Map<String, String>.fromEntries(urlEntries),
+    );
+  }
+
+  Future<void> _openV1WebsitePreview({required Iterable<StorageEntry> entries}) async {
+    final previewPath = _webServerPreviewEntryPathFromEntries(entries);
+    if (previewPath == null) {
+      if (mounted) {
+        ShadToaster.of(context).show(
+          powerboardsToast(
+            title: 'Website preview unavailable',
+            description: 'Add an HTML file such as `index.html` to preview this website.',
+            destructive: true,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      final routePreviewUri = _webServerSiteUri();
+      final useRoutePreview = routePreviewUri != null && powerboardsWebsitePreviewShouldUseRoute(entries);
+      final previewHtml = useRoutePreview ? null : await _buildWebsitePreviewHtml(entryPath: previewPath);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        if (_v1PreviewFile != null) {
+          _clearV1PreviewDraftForItem(_v1PreviewFile);
+        }
+        _v1PreviewFile = null;
+        _v1WebsitePreview = _V1WebsitePreviewState(
+          entryPath: previewPath,
+          previewHtml: previewHtml,
+          previewUrl: useRoutePreview ? routePreviewUri : null,
+          title: _webServerDisplayLabel(),
+        );
+        _v1FilePreviewFullscreen = true;
+        _v1FilesRoomPanelCollapsed = false;
+        _v1FilesRoomPanelOverlayOpen = false;
+        _v1RestoreRoomPanelOverlayOnPreviewClose = false;
+        _clearV1KeyboardPreviewNavigationState();
+        _clearSelected();
+      });
+      setPreviewFilePreviewFullscreen(true);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ShadToaster.of(context).show(
+        powerboardsToast(
+          title: 'Website preview unavailable',
+          description: '$error',
+          destructive: true,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    }
+  }
+
+  void _openRouteRequestedWebServerPreviewIfNeeded({required Iterable<StorageEntry> entries}) {
+    final uri = PathRouteMatch.of(context).uri;
+    if (uri.queryParameters[_webServerPreviewQueryParameter] != '1') {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final currentUri = PathRouteMatch.of(context).uri;
+      if (currentUri.queryParameters[_webServerPreviewQueryParameter] != '1') {
+        return;
+      }
+      final updatedQueryParameters = Map<String, String>.from(currentUri.queryParameters)..remove(_webServerPreviewQueryParameter);
+      context.go(currentUri.replace(queryParameters: updatedQueryParameters).toString());
+      if (_webServerPreviewEntryPathFromEntries(entries) == null) {
+        return;
+      }
+      unawaited(_openV1WebsitePreview(entries: entries));
+    });
+  }
+
+  void _closeV1WebsitePreview() {
+    if (_v1WebsitePreview == null) {
+      return;
+    }
+
+    setState(() {
+      _v1WebsitePreview = null;
+      _v1FilePreviewFullscreen = false;
+    });
+    setPreviewFilePreviewFullscreen(false);
+  }
+
+  Future<void> _openV1WebsiteSite() async {
+    final siteUri = _webServerSiteUri();
+    if (siteUri == null) {
+      return;
+    }
+
+    final launched = await launchUrl(siteUri, webOnlyWindowName: '_blank');
+    if (launched || !mounted) {
+      return;
+    }
+
+    ShadToaster.of(context).show(
+      powerboardsToast(
+        title: 'Unable to open website',
+        description: 'The published website could not be opened in a new tab.',
+        destructive: true,
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  bool get _hasInstalledWebServer => _currentWebServerService() != null;
+
+  bool _isWebServerFolderPath(String fullPath, {required bool isFolder}) {
+    return powerboardsV1IsCanonicalWebServerFolder(
+      usesDesktopV1FilesBrowser: _usesDesktopV1FilesBrowser(),
+      fullPath: fullPath,
+      isFolder: isFolder,
+    );
+  }
+
+  bool _isWebServerInstalled() {
+    return _hasInstalledWebServer;
+  }
+
+  Future<ServiceDirectoryEntry?> _loadWebServerTemplate() async {
+    final serverUrl = powerboards_meshagent.MeshagentConfig.current?.serverUrl;
+    if (serverUrl == null) {
+      throw StateError("MeshagentConfig.current.serverUrl is not set");
+    }
+
+    final response = await http.get(serverUrl.resolve("/directory"));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception("Failed to load service directory: ${response.statusCode}");
+    }
+
+    final directory = await ServiceDirectoryPage.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return directory.templates.firstWhereOrNull(
+      (entry) => entry.parsed.metadata.annotations["meshagent.service.id"] == _webServerServiceId,
+    );
+  }
+
+  Future<void> _refreshWebServerState() async {
+    final services = widget.services;
+    await powerboardsRefreshFilesWebServerState(services: services, roomRoutes: roomRoutes);
+    widget.onServiceChanged?.call();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<String?> _promptRenameWebServerUrl() async {
+    final initialValue = _webServerEditableSlug();
+    final suffix = _webServerDomainSuffix();
+
+    return await showPowerboardsAlertDialog<String>(
+      context: context,
+      builder: (context) {
+        final theme = ShadTheme.of(context);
+        return ControlledForm(
+          builder: (context, controller, formKey) {
+            void submit() {
+              if (!formKey.currentState!.saveAndValidate()) {
+                return;
+              }
+
+              final formData = formKey.currentState!.value;
+              final name = (formData["name"] as String? ?? "").trim().toLowerCase();
+              Navigator.of(context).pop(name);
+            }
+
+            return PowerboardsShadDialog.compact(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              title: const Text('Rename website URL'),
+              actions: [
+                ShadButton.outline(onPressed: () => Navigator.of(context).pop(null), child: const Text('Cancel')),
+                ShadButton(onPressed: submit, child: const Text('Rename')),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 16,
+                  children: [
+                    PowerboardsAdaptiveInputFormField(
+                      id: "name",
+                      initialValue: initialValue,
+                      validator: _validateWebServerSlugInput,
+                      label: const Text("Name"),
+                      autofocus: true,
+                      trailing: suffix == null || suffix.isEmpty
+                          ? null
+                          : Container(
+                              color: theme.colorScheme.muted,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              child: Text('.$suffix', style: theme.textTheme.small.copyWith(color: theme.colorScheme.mutedForeground)),
+                            ),
+                      onSubmitted: (_) => submit(),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _webServerDomainForSlug(String slug) {
+    final currentValue = _webServerRouteDomain() ?? _webServerUrlValue();
+    return powerboardsWebServerDomainFromSlug(
+      slug,
+      currentValue: currentValue,
+      configuredDomains: powerboards_meshagent.MeshagentConfig.current?.domains,
+    );
+  }
+
+  Future<void> _renameWebServerUrl(String nextSlug) async {
+    final projectId = widget.projectId;
+    final roomName = widget.client.roomName?.trim();
+    final service = _currentWebServerService();
+    if (projectId == null || roomName == null || roomName.isEmpty || service?.id == null) {
+      return;
+    }
+
+    final toaster = ShadToaster.of(context);
+
+    try {
+      final prefilled = _webServerTemplateValues(service!);
+      final nextDomain = _webServerDomainForSlug(nextSlug);
+      final currentDomain = _webServerRouteDomain() ?? _webServerUrlValue();
+      if (currentDomain != null && _webServerLabelFromUrlValue(currentDomain) == _webServerLabelFromUrlValue(nextDomain)) {
+        return;
+      }
+
+      final existingTemplate = service.metadata.annotations['meshagent.service.template.yaml'];
+      String? template = existingTemplate;
+      ServiceTemplateSpec? manifest;
+
+      if (template != null && template.trim().isNotEmpty) {
+        manifest = await powerboards_meshagent.getMeshagentClient().renderTemplate(template: template, values: prefilled);
+      } else {
+        final directoryTemplate = await _loadWebServerTemplate();
+        template = directoryTemplate?.template;
+        manifest = directoryTemplate?.parsed;
+      }
+
+      if (!mounted || template == null || template.trim().isEmpty) {
+        return;
+      }
+
+      final nextValues = <String, String>{...prefilled, _webServerUrlVariableName: nextDomain};
+      final renderedTemplate =
+          manifest ?? await powerboards_meshagent.getMeshagentClient().renderTemplate(template: template, values: nextValues);
+      final inputVariables = renderedTemplate.variables ?? const <ServiceTemplateVariable>[];
+      final routeRequests = <({String domain, String port})>[];
+      for (final variable in inputVariables) {
+        if (variable.type != 'route') {
+          continue;
+        }
+
+        final domain = (nextValues[variable.name] ?? '').trim();
+        if (domain.isEmpty) {
+          continue;
+        }
+
+        final port = variable.annotations?['meshagent.route.port']?.trim();
+        if (port == null || port.isEmpty) {
+          throw RoomServerException('meshagent.route.port is missing for ${variable.name}');
+        }
+        routeRequests.add((domain: domain, port: port));
+      }
+
+      final client = powerboards_meshagent.getMeshagentClient();
+      final existingServiceRoutes = routesForService(
+        routes: await client.listRoomRoutes(projectId: projectId, roomName: roomName),
+        service: service,
+      );
+      final requestedRouteDomains = {for (final route in routeRequests) route.domain};
+
+      if (routeRequests.isNotEmpty) {
+        final room = await client.getRoom(projectId: projectId, name: roomName);
+        for (final route in routeRequests) {
+          try {
+            final existing = await client.getRoute(projectId: projectId, domain: route.domain);
+            if (existing.roomName != room.name) {
+              throw RoomServerException('Domain ${route.domain} has already been assigned to another room');
+            }
+            await client.updateRoute(
+              projectId: projectId,
+              domain: route.domain,
+              roomName: room.name,
+              port: route.port,
+              annotations: {'meshagent.service.id': _webServerServiceId},
+            );
+          } on meshagent_api.NotFoundException {
+            await client.createRoute(
+              projectId: projectId,
+              domain: route.domain,
+              roomName: room.name,
+              port: route.port,
+              annotations: {'meshagent.service.id': _webServerServiceId},
+            );
+          }
+        }
+      }
+
+      await client.updateRoomServiceFromTemplate(
+        projectId: projectId,
+        serviceId: service.id!,
+        template: template,
+        values: nextValues,
+        roomName: roomName,
+      );
+
+      for (final route in existingServiceRoutes) {
+        if (requestedRouteDomains.contains(route.domain)) {
+          continue;
+        }
+        await client.deleteRoute(projectId: projectId, domain: route.domain);
+      }
+
+      await _refreshWebServerState();
+    } catch (error) {
+      if (mounted) {
+        toaster.show(powerboardsToast(title: 'Unable to change website URL', description: '$error', destructive: true));
+      }
+    }
+  }
+
+  Future<void> _openWebServerUrlDialog() async {
+    final nextSlug = await _promptRenameWebServerUrl();
+    if (!mounted || nextSlug == null) {
+      return;
+    }
+
+    if (nextSlug == _webServerEditableSlug()) {
+      return;
+    }
+
+    await _renameWebServerUrl(nextSlug);
+  }
+
+  Future<void> _openWebServerInstallDialog() async {
+    if (!_canInstallWebServerFromFiles || _installingWebServer) {
+      return;
+    }
+
+    final projectId = widget.projectId!;
+    final roomName = widget.client.roomName!.trim();
+    final toaster = ShadToaster.of(context);
+    setState(() => _installingWebServer = true);
+    try {
+      final template = await _loadWebServerTemplate();
+      if (!mounted) {
+        return;
+      }
+
+      if (template == null) {
+        toaster.show(
+          powerboardsToast(
+            title: "Web server unavailable",
+            description: 'The Web server service template is not available right now.',
+            destructive: true,
+          ),
+        );
+        return;
+      }
+
+      final installed = await showPowerboardsFlowDialog<bool>(
+        context: context,
+        builder: (_) => InstallServiceDialog(
+          template: template.template,
+          projectId: projectId,
+          roomName: roomName,
+          onInstalled: (dialogContext, _, _, _) {
+            Navigator.of(dialogContext).pop(true);
+          },
+        ),
+      );
+
+      if (!mounted || installed != true) {
+        return;
+      }
+
+      await _refreshWebServerState();
+
+      await _createOrOpenWebServerFolder();
+      if (!mounted) {
+        return;
+      }
+
+      toaster.show(powerboardsToast(title: "Web server installed", description: 'The "website" folder is ready for files.'));
+    } catch (_) {
+      if (mounted) {
+        toaster.show(
+          powerboardsToast(
+            title: "Unable to install Web server",
+            description: 'Try again from Files or from Agents & Services.',
+            destructive: true,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _installingWebServer = false);
+      }
+    }
+  }
+
+  Future<void> _deleteActiveWebServerFolder(String folderPath) async {
+    final projectId = widget.projectId;
+    final roomName = widget.client.roomName?.trim();
+    if (projectId == null || roomName == null || roomName.isEmpty) {
+      throw StateError('Web server room context is not available.');
+    }
+
+    final client = powerboards_meshagent.getMeshagentClient();
+    await powerboardsUninstallV1WebServerResources(client: client, projectId: projectId, roomName: roomName);
+
+    try {
+      final deleted = await powerboardsV1DeleteFolderIfPresent(
+        exists: () => widget.client.storage.exists(folderPath),
+        delete: () => _deleteFolder(folderPath),
+      );
+      if (!deleted) {
+        _removePath(folderPath, isFolder: true);
+      }
+    } catch (error) {
+      await _refreshWebServerState();
+      throw StateError('The website service was removed, but the website folder could not be deleted: $error');
+    }
+
+    await _refreshWebServerState();
+  }
+
+  Future<bool> _confirmAndDeleteWebServerFolder(String folderPath) async {
+    final confirmDelete = await showPowerboardsAlertDialog<bool>(
+      context: context,
+      builder: (context) => PowerboardsShadDialog.compactAlert(
+        title: const Text('Delete website'),
+        description: const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text('This will uninstall the website service and permanently delete the website folder and all its contents.'),
+        ),
+        actions: [
+          ShadButton.outline(child: const Text('Cancel'), onPressed: () => Navigator.of(context).pop(false)),
+          ShadButton.destructive(child: const Text('Delete'), onPressed: () => Navigator.of(context).pop(true)),
+        ],
+      ),
+    );
+
+    if (confirmDelete != true) {
+      return false;
+    }
+
+    try {
+      await _deleteActiveWebServerFolder(folderPath);
+      return true;
+    } catch (error) {
+      if (!mounted) {
+        return false;
+      }
+
+      ShadToaster.of(context).show(
+        powerboardsToast(title: 'Unable to delete website', description: '$error', destructive: true, duration: const Duration(seconds: 6)),
+      );
+      return false;
+    }
+  }
+
   Future<bool> _confirmAndDelete(String fullPath, bool isFolder) async {
+    if (_isWebServerFolderPath(fullPath, isFolder: isFolder)) {
+      return _confirmAndDeleteWebServerFolder(fullPath);
+    }
+
     final name = fullPath.split('/').where((s) => s.isNotEmpty).last;
     final displayName = isFolder ? name : _displayNameForPath(fullPath);
     final bool? confirmDelete = await showPowerboardsAlertDialog<bool>(
@@ -3838,6 +4919,26 @@ class _FileManagerViewState extends State<FileManagerView> {
               if (v1ItemsById[key] == null || _v1ItemIsSelectable(v1ItemsById[key]!)) key,
           ]
         : selected.toList();
+    final webServerSelections = [
+      for (final key in toDelete)
+        if (_isWebServerFolderPath(_FilePathKey.pathFromKey(key), isFolder: _FilePathKey.isFolderKey(key))) key,
+    ];
+    if (webServerSelections.isNotEmpty) {
+      if (toDelete.length == 1) {
+        await _confirmAndDelete(_FilePathKey.pathFromKey(webServerSelections.first), true);
+        return;
+      }
+
+      toaster.show(
+        powerboardsToast(
+          title: 'Remove website separately',
+          description: 'Remove the website on its own before using batch delete.',
+          destructive: true,
+        ),
+      );
+      return;
+    }
+
     final pendingDeletes = <String, _PendingDeleteOperation>{};
     final batchStartedAt = DateTime.now();
 
@@ -4186,17 +5287,17 @@ class _FileManagerViewState extends State<FileManagerView> {
     );
   }
 
-  Widget _buildDesktopV1FilesBrowser(BuildContext context, {required List<StorageEntry> entries}) {
-    final items = _v1VisibleItems(entries);
+  Widget _buildDesktopV1FilesBrowser(BuildContext context, {required List<StorageEntry> entries, String? folderPath}) {
+    final currentFolder = folderPath ?? _folderSig.value;
+    final items = _v1VisibleItems(entries, folderPath: currentFolder);
     final selected = powerboardsV1SelectedVisibleItemIds(_selectedSig.value, items);
     final routePreviewFile = _v1PreviewFileFromRoute(items);
     final activePreviewFile = _v1PreviewFile ?? routePreviewFile;
     final previewFile = selected.isEmpty ? activePreviewFile : null;
     final recentlyOpenedFiles = _v1RecentlyOpenedFilesForSidePane;
-    final currentFolder = _folderSig.value;
-    final filterEnabled = _v1FilterEnabled(entries);
+    final filterEnabled = _v1FilterEnabled(entries, folderPath: currentFolder);
     final extractingArchiveIds = _v1ExtractingArchiveIds;
-    _clearV1FilterIfUnavailable(filterEnabled);
+    _clearV1FilterIfUnavailable(filterEnabled, folderPath: currentFolder);
 
     return IconTheme(
       data: IconThemeData(color: ShadTheme.of(context).colorScheme.primary),
@@ -4215,13 +5316,31 @@ class _FileManagerViewState extends State<FileManagerView> {
           builder: (context, constraints) {
             final usesStackedRoomPanel = constraints.maxWidth <= pbRoomPanelStackBreakpoint;
             final usesShellMobileLayout = constraints.maxWidth <= pbShellMobileBreakpoint;
-            final filePreviewFullscreen = _v1FilePreviewFullscreen || (usesShellMobileLayout && previewFile != null);
+            final websitePreview = _v1WebsitePreview;
+            final filePreviewFullscreen =
+                websitePreview != null || _v1FilePreviewFullscreen || (usesShellMobileLayout && previewFile != null);
             final responsivePanel = usesStackedRoomPanel && !filePreviewFullscreen;
             final responsiveMode = usesShellMobileLayout
                 ? PbFilesResponsiveMode.mobile
                 : responsivePanel
                 ? PbFilesResponsiveMode.overlay
                 : PbFilesResponsiveMode.docked;
+            final showWebServerPreview = _isWebServerFolderRoot(currentFolder);
+            final webServerPreviewEntryPath = showWebServerPreview ? _webServerPreviewEntryPathFromEntries(entries) : null;
+            final webServerPreviewReady = webServerPreviewEntryPath != null;
+            if (showWebServerPreview) {
+              _openRouteRequestedWebServerPreviewIfNeeded(entries: entries);
+            }
+            if (websitePreview != null) {
+              return PbWebsitePreviewPane(
+                title: websitePreview.title,
+                previewHtml: websitePreview.previewHtml,
+                previewUrl: websitePreview.previewUrl,
+                onOpenSite: _webServerSiteUri() == null ? null : () => unawaited(_openV1WebsiteSite()),
+                onDownloadZip: () => unawaited(_downloadV1WebsiteArchive()),
+                onClose: _closeV1WebsitePreview,
+              );
+            }
             final roomHasInstalledAgent = widget.services?.state.isReady == true && widget.services!.state.value!.isNotEmpty;
             final sidePaneAvailable =
                 previewFile != null ||
@@ -4290,8 +5409,16 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onDeleteSelection: _confirmAndDeleteSelected,
                   onDownloadSelection: _downloadSelected,
                   onCreateFolder: () => unawaited(_addFolder(currentFolder)),
+                  onInstallWebServer: currentFolder.isEmpty && _canInstallWebServerFromFiles && !_isWebServerInstalled()
+                      ? () => unawaited(_openWebServerInstallDialog())
+                      : null,
                   onCreateTextFile: _showNewTextFileDialog,
                   onUpload: () => unawaited(_addFiles(currentFolder)),
+                  onAskCurrentFolder: () =>
+                      unawaited(_startDefaultFilePrompt(currentFolder, isFolder: true, cleanupSurfacesAfterHandoff: usesStackedRoomPanel)),
+                  showWebServerPreview: showWebServerPreview,
+                  webServerPreviewActive: webServerPreviewReady,
+                  onPreviewWebServer: webServerPreviewReady ? () => unawaited(_openV1WebsitePreview(entries: entries)) : null,
                   onFilesDropped: (_) {},
                   onOpenRecentFiles: () {
                     if (!sidePaneAvailable) {
@@ -4335,8 +5462,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onAskAgent: (item) => unawaited(
                     _startDefaultFilePrompt(
                       _v1PathForItem(item),
+                      isFolder: _v1IsFolder(item),
                       recentlyOpenedItem: item,
                       cleanupSurfacesAfterHandoff: usesStackedRoomPanel,
+                      fileDisplayName: item.title,
                     ),
                   ),
                   onExtract: (item) => unawaited(_showV1ArchiveExtractDialog(item)),
@@ -4387,8 +5516,10 @@ class _FileManagerViewState extends State<FileManagerView> {
                 onAskAgent: (item) => unawaited(
                   _startDefaultFilePrompt(
                     _v1PathForItem(item),
+                    isFolder: false,
                     recentlyOpenedItem: item,
                     cleanupSurfacesAfterHandoff: usesStackedRoomPanel,
+                    fileDisplayName: item.title,
                   ),
                 ),
                 onExtractArchive: (item) => unawaited(_showV1ArchiveExtractDialog(item)),
@@ -4467,6 +5598,10 @@ class _FileManagerViewState extends State<FileManagerView> {
       return 'Files';
     }
 
+    if (_hasInstalledWebServer && PendingStorageDeletes.normalizePath(path) == _webServerFolderName) {
+      return _webServerDisplayLabel();
+    }
+
     return path.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? path;
   }
 
@@ -4491,7 +5626,11 @@ class _FileManagerViewState extends State<FileManagerView> {
           await _renamePath(fullPath, isFolder: isFolder);
           break;
         case _FileAction.download:
-          await _downloadFile(fullPath);
+          if (_usesDesktopV1FilesBrowser()) {
+            await _downloadV1FileWithToast(fullPath);
+          } else {
+            await _downloadFile(fullPath);
+          }
           break;
         case _FileAction.share:
           await _shareFile(fullPath);
@@ -4503,7 +5642,13 @@ class _FileManagerViewState extends State<FileManagerView> {
       final callback = widget.onV1FilePromptRequested;
       if (callback != null) {
         final responsiveHandoff = _usesResponsiveV1FilePromptHandoff();
-        await callback(action, fullPath, responsiveHandoff: responsiveHandoff);
+        await callback(
+          action,
+          fullPath,
+          isFolder: isFolder,
+          responsiveHandoff: responsiveHandoff,
+          fileDisplayName: isFolder ? _v1FolderLabelForPath(fullPath) : _displayFileName(p.basename(fullPath)),
+        );
         if (!mounted) {
           return;
         }
@@ -5106,7 +6251,11 @@ class _FileManagerViewState extends State<FileManagerView> {
               icon: const Icon(LucideIcons.download),
               decoration: powerboardsAdaptiveIconButtonDecoration(context),
               onPressed: () {
-                _downloadFile(_openedFile!);
+                if (_usesDesktopV1FilesBrowser()) {
+                  unawaited(_downloadV1FileWithToast(_openedFile!));
+                } else {
+                  _downloadFile(_openedFile!);
+                }
               },
             ),
           ),
@@ -5626,21 +6775,40 @@ class _FileManagerViewState extends State<FileManagerView> {
               final selected = _visibleSelected.value;
               final hasOpenedFile = _openedFile != null;
               final useDesktopV1FilesBrowser = !isAdaptiveMobile && powerboardsUsesDesktopUiPreview(context);
+              widget.services?.state.isReady;
+              roomRoutes.state.isReady;
               if (useDesktopV1FilesBrowser) {
                 return SizedBox.expand(
                   child: ValueListenableBuilder<int>(
                     valueListenable: PendingStorageDeletes.listenableFor(_deleteScope),
-                    builder: (context, _, _) => storageEntries.state.when(
-                      loading: () {
-                        final cachedEntries = _v1CachedFolderEntries(_folderSig.value);
-                        if (cachedEntries != null) {
-                          return _buildDesktopV1FilesBrowser(context, entries: cachedEntries);
-                        }
-                        return _buildDesktopV1FilesLoading();
-                      },
-                      error: (e, st) => _buildDesktopV1FilesLoadError(context, e),
-                      ready: (entries) => _buildDesktopV1FilesBrowser(context, entries: entries),
-                    ),
+                    builder: (context, _, _) {
+                      final routeFolder = _FileLocation.fromUri(PathRouteMatch.of(context).uri).folder;
+                      final cachedEntries = _v1CachedFolderEntries(routeFolder);
+                      final liveEntriesMatchRoute = powerboardsV1LiveFolderEntriesMatchRoute(
+                        routeFolder: routeFolder,
+                        activeFolder: _folderSig.value,
+                        loadedFolderPath: _v1LoadedFolderPath,
+                      );
+
+                      return storageEntries.state.when(
+                        loading: () {
+                          if (cachedEntries != null) {
+                            return _buildDesktopV1FilesBrowser(context, entries: cachedEntries, folderPath: routeFolder);
+                          }
+                          return _buildDesktopV1FilesLoading();
+                        },
+                        error: (e, st) => _buildDesktopV1FilesLoadError(context, e),
+                        ready: (entries) {
+                          if (liveEntriesMatchRoute) {
+                            return _buildDesktopV1FilesBrowser(context, entries: entries, folderPath: routeFolder);
+                          }
+                          if (cachedEntries != null) {
+                            return _buildDesktopV1FilesBrowser(context, entries: cachedEntries, folderPath: routeFolder);
+                          }
+                          return _buildDesktopV1FilesLoading();
+                        },
+                      );
+                    },
                   ),
                 );
               }

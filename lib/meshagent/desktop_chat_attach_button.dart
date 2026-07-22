@@ -15,7 +15,10 @@ import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_list.dart
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_option.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+
+const Duration _v1LongActionToastDelay = Duration(milliseconds: 700);
 
 double _desktopAttachDialogHeight(BoxConstraints constraints) {
   final maxHeight = constraints.maxHeight;
@@ -35,6 +38,16 @@ BoxConstraints? _desktopAttachDialogConstraints(BuildContext context, BoxConstra
   return BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height);
 }
 
+class PowerboardsV1AttachMenuActions {
+  const PowerboardsV1AttachMenuActions({required this.onUploadFile, required this.onAddFromRoom, required this.closeMenu});
+
+  final VoidCallback onUploadFile;
+  final VoidCallback? onAddFromRoom;
+  final VoidCallback closeMenu;
+}
+
+typedef PowerboardsV1AttachMenuPanelBuilder = Widget Function(BuildContext context, PowerboardsV1AttachMenuActions actions);
+
 class PowerboardsDesktopChatAttachButton extends StatefulWidget {
   const PowerboardsDesktopChatAttachButton({
     required this.controller,
@@ -46,6 +59,7 @@ class PowerboardsDesktopChatAttachButton extends StatefulWidget {
     this.showMcpConnectors = false,
     this.showMcpMenuItem = true,
     this.useV1Menu = false,
+    this.v1MenuPanelBuilder,
     this.triggerBuilder,
   });
 
@@ -57,6 +71,7 @@ class PowerboardsDesktopChatAttachButton extends StatefulWidget {
   final bool showMcpConnectors;
   final bool showMcpMenuItem;
   final bool useV1Menu;
+  final PowerboardsV1AttachMenuPanelBuilder? v1MenuPanelBuilder;
   final Widget Function(BuildContext context, VoidCallback onPressed)? triggerBuilder;
 
   @override
@@ -70,6 +85,11 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
   bool get _canShowMcpConnectors {
     final normalizedAgentName = widget.agentName?.trim();
     return widget.showMcpConnectors && normalizedAgentName != null && normalizedAgentName.isNotEmpty;
+  }
+
+  String _importFileDisplayName(String sourcePath) {
+    final segments = sourcePath.split('/').where((segment) => segment.isNotEmpty).toList();
+    return segments.isEmpty ? sourcePath : segments.last;
   }
 
   Future<String> _resolveImportedPath({required RoomClient destinationRoom, required String requestedPath}) async {
@@ -281,19 +301,60 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
       ),
     );
 
+    var importedCount = 0;
+    String? lastImportedDisplayName;
     try {
       if (selectedFiles == null || selectedFiles.isEmpty) {
         return;
       }
+      if (!mounted) {
+        return;
+      }
 
+      final showImportProgress = widget.useV1Menu && !identical(selectedRoomClient, destinationRoom);
+      final toaster = showImportProgress ? ShadToaster.maybeOf(context) : null;
+      Timer? progressTimer;
+      var progressShown = false;
       for (final filePath in selectedFiles) {
         if (identical(selectedRoomClient, destinationRoom)) {
           widget.controller.attachFile(filePath);
           continue;
         }
 
-        final importedPath = await _importFile(sourceRoom: selectedRoomClient, destinationRoom: destinationRoom, sourcePath: filePath);
-        widget.controller.attachFile(importedPath);
+        final importDisplayName = _importFileDisplayName(filePath);
+        progressTimer?.cancel();
+        progressTimer = Timer(_v1LongActionToastDelay, () {
+          if (!mounted) {
+            return;
+          }
+
+          progressShown = true;
+          toaster?.show(powerboardsToast(title: 'Importing file', description: importDisplayName, duration: const Duration(seconds: 4)));
+        });
+        try {
+          final importedPath = await _importFile(sourceRoom: selectedRoomClient, destinationRoom: destinationRoom, sourcePath: filePath);
+          widget.controller.attachFile(importedPath);
+          importedCount += 1;
+          lastImportedDisplayName = importDisplayName;
+        } finally {
+          progressTimer.cancel();
+        }
+      }
+
+      if (showImportProgress && progressShown && importedCount > 0 && mounted) {
+        toaster?.show(
+          powerboardsToast(
+            title: 'File${importedCount == 1 ? '' : 's'} attached',
+            description: importedCount == 1 ? lastImportedDisplayName : '$importedCount files imported',
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted && widget.useV1Menu) {
+        ShadToaster.maybeOf(context)?.show(
+          powerboardsToast(title: 'Unable to attach file', description: '$error', destructive: true, duration: const Duration(seconds: 6)),
+        );
       }
     } finally {
       if (!identical(selectedRoomClient, destinationRoom)) {
@@ -369,38 +430,47 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
   }
 
   Widget _buildV1AttachButton(BuildContext context) {
+    final menuActions = PowerboardsV1AttachMenuActions(
+      closeMenu: () => _setV1MenuOpen(false),
+      onUploadFile: () {
+        _setV1MenuOpen(false);
+        unawaited(_onSelectAttachment());
+      },
+      onAddFromRoom: widget.controller.room == null
+          ? null
+          : () {
+              _setV1MenuOpen(false);
+              unawaited(_onBrowseFiles());
+            },
+    );
+
     return PbMenuAnchor(
       placement: PbMenuAnchorPlacement.bottomLeft,
       gap: 10,
       preferAboveWhenOverflow: true,
       onDismiss: () => _setV1MenuOpen(false),
       panel: _v1MenuOpen
-          ? PbMenuCard(
-              width: 240,
-              child: PbMenuList(
-                children: <Widget>[
-                  PbMenuOption(
-                    title: 'Upload a file...',
-                    leadingIconAssetName: 'paperclip',
-                    singleLine: true,
-                    onPressed: () {
-                      _setV1MenuOpen(false);
-                      unawaited(_onSelectAttachment());
-                    },
+          ? widget.v1MenuPanelBuilder?.call(context, menuActions) ??
+                PbMenuCard(
+                  width: 240,
+                  child: PbMenuList(
+                    children: <Widget>[
+                      PbMenuOption(
+                        title: 'Upload a file...',
+                        leadingIconAssetName: 'paperclip',
+                        singleLine: true,
+                        onPressed: menuActions.onUploadFile,
+                      ),
+                      if (menuActions.onAddFromRoom != null)
+                        PbMenuOption(
+                          title: 'Add from room...',
+                          leadingIconAssetName: 'folder-plus',
+                          singleLine: true,
+                          onPressed: menuActions.onAddFromRoom,
+                        ),
+                    ],
                   ),
-                  if (widget.controller.room != null)
-                    PbMenuOption(
-                      title: 'Add from room...',
-                      leadingIconAssetName: 'folder-plus',
-                      singleLine: true,
-                      onPressed: () {
-                        _setV1MenuOpen(false);
-                        unawaited(_onBrowseFiles());
-                      },
-                    ),
-                ],
-              ),
-            )
+                )
           : null,
       child:
           widget.triggerBuilder?.call(context, () => _setV1MenuOpen(!_v1MenuOpen)) ??

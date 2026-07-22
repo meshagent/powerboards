@@ -10,6 +10,7 @@ import '../files/pb_files_header.dart';
 import '../files/pb_files_layout_values.dart';
 import '../files/pb_files_side_pane.dart';
 import '../files/pb_files_table.dart';
+import '../primitives/pb_empty_state.dart';
 import 'pb_room_panel.dart';
 import 'pb_room_panel_mount.dart';
 
@@ -200,7 +201,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
     });
   }
 
-  void _setCurrentPath(String path, {bool keepPreview = true}) {
+  void _setCurrentPath(String path) {
     setState(() {
       _currentPath = path;
       _selectedIds.clear();
@@ -208,9 +209,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
       _keyboardPreviewDirection = 0;
       _filesKeyboardBrowseArmed = false;
 
-      if (!keepPreview) {
-        _closePreview();
-      }
+      _closePreview();
     });
   }
 
@@ -278,7 +277,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
     }
 
     if (item.kind == PbFilesItemKind.folder) {
-      _setCurrentPath(item.folderPath, keepPreview: true);
+      _setCurrentPath(item.folderPath);
       return;
     }
 
@@ -812,7 +811,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
           keyboardPreviewFileId: _keyboardPreviewFileId,
           keyboardPreviewDirection: _keyboardPreviewDirection,
           savingIds: _savingFileIds,
-          onBreadcrumbPressed: (path) => _setCurrentPath(path, keepPreview: true),
+          onBreadcrumbPressed: _setCurrentPath,
           onSortChanged: _setSort,
           onFilterChanged: (_) => setState(() {}),
           onToggleSelection: _toggleRowSelection,
@@ -827,7 +826,7 @@ class _PbFilesPageState extends State<PbFilesPage> {
           onOpenRecentFiles: _openRoomPanelOverlay,
           onRoomPanelToggle: () => _toggleRoomPanel(responsivePanel: responsivePanel, responsiveMode: responsiveMode),
           onItemPressed: (item) => _openItem(item, responsivePanel: responsivePanel, mobilePanel: mobilePanel),
-          onBrowseFolder: (item) => _setCurrentPath(item.folderPath, keepPreview: true),
+          onBrowseFolder: (item) => _setCurrentPath(item.folderPath),
           onRemoveProcessingRow: _removeProcessingRow,
           onLinkedThreadPressed: _openLinkedThread,
           onExtract: _showMockArchiveExtractDialog,
@@ -948,8 +947,14 @@ class PbFilesMainPanel extends StatelessWidget {
     required this.onDeleteSelection,
     required this.onDownloadSelection,
     required this.onCreateFolder,
+    this.onInstallWebServer,
     required this.onCreateTextFile,
     required this.onUpload,
+    this.onAskCurrentFolder,
+    this.toolbarTrailingAction,
+    this.showWebServerPreview = false,
+    this.webServerPreviewActive = false,
+    this.onPreviewWebServer,
     required this.onFilesDropped,
     required this.onOpenRecentFiles,
     required this.onRoomPanelToggle,
@@ -992,8 +997,14 @@ class PbFilesMainPanel extends StatelessWidget {
   final VoidCallback onDeleteSelection;
   final VoidCallback onDownloadSelection;
   final VoidCallback onCreateFolder;
+  final VoidCallback? onInstallWebServer;
   final VoidCallback onCreateTextFile;
   final VoidCallback onUpload;
+  final VoidCallback? onAskCurrentFolder;
+  final PbFilesToolbarTrailingAction? toolbarTrailingAction;
+  final bool showWebServerPreview;
+  final bool webServerPreviewActive;
+  final VoidCallback? onPreviewWebServer;
   final ValueChanged<List<String>> onFilesDropped;
   final VoidCallback onOpenRecentFiles;
   final VoidCallback onRoomPanelToggle;
@@ -1012,12 +1023,15 @@ class PbFilesMainPanel extends StatelessWidget {
 
   bool get _hasSelection => selectedIds.isNotEmpty;
 
+  bool get _isWebsiteRoot => currentPath.trim().replaceAll(RegExp(r'^/+|/+$'), '') == 'website';
+
   @override
   Widget build(BuildContext context) {
     final sidePadding = responsiveMode == PbFilesResponsiveMode.docked
         ? const PbFilesPanelPadding(left: 30, right: 28)
         : const PbFilesPanelPadding(left: 20, right: 20);
     final dropTargetTop = responsiveMode == PbFilesResponsiveMode.mobile ? 202.0 : 142.0;
+    final showWebsiteLandingEmptyState = (showWebServerPreview || _isWebsiteRoot) && !hasActiveFilter && items.isEmpty;
 
     final panel = Container(
       color: PbColors.surfacePanelWash,
@@ -1037,45 +1051,55 @@ class PbFilesMainPanel extends StatelessWidget {
           PbFilesToolbar(
             hasSelection: _hasSelection,
             selectedCount: selectedIds.length,
+            currentPath: currentPath,
             filterController: filterController,
             filterEnabled: filterEnabled,
             responsiveMode: responsiveMode,
             padding: sidePadding,
             onFilterChanged: onFilterChanged,
             onCreateFolder: onCreateFolder,
+            onInstallWebServer: onInstallWebServer,
             onCreateTextFile: onCreateTextFile,
             onUpload: onUpload,
+            onAskCurrentFolder: onAskCurrentFolder,
+            trailingAction: toolbarTrailingAction,
+            showWebServerPreview: showWebServerPreview,
+            webServerPreviewActive: webServerPreviewActive,
+            onPreviewWebServer: onPreviewWebServer,
             onClearSelection: onClearSelection,
             onDeleteSelection: onDeleteSelection,
             onDownloadSelection: onDownloadSelection,
           ),
           Expanded(
-            child: PbFilesTable(
-              padding: sidePadding,
-              items: items,
-              selectedIds: selectedIds,
-              sortKey: sortKey,
-              sortDirectionDescending: sortDirectionDescending,
-              previewFileId: previewFileId,
-              keyboardPreviewFileId: keyboardPreviewFileId,
-              keyboardPreviewDirection: keyboardPreviewDirection,
-              savingIds: savingIds,
-              extractingArchiveIds: extractingArchiveIds,
-              hasActiveFilter: hasActiveFilter,
-              onSortChanged: onSortChanged,
-              onToggleSelection: onToggleSelection,
-              onToggleVisibleSelection: onToggleVisibleSelection,
-              onItemPressed: onItemPressed,
-              onBrowseFolder: onBrowseFolder,
-              onRemoveProcessingRow: onRemoveProcessingRow,
-              onLinkedThreadPressed: onLinkedThreadPressed,
-              onAskAgent: onAskAgent,
-              onShare: onShare,
-              onExtract: onExtract,
-              onDownload: onDownload,
-              onRename: onRename,
-              onDelete: onDelete,
-            ),
+            child: showWebsiteLandingEmptyState
+                ? const _PbWebsiteLandingEmptyState()
+                : PbFilesTable(
+                    key: ValueKey('files-table:$currentPath'),
+                    padding: sidePadding,
+                    items: items,
+                    selectedIds: selectedIds,
+                    sortKey: sortKey,
+                    sortDirectionDescending: sortDirectionDescending,
+                    previewFileId: previewFileId,
+                    keyboardPreviewFileId: keyboardPreviewFileId,
+                    keyboardPreviewDirection: keyboardPreviewDirection,
+                    savingIds: savingIds,
+                    extractingArchiveIds: extractingArchiveIds,
+                    hasActiveFilter: hasActiveFilter,
+                    onSortChanged: onSortChanged,
+                    onToggleSelection: onToggleSelection,
+                    onToggleVisibleSelection: onToggleVisibleSelection,
+                    onItemPressed: onItemPressed,
+                    onBrowseFolder: onBrowseFolder,
+                    onRemoveProcessingRow: onRemoveProcessingRow,
+                    onLinkedThreadPressed: onLinkedThreadPressed,
+                    onAskAgent: onAskAgent,
+                    onShare: onShare,
+                    onExtract: onExtract,
+                    onDownload: onDownload,
+                    onRename: onRename,
+                    onDelete: onDelete,
+                  ),
           ),
         ],
       ),
@@ -1086,6 +1110,28 @@ class PbFilesMainPanel extends StatelessWidget {
     }
 
     return PbFilesDropTargetLayer(dropTargetTop: dropTargetTop, padding: sidePadding, onFilesDropped: onFilesDropped, child: panel);
+  }
+}
+
+class _PbWebsiteLandingEmptyState extends StatelessWidget {
+  const _PbWebsiteLandingEmptyState();
+
+  static const _title = 'Add files here';
+  static const _subtitle = 'No files here yet. Add code or docs to edit and preview as a site or app.';
+  static const _iconAssetName = 'website-empty-state';
+  static const _topFactor = 0.334;
+  static const _topOffset = -142.0 * (1 - _topFactor);
+
+  @override
+  Widget build(BuildContext context) {
+    return const PbEmptyState(
+      key: ValueKey('website-root-empty-state'),
+      iconAssetName: _iconAssetName,
+      title: _title,
+      subtitle: _subtitle,
+      topFactor: _topFactor,
+      topOffset: _topOffset,
+    );
   }
 }
 

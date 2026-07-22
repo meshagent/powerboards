@@ -7,6 +7,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/powerboards_router/powerboards_router.dart';
+import 'package:powerboards/settings/ui_mode.dart';
 
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -15,6 +16,7 @@ import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/avatar_menu_button.dart';
 import 'package:powerboards/ui/hover_builder.dart';
 import 'package:powerboards/ui/pane_header_action_scope.dart';
+import 'package:powerboards/ui/powerboards_toasts.dart';
 
 import 'rename_room_dialog.dart';
 import 'delete_room_dialog.dart';
@@ -329,6 +331,20 @@ class _RoomTileState extends State<_RoomTile> {
       height: 40.0,
       leading: Icon(LucideIcons.trash, size: 16),
       onPressed: () async {
+        final showDeleteToast = powerboardsUsesDesktopUiPreview(context);
+        final toaster = showDeleteToast ? ShadToaster.maybeOf(context) : null;
+        final deletingToast = showDeleteToast
+            ? powerboardsRoomLifecycleToast(
+                context,
+                title: 'Deleting room',
+                description: name,
+                duration: const Duration(minutes: 2),
+                showProgress: true,
+              )
+            : null;
+        final deletedToast = showDeleteToast
+            ? powerboardsRoomLifecycleToast(context, title: 'Room deleted', description: name, duration: const Duration(seconds: 4))
+            : null;
         final confirmed =
             await showDeleteRoomDialog(
               context,
@@ -353,18 +369,36 @@ class _RoomTileState extends State<_RoomTile> {
           }
 
           try {
+            if (deletingToast != null) {
+              toaster?.show(deletingToast);
+            }
+
             final client = getMeshagentClient();
             await client.deleteRoom(projectId: widget.projectId, roomId: widget.room.id);
             deleted = true;
+            if (deletedToast != null) {
+              toaster?.show(deletedToast);
+            }
 
             widget.onSave();
 
-            if (widget.selected && context.mounted) {
+            if (widget.selected && mounted) {
               clearLastSelectedRoom(widget.projectId);
               if (isMobile) {
                 requestStayOnMobileRoomList(widget.projectId);
               }
-              context.go('/p/${fromUUID(widget.projectId)}');
+              this.context.go('/p/${fromUUID(widget.projectId)}');
+            }
+          } catch (error) {
+            if (showDeleteToast && mounted) {
+              toaster?.show(
+                powerboardsToast(
+                  title: 'Unable to delete room',
+                  description: '$error',
+                  destructive: true,
+                  duration: const Duration(seconds: 6),
+                ),
+              );
             }
           } finally {
             widget.onDeleteFinished?.call(widget.room, deleted);
