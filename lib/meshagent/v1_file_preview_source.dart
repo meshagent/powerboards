@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 import 'package:pdfrx/pdfrx.dart';
 
 import 'package:powerboards/meshagent/document_pane.dart';
+import 'package:powerboards/meshagent/lapce_code_preview_editor.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_avatar.dart';
@@ -324,7 +325,7 @@ Widget? powerboardsV1PreviewContentChild({
   }
 
   if (kind == FileKind.custom) {
-    return fileViewer(room, path);
+    return fileViewer(room, path, codeEditorBuilder: buildPowerboardsLapceCodePreviewEditor);
   }
 
   if (powerboardsV1IsNativeDocumentPath(classificationPath)) {
@@ -396,7 +397,7 @@ Widget? powerboardsV1PreviewContentChild({
     case FileKind.pdf:
       return PowerboardsV1PdfPreview(key: ValueKey('v1-pdf-preview:$path'), room: room, path: path, file: file);
     case FileKind.custom:
-      return fileViewer(room, path);
+      return fileViewer(room, path, codeEditorBuilder: buildPowerboardsLapceCodePreviewEditor);
     case FileKind.thread:
     case FileKind.markdown:
     case FileKind.code:

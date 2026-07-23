@@ -33,6 +33,8 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  lapce_editor_flutter:
+    path: ../meshagent-sdk/lapce/packages/lapce_editor_flutter
 
   app_links: ^7.0.0
   archive: ^4.0.9
