@@ -62,9 +62,16 @@ BoxConstraints? _desktopTaskDialogConstraints(BuildContext context, BoxConstrain
 }
 
 class _UserSettingsMenuButton extends StatefulWidget {
-  const _UserSettingsMenuButton({required this.role, required this.onSetOwner, required this.onSetNonOwner, required this.onRemove});
+  const _UserSettingsMenuButton({
+    required this.role,
+    required this.onSetSiteUser,
+    required this.onSetOwner,
+    required this.onSetNonOwner,
+    required this.onRemove,
+  });
 
   final GrantRole role;
+  final VoidCallback onSetSiteUser;
   final VoidCallback onSetOwner;
   final VoidCallback onSetNonOwner;
   final VoidCallback onRemove;
@@ -87,14 +94,21 @@ class _UserSettingsMenuButtonState extends State<_UserSettingsMenuButton> {
   Widget build(BuildContext context) {
     final cs = ShadTheme.of(context).colorScheme;
     final items = [
-      if (widget.role == GrantRole.owner)
+      if (widget.role != GrantRole.siteUser)
+        ShadContextMenuItem(
+          height: 40.0,
+          leading: Icon(LucideIcons.globe, size: 16),
+          onPressed: widget.onSetSiteUser,
+          child: const Text('Set as Site User'),
+        ),
+      if (widget.role != GrantRole.nonOwner)
         ShadContextMenuItem(
           height: 40.0,
           leading: Icon(LucideIcons.user, size: 16),
           onPressed: widget.onSetNonOwner,
           child: const Text('Set as Member'),
         ),
-      if (widget.role == GrantRole.nonOwner)
+      if (widget.role != GrantRole.owner)
         ShadContextMenuItem(
           height: 40.0,
           leading: Icon(LucideIcons.user, size: 16),
@@ -129,7 +143,7 @@ class _UserSettingsMenuButtonState extends State<_UserSettingsMenuButton> {
       controller: controller,
       constraints: const BoxConstraints(minWidth: 220),
       estimatedMenuWidth: 220,
-      estimatedMenuHeight: (widget.role == GrantRole.owner || widget.role == GrantRole.nonOwner) ? 88 : 48,
+      estimatedMenuHeight: 128,
       items: items,
       child: triggerButton,
     );
@@ -141,6 +155,7 @@ class _UserGrantRow extends StatelessWidget {
     required this.grantSummary,
     required this.user,
     required this.canEdit,
+    required this.setAsSiteUser,
     required this.setAsOwner,
     required this.setAsNonOwner,
     required this.onRemove,
@@ -149,6 +164,7 @@ class _UserGrantRow extends StatelessWidget {
   final GrantSummary grantSummary;
   final User user;
   final bool canEdit;
+  final VoidCallback setAsSiteUser;
   final VoidCallback setAsOwner;
   final VoidCallback setAsNonOwner;
   final VoidCallback onRemove;
@@ -203,7 +219,13 @@ class _UserGrantRow extends StatelessWidget {
         ],
 
         if (canEdit)
-          _UserSettingsMenuButton(role: grantSummary.role, onSetOwner: setAsOwner, onSetNonOwner: setAsNonOwner, onRemove: onRemove)
+          _UserSettingsMenuButton(
+            role: grantSummary.role,
+            onSetSiteUser: setAsSiteUser,
+            onSetOwner: setAsOwner,
+            onSetNonOwner: setAsNonOwner,
+            onRemove: onRemove,
+          )
         else
           SizedBox(width: 40, height: 30, child: Icon(LucideIcons.lock, size: 16)),
       ],
@@ -298,6 +320,22 @@ class _PermissionDialogState extends State<_PermissionDialog> {
         grantSummary: grant,
         user: user,
         canEdit: canEdit && !isMe(grant.userId),
+        setAsSiteUser: () async {
+          final client = getMeshagentClient();
+          await client.grantResourcePolicy(
+            projectId: widget.projectId,
+            resourceType: 'room',
+            resourceId: widget.room.id,
+            subject: AccessSubject(type: 'user', id: grant.userId),
+            roles: [GrantRole.siteUser.resourceRole, 'list'],
+          );
+
+          if (!mounted) return;
+
+          setState(() {
+            grants[grant.userId] = GrantSummary(userId: grant.userId, role: GrantRole.siteUser);
+          });
+        },
         setAsOwner: () async {
           final client = getMeshagentClient();
           await client.grantResourcePolicy(
@@ -305,7 +343,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
             resourceType: 'room',
             resourceId: widget.room.id,
             subject: AccessSubject(type: 'user', id: grant.userId),
-            roles: [resourceRoleFromApiScope(GrantRole.owner.apiScope), 'list'],
+            roles: [GrantRole.owner.resourceRole, 'list'],
           );
 
           if (!mounted) return;
@@ -321,7 +359,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
             resourceType: 'room',
             resourceId: widget.room.id,
             subject: AccessSubject(type: 'user', id: grant.userId),
-            roles: [resourceRoleFromApiScope(GrantRole.nonOwner.apiScope), 'list'],
+            roles: [GrantRole.nonOwner.resourceRole, 'list'],
           );
 
           if (!mounted) return;
@@ -550,6 +588,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
   static const int _initialMobileFocusMaxAttempts = 12;
 
   bool submitting = false;
+  GrantRole _selectedRole = GrantRole.nonOwner;
   final selectedUsers = Signal<List<AddedUser>>([]);
   final controller = SelectUsersController();
   final textController = TextEditingController();
@@ -689,13 +728,34 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
           final projectUser = projectUsersMap[normalizedEmail];
           if (projectUser == null) {
-            return AddedUser(email: email, role: GrantRole.nonOwner);
+            return AddedUser(email: email, role: _selectedRole);
           }
 
           final currentGrant = roomGrants[projectUser.id];
-          return AddedUser(email: email, role: currentGrant?.role ?? GrantRole.nonOwner);
+          return AddedUser(email: email, role: currentGrant?.role ?? _selectedRole);
         })
         .toList(growable: false);
+  }
+
+  void _setSelectedRole(GrantRole role) {
+    setState(() {
+      _selectedRole = role;
+      selectedUsers.value = [for (final user in selectedUsers.value) AddedUser(email: user.email, role: role)];
+    });
+  }
+
+  Widget _buildRoleSelect() {
+    return ShadSelectFormField<GrantRole>(
+      label: const Text('Permission'),
+      initialValue: _selectedRole,
+      selectedOptionBuilder: (context, role) => Text(role.displayName),
+      onChanged: (role) {
+        if (role != null) {
+          _setSelectedRole(role);
+        }
+      },
+      options: [for (final role in GrantRole.values) ShadOption<GrantRole>(value: role, child: Text(role.displayName))],
+    );
   }
 
   void _setSelectedUsersFromEmails(
@@ -1163,7 +1223,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
             resourceType: 'room',
             resourceId: widget.room.id,
             subject: AccessSubject(type: 'user', id: '', email: u.email),
-            roles: [resourceRoleFromApiScope(u.role.apiScope), 'list'],
+            roles: [u.role.resourceRole, 'list'],
             inviteRedirectUrl: MeshagentConfig.current!.appUrl,
           );
         }),
@@ -1242,11 +1302,11 @@ class _AddUserDialogState extends State<AddUserDialog> {
 
                       if (inProject) {
                         final grants = roomGrants[projectUser.id];
-                        final role = grants != null ? grants.role : GrantRole.nonOwner;
+                        final role = grants != null ? grants.role : _selectedRole;
 
                         updated.add(AddedUser(email: email, role: role));
                       } else {
-                        updated.add(AddedUser(email: email, role: GrantRole.nonOwner));
+                        updated.add(AddedUser(email: email, role: _selectedRole));
                       }
                     }
 
@@ -1259,7 +1319,7 @@ class _AddUserDialogState extends State<AddUserDialog> {
                   builder: (context, textEditingValue, _) {
                     final text = textEditingValue.text.trim();
                     final isEmail = SelectUsersController.emailRegex.hasMatch(text);
-                    final items = isEmail ? [...selected, AddedUser(email: text, role: GrantRole.nonOwner)] : selected;
+                    final items = isEmail ? [...selected, AddedUser(email: text, role: _selectedRole)] : selected;
                     final usersNotInProject = items
                         .where((u) => !projUsersMap.containsKey(u.email.toLowerCase()))
                         .map((u) => u.email)
@@ -1308,6 +1368,8 @@ class _AddUserDialogState extends State<AddUserDialog> {
                     );
                   },
                 ),
+                const SizedBox(height: 30),
+                _buildRoleSelect(),
                 const SizedBox(height: 30),
               ],
             );
@@ -1445,7 +1507,12 @@ class _AddUserDialogState extends State<AddUserDialog> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
-              children: [buildTopSection(), const SizedBox(height: 24), mobileSelectionContent],
+              children: [
+                buildTopSection(),
+                const SizedBox(height: 24),
+                if (!showsLandscapeRotatePrompt) ...[_buildRoleSelect(), const SizedBox(height: 24)],
+                mobileSelectionContent,
+              ],
             );
           },
         );

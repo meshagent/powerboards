@@ -234,6 +234,10 @@ void main() {
 
     await tester.enterText(find.byType(EditableText).last, 'ada@example.test,');
     await tester.pump();
+    await tester.tap(find.text('Member'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Site User').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.runAsync(() async {
       await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -242,7 +246,7 @@ void main() {
 
     expect(grantBody, {
       'subject': {'type': 'user', 'id': '', 'email': 'ada@example.test'},
-      'roles': ['developer', 'list'],
+      'roles': ['site_user', 'list'],
       'invite_redirect_url': 'http://app.example.test',
     });
     expect(tester.takeException(), isNull);
