@@ -107,7 +107,6 @@ const int _v1RecentlyOpenedFilesLimit = 7;
 const Duration _v1DeleteProcessingStep = Duration(milliseconds: 650);
 const Duration _v1SaveProcessingStep = Duration(milliseconds: 850);
 const Duration _v1LongActionToastDelay = Duration(milliseconds: 700);
-const Duration _v1BrowseHintToastDuration = Duration(days: 1);
 const Duration _downloadArchiveCleanupDelay = Duration(seconds: 30);
 const Offset _uploadProgressPopoverOffset = Offset(20, -20);
 const String _webServerFolderName = powerboardsWebServerFolderName;
@@ -198,38 +197,6 @@ Future<void> powerboardsRefreshFilesWebServerState({
   required Resource<List<meshagent_api.Route>> roomRoutes,
 }) async {
   await Future.wait<void>([if (services != null) services.refresh(), roomRoutes.refresh()]);
-}
-
-class _V1FilesBrowseHintToastDescription extends StatelessWidget {
-  const _V1FilesBrowseHintToastDescription();
-
-  @override
-  Widget build(BuildContext context) {
-    final bodyStyle = PowerboardsTypography.p.copyWith(color: PbColors.textMuted, height: 1.45);
-    final strongStyle = bodyStyle.copyWith(color: PbColors.textPrimary, fontWeight: FontWeight.w700);
-
-    return Semantics(
-      label: 'Use up arrow and down arrow to browse files. Press Enter to browse folders. Press Escape to leave browse mode.',
-      child: ExcludeSemantics(
-        child: Text.rich(
-          TextSpan(
-            style: bodyStyle,
-            children: [
-              const TextSpan(text: 'Use '),
-              TextSpan(text: 'Up Arrow', style: strongStyle),
-              const TextSpan(text: ' and '),
-              TextSpan(text: 'Down Arrow', style: strongStyle),
-              const TextSpan(text: ' to browse files.\nPress '),
-              TextSpan(text: 'Enter', style: strongStyle),
-              const TextSpan(text: ' to browse folders.\nPress '),
-              TextSpan(text: 'Escape', style: strongStyle),
-              const TextSpan(text: ' to leave browse mode.'),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 const Map<String, String> _powerboardsV1FileTypeKeysByExtension = {
@@ -1195,7 +1162,6 @@ class _FileManagerViewState extends State<FileManagerView> {
   String? _v1LoadedFolderPath;
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
-  Timer? _v1PendingBrowseHintTimer;
   final Map<String, DateTime> _v1DownloadUrlExpiresAtByPath = <String, DateTime>{};
 
   PendingStorageDeleteScope get _deleteScope => PendingStorageDeleteScope(projectId: widget.projectId, roomName: widget.client.roomName);
@@ -1428,7 +1394,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     _v1FilterController.dispose();
     _v1FilesKeyboardFocusNode.dispose();
     _v1FilesDropTargetActive.dispose();
-    _v1PendingBrowseHintTimer?.cancel();
     _collapsedBreadcrumbMenuController.dispose();
     popoverController.dispose();
     _codePreviewController.dispose();
@@ -2337,8 +2302,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     _v1KeyboardPreviewFileId = null;
     _v1KeyboardPreviewDirection = 0;
     _v1FilesKeyboardBrowseArmed = false;
-    _v1PendingBrowseHintTimer?.cancel();
-    _v1PendingBrowseHintTimer = null;
   }
 
   void _clearV1KeyboardPreviewNavigation() {
@@ -2389,16 +2352,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
     _setV1FilesRoomPanelCollapsed(false);
     setPreviewFilePreviewFullscreen(openFullscreen);
-  }
-
-  void _showV1FilesBrowseHintToast() {
-    ShadToaster.of(context).show(
-      powerboardsWidgetToast(
-        title: const Text('Browse files with arrow keys'),
-        description: const _V1FilesBrowseHintToastDescription(),
-        duration: _v1BrowseHintToastDuration,
-      ),
-    );
   }
 
   void _closeV1Preview() {
@@ -3440,24 +3393,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   void _openV1ExtractedArchiveForPreview(PowerboardsArchiveExtractionOpenTarget target) {
-    final previewPath = target.previewPath;
-    if (previewPath == null) {
-      _openEntry(target.targetFolderPath, true);
-      return;
-    }
-
-    final previewItem = _v1ItemForPath(previewPath);
-    _openEntry(previewPath, false);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-
-      _openV1Preview(previewItem, keyboardDirection: 1);
-      _v1PendingBrowseHintTimer?.cancel();
-      _v1PendingBrowseHintTimer = null;
-      _showV1FilesBrowseHintToast();
-    });
+    _openEntry(target.folderPath, true);
   }
 
   Future<void> _extractV1ArchiveForPreviewPath(String archivePath, PbArchiveInspectionResult inspection) async {

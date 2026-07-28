@@ -4,12 +4,29 @@ import 'package:archive/archive.dart' as archive;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/meshagent/archive_extract.dart';
+import 'package:powerboards/meshagent/archive_extract_toast.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_archive_extract.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 
 void main() {
+  test('archive completion opens the extraction root when the first preview is nested', () {
+    const result = PowerboardsArchiveExtractResult(
+      targetFolderPath: 'uploads/photos',
+      firstPreviewPath: 'vacation/day-one/beach.jpg',
+      extractedEntries: [PowerboardsArchiveExtractedEntry(path: 'vacation/day-one/beach.jpg', folder: false, sizeBytes: 1024)],
+    );
+    const target = PowerboardsArchiveExtractionOpenTarget(
+      targetFolderPath: 'uploads/photos',
+      firstPreviewPath: 'vacation/day-one/beach.jpg',
+      result: result,
+    );
+
+    expect(target.folderPath, 'uploads/photos');
+    expect(target.folderRoutePath, 'uploads/photos/');
+  });
+
   test('unsupported archives are eligible for extract preview by supported format', () {
     for (final title in const ['bundle.zip', 'bundle.tar', 'bundle.tar.gz', 'bundle.tgz']) {
       final file = PbAttachmentListItemData.fromFileName(title: title, previewState: PbAttachmentPreviewState.unsupported);

@@ -29,13 +29,9 @@ class PowerboardsArchiveExtractionOpenTarget {
   final String? firstPreviewPath;
   final PowerboardsArchiveExtractResult result;
 
-  String? get previewPath {
-    final path = firstPreviewPath?.trim();
-    if (path == null || path.isEmpty) {
-      return null;
-    }
-    return joinPaths(targetFolderPath, path);
-  }
+  String get folderPath => targetFolderPath;
+
+  String get folderRoutePath => folderPath.isEmpty ? '' : '$folderPath/';
 }
 
 class _ArchiveExtractionToastProgress {

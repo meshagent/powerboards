@@ -31,6 +31,7 @@ void main() {
     expect(powerboardsV1PreviewStateForPath('docs/notes.txt'), PbAttachmentPreviewState.none);
     expect(powerboardsV1PreviewStateForPath('docs/readme.md'), PbAttachmentPreviewState.none);
     expect(powerboardsV1PreviewStateForPath('src/main.dart'), PbAttachmentPreviewState.none);
+    expect(powerboardsV1PreviewStateForPath('Project status dashboard layouts/Status Dashboard.html'), PbAttachmentPreviewState.none);
     expect(powerboardsV1PreviewStateForPath('media/photo.bmp'), PbAttachmentPreviewState.none);
     expect(powerboardsV1PreviewStateForPath('media/sample-image-preview.tiff'), PbAttachmentPreviewState.unavailable);
     expect(powerboardsV1PreviewStateForPath('media/photo.heic'), PbAttachmentPreviewState.unavailable);
