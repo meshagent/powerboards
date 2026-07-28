@@ -4,11 +4,14 @@ import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 
 enum GrantRole {
-  owner,
-  nonOwner;
+  siteUser,
+  nonOwner,
+  owner;
 
   String get displayName {
     switch (this) {
+      case GrantRole.siteUser:
+        return 'Site User';
       case GrantRole.owner:
         return 'Owner';
       case GrantRole.nonOwner:
@@ -16,17 +19,25 @@ enum GrantRole {
     }
   }
 
-  ApiScope get apiScope {
+  String get resourceRole {
     switch (this) {
+      case GrantRole.siteUser:
+        return 'site_user';
       case GrantRole.owner:
-        return ApiScope.full();
+        return 'admin';
       case GrantRole.nonOwner:
-        return ApiScope.userDefault();
+        return 'operator';
     }
   }
 
   static GrantRole fromGrant(ProjectRoomGrant grant) {
-    return grant.permissions.admin == null ? GrantRole.nonOwner : GrantRole.owner;
+    if (grant.directRoles.contains('admin')) {
+      return GrantRole.owner;
+    }
+    if (grant.directRoles.any((role) => role == 'viewer' || role == 'operator' || role == 'developer')) {
+      return GrantRole.nonOwner;
+    }
+    return grant.directRoles.contains('site_user') ? GrantRole.siteUser : GrantRole.nonOwner;
   }
 }
 

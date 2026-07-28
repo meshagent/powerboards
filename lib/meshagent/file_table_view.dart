@@ -45,6 +45,7 @@ import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
+import 'package:powerboards/meshagent/lapce_code_preview_editor.dart';
 import 'package:powerboards/meshagent/meshagent.dart' as powerboards_meshagent;
 import 'package:powerboards/meshagent/path.dart';
 import 'package:powerboards/meshagent/route_service_match.dart';
@@ -6564,6 +6565,7 @@ class _FileManagerViewState extends State<FileManagerView> {
           readOnly: readOnly,
           controller: controller,
           showToolbar: showToolbar,
+          editorBuilder: buildPowerboardsLapceCodePreviewEditor,
         );
       }
 
@@ -6579,7 +6581,8 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     if (!showExternalSave) {
       return _buildOpenedFileSurface(
-        fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client),
+        fileViewer(widget.client, path, codeEditorBuilder: buildPowerboardsLapceCodePreviewEditor) ??
+            DocumentPane(path: path, room: widget.client),
         insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: false),
       );
     }
@@ -6601,7 +6604,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     final view = fileKind == FileKind.code
         ? readOnlyTextPreview
         : _buildOpenedFileSurface(
-            fileViewer(widget.client, path) ?? DocumentPane(path: path, room: widget.client),
+            fileViewer(widget.client, path, codeEditorBuilder: buildPowerboardsLapceCodePreviewEditor) ??
+                DocumentPane(path: path, room: widget.client),
             insetContent: _shouldInsetOpenedFileSurface(fileKind: fileKind, editing: false),
           );
 

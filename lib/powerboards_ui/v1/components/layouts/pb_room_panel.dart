@@ -3,6 +3,7 @@ import 'dart:ui' show ImageFilter, PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lapce_editor_flutter/lapce_editor_flutter.dart' as lapce;
 
 import '../../models/pb_attachment_file_metadata.dart';
 import '../../models/pb_agent_display.dart';
@@ -2510,6 +2511,23 @@ void _setEditorTextPreservingSelection(TextEditingController controller, String 
   controller.value = TextEditingValue(text: text, selection: nextSelection, composing: TextRange.empty);
 }
 
+void _setLapceEditorTextPreservingSelection(lapce.LapceEditorController controller, String text) {
+  if (controller.text == text) {
+    return;
+  }
+
+  final region = controller.selection.lastInserted;
+  controller.setText(text);
+  controller.setSelection(
+    region == null
+        ? lapce.Selection.caret(lapce.TextOffset(text.length))
+        : lapce.Selection.region(
+            lapce.TextOffset(region.start.value.clamp(0, text.length)),
+            lapce.TextOffset(region.end.value.clamp(0, text.length)),
+          ),
+  );
+}
+
 int _lineStartForOffset(String text, int offset) {
   if (text.isEmpty || offset <= 0) {
     return 0;
@@ -2940,35 +2958,45 @@ class _CodeFilePreview extends StatefulWidget {
 
 class _CodeFilePreviewState extends State<_CodeFilePreview> {
   static const _codePreviewSurfaceKey = ValueKey('code-preview-surface');
-  static const _codeGutterWidth = 28.0;
-  static const _codeGutterGap = 12.0;
-  static const _averageCodeGlyphWidth = 9.0;
 
-  late final _CodeTextEditingController _controller;
+  late final lapce.LapceEditorController _controller;
+  late final lapce.TreeSitterSyntaxHighlighter _syntaxHighlighter;
   final FocusNode _focusNode = FocusNode();
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
   bool _loading = false;
   bool _hovered = false;
+  bool _settingSourceText = false;
   Object? _loadError;
   int _loadGeneration = 0;
-
-  int get _lineCount => _controller.text.split('\n').length;
-
-  int get _longestLineLength {
-    return _controller.text.split('\n').fold(0, (longest, line) => math.max(longest, line.length));
-  }
 
   @override
   void initState() {
     super.initState();
-    _controller = _CodeTextEditingController(text: '');
-    _focusNode.onKeyEvent = _handleKeyEvent;
+    _controller = lapce.LapceEditorController()..addListener(_handleChanged);
+    _controller.buffer.indentStyle = const lapce.IndentStyle.spaces(2);
+    _syntaxHighlighter = lapce.TreeSitterSyntaxHighlighter(
+      controller: _controller,
+      language: lapce.LapceLanguage.fromPath(widget.file.path ?? widget.file.title),
+      theme: const lapce.SyntaxHighlightTheme({
+        'attribute': TextStyle(color: Color(0xFF93C5FD)),
+        'boolean': TextStyle(color: Color(0xFFFDBA74)),
+        'comment': TextStyle(color: Color(0xFF6B7280)),
+        'constant': TextStyle(color: Color(0xFFFDBA74)),
+        'constructor': TextStyle(color: Color(0xFF7DD3FC)),
+        'function': TextStyle(color: Color(0xFFFDE68A)),
+        'keyword': TextStyle(color: Color(0xFFC084FC)),
+        'number': TextStyle(color: Color(0xFFF0ABFC)),
+        'property': TextStyle(color: Color(0xFF93C5FD)),
+        'string': TextStyle(color: Color(0xFFA7F3D0)),
+        'type': TextStyle(color: Color(0xFF7DD3FC)),
+      }),
+    );
     final draftText = widget.draftText;
     if (draftText == null) {
       _loadText();
     } else {
-      _controller.text = draftText;
+      _replaceSourceText(draftText);
     }
   }
 
@@ -2977,13 +3005,14 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
     super.didUpdateWidget(oldWidget);
 
     if (_previewTextSourceChanged(oldWidget.file, widget.file, oldWidget.sourceKey, widget.sourceKey)) {
+      _syntaxHighlighter.language = lapce.LapceLanguage.fromPath(widget.file.path ?? widget.file.title);
       _loadText();
       return;
     }
 
     final draftText = widget.draftText;
     if (draftText != null && draftText != oldWidget.draftText) {
-      _setEditorTextPreservingSelection(_controller, draftText);
+      _replaceSourceText(draftText);
     }
   }
 
@@ -2995,7 +3024,7 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
       setState(() {
         _loading = false;
         _loadError = null;
-        _setEditorTextPreservingSelection(_controller, _CodeFilePreview._plainTextFor(widget.file.title));
+        _replaceSourceText(_CodeFilePreview._plainTextFor(widget.file.title));
       });
       return;
     }
@@ -3012,7 +3041,7 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
       }
       setState(() {
         _loading = false;
-        _setEditorTextPreservingSelection(_controller, text);
+        _replaceSourceText(text);
       });
     } catch (error) {
       if (!mounted || generation != _loadGeneration) {
@@ -3027,6 +3056,8 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
 
   @override
   void dispose() {
+    _syntaxHighlighter.dispose();
+    _controller.removeListener(_handleChanged);
     _horizontalController.dispose();
     _verticalController.dispose();
     _focusNode.dispose();
@@ -3034,30 +3065,27 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
     super.dispose();
   }
 
-  void _handleChanged(String value) {
-    widget.onEdited(value);
-    setState(() {});
+  void _replaceSourceText(String text) {
+    _settingSourceText = true;
+    try {
+      _setLapceEditorTextPreservingSelection(_controller, text);
+      _controller.buffer.indentStyle = const lapce.IndentStyle.spaces(2);
+    } finally {
+      _settingSourceText = false;
+    }
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (!_isEditorTabEvent(event)) {
-      return KeyEventResult.ignored;
+  void _handleChanged() {
+    if (_settingSourceText) {
+      return;
     }
-
-    final nextValue = HardwareKeyboard.instance.isShiftPressed
-        ? _outdentSelectedLines(_controller.value)
-        : _insertEditorIndent(_controller.value);
-    _controller.value = nextValue;
-    widget.onEdited(nextValue.text);
-    setState(() {});
-    return KeyEventResult.handled;
+    widget.onEdited(_controller.text);
   }
 
   @override
   Widget build(BuildContext context) {
     final padding = widget.fullscreen ? const EdgeInsets.fromLTRB(22, 40, 22, 36) : const EdgeInsets.fromLTRB(10, 24, 10, 22);
     final codeStyle = PowerboardsTypography.customCodeDisplay.copyWith(color: _CodeTokenTone.plain.color);
-    final lineHeight = (codeStyle.fontSize ?? 15) * (codeStyle.height ?? (22 / 15));
 
     return MouseRegion(
       cursor: SystemMouseCursors.text,
@@ -3079,91 +3107,42 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
                   ),
                 ),
               )
-            : LayoutBuilder(
-                builder: (context, constraints) {
-                  final availableCodeWidth = constraints.maxWidth - padding.horizontal - _codeGutterWidth - _codeGutterGap;
-                  final codeWidth = math.max(math.max(availableCodeWidth, 320.0), (_longestLineLength * _averageCodeGlyphWidth) + 22.0);
-
-                  return ScrollConfiguration(
-                    behavior: _editorScrollBehavior,
-                    child: Scrollbar(
-                      key: const ValueKey('code-preview-horizontal-scrollbar'),
-                      controller: _horizontalController,
-                      thumbVisibility: _hovered,
-                      interactive: true,
-                      notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
-                      child: Scrollbar(
-                        key: const ValueKey('code-preview-vertical-scrollbar'),
-                        controller: _verticalController,
-                        thumbVisibility: _hovered,
-                        interactive: true,
-                        notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
-                        child: SingleChildScrollView(
-                          controller: _verticalController,
-                          child: SingleChildScrollView(
-                            controller: _horizontalController,
-                            scrollDirection: Axis.horizontal,
-                            child: Padding(
-                              padding: padding,
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(
-                                    width: _codeGutterWidth,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        for (var index = 0; index < _lineCount; index++)
-                                          SizedBox(
-                                            height: lineHeight,
-                                            child: Text(
-                                              '${index + 1}',
-                                              textAlign: TextAlign.right,
-                                              style: codeStyle.copyWith(color: _CodeTokenTone.comment.color),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: _codeGutterGap),
-                                  TextSelectionTheme(
-                                    key: const ValueKey('code-editor-selection-theme'),
-                                    data: const TextSelectionThemeData(
-                                      cursorColor: PbColors.textInverse,
-                                      selectionColor: _codeEditorSelectionColor,
-                                      selectionHandleColor: Color(0xFF5EA2FF),
-                                    ),
-                                    child: SizedBox(
-                                      width: codeWidth,
-                                      child: TextField(
-                                        controller: _controller,
-                                        focusNode: _focusNode,
-                                        cursorColor: PbColors.textInverse,
-                                        enableInteractiveSelection: true,
-                                        keyboardType: TextInputType.multiline,
-                                        minLines: _lineCount,
-                                        maxLines: null,
-                                        onChanged: _handleChanged,
-                                        style: codeStyle,
-                                        decoration: InputDecoration(
-                                          border: InputBorder.none,
-                                          contentPadding: EdgeInsets.zero,
-                                          hintText: 'Type here',
-                                          hintStyle: codeStyle.copyWith(color: _CodeTokenTone.comment.color),
-                                          isCollapsed: true,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+            : ScrollConfiguration(
+                behavior: _editorScrollBehavior,
+                child: Scrollbar(
+                  key: const ValueKey('code-preview-horizontal-scrollbar'),
+                  controller: _horizontalController,
+                  thumbVisibility: _hovered,
+                  interactive: true,
+                  notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
+                  child: Scrollbar(
+                    key: const ValueKey('code-preview-vertical-scrollbar'),
+                    controller: _verticalController,
+                    thumbVisibility: _hovered,
+                    interactive: true,
+                    notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
+                    child: lapce.LapceEditor(
+                      key: const ValueKey('code-editor-selection-theme'),
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      scrollController: _verticalController,
+                      horizontalScrollController: _horizontalController,
+                      showGutter: true,
+                      placeholder: 'Type here',
+                      syntaxHighlightProvider: _syntaxHighlighter,
+                      theme: lapce.LapceEditorTheme(
+                        background: PbColors.customCodeSurface,
+                        foreground: _CodeTokenTone.plain.color,
+                        caret: PbColors.textInverse,
+                        selection: _codeEditorSelectionColor,
+                        currentLine: const Color(0x142563EB),
+                        placeholder: _CodeTokenTone.comment.color,
+                        padding: padding,
+                        textStyle: codeStyle,
                       ),
                     ),
-                  );
-                },
+                  ),
+                ),
               ),
       ),
     );

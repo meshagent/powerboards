@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
+import 'package:lapce_editor_flutter/lapce_editor_flutter.dart' as lapce;
 import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
@@ -1499,12 +1500,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
-    final textField = tester.widget<TextField>(find.byType(TextField));
-    expect(textField.enableInteractiveSelection, isTrue);
-    final selectionTheme = tester.widget<TextSelectionTheme>(find.byKey(const ValueKey('code-editor-selection-theme')));
-    expect(selectionTheme.data.selectionColor, const Color(0x665EA2FF));
+    final editor = tester.widget<lapce.LapceEditor>(find.byType(lapce.LapceEditor));
+    expect(editor.theme.selection, const Color(0x665EA2FF));
 
-    await tester.enterText(find.byType(EditableText), 'final mode = "code";');
+    editor.controller.setText('final mode = "code";');
+    editor.controller.setSelection(lapce.Selection.caret(lapce.TextOffset(editor.controller.textLength)));
+    editor.focusNode!.requestFocus();
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
@@ -1534,9 +1535,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
-    final textField = tester.widget<TextField>(find.byType(TextField));
-    expect(textField.decoration?.hintText, 'Type here');
-    expect(find.text('Type here'), findsOneWidget);
+    final editor = tester.widget<lapce.LapceEditor>(find.byType(lapce.LapceEditor));
+    expect(editor.placeholder, 'Type here');
   });
 
   testWidgets('editable code preview keeps draft when fullscreen toggles', (tester) async {
@@ -1571,14 +1571,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(EditableText), 'final mode = "draft";');
+    final initialEditor = tester.widget<lapce.LapceEditor>(find.byType(lapce.LapceEditor));
+    initialEditor.controller.setText('final mode = "draft";');
     await tester.pump();
 
     rebuildParent(() => fullscreen = true);
     await tester.pumpAndSettle();
 
-    final textField = tester.widget<TextField>(find.byType(TextField));
-    expect(textField.controller?.text, 'final mode = "draft";');
+    final editor = tester.widget<lapce.LapceEditor>(find.byType(lapce.LapceEditor));
+    expect(editor.controller.text, 'final mode = "draft";');
     expect(loadCount, 1);
   });
 
