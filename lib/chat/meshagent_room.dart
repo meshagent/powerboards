@@ -7925,9 +7925,6 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return;
     }
 
-    final previewPath = target.previewPath;
-    final rawPath = previewPath ?? (target.targetFolderPath.isEmpty ? '' : '${target.targetFolderPath}/');
-
     setState(() {
       _desktopPreviewFilePreviewFile = null;
       _desktopPreviewFilePreviewOpen = false;
@@ -7936,7 +7933,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     });
     setPreviewFilePreviewFullscreen(false);
     controller.showFiles();
-    _replaceRoomRouteState(context, pane: _MobileRoomPane.files, rawPath: rawPath, clearPreviewOrigin: true);
+    _replaceRoomRouteState(context, pane: _MobileRoomPane.files, rawPath: target.folderRoutePath, clearPreviewOrigin: true);
 
     _filesHeaderController.openExtractedArchiveForPreview(target);
   }

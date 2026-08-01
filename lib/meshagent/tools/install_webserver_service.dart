@@ -42,7 +42,10 @@ const Map<String, dynamic> publishWebsiteInputSchema = {
   'additionalProperties': false,
   'required': ['domain', 'path', 'access'],
   'properties': {
-    'domain': {'type': 'string', 'description': 'Full domain for the published website.'},
+    'domain': {
+      'type': 'string',
+      'description': 'Full domain for the published website. It must not be the live preview domain used by install_live_website_preview.',
+    },
     'path': {
       'type': 'string',
       'description':
@@ -584,6 +587,8 @@ class PublishWebsiteTool extends FunctionTool with _PowerboardsToolResponseSentC
             'Publish a stable website release from a packaged website file already stored in the current room. '
             'Use this after a site is ready to share as a fixed release; unlike the live website preview, later edits to individual source files '
             'do not change the published release until this tool is run again with an updated package. '
+            'Use a different URL from the live preview URL created by install_live_website_preview. Do not share that tool\'s URL; '
+            'publishing fails if the requested URL already routes to a different port than the published website uses. '
             'Unless the user instructs otherwise, tar the website files from /website and place the archive at '
             '/published/website-{MMDDYYHHMMSS}.tar using the current timestamp, with the contents of /website at the archive root, '
             'before invoking this tool. Create a new archive for every publish and retain older archives. '
@@ -953,6 +958,18 @@ Future<PublishWebsiteResult> publishPowerboardsWebsite(PublishWebsiteRequest req
           message: 'The domain $domain is already assigned to another room.',
         );
       }
+      if (powerboardsPublishedWebsiteRouteUsesDifferentPort(existingPort: current.port, publishedPort: route.port)) {
+        final isLivePreview = current.annotations['meshagent.service.id'] == powerboardsWebServerServiceId;
+        return PublishWebsiteResult(
+          status: 'blocked',
+          domain: domain,
+          path: publishedPath.containerPath,
+          access: access,
+          message: isLivePreview
+              ? 'The domain $domain is already used by install_live_website_preview. Use a different domain for the published website.'
+              : 'The domain $domain is already in use by a service on a different port. Use a different domain for the published website.',
+        );
+      }
       await client.updateRoute(
         projectId: projectId,
         domain: route.domain,
@@ -996,6 +1013,10 @@ Future<PublishWebsiteResult> publishPowerboardsWebsite(PublishWebsiteRequest req
     access: access,
     message: existing == null ? 'Published the website.' : 'Updated the published website.',
   );
+}
+
+bool powerboardsPublishedWebsiteRouteUsesDifferentPort({required String existingPort, required String publishedPort}) {
+  return existingPort.trim() != publishedPort.trim();
 }
 
 Future<T> _withRoomStorage<T>({

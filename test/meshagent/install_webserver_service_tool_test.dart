@@ -159,6 +159,12 @@ void main() {
       expect(tool.inputSchema['required'], ['domain', 'path', 'access']);
       expect(tool.description, contains("mounted into the /data folder"));
       expect(tool.description, contains('unlike the live website preview'));
+      expect(tool.description, contains('different URL from the live preview URL created by install_live_website_preview'));
+      expect(tool.description, contains('publishing fails if the requested URL already routes to a different port'));
+      expect(
+        (tool.inputSchema['properties'] as Map<String, dynamic>)['domain']['description'],
+        contains('must not be the live preview domain used by install_live_website_preview'),
+      );
       expect(tool.description, contains('tar the website files from /website'));
       expect(tool.description, contains('/published/website-{MMDDYYHHMMSS}.tar'));
       expect(tool.description, contains('retain older archives'));
@@ -188,6 +194,11 @@ void main() {
       expect(powerboardsNormalizePublishedWebsitePath('/published/site.tar'), isNull);
       expect(powerboardsNormalizePublishedWebsitePath('/data/published/site.zip'), isNull);
       expect(powerboardsNormalizePublishedWebsitePath('/data/../site.tar'), isNull);
+    });
+
+    test('rejects an existing URL route that uses a different port', () {
+      expect(powerboardsPublishedWebsiteRouteUsesDifferentPort(existingPort: '5002', publishedPort: '5003'), isTrue);
+      expect(powerboardsPublishedWebsiteRouteUsesDifferentPort(existingPort: ' 5003 ', publishedPort: '5003'), isFalse);
     });
   });
 
