@@ -254,6 +254,60 @@ void main() {
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [nestedFolder]), isFalse);
   });
 
+  testWidgets('V1 file reference loading waits for the room identity', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final previousMode = powerboardsUiModeSignal.value;
+    powerboardsUiModeSignal.value = PowerboardsUiMode.v1;
+    addTearDown(() => powerboardsUiModeSignal.value = previousMode);
+
+    final pair = _ProtocolPair();
+    var registryDownloadRequested = false;
+    pair.serverProtocol.start(
+      onMessage: (protocol, messageId, type, data) async {
+        if (type != 'room.invoke_tool') {
+          return;
+        }
+        final request = unpackMessage(data).header;
+        if (request['toolkit'] != 'storage' || request['tool'] != 'download') {
+          return;
+        }
+        registryDownloadRequested = true;
+        await protocol.send('__response__', ErrorContent(text: 'registry not found', code: 404).pack(), id: messageId);
+      },
+    );
+
+    final room = RoomClient(protocolFactory: pair.clientProtocolFactory);
+    final startFuture = room.start();
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      room.dispose();
+      await pair.dispose();
+    });
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        child: Scaffold(
+          body: SizedBox.expand(child: _ThreadViewHarness(room: room)),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(registryDownloadRequested, isFalse);
+
+    await _sendRoomReady(pair.serverProtocol);
+    await startFuture;
+    for (var attempt = 0; attempt < 20 && !registryDownloadRequested; attempt += 1) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+
+    expect(registryDownloadRequested, isTrue);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+  });
+
   test('folder and file chat links dispatch to Files navigation and file preview', () {
     String? openedFolder;
     String? previewedFile;

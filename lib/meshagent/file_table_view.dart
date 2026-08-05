@@ -43,6 +43,7 @@ import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
 import 'package:powerboards/meshagent/file_move_copy.dart';
+import 'package:powerboards/meshagent/file_reference_registry.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
@@ -3943,10 +3944,22 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
 
       await widget.client.storage.move(fullPath, destinationPath);
+      if (mounted) {
+        _onFileMoved(fullPath, destinationPath);
+      }
+      if (showV1Progress) {
+        await _registerV1TransferredPath(
+          sourcePath: fullPath,
+          destinationPath: destinationPath,
+          destinationClient: widget.client,
+          destinationRoomName: widget.client.roomName?.trim() ?? '',
+          folder: isFolder,
+          move: true,
+        );
+      }
       if (!mounted) {
         return;
       }
-      _onFileMoved(fullPath, destinationPath);
       if (progressShown) {
         toaster.show(
           powerboardsToast(
@@ -4112,6 +4125,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     final remoteClients = <RoomClient>{};
     final sourceItemPaths = items.map(_v1PathForItem).map(powerboardsNormalizeStoragePath).toSet();
     final sourceFolderPaths = items.where(_v1IsFolder).map(_v1PathForItem).toList(growable: false);
+    final selectionContainsLinkedAttachments = _v1SelectionContainsLinkedAttachments(items);
 
     try {
       final selection = await showDialog<_V1MoveDestinationSelection>(
@@ -4169,9 +4183,51 @@ class _FileManagerViewState extends State<FileManagerView> {
                   itemCount: items.length,
                   canConfirm: canConfirm,
                   onClose: () => Navigator.of(dialogContext).pop(),
-                  onConfirm: (copyFilesInstead) => Navigator.of(
-                    dialogContext,
-                  ).pop(_V1MoveDestinationSelection(roomName: selectedRoomName, path: destinationPath, copyFilesInstead: copyFilesInstead)),
+                  onConfirm: (copyFilesInstead) {
+                    Future<void> confirmSelection() async {
+                      var resolvedCopyFilesInstead = copyFilesInstead;
+                      if (powerboardsV1ShouldConfirmCrossRoomLinkedMove(
+                        sourceRoom: sourceRoomName,
+                        destinationRoom: selectedRoomName,
+                        copyFilesInstead: copyFilesInstead,
+                        containsLinkedAttachments: selectionContainsLinkedAttachments,
+                      )) {
+                        final confirmed = await showPowerboardsAlertDialog<bool>(
+                          context: dialogContext,
+                          builder: (confirmationContext) => PowerboardsShadDialog.compactAlert(
+                            title: const Text('Copy linked files instead?'),
+                            description: const Text(
+                              'Moving these files to another room would disconnect them from existing thread attachments. Continue to copy them instead, or cancel to keep choosing a destination.',
+                            ),
+                            actions: [
+                              ShadButton.outline(
+                                onPressed: () => Navigator.of(confirmationContext).pop(false),
+                                child: const Text('Cancel'),
+                              ),
+                              ShadButton(onPressed: () => Navigator.of(confirmationContext).pop(true), child: const Text('Continue')),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true || !dialogContext.mounted) {
+                          return;
+                        }
+                        resolvedCopyFilesInstead = true;
+                      }
+
+                      if (!dialogContext.mounted) {
+                        return;
+                      }
+                      Navigator.of(dialogContext).pop(
+                        _V1MoveDestinationSelection(
+                          roomName: selectedRoomName,
+                          path: destinationPath,
+                          copyFilesInstead: resolvedCopyFilesInstead,
+                        ),
+                      );
+                    }
+
+                    unawaited(confirmSelection());
+                  },
                   onRoomSelected: (roomName) async {
                     if (roomName == selectedRoomName || resolvingRoom) {
                       return;
@@ -4264,6 +4320,7 @@ class _FileManagerViewState extends State<FileManagerView> {
     });
 
     var succeeded = 0;
+    var registrationFailures = 0;
     Object? firstError;
     try {
       for (final item in items) {
@@ -4284,6 +4341,17 @@ class _FileManagerViewState extends State<FileManagerView> {
           } else if (move) {
             _removePath(sourcePath, isFolder: folder);
           }
+          final registered = await _registerV1TransferredPath(
+            sourcePath: sourcePath,
+            destinationPath: resolvedDestinationPath,
+            destinationClient: destinationClient,
+            destinationRoomName: destinationRoomName,
+            folder: folder,
+            move: move,
+          );
+          if (!registered) {
+            registrationFailures += 1;
+          }
         } catch (error) {
           firstError ??= error;
         }
@@ -4298,7 +4366,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     if (succeeded > 0) {
       _clearSelected();
-      await _refreshCurrentFolder();
+      await Future.wait([_refreshCurrentFolder(), _refreshFileAttachmentLinks()]);
       if (!mounted) {
         return;
       }
@@ -4308,7 +4376,10 @@ class _FileManagerViewState extends State<FileManagerView> {
       toaster.show(
         powerboardsToast(
           title: move ? 'Files moved' : 'Files copied',
-          description: '${items.length} ${items.length == 1 ? 'item' : 'items'} ${move ? 'moved' : 'copied'} successfully.',
+          description: registrationFailures == 0
+              ? '${items.length} ${items.length == 1 ? 'item' : 'items'} ${move ? 'moved' : 'copied'} successfully.'
+              : '${items.length} ${items.length == 1 ? 'item was' : 'items were'} ${move ? 'moved' : 'copied'}, but some thread references could not be updated.',
+          destructive: registrationFailures > 0,
           duration: const Duration(seconds: 4),
         ),
       );
@@ -4323,6 +4394,48 @@ class _FileManagerViewState extends State<FileManagerView> {
         duration: const Duration(seconds: 6),
       ),
     );
+  }
+
+  bool _v1SelectionContainsLinkedAttachments(Iterable<PbFilesItemData> items) {
+    for (final item in items) {
+      final sourcePath = powerboardsNormalizeStoragePath(_v1PathForItem(item));
+      final folder = _v1IsFolder(item);
+      if (_fileAttachmentLinks.any((link) => link.filePath == sourcePath || (folder && link.filePath.startsWith('$sourcePath/')))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<bool> _registerV1TransferredPath({
+    required String sourcePath,
+    required String destinationPath,
+    required RoomClient destinationClient,
+    required String destinationRoomName,
+    required bool folder,
+    required bool move,
+  }) async {
+    final sourceRoomName = widget.client.roomName?.trim() ?? '';
+    if (sourceRoomName.isEmpty || destinationRoomName.trim().isEmpty) {
+      return false;
+    }
+
+    try {
+      await registerPowerboardsFileTransfer(
+        sourceRoom: widget.client,
+        destinationRoom: destinationClient,
+        sourceRoomName: sourceRoomName,
+        destinationRoomName: destinationRoomName,
+        sourcePath: sourcePath,
+        destinationPath: destinationPath,
+        folder: folder,
+        move: move,
+      );
+      return true;
+    } catch (error) {
+      debugPrint('Failed to register ${move ? 'move' : 'copy'} reference for $sourcePath: $error');
+      return false;
+    }
   }
 
   Future<void> _compressFolder(String folderPath) async {

@@ -34,6 +34,7 @@ import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
+import 'package:powerboards/meshagent/file_reference_registry.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
@@ -391,6 +392,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   String? _powerboardsClientToolkitSignature;
   String? _lastRestoredThreadScrollOffsetValue;
   final Set<String> _reportedAttachmentKeys = <String>{};
+  StreamSubscription<RoomEvent>? _fileReferenceSubscription;
+  Future<void>? _fileReferenceReadyLoad;
+  List<PowerboardsFileReference> _fileReferences = const <PowerboardsFileReference>[];
+  int _fileReferenceLoadGeneration = 0;
   int _lastAppliedComposerAttachmentSeedVersion = 0;
   String? _activeFolderContextStoragePath;
 
@@ -576,24 +581,141 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _configurePowerboardsClientToolkit();
+    _restoreThreadScrollOffsetFromRoute();
+    final shouldBindFileReferences = powerboardsUsesDesktopUiPreview(context);
+    if (shouldBindFileReferences && _fileReferenceSubscription == null) {
+      _bindFileReferenceRegistry();
+    } else if (!shouldBindFileReferences && _fileReferenceSubscription != null) {
+      _fileReferenceLoadGeneration += 1;
+      _fileReferenceSubscription?.cancel();
+      _fileReferenceSubscription = null;
+      _fileReferenceReadyLoad = null;
+      _fileReferences = const <PowerboardsFileReference>[];
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.client != widget.client) {
+      _fileReferenceLoadGeneration += 1;
+      _fileReferenceSubscription?.cancel();
+      _fileReferenceSubscription = null;
+      _fileReferenceReadyLoad = null;
+      _fileReferences = const <PowerboardsFileReference>[];
+      if (powerboardsUsesDesktopUiPreview(context)) {
+        _bindFileReferenceRegistry();
+      }
+    }
     _configurePowerboardsClientToolkit();
     _scheduleComposerAttachmentSeed();
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _configurePowerboardsClientToolkit();
-    _restoreThreadScrollOffsetFromRoute();
-  }
-
-  @override
   void dispose() {
+    _fileReferenceLoadGeneration += 1;
+    _fileReferenceSubscription?.cancel();
+    _fileReferenceReadyLoad = null;
     _chatController.removeListener(_onChatControllerChanged);
     _chatController.dispose();
     super.dispose();
+  }
+
+  void _bindFileReferenceRegistry() {
+    if (_fileReferenceSubscription != null) {
+      return;
+    }
+    _fileReferenceSubscription = widget.client.listen((event) {
+      final path = switch (event) {
+        FileUpdatedEvent() => normalizePowerboardsAttachmentPath(event.path),
+        FileDeletedEvent() => normalizePowerboardsAttachmentPath(event.path),
+        _ => null,
+      };
+      if (path == powerboardsFileReferenceRegistryPath) {
+        _scheduleFileReferenceLoad();
+      }
+    });
+    _scheduleFileReferenceLoad();
+  }
+
+  void _scheduleFileReferenceLoad() {
+    if ((widget.client.roomName?.trim() ?? '').isNotEmpty) {
+      unawaited(_loadFileReferences());
+      return;
+    }
+    if (_fileReferenceReadyLoad != null) {
+      return;
+    }
+
+    final client = widget.client;
+    final generation = _fileReferenceLoadGeneration;
+    final pendingLoad = _loadFileReferencesWhenRoomReady(client, generation: generation);
+    _fileReferenceReadyLoad = pendingLoad;
+    unawaited(
+      pendingLoad.whenComplete(() {
+        if (identical(_fileReferenceReadyLoad, pendingLoad)) {
+          _fileReferenceReadyLoad = null;
+        }
+      }),
+    );
+  }
+
+  Future<void> _loadFileReferencesWhenRoomReady(RoomClient client, {required int generation}) async {
+    try {
+      await client.ready;
+    } catch (_) {
+      return;
+    }
+    if (!mounted || !identical(widget.client, client) || generation != _fileReferenceLoadGeneration) {
+      return;
+    }
+    await _loadFileReferences();
+  }
+
+  Future<void> _loadFileReferences() async {
+    final generation = ++_fileReferenceLoadGeneration;
+    final references = await loadPowerboardsFileReferences(widget.client);
+    if (!mounted || generation != _fileReferenceLoadGeneration) {
+      return;
+    }
+    setState(() => _fileReferences = references);
+    if (references.any((reference) => reference.operation == PowerboardsFileTransferOperation.move)) {
+      final roomName = widget.client.roomName?.trim() ?? '';
+      final threadPath = _currentThreadPathForAttachmentIndex();
+      if (roomName.isNotEmpty && threadPath.isNotEmpty) {
+        unawaited(
+          reconcilePowerboardsThreadAttachmentRows(
+            room: widget.client,
+            threadPath: threadPath,
+            resolvePath: (path) {
+              final resolution = powerboardsResolveFileReference(roomName: roomName, path: path, references: references);
+              return resolution.roomName.trim().toLowerCase() == roomName.toLowerCase() ? resolution.path : path;
+            },
+          ).catchError((Object error, StackTrace stackTrace) {
+            if (powerboardsIsExpectedRoomLifecycleClosure(error, stackTrace)) {
+              return;
+            }
+            debugPrint('Failed to reconcile moved thread attachments: $error');
+          }),
+        );
+      }
+    }
+  }
+
+  String _resolveThreadAttachmentPath(String path) {
+    final roomName = widget.client.roomName?.trim() ?? '';
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
+    if (roomName.isEmpty || normalizedPath.isEmpty) {
+      return normalizedPath;
+    }
+    final resolution = powerboardsResolveFileReference(roomName: roomName, path: normalizedPath, references: _fileReferences);
+    if (resolution.roomName.trim().toLowerCase() != roomName.toLowerCase()) {
+      return normalizedPath;
+    }
+    return resolution.path;
   }
 
   void _configurePowerboardsClientToolkit() {
@@ -1011,6 +1133,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       onMessageSent: _onMessageSent,
       fileInThreadBuilder: _fileInThreadBuilder,
       pendingFileInThreadBuilder: _pendingFolderInThreadBuilder,
+      attachmentPathResolver: usesDesktopUiPreview ? _resolveThreadAttachmentPath : null,
       datasetInlineAttachmentViewerPredicate: (path) => powerboardsFolderChatContextFromDataUrl(path) == null,
       openFile: _openThreadAttachment,
       fileDropOverlayBuilder: widget.fileDropOverlayBuilder,

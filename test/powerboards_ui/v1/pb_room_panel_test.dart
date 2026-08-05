@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
 import 'package:powerboards/chat/meshagent_room.dart';
+import 'package:powerboards/meshagent/file_attachment_index.dart';
+import 'package:powerboards/meshagent/file_reference_registry.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
@@ -543,6 +545,62 @@ void main() {
     expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.agents, filePreviewOpen: true), isTrue);
   });
 
+  test('chat files pane excludes inherited copy links but keeps direct attachments', () {
+    const directLink = PowerboardsFileAttachmentLink(
+      filePath: 'moved/moved-image.png',
+      threadPath: 'dataset://agents/assistant/threads/attached-files',
+      threadName: 'Attached Files',
+      createdBy: 'User',
+      createdAt: null,
+      inheritedFromCopy: false,
+    );
+    const copiedLink = PowerboardsFileAttachmentLink(
+      filePath: 'copies/copied-image.png',
+      threadPath: 'dataset://agents/assistant/threads/attached-files',
+      threadName: 'Attached Files',
+      createdBy: 'User',
+      createdAt: null,
+      inheritedFromCopy: true,
+    );
+
+    expect(powerboardsDesktopPreviewShouldListIndexedAttachment(link: directLink, roomName: 'Product', references: const []), isTrue);
+    expect(powerboardsDesktopPreviewShouldListIndexedAttachment(link: copiedLink, roomName: 'Product', references: const []), isFalse);
+  });
+
+  test('chat files pane filters legacy copied links through the reference registry', () {
+    const legacyCopiedLink = PowerboardsFileAttachmentLink(
+      filePath: 'copies/copied-image.png',
+      threadPath: 'dataset://agents/assistant/threads/attached-files',
+      threadName: 'Attached Files',
+      createdBy: 'User',
+      createdAt: null,
+    );
+    final references = [
+      PowerboardsFileReference(
+        sourceRoomName: 'Product',
+        sourcePath: 'moved/moved-image.png',
+        destinationRoomName: 'Product',
+        destinationPath: 'copies/copied-image.png',
+        operation: PowerboardsFileTransferOperation.copy,
+        folder: false,
+        updatedAt: DateTime.utc(2026, 7, 21),
+      ),
+    ];
+
+    expect(
+      powerboardsDesktopPreviewShouldListIndexedAttachment(link: legacyCopiedLink, roomName: 'Product', references: references),
+      isFalse,
+    );
+    expect(
+      powerboardsDesktopPreviewShouldListIndexedAttachment(
+        link: legacyCopiedLink.copyWith(inheritedFromCopy: false),
+        roomName: 'Product',
+        references: references,
+      ),
+      isTrue,
+    );
+  });
+
   Widget buildHarness({
     required List<PbAgentListItemData> agents,
     String? selectedAgentId,
@@ -1030,6 +1088,16 @@ void main() {
 
     expect(find.text('Agents'), findsOneWidget);
     expect(find.text('Files'), findsNothing);
+  });
+
+  testWidgets('files tab describes attachments for the selected thread', (tester) async {
+    final agents = [const PbAgentListItemData(id: 'assistant-primary', title: 'Assistant', status: 'Available', icon: 'bot')];
+
+    await tester.pumpWidget(buildHarness(agents: agents, selectedTab: PbRoomPanelTab.files));
+    await tester.pump();
+
+    expect(find.text('Browse attachments by selected thread.'), findsOneWidget);
+    expect(find.text('Browse attachments by selected agent.'), findsNothing);
   });
 
   testWidgets('hidden files tab keeps controlled files selection on agents panel', (tester) async {

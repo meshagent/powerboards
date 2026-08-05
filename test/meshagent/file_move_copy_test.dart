@@ -75,4 +75,34 @@ void main() {
       'Copy of Research',
     );
   });
+
+  test('linked cross-room moves require confirmation but copies and local moves do not', () {
+    expect(
+      powerboardsV1ShouldConfirmCrossRoomLinkedMove(
+        sourceRoom: 'Product',
+        destinationRoom: 'Research',
+        copyFilesInstead: false,
+        containsLinkedAttachments: true,
+      ),
+      isTrue,
+    );
+    expect(
+      powerboardsV1ShouldConfirmCrossRoomLinkedMove(
+        sourceRoom: 'Product',
+        destinationRoom: 'Research',
+        copyFilesInstead: true,
+        containsLinkedAttachments: true,
+      ),
+      isFalse,
+    );
+    expect(
+      powerboardsV1ShouldConfirmCrossRoomLinkedMove(
+        sourceRoom: 'Product',
+        destinationRoom: 'product',
+        copyFilesInstead: false,
+        containsLinkedAttachments: true,
+      ),
+      isFalse,
+    );
+  });
 }
