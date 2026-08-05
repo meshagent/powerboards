@@ -12,7 +12,15 @@ const double _sidepaneScrollTopPadding = 8;
 const double _sidepaneScrollBottomPadding = 24;
 
 class PbSidepaneFileListItem {
-  const PbSidepaneFileListItem({required this.data, this.onPressed, this.onAskAgent, this.onShare, this.onExtract, this.onDownload});
+  const PbSidepaneFileListItem({
+    required this.data,
+    this.onPressed,
+    this.onAskAgent,
+    this.onShare,
+    this.onExtract,
+    this.onDownload,
+    this.onSaveCopyAs,
+  });
 
   final PbAttachmentListItemData data;
   final VoidCallback? onPressed;
@@ -20,6 +28,7 @@ class PbSidepaneFileListItem {
   final VoidCallback? onShare;
   final VoidCallback? onExtract;
   final VoidCallback? onDownload;
+  final VoidCallback? onSaveCopyAs;
 }
 
 class PbSidepaneFileEmptyStateData {
@@ -78,6 +87,7 @@ class PbSidepaneFileList extends StatelessWidget {
           onShare: file.onShare,
           onExtract: file.onExtract,
           onDownload: file.onDownload,
+          onSaveCopyAs: file.onSaveCopyAs,
         );
       },
     );
@@ -180,6 +190,7 @@ class PbAttachmentCard extends StatefulWidget {
     this.onShare,
     this.onExtract,
     this.onDownload,
+    this.onSaveCopyAs,
     this.emptyState = false,
     this.emptyIconAssetName = 'file',
     this.emptyIconColor = PbColors.textSubtle,
@@ -191,6 +202,7 @@ class PbAttachmentCard extends StatefulWidget {
   final VoidCallback? onShare;
   final VoidCallback? onExtract;
   final VoidCallback? onDownload;
+  final VoidCallback? onSaveCopyAs;
   final bool emptyState;
   final String emptyIconAssetName;
   final Color emptyIconColor;
@@ -206,10 +218,12 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
 
   @override
   Widget build(BuildContext context) {
+    final unavailable = widget.data.previewState == PbAttachmentPreviewState.unavailable;
+    final loading = widget.data.isLoading;
     final lifted = !widget.emptyState && _hovered && !_pressed && !_menuOpen;
-    final showAction = !widget.emptyState && (_hovered || _pressed || _menuOpen);
+    final showAction = !widget.emptyState && !unavailable && !loading && (_hovered || _pressed || _menuOpen);
     final iconAssetName = widget.emptyState ? widget.emptyIconAssetName : widget.data.iconAssetName;
-    final iconColor = widget.emptyState ? widget.emptyIconColor : widget.data.iconColor;
+    final iconColor = widget.emptyState || unavailable ? PbColors.textSubtle : widget.data.iconColor;
 
     return MouseRegion(
       cursor: widget.emptyState ? SystemMouseCursors.basic : SystemMouseCursors.click,
@@ -283,7 +297,19 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
               ),
               child: Row(
                 children: [
-                  PbSvgIcon(assetName: iconAssetName, size: 28, color: iconColor),
+                  if (loading)
+                    Semantics(
+                      label: 'Generating image',
+                      child: const SizedBox.square(
+                        dimension: 28,
+                        child: Padding(
+                          padding: EdgeInsets.all(3),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: PbColors.textSubtle),
+                        ),
+                      ),
+                    )
+                  else
+                    PbSvgIcon(assetName: iconAssetName, size: 28, color: iconColor),
                   const SizedBox(width: 23),
                   Expanded(
                     child: Column(
@@ -310,7 +336,7 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                       ],
                     ),
                   ),
-                  if (!widget.emptyState) ...[
+                  if (!widget.emptyState && !unavailable && !loading) ...[
                     const SizedBox(width: 12),
                     SizedBox(
                       width: 38,
@@ -327,6 +353,7 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                               onAskAgent: widget.onAskAgent,
                               onExtract: widget.onExtract,
                               onDownload: widget.onDownload,
+                              onSaveCopyAs: widget.onSaveCopyAs,
                               onDismiss: closeMenu,
                             ),
                           ),

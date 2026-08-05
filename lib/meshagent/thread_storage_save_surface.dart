@@ -1,7 +1,17 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_comment_save_copy_dialog.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_dialog_file_list.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_select_dialog.dart';
+import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:powerboards/ui/powerboards_toasts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -88,6 +98,54 @@ Future<bool> _showOverwriteConfirmation(BuildContext context, {required String f
   return overwrite == true;
 }
 
+enum PowerboardsV1SaveConflictResolution { cancel, keepBoth, replace }
+
+@visibleForTesting
+Future<PowerboardsV1SaveConflictResolution> showPowerboardsV1SaveConflictResolution(
+  BuildContext context, {
+  required String fullPath,
+}) async {
+  final resolution = await showPowerboardsAlertDialog<PowerboardsV1SaveConflictResolution>(
+    context: context,
+    builder: (dialogContext) => PowerboardsShadDialog.compactAlert(
+      title: const Text('File already exists'),
+      description: Text("A file named '${_threadStorageFileNameFromPath(fullPath)}' already exists in this folder."),
+      actions: [
+        ShadButton.secondary(
+          onPressed: () => Navigator.of(dialogContext).pop(PowerboardsV1SaveConflictResolution.keepBoth),
+          child: const Text('Keep both'),
+        ),
+        ShadButton(
+          onPressed: () => Navigator.of(dialogContext).pop(PowerboardsV1SaveConflictResolution.replace),
+          child: const Text('Replace'),
+        ),
+      ],
+    ),
+  );
+  return resolution ?? PowerboardsV1SaveConflictResolution.cancel;
+}
+
+@visibleForTesting
+Future<String> powerboardsV1NextAvailableSavePath(String fullPath, {required Future<bool> Function(String path) exists}) async {
+  final slash = fullPath.lastIndexOf('/');
+  final directory = slash < 0 ? '' : fullPath.substring(0, slash + 1);
+  final fileName = slash < 0 ? fullPath : fullPath.substring(slash + 1);
+  final dot = fileName.lastIndexOf('.');
+  final extension = dot <= 0 ? '' : fileName.substring(dot);
+  final stem = dot <= 0 ? fileName : fileName.substring(0, dot);
+  final numberedStem = RegExp(r'^(.*)-([2-9][0-9]*)$').firstMatch(stem);
+  final baseStem = numberedStem?.group(1) ?? stem;
+  var suffix = numberedStem == null ? 2 : int.parse(numberedStem.group(2)!) + 1;
+
+  while (true) {
+    final candidate = '$directory$baseStem-$suffix$extension';
+    if (!await exists(candidate)) {
+      return candidate;
+    }
+    suffix += 1;
+  }
+}
+
 void _showThreadStorageSaveToast(BuildContext context, {required Widget title, Widget? description, bool destructive = false}) {
   final toaster = ShadToaster.maybeOf(context);
   if (toaster == null) {
@@ -100,6 +158,180 @@ void _showThreadStorageSaveToast(BuildContext context, {required Widget title, W
 
 void _dismissSaveFieldFocus() {
   FocusManager.instance.primaryFocus?.unfocus();
+}
+
+Widget _buildPowerboardsV1CommentDestinationList(BuildContext context, List<FileBrowserRowViewModel> rows) {
+  final rowsById = {for (final row in rows) row.fullPath: row};
+  final items = [
+    for (final row in rows)
+      () {
+        final metadata = PbResolvedAttachmentMetadata.resolve(
+          title: row.entry.name,
+          explicitFileType: row.entry.isFolder ? PbAttachmentFileType.folder : null,
+        );
+        return PbDialogFileListItemData(
+          id: row.fullPath,
+          title: row.displayName,
+          iconAssetName: metadata.iconAssetName,
+          iconColor: row.entry.isFolder ? PbColors.surfaceRailActive : metadata.iconColor,
+        );
+      }(),
+  ];
+
+  return PbDialogFileList(
+    items: items,
+    showCheckboxes: false,
+    framed: false,
+    rowMargin: const EdgeInsets.symmetric(horizontal: 28),
+    rowPadding: const EdgeInsets.all(11),
+    listPadding: const EdgeInsets.symmetric(vertical: 8),
+    clipBehavior: Clip.none,
+    onItemPressed: (item) {
+      final row = rowsById[item.id];
+      if (row?.entry.isFolder == true) {
+        row?.onPressed();
+      }
+    },
+  );
+}
+
+Future<String?> showPowerboardsV1ThreadSaveCopySurface(BuildContext context, ThreadStorageSaveSurfaceRequest request) async {
+  final isComment = request.contentType == ThreadStorageSaveContentType.comment;
+  final nameController = TextEditingController(text: isComment ? '' : request.suggestedFileName);
+  String selectedFolder = '';
+  String? savedPath;
+  bool saving = false;
+
+  try {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.transparent,
+      useSafeArea: false,
+      builder: (dialogContext) => Stack(
+        children: [
+          StatefulBuilder(
+            builder: (dialogContext, setDialogState) {
+              Future<void> saveCopy() async {
+                final name = nameController.text.trim();
+                if (name.isEmpty || saving) {
+                  return;
+                }
+
+                var fullPath = _resolvedThreadStorageSavePath(
+                  rawValue: name,
+                  selectedFolder: selectedFolder,
+                  suggestedFileName: request.suggestedFileName,
+                );
+                final exists = await request.room.storage.exists(fullPath);
+                var overwrite = true;
+                if (exists && dialogContext.mounted) {
+                  if (request.offerKeepBothOnConflict) {
+                    final resolution = await showPowerboardsV1SaveConflictResolution(dialogContext, fullPath: fullPath);
+                    if (resolution == PowerboardsV1SaveConflictResolution.cancel || !dialogContext.mounted) {
+                      return;
+                    }
+                    if (resolution == PowerboardsV1SaveConflictResolution.keepBoth) {
+                      fullPath = await powerboardsV1NextAvailableSavePath(fullPath, exists: request.room.storage.exists);
+                      overwrite = false;
+                    }
+                  } else {
+                    final confirmed = await _showOverwriteConfirmation(dialogContext, fullPath: fullPath);
+                    if (!confirmed || !dialogContext.mounted) {
+                      return;
+                    }
+                  }
+                } else if (request.offerKeepBothOnConflict) {
+                  overwrite = false;
+                }
+
+                setDialogState(() => saving = true);
+
+                try {
+                  final content = await request.loadContent();
+                  await request.room.storage.uploadStream(
+                    fullPath,
+                    Stream.value(content.data),
+                    overwrite: overwrite,
+                    size: content.data.length,
+                    name: _threadStorageFileNameFromPath(fullPath),
+                    mimeType: content.mimeType,
+                  );
+                  savedPath = fullPath;
+
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                  if (context.mounted) {
+                    _showThreadStorageSaveToast(context, title: const Text('Saved to room storage'), description: Text(fullPath));
+                  }
+                } catch (error) {
+                  if (context.mounted) {
+                    _showThreadStorageSaveToast(
+                      context,
+                      title: const Text('Unable to save file'),
+                      description: Text('$error'),
+                      destructive: true,
+                    );
+                  }
+                  if (dialogContext.mounted) {
+                    setDialogState(() => saving = false);
+                  }
+                }
+              }
+
+              return PbCommentSaveCopyDialog(
+                subtitle: isComment ? 'Save comment as markdown' : 'Save attachment to Files',
+                namePlaceholder: isComment ? 'Enter a name for your comment' : 'Enter a name for your file',
+                nameController: nameController,
+                canSave: nameController.text.trim().isNotEmpty,
+                saving: saving,
+                onNameChanged: (_) => setDialogState(() {}),
+                onCopyAndSave: () => unawaited(saveCopy()),
+                onClose: () => Navigator.of(dialogContext).pop(),
+                fileBrowser: FileBrowser(
+                  room: request.room,
+                  selectionMode: FileBrowserSelectionMode.folders,
+                  showFilesWhenSelectingFolders: true,
+                  rootLabel: 'Browse',
+                  onPathChanged: (path) => selectedFolder = path,
+                  headerBuilder: (context, model) => PbFileSelectBreadcrumb(
+                    currentPath: model.path,
+                    onRootPressed: model.onRootPressed,
+                    onSegmentPressed: model.onSegmentPressed,
+                  ),
+                  listBuilder: _buildPowerboardsV1CommentDestinationList,
+                  emptyBuilder: (context) => const PbFileSelectStatus(message: 'This folder is empty'),
+                  loadingBuilder: (context) => const PbFileSelectStatus(message: 'Loading files...', loading: true),
+                  errorBuilder: (context, error) => const PbFileSelectStatus(message: 'Unable to load files'),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  } finally {
+    nameController.dispose();
+  }
+  return savedPath;
+}
+
+Future<void> showPowerboardsV1ThreadCommentSaveCopySurfaceForText(BuildContext context, {required RoomClient room, required String text}) {
+  return showPowerboardsV1ThreadSaveCopySurface(
+    context,
+    ThreadStorageSaveSurfaceRequest(
+      room: room,
+      title: 'Save a copy as...',
+      suggestedFileName: 'chat-comment.md',
+      fileNameLabel: 'Enter a name for your comment',
+      contentType: ThreadStorageSaveContentType.comment,
+      loadContent: () async {
+        final bytes = Uint8List.fromList(utf8.encode(text));
+        return FileContent(data: bytes, name: 'chat-comment.md', mimeType: 'text/markdown');
+      },
+    ),
+  );
 }
 
 Future<void> showPowerboardsThreadStorageSaveSurface(BuildContext context, ThreadStorageSaveSurfaceRequest request) async {
