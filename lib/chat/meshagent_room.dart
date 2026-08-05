@@ -44,6 +44,7 @@ import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
+import 'package:powerboards/meshagent/file_reference_registry.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/meshagent/thread_display_name.dart';
 import 'package:powerboards/meshagent/grant.dart' as grant;
@@ -810,6 +811,20 @@ bool powerboardsDesktopPreviewShouldLoadThreadAttachments({required PbRoomPanelT
 }
 
 @visibleForTesting
+bool powerboardsDesktopPreviewShouldListIndexedAttachment({
+  required PowerboardsFileAttachmentLink link,
+  required String roomName,
+  required Iterable<PowerboardsFileReference> references,
+}) {
+  final inheritedFromCopy = link.inheritedFromCopy;
+  if (inheritedFromCopy != null) {
+    return !inheritedFromCopy;
+  }
+
+  return !powerboardsPathWasCreatedByCopy(roomName: roomName, path: link.filePath, references: references);
+}
+
+@visibleForTesting
 String powerboardsDesktopPreviewSelectedThreadTitleForVisibleThreads({
   required String? selectedThreadPath,
   required String? currentThreadLabel,
@@ -1102,6 +1117,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   final Map<String, agent_sessions.ChatThreadSession> _agentThreadSessions = <String, agent_sessions.ChatThreadSession>{};
   final Map<String, StorageEntry> _attachmentEntriesByPath = <String, StorageEntry>{};
   List<PowerboardsFileAttachmentLink> _links = const <PowerboardsFileAttachmentLink>[];
+  List<PowerboardsFileReference> _fileReferences = const <PowerboardsFileReference>[];
   List<_DesktopPreviewThreadAttachmentRecord> _threadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
   List<_DesktopPreviewThreadAttachmentRecord> _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
   int _loadGeneration = 0;
@@ -1189,6 +1205,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     _pendingThreadDocumentClose = _closeThreadDocuments(client: oldWidget.client);
     _attachmentEntriesByPath.clear();
     _links = const <PowerboardsFileAttachmentLink>[];
+    _fileReferences = const <PowerboardsFileReference>[];
     _threadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
     _agentThreadAttachments = const <_DesktopPreviewThreadAttachmentRecord>[];
   }
@@ -1211,6 +1228,11 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
   }
 
   void _onRoomEvent(RoomEvent event) {
+    if (event is FileMovedEvent) {
+      unawaited(_registerObservedFileMove(event));
+      return;
+    }
+
     final path = switch (event) {
       FileUpdatedEvent() => normalizePowerboardsAttachmentPath(event.path),
       FileDeletedEvent() => normalizePowerboardsAttachmentPath(event.path),
@@ -1221,7 +1243,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       return;
     }
 
-    if (path == powerboardsFileAttachmentIndexPath) {
+    if (path == powerboardsFileAttachmentIndexPath || path == powerboardsFileReferenceRegistryPath) {
       unawaited(_loadAttachments());
       return;
     }
@@ -1239,6 +1261,37 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
 
     if (event is FileUpdatedEvent) {
       unawaited(_refreshAttachmentEntry(path));
+    }
+  }
+
+  Future<void> _registerObservedFileMove(FileMovedEvent event) async {
+    final roomName = widget.client.roomName?.trim() ?? '';
+    if (roomName.isEmpty) {
+      return;
+    }
+
+    var folder = false;
+    try {
+      folder = (await widget.client.storage.stat(event.destinationPath))?.isFolder == true;
+    } catch (_) {}
+
+    try {
+      await registerPowerboardsFileTransfer(
+        sourceRoom: widget.client,
+        destinationRoom: widget.client,
+        sourceRoomName: roomName,
+        destinationRoomName: roomName,
+        sourcePath: event.sourcePath,
+        destinationPath: event.destinationPath,
+        folder: folder,
+        move: true,
+      );
+    } catch (error) {
+      debugPrint('Failed to register observed file move from ${event.sourcePath}: $error');
+    }
+
+    if (mounted) {
+      await _loadAttachments();
     }
   }
 
@@ -1285,6 +1338,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     final threadRefs = _threadRefs();
     _syncAgentThreadSessions(threadRefs);
     final links = await loadPowerboardsFileAttachmentLinks(widget.client);
+    final fileReferences = await loadPowerboardsFileReferences(widget.client);
     await _pendingThreadDocumentClose;
     if (!mounted || generation != _loadGeneration) {
       return;
@@ -1298,6 +1352,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     final agentThreadAttachments = _collectAgentThreadAttachments(threadRefs);
     setState(() {
       _links = links;
+      _fileReferences = fileReferences;
       _threadAttachments = threadAttachments;
       _agentThreadAttachments = agentThreadAttachments;
     });
@@ -1523,11 +1578,18 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     final threadPathKeys = _threadRefs().map((thread) => powerboardsThreadAttachmentMatchKey(thread.path)).toSet();
     final paths = <String>{};
 
+    void addPath(String path) {
+      final resolvedPath = _resolvedLocalAttachmentPath(path);
+      if (resolvedPath != null && resolvedPath.isNotEmpty) {
+        paths.add(resolvedPath);
+      }
+    }
+
     for (final link in widget.localLinks) {
       if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(link.threadPath)) && link.filePath.isNotEmpty) {
         final filePath = powerboardsStorageAttachmentPathFromUrl(link.filePath);
         if (filePath.isNotEmpty) {
-          paths.add(filePath);
+          addPath(filePath);
         }
       }
     }
@@ -1536,7 +1598,7 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(attachment.threadPath)) && attachment.filePath.isNotEmpty) {
         final filePath = powerboardsStorageAttachmentPathFromUrl(attachment.filePath);
         if (filePath.isNotEmpty) {
-          paths.add(filePath);
+          addPath(filePath);
         }
       }
     }
@@ -1545,21 +1607,42 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
       if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(attachment.threadPath)) && attachment.filePath.isNotEmpty) {
         final filePath = powerboardsStorageAttachmentPathFromUrl(attachment.filePath);
         if (filePath.isNotEmpty) {
-          paths.add(filePath);
+          addPath(filePath);
         }
       }
     }
 
     for (final link in _links) {
+      if (!powerboardsDesktopPreviewShouldListIndexedAttachment(
+        link: link,
+        roomName: widget.client.roomName?.trim() ?? '',
+        references: _fileReferences,
+      )) {
+        continue;
+      }
       if (threadPathKeys.contains(powerboardsThreadAttachmentMatchKey(link.threadPath)) && link.filePath.isNotEmpty) {
         final filePath = powerboardsStorageAttachmentPathFromUrl(link.filePath);
         if (filePath.isNotEmpty) {
-          paths.add(filePath);
+          addPath(filePath);
         }
       }
     }
 
     return paths;
+  }
+
+  String? _resolvedLocalAttachmentPath(String path) {
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
+    final roomName = widget.client.roomName?.trim() ?? '';
+    if (normalizedPath.isEmpty || roomName.isEmpty) {
+      return null;
+    }
+
+    final resolution = powerboardsResolveFileReference(roomName: roomName, path: normalizedPath, references: _fileReferences);
+    if (resolution.roomName.trim().toLowerCase() != roomName.toLowerCase()) {
+      return null;
+    }
+    return resolution.path;
   }
 
   Future<void> _syncAttachmentEntries() async {
@@ -1618,9 +1701,9 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     final attachments = <PbAttachmentListItemData>[];
 
     void addAttachment({required String filePath, required String threadPath, required String threadName}) {
-      final normalizedFilePath = powerboardsStorageAttachmentPathFromUrl(filePath);
+      final normalizedFilePath = _resolvedLocalAttachmentPath(filePath);
       final normalizedThreadPath = normalizePowerboardsThreadAttachmentPath(threadPath);
-      if (normalizedFilePath.isEmpty || normalizedThreadPath.isEmpty) {
+      if (normalizedFilePath == null || normalizedFilePath.isEmpty || normalizedThreadPath.isEmpty) {
         return;
       }
 
@@ -1674,6 +1757,13 @@ class _DesktopPreviewThreadAttachmentsState extends State<_DesktopPreviewThreadA
     }
 
     for (final link in _links) {
+      if (!powerboardsDesktopPreviewShouldListIndexedAttachment(
+        link: link,
+        roomName: widget.client.roomName?.trim() ?? '',
+        references: _fileReferences,
+      )) {
+        continue;
+      }
       final threadName = threadNamesByMatchKey[powerboardsThreadAttachmentMatchKey(link.threadPath)];
       if (threadName == null) {
         continue;
@@ -6661,7 +6751,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           builder: (context, attachments) => buildRoomWorkspace(
             attachments,
             filesTabLabel: 'Files',
-            filesPanelDescription: 'Browse attachments by selected agent.',
+            filesPanelDescription: 'Browse attachments by selected thread.',
             filesEmptyState: const PbSidepaneFileEmptyStateData(title: 'No files here yet', subtitle: 'Files attached will show up here.'),
           ),
         );
@@ -7523,6 +7613,18 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       }
       if (exactEntry?.isFolder == true) {
         return null;
+      }
+    } catch (_) {}
+
+    try {
+      final roomName = widget.room.roomName?.trim() ?? '';
+      final references = await loadPowerboardsFileReferences(widget.room);
+      final resolution = powerboardsResolveFileReference(roomName: roomName, path: normalizedPath, references: references);
+      if (resolution.roomName.trim().toLowerCase() == roomName.toLowerCase() && resolution.path != normalizedPath) {
+        final relocatedEntry = await widget.room.storage.stat(resolution.path);
+        if (relocatedEntry != null && !relocatedEntry.isFolder) {
+          return resolution.path;
+        }
       }
     } catch (_) {}
 

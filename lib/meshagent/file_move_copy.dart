@@ -51,6 +51,15 @@ bool powerboardsV1CanUseMoveDestination({
   return true;
 }
 
+bool powerboardsV1ShouldConfirmCrossRoomLinkedMove({
+  required String sourceRoom,
+  required String destinationRoom,
+  required bool copyFilesInstead,
+  required bool containsLinkedAttachments,
+}) {
+  return !copyFilesInstead && containsLinkedAttachments && sourceRoom.trim().toLowerCase() != destinationRoom.trim().toLowerCase();
+}
+
 @visibleForTesting
 String powerboardsV1ConflictCopyName(
   String originalName, {
