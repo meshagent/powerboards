@@ -528,6 +528,14 @@ bool _isTranscriptFileName(String fileName) {
   return fileName.toLowerCase().endsWith(transcriptFileExtension);
 }
 
+@visibleForTesting
+bool powerboardsDesktopPreviewRoomRouteSyncShouldReleaseFullscreen({
+  required bool routeTargetsFolder,
+  required bool roomFilePreviewFullscreen,
+}) {
+  return routeTargetsFolder && roomFilePreviewFullscreen;
+}
+
 String? _agentThreadListPath(String? path) {
   final normalized = path?.trim();
   if (normalized == null || normalized.isEmpty) {
@@ -3048,13 +3056,17 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     final pane = _roomPaneFromUri(currentUri);
     final usesMobileRoomLayout = _usesMobileRoomLayout(context);
     final routeTargetsFolder = pane == _MobileRoomPane.files && (path == null || path.isEmpty || path.endsWith('/'));
+    final releaseRoomFilePreviewFullscreen = powerboardsDesktopPreviewRoomRouteSyncShouldReleaseFullscreen(
+      routeTargetsFolder: routeTargetsFolder,
+      roomFilePreviewFullscreen: _desktopPreviewFilePreviewFullscreen,
+    );
 
     if (routeTargetsFolder) {
       _desktopPreviewFilePreviewFile = null;
       _desktopPreviewFilePreviewOpen = false;
       _desktopPreviewFilePreviewFullscreen = false;
       _desktopPreviewComposerAttachmentPreviewPath = null;
-      if (previewFilePreviewFullscreenListenable.value) {
+      if (releaseRoomFilePreviewFullscreen && previewFilePreviewFullscreenListenable.value) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             setPreviewFilePreviewFullscreen(false);
