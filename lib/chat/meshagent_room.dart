@@ -7661,6 +7661,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
         ? null
         : <String, String>{filePath: normalizedFileDisplayName};
 
+    if (isFolder) {
+      await _handoffDesktopPreviewFolderPrompt(
+        context,
+        agentKey: agentKey,
+        folderPath: filePath,
+        displayNamesByPath: composerAttachmentDisplayNamesByPath,
+      );
+      return;
+    }
+
     if (!powerboardsFilePromptShouldShowPreview(isFolder: isFolder, responsiveHandoff: responsiveHandoff)) {
       await _handoffResponsiveDesktopPreviewFilePrompt(
         context,
@@ -7687,6 +7697,26 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     });
     await _setComposerAttachmentSeed(agentKey, [filePath], isFolder: isFolder, displayNamesByPath: composerAttachmentDisplayNamesByPath);
     setPreviewFilePreviewFullscreen(false);
+
+    if (!mounted || !context.mounted) {
+      return;
+    }
+    _showDesktopPreviewChatPane(context, agentKey: agentKey);
+  }
+
+  Future<void> _handoffDesktopPreviewFolderPrompt(
+    BuildContext context, {
+    required String agentKey,
+    required String folderPath,
+    Map<String, String>? displayNamesByPath,
+  }) async {
+    final normalizedPath = powerboardsStorageAttachmentPathFromUrl(folderPath);
+    setState(() {
+      _selectedThreadPathByAgentKey.remove(agentKey);
+      _selectedThreadLabelByAgentKey.remove(agentKey);
+      _newThreadResetVersion++;
+    });
+    await _setComposerAttachmentSeed(agentKey, [normalizedPath], isFolder: true, displayNamesByPath: displayNamesByPath);
 
     if (!mounted || !context.mounted) {
       return;

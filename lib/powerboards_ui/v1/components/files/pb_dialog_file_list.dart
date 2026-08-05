@@ -15,6 +15,7 @@ class PbDialogFileListItemData {
     this.depth = 1,
     this.enabled = true,
     this.selectionEnabled = true,
+    this.visuallyDisabled = false,
   });
 
   final String id;
@@ -24,6 +25,7 @@ class PbDialogFileListItemData {
   final int depth;
   final bool enabled;
   final bool selectionEnabled;
+  final bool visuallyDisabled;
 }
 
 class PbDialogFileList extends StatefulWidget {
@@ -247,11 +249,19 @@ class _PbDialogFileListRow extends StatelessWidget {
               boxShadow: shadow,
             ),
             foregroundDecoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: hideDivider ? Colors.transparent : PbColors.borderFaint)),
+              border: Border(
+                bottom: BorderSide(
+                  color: hideDivider
+                      ? Colors.transparent
+                      : PbColors.borderFaint,
+                ),
+              ),
             ),
-            child: Row(
-              children: [
-                if (showCheckbox) ...[
+            child: Opacity(
+              opacity: item.visuallyDisabled ? 0.42 : 1,
+              child: Row(
+                children: [
+                  if (showCheckbox) ...[
                   SizedBox(
                     width: 28,
                     child: Center(
@@ -267,6 +277,7 @@ class _PbDialogFileListRow extends StatelessWidget {
                   child: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: PowerboardsTypography.button),
                 ),
               ],
+            ),
             ),
           ),
         ),
