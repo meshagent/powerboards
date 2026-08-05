@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_menus.dart';
@@ -7,6 +8,8 @@ import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_v
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_files_page.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_option.dart';
 
 PbFilesItemData _folder(String id, String title) {
   return PbFilesItemData(
@@ -79,7 +82,17 @@ void main() {
       ),
     );
 
-    expect(find.text('Move to...'), findsOneWidget);
+    final moveOption = find.byWidgetPredicate((widget) => widget is PbMenuOption && widget.title == 'Move to...');
+    expect(moveOption, findsOneWidget);
+    expect(tester.widget<PbMenuOption>(moveOption).leadingIconAssetName, 'folder-symlink');
+    expect(
+      find.descendant(
+        of: moveOption,
+        matching: find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'folder-symlink'),
+      ),
+      findsOneWidget,
+    );
+    await rootBundle.load('lib/powerboards_ui/v1/assets/icons/folder-symlink.svg');
     await tester.tap(find.text('Move to...'));
     expect(moves, 1);
   });

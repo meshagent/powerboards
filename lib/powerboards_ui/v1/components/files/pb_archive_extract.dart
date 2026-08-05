@@ -406,12 +406,12 @@ class _ArchiveStatsBox extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: PbColors.borderStateSelected),
-        color: PbColors.surfaceStateSelected,
+        border: Border.all(color: PbColors.dynamicBorderStateSelected),
+        color: PbColors.dynamicSurfaceStateSelected,
       ),
       child: Row(
         children: [
-          const PbSvgIcon(assetName: 'info', size: 18, color: PbColors.customBlue),
+          PbSvgIcon(assetName: 'info', size: 18, color: PbColors.dynamicCustomBlue),
           const SizedBox(width: 9),
           Expanded(
             child: Text(summaryLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: PowerboardsTypography.labelSmall),
@@ -517,8 +517,8 @@ class _ArchiveNotice extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PbColors.borderStateSelected),
-        color: PbColors.surfaceStateSelected,
+        border: Border.all(color: PbColors.dynamicBorderStateSelected),
+        color: PbColors.dynamicSurfaceStateSelected,
       ),
       child: Text(text, style: PowerboardsTypography.labelSmall.copyWith(height: 1.45)),
     );

@@ -163,8 +163,8 @@ class PbFilesToolbar extends StatelessWidget {
                 iconAssetName: 'globe',
                 onPressed: onPreviewWebServer,
                 width: 134,
-                backgroundColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.surfacePanelSoft,
-                pressedBackgroundColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.surfacePanelSoft,
+                backgroundColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.dynamicSurfacePanelSoft,
+                pressedBackgroundColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.dynamicSurfacePanelSoft,
                 borderColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.borderSoft,
                 pressedBorderColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.borderSoft,
                 foregroundColor: webServerPreviewActive ? PbColors.textInverse : PbColors.textMuted,
@@ -545,9 +545,9 @@ class _FilesBreadcrumbOverflowButton extends StatelessWidget {
             height: height,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: open ? PbColors.surfaceAccentSoft : PbColors.surfacePanel,
+                color: open ? PbColors.dynamicSurfaceAccentSoft : PbColors.dynamicSurfacePanel,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: open ? PbColors.borderStateSelected : PbColors.borderSoft),
+                border: Border.all(color: open ? PbColors.dynamicBorderStateSelected : PbColors.borderSoft),
               ),
               child: const Center(
                 child: PbSvgIcon(assetName: 'ellipsis', size: 18, color: PbColors.textMuted),
@@ -845,20 +845,12 @@ class _FilesSelectionActions extends StatelessWidget {
       mainAxisSize: stretch ? MainAxisSize.max : MainAxisSize.min,
       children: [
         if (stretch) Expanded(child: deselectButton) else deselectButton,
-        if (onMoveSelection != null) ...[
-          const SizedBox(width: 10),
-          if (stretch) Expanded(child: moveButton) else moveButton,
-        ],
+        if (onMoveSelection != null) ...[const SizedBox(width: 10), if (stretch) Expanded(child: moveButton) else moveButton],
         const SizedBox(width: 10),
         if (stretch) Expanded(child: downloadButton) else downloadButton,
         const SizedBox(width: 10),
         if (stretch) Expanded(child: deleteButton) else deleteButton,
-        if (showCount) ...[
-          const SizedBox(width: 18),
-          Flexible(
-            child: _FilesSelectionCountText(selectedCount: selectedCount),
-          ),
-        ],
+        if (showCount) ...[const SizedBox(width: 18), Flexible(child: _FilesSelectionCountText(selectedCount: selectedCount))],
       ],
     );
 

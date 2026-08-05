@@ -444,7 +444,7 @@ class _FilesTableHeader extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 36),
       decoration: BoxDecoration(
-        color: PbColors.surfacePanelWash,
+        color: Colors.transparent,
         border: Border.all(color: Colors.transparent),
       ),
       padding: EdgeInsets.symmetric(horizontal: columns.compact ? 8 : 10),
@@ -824,18 +824,18 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
     final radius = _processing ? BorderRadius.circular(processingHovered || processingMenuOpen ? 10 : 0) : _selectionRadius();
     final backgroundColor = _processing
         ? processingMenuOpen
-              ? Color.lerp(PbColors.surfacePanel, PbColors.surfacePanelSoft, 0.72)
+              ? Color.lerp(PbColors.dynamicSurfacePanel, PbColors.dynamicSurfacePanelSoft, 0.72)
               : processingHovered
-              ? Color.lerp(PbColors.surfacePanelSoft, PbColors.surfacePanel, 0.56)
+              ? Color.lerp(PbColors.dynamicSurfacePanelSoft, PbColors.dynamicSurfacePanel, 0.56)
               : Colors.transparent
         : widget.selected || widget.active || _pressed
-        ? PbColors.customStateSelectedSurface
+        ? PbColors.dynamicCustomStateSelectedSurface
         : menuOpen
-        ? PbColors.customMenuOpenSurface
+        ? PbColors.dynamicCustomMenuOpenSurface
         : null;
     final gradient = !_processing && normalHovered && !stateful
-        ? const LinearGradient(
-            colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+        ? LinearGradient(
+            colors: [PbColors.dynamicSurfacePanel, PbColors.dynamicSurfacePanelSoft],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           )
@@ -846,13 +846,13 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
               : Colors.transparent
         : widget.active || _pressed
         ? widget.keyboardFocused
-              ? PbColors.customRailSelectedSurface
-              : PbColors.customStateSelectedBorder
+              ? PbColors.dynamicCustomRailSelectedSurface
+              : PbColors.dynamicCustomStateSelectedBorder
         : Colors.transparent;
     final shadow = _processing
         ? null
         : widget.keyboardFocused
-        ? const [BoxShadow(color: PbColors.customRailSelectedSurface, blurRadius: 0, spreadRadius: 1)]
+        ? [BoxShadow(color: PbColors.dynamicCustomRailSelectedSurface, blurRadius: 0, spreadRadius: 1)]
         : normalHovered && !stateful
         ? PbShadows.stateHover
         : _pressed
@@ -1122,13 +1122,9 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
         Container(
           width: 28,
           height: 28,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: [PbColors.surfaceRailActive, PbColors.surfaceActionPrimary],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
+            gradient: LinearGradient(colors: PbColors.dynamicPrimaryGradient, begin: Alignment.topCenter, end: Alignment.bottomCenter),
           ),
           alignment: Alignment.center,
           child: Text(
@@ -1273,9 +1269,9 @@ class _FilesCheckbox extends StatelessWidget {
               width: 14,
               height: 14,
               decoration: BoxDecoration(
-                color: active ? PbColors.surfaceActionPrimary : PbColors.surfacePanel,
+                color: active ? PbColors.dynamicSurfaceActionPrimary : PbColors.dynamicSurfacePanel,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: active ? PbColors.surfaceActionPrimary : PbColors.customGray),
+                border: Border.all(color: active ? PbColors.dynamicSurfaceActionPrimary : PbColors.customGray),
               ),
               child: active
                   ? CustomPaint(
@@ -1299,7 +1295,7 @@ class _FilesCheckPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = PbColors.surfacePanel
+      ..color = PbColors.dynamicSurfacePanel
       ..strokeWidth = 1.7
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round

@@ -239,9 +239,9 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                 color: widget.emptyState
                     ? null
                     : _menuOpen
-                    ? PbColors.customMenuOpenSurface
+                    ? PbColors.dynamicCustomMenuOpenSurface
                     : _pressed
-                    ? PbColors.customStateSelectedSurface
+                    ? PbColors.dynamicCustomStateSelectedSurface
                     : null,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
@@ -250,22 +250,22 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                       : _menuOpen
                       ? Colors.transparent
                       : _pressed
-                      ? PbColors.customStateSelectedBorder
+                      ? PbColors.dynamicCustomStateSelectedBorder
                       : PbColors.borderSoft,
                 ),
                 gradient: widget.emptyState
                     ? LinearGradient(
                         colors: [
-                          Color.lerp(PbColors.surfacePanel, PbColors.surfacePanelSoft, 0.08)!,
-                          PbColors.surfacePanelSoft.withValues(alpha: 0.96),
+                          Color.lerp(PbColors.dynamicSurfacePanel, PbColors.dynamicSurfacePanelSoft, 0.08)!,
+                          PbColors.dynamicSurfacePanelSoft.withValues(alpha: 0.96),
                         ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       )
                     : _menuOpen || _pressed
                     ? null
-                    : const LinearGradient(
-                        colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+                    : LinearGradient(
+                        colors: [PbColors.dynamicSurfacePanel, PbColors.dynamicSurfacePanelSoft],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -292,9 +292,7 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                       children: [
                         Text(
                           widget.data.title,
-                          style: widget.emptyState
-                              ? PowerboardsTypography.listEmptyState
-                              : PowerboardsTypography.button,
+                          style: widget.emptyState ? PowerboardsTypography.listEmptyState : PowerboardsTypography.button,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

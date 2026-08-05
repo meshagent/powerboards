@@ -545,6 +545,17 @@ void main() {
     expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.agents, filePreviewOpen: true), isTrue);
   });
 
+  test('files takeover keeps fullscreen chrome ownership through room route sync', () {
+    expect(
+      powerboardsDesktopPreviewRoomRouteSyncShouldReleaseFullscreen(routeTargetsFolder: true, roomFilePreviewFullscreen: false),
+      isFalse,
+    );
+    expect(
+      powerboardsDesktopPreviewRoomRouteSyncShouldReleaseFullscreen(routeTargetsFolder: true, roomFilePreviewFullscreen: true),
+      isTrue,
+    );
+  });
+
   test('chat files pane excludes inherited copy links but keeps direct attachments', () {
     const directLink = PowerboardsFileAttachmentLink(
       filePath: 'moved/moved-image.png',

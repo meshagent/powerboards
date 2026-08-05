@@ -148,7 +148,7 @@ class PbFilesDropTargetOverlay extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(PbRadii.medium),
-          color: PbColors.customStateSelectedSurface.withValues(alpha: 0.54),
+          color: PbColors.dynamicCustomStateSelectedSurface.withValues(alpha: 0.54),
           boxShadow: PbShadows.card,
         ),
         child: ClipRRect(
@@ -165,12 +165,12 @@ class PbFilesDropTargetOverlay extends StatelessWidget {
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: Color.lerp(PbColors.customStateSelectedSurface, PbColors.surfacePanel, 0.76),
+                        color: Color.lerp(PbColors.dynamicCustomStateSelectedSurface, PbColors.dynamicSurfacePanel, 0.76),
                         borderRadius: BorderRadius.circular(PbRadii.small),
                         boxShadow: [PbShadows.softFromTextMuted(0.10)],
                       ),
                       alignment: Alignment.center,
-                      child: const PbSvgIcon(assetName: 'arrow-down-to-line', size: 22, color: PbColors.customRailSelectedSurface),
+                      child: PbSvgIcon(assetName: 'arrow-down-to-line', size: 22, color: PbColors.dynamicCustomRailSelectedSurface),
                     ),
                     const SizedBox(width: 12),
                     Text(title, style: PowerboardsTypography.h2.copyWith(color: PbColors.textPrimary)),
@@ -191,7 +191,7 @@ class _FilesDropTargetFramePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = PbColors.customStateSelectedBorder
+      ..color = PbColors.dynamicCustomStateSelectedBorder
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
     final rect = Offset.zero & size;

@@ -40,12 +40,12 @@ class PbFileSelectionCheckbox extends StatelessWidget {
                 height: 14,
                 decoration: BoxDecoration(
                   color: active
-                      ? PbColors.surfaceActionPrimary
+                      ? PbColors.dynamicSurfaceActionPrimary
                       : enabled
-                      ? PbColors.surfacePanel
+                      ? PbColors.dynamicSurfacePanel
                       : PbColors.borderFaint,
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: active ? PbColors.surfaceActionPrimary : PbColors.customGray),
+                  border: Border.all(color: active ? PbColors.dynamicSurfaceActionPrimary : PbColors.customGray),
                 ),
                 child: active
                     ? CustomPaint(
@@ -70,7 +70,7 @@ class _PbFileSelectionCheckPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = PbColors.surfacePanel
+      ..color = PbColors.dynamicSurfacePanel
       ..strokeWidth = 1.7
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
