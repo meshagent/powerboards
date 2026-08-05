@@ -292,7 +292,9 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                       children: [
                         Text(
                           widget.data.title,
-                          style: PowerboardsTypography.button.copyWith(color: widget.emptyState ? PbColors.textMuted : null),
+                          style: widget.emptyState
+                              ? PowerboardsTypography.listEmptyState
+                              : PowerboardsTypography.button,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

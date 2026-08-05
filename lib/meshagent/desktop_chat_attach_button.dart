@@ -9,10 +9,14 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
 import 'package:powerboards/meshagent/file_upload.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_dialog_file_list.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_select_dialog.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_anchor.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_list.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_menu_option.dart';
+import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
 import 'package:powerboards/ui/powerboards_shad_dialog.dart';
 import 'package:powerboards/ui/powerboards_toasts.dart';
@@ -36,6 +40,37 @@ BoxConstraints? _desktopAttachDialogConstraints(BuildContext context, BoxConstra
 
   final height = _desktopAttachDialogHeight(constraints);
   return BoxConstraints(minWidth: 512.0, maxWidth: 512.0, minHeight: height, maxHeight: height);
+}
+
+Widget _buildPowerboardsV1DialogFileList(BuildContext context, List<FileBrowserRowViewModel> rows) {
+  final rowsById = {for (final row in rows) row.fullPath: row};
+  final items = [
+    for (final row in rows)
+      PbDialogFileListItemData(
+        id: row.fullPath,
+        title: row.displayName,
+        iconAssetName: PbResolvedAttachmentMetadata.resolve(
+          title: row.entry.name,
+          explicitFileType: row.entry.isFolder ? PbAttachmentFileType.folder : null,
+        ).iconAssetName,
+        iconColor: row.entry.isFolder ? PbColors.surfaceRailActive : PbResolvedAttachmentMetadata.resolve(title: row.entry.name).iconColor,
+        enabled: row.canActivate,
+        selectionEnabled: row.canToggleSelection,
+      ),
+  ];
+
+  return PbDialogFileList(
+    items: items,
+    selectedIds: {for (final row in rows.where((row) => row.selected)) row.fullPath},
+    showCheckboxes: true,
+    framed: false,
+    rowMargin: const EdgeInsets.symmetric(horizontal: 28),
+    rowPadding: const EdgeInsets.all(11),
+    listPadding: const EdgeInsets.symmetric(vertical: 8),
+    clipBehavior: Clip.none,
+    onItemPressed: (item) => rowsById[item.id]?.onPressed(),
+    onToggleSelection: (id) => rowsById[id]?.onToggleSelection?.call(),
+  );
 }
 
 class PowerboardsV1AttachMenuActions {
@@ -189,117 +224,202 @@ class _PowerboardsDesktopChatAttachButtonState extends State<PowerboardsDesktopC
       return;
     }
 
-    final selectedFiles = await showPowerboardsFlowDialog<List<String>>(
-      context: context,
-      builder: (dialogContext) => LayoutBuilder(
-        builder: (dialogContext, constraints) => StatefulBuilder(
-          builder: (dialogContext, setDialogState) => PowerboardsShadDialog.task(
-            scrollable: false,
-            constraints: _desktopAttachDialogConstraints(dialogContext, constraints),
-            title: const Text('Select files'),
-            description: const Text('Attach files from this room'),
-            mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.ignore,
-            actions: [
-              ShadButton.outline(
-                onPressed: () {
-                  picked.clear();
-                  Navigator.of(dialogContext).pop(const <String>[]);
-                },
-                child: const Text('Cancel'),
-              ),
-              (picked.isEmpty ? ShadButton.secondary : ShadButton.new)(
-                onPressed: picked.isEmpty
-                    ? null
-                    : () {
-                        Navigator.of(dialogContext).pop(List<String>.from(picked));
-                      },
-                child: const Text('Add'),
-              ),
-            ],
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    final selectedFiles = widget.useV1Menu
+        ? await showDialog<List<String>>(
+            context: context,
+            barrierDismissible: false,
+            barrierColor: Colors.transparent,
+            useSafeArea: false,
+            builder: (dialogContext) => Stack(
               children: [
-                if (roomOptions.length > 1)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 4, 0, 16),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ShadSelect<String>(
-                          initialValue: selectedRoomName,
-                          selectedOptionBuilder: (selectContext, value) => Text(value),
-                          options: [for (final option in roomOptions) ShadOption<String>(value: option, child: Text(option))],
-                          onChanged: (value) async {
-                            if (value == null || value == selectedRoomName || widget.connectRoomClient == null) {
-                              return;
-                            }
+                StatefulBuilder(
+                  builder: (dialogContext, setDialogState) => PbFileSelectDialog(
+                    rooms: roomOptions,
+                    selectedRoom: selectedRoomName,
+                    canAdd: picked.isNotEmpty && !resolvingRoom,
+                    onClose: () {
+                      picked.clear();
+                      Navigator.of(dialogContext).pop(const <String>[]);
+                    },
+                    onAddPressed: () => Navigator.of(dialogContext).pop(List<String>.from(picked)),
+                    onRoomSelected: (value) async {
+                      if (value == selectedRoomName || widget.connectRoomClient == null) {
+                        return;
+                      }
 
-                            setDialogState(() {
-                              resolvingRoom = true;
-                              resolveError = false;
-                            });
+                      setDialogState(() {
+                        resolvingRoom = true;
+                        resolveError = false;
+                      });
 
-                            RoomClient? nextRoomClient;
-                            if (value == currentRoomName) {
-                              nextRoomClient = destinationRoom;
-                            } else {
-                              try {
-                                nextRoomClient = await widget.connectRoomClient!(value);
-                              } catch (_) {}
-                            }
+                      RoomClient? nextRoomClient;
+                      if (value == currentRoomName) {
+                        nextRoomClient = destinationRoom;
+                      } else {
+                        try {
+                          nextRoomClient = await widget.connectRoomClient!(value);
+                        } catch (_) {}
+                      }
 
-                            if (nextRoomClient == null) {
+                      if (nextRoomClient == null) {
+                        setDialogState(() {
+                          resolvingRoom = false;
+                          resolveError = true;
+                        });
+                        return;
+                      }
+
+                      if (!identical(destinationRoom, selectedRoomClient) && !identical(nextRoomClient, selectedRoomClient)) {
+                        selectedRoomClient.dispose();
+                      }
+
+                      setDialogState(() {
+                        selectedRoomName = value;
+                        selectedRoomClient = nextRoomClient!;
+                        picked = [];
+                        resolvingRoom = false;
+                      });
+                    },
+                    fileBrowser: resolvingRoom
+                        ? const PbFileSelectStatus(message: 'Connecting to room...', loading: true)
+                        : resolveError
+                        ? const PbFileSelectStatus(message: 'Room failed to connect')
+                        : FileBrowser(
+                            key: ValueKey(selectedRoomName),
+                            onSelectionChanged: (selection) {
                               setDialogState(() {
-                                resolvingRoom = false;
-                                resolveError = true;
+                                picked = selection;
                               });
-                              return;
-                            }
-
-                            if (!identical(destinationRoom, selectedRoomClient) && !identical(nextRoomClient, selectedRoomClient)) {
-                              selectedRoomClient.dispose();
-                            }
-
-                            setDialogState(() {
-                              selectedRoomName = value;
-                              selectedRoomClient = nextRoomClient!;
-                              picked = [];
-                              resolvingRoom = false;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
+                            },
+                            room: selectedRoomClient,
+                            multiple: true,
+                            headerBuilder: (context, model) => PbFileSelectBreadcrumb(
+                              currentPath: model.path,
+                              onRootPressed: model.onRootPressed,
+                              onSegmentPressed: model.onSegmentPressed,
+                            ),
+                            listBuilder: _buildPowerboardsV1DialogFileList,
+                            emptyBuilder: (context) => const PbFileSelectStatus.empty(message: 'Nothing to attach here'),
+                            loadingBuilder: (context) => const PbFileSelectStatus(message: 'Loading files...', loading: true),
+                            errorBuilder: (context, error) => const PbFileSelectStatus(message: 'Unable to load files'),
+                          ),
                   ),
-                const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
-                Expanded(
-                  child: resolvingRoom
-                      ? const Center(child: CircularProgressIndicator())
-                      : resolveError
-                      ? const Center(child: Text('Room failed to connect'))
-                      : FileBrowser(
-                          key: ValueKey(selectedRoomName),
-                          onSelectionChanged: (selection) {
-                            setDialogState(() {
-                              picked = selection;
-                            });
-                          },
-                          room: selectedRoomClient,
-                          multiple: true,
-                          headerBuilder: (context, model) => buildPowerboardsFileBrowserInsetHeader(context, model, horizontalPadding: 4),
-                          rowBuilder: buildPowerboardsCompactFileBrowserTitleOnlyRow,
-                          separatorBuilder: buildPowerboardsFileListDivider,
-                          emptyBuilder: buildPowerboardsFileBrowserEmptyState,
-                        ),
                 ),
-                const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
               ],
             ),
-          ),
-        ),
-      ),
-    );
+          )
+        : await showPowerboardsFlowDialog<List<String>>(
+            context: context,
+            builder: (dialogContext) => LayoutBuilder(
+              builder: (dialogContext, constraints) => StatefulBuilder(
+                builder: (dialogContext, setDialogState) => PowerboardsShadDialog.task(
+                  scrollable: false,
+                  constraints: _desktopAttachDialogConstraints(dialogContext, constraints),
+                  title: const Text('Select files'),
+                  description: const Text('Attach files from this room'),
+                  mobileKeyboardBehavior: PowerboardsDialogMobileKeyboardBehavior.ignore,
+                  actions: [
+                    ShadButton.outline(
+                      onPressed: () {
+                        picked.clear();
+                        Navigator.of(dialogContext).pop(const <String>[]);
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                    (picked.isEmpty ? ShadButton.secondary : ShadButton.new)(
+                      onPressed: picked.isEmpty
+                          ? null
+                          : () {
+                              Navigator.of(dialogContext).pop(List<String>.from(picked));
+                            },
+                      child: const Text('Add'),
+                    ),
+                  ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (roomOptions.length > 1)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(0, 4, 0, 16),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ShadSelect<String>(
+                                initialValue: selectedRoomName,
+                                selectedOptionBuilder: (selectContext, value) => Text(value),
+                                options: [for (final option in roomOptions) ShadOption<String>(value: option, child: Text(option))],
+                                onChanged: (value) async {
+                                  if (value == null || value == selectedRoomName || widget.connectRoomClient == null) {
+                                    return;
+                                  }
+
+                                  setDialogState(() {
+                                    resolvingRoom = true;
+                                    resolveError = false;
+                                  });
+
+                                  RoomClient? nextRoomClient;
+                                  if (value == currentRoomName) {
+                                    nextRoomClient = destinationRoom;
+                                  } else {
+                                    try {
+                                      nextRoomClient = await widget.connectRoomClient!(value);
+                                    } catch (_) {}
+                                  }
+
+                                  if (nextRoomClient == null) {
+                                    setDialogState(() {
+                                      resolvingRoom = false;
+                                      resolveError = true;
+                                    });
+                                    return;
+                                  }
+
+                                  if (!identical(destinationRoom, selectedRoomClient) && !identical(nextRoomClient, selectedRoomClient)) {
+                                    selectedRoomClient.dispose();
+                                  }
+
+                                  setDialogState(() {
+                                    selectedRoomName = value;
+                                    selectedRoomClient = nextRoomClient!;
+                                    picked = [];
+                                    resolvingRoom = false;
+                                  });
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+                      Expanded(
+                        child: resolvingRoom
+                            ? const Center(child: CircularProgressIndicator())
+                            : resolveError
+                            ? const Center(child: Text('Room failed to connect'))
+                            : FileBrowser(
+                                key: ValueKey(selectedRoomName),
+                                onSelectionChanged: (selection) {
+                                  setDialogState(() {
+                                    picked = selection;
+                                  });
+                                },
+                                room: selectedRoomClient,
+                                multiple: true,
+                                headerBuilder: (context, model) =>
+                                    buildPowerboardsFileBrowserInsetHeader(context, model, horizontalPadding: 4),
+                                rowBuilder: buildPowerboardsCompactFileBrowserTitleOnlyRow,
+                                separatorBuilder: buildPowerboardsFileListDivider,
+                                emptyBuilder: buildPowerboardsFileBrowserEmptyState,
+                              ),
+                      ),
+                      const SizedBox(height: powerboardsDialogScrollViewportVerticalInset),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
 
     var importedCount = 0;
     String? lastImportedDisplayName;

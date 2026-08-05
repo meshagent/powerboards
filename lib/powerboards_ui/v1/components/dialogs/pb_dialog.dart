@@ -22,6 +22,14 @@ class PbDialogShell extends StatelessWidget {
     this.maxWidth = 425,
     this.maxHeight = 720,
     this.viewportVerticalInset = 96,
+    this.showBackdrop = true,
+    this.blurBackdrop = true,
+    this.surfacePadding = const EdgeInsets.all(28),
+    this.headerPadding = EdgeInsets.zero,
+    this.bodyPadding = EdgeInsets.zero,
+    this.actionsPadding = EdgeInsets.zero,
+    this.headerBodySpacing = 24,
+    this.bodyActionsSpacing = 22,
   });
 
   final String title;
@@ -35,6 +43,14 @@ class PbDialogShell extends StatelessWidget {
   final double maxWidth;
   final double maxHeight;
   final double viewportVerticalInset;
+  final bool showBackdrop;
+  final bool blurBackdrop;
+  final EdgeInsetsGeometry surfacePadding;
+  final EdgeInsetsGeometry headerPadding;
+  final EdgeInsetsGeometry bodyPadding;
+  final EdgeInsetsGeometry actionsPadding;
+  final double headerBodySpacing;
+  final double bodyActionsSpacing;
 
   @override
   Widget build(BuildContext context) {
@@ -47,41 +63,80 @@ class PbDialogShell extends StatelessWidget {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: onClose,
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-              child: Container(color: PbColors.surfaceRailActive.withValues(alpha: 0.52)),
-            ),
+            child: showBackdrop
+                ? blurBackdrop
+                      ? BackdropFilter(
+                          filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                          child: Container(
+                            color: PbColors.surfaceRailActive.withValues(
+                              alpha: 0.52,
+                            ),
+                          ),
+                        )
+                      : Container(
+                          color: PbColors.surfaceRailActive.withValues(
+                            alpha: 0.52,
+                          ),
+                        )
+                : const SizedBox.expand(),
           ),
           Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: dialogMaxHeight),
+                constraints: BoxConstraints(
+                  maxWidth: maxWidth,
+                  maxHeight: dialogMaxHeight,
+                ),
                 child: Container(
-                  padding: const EdgeInsets.all(28),
+                  padding: surfacePadding,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(color: PbColors.borderSoft),
                     gradient: const LinearGradient(
-                      colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+                      colors: [
+                        PbColors.surfacePanel,
+                        PbColors.surfacePanelSoft,
+                      ],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
-                    boxShadow: const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 80, offset: Offset(0, 30))],
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color.fromRGBO(15, 23, 42, 0.12),
+                        blurRadius: 80,
+                        offset: Offset(0, 30),
+                      ),
+                    ],
                   ),
                   child: Column(
-                    mainAxisSize: bodyExpanded ? MainAxisSize.max : MainAxisSize.min,
+                    mainAxisSize: bodyExpanded
+                        ? MainAxisSize.max
+                        : MainAxisSize.min,
                     children: [
-                      _PbDialogHeader(
-                        title: title,
-                        subtitle: subtitle,
-                        iconAssetName: iconAssetName,
-                        iconColor: iconColor,
-                        onClose: onClose,
+                      Padding(
+                        padding: headerPadding,
+                        child: _PbDialogHeader(
+                          title: title,
+                          subtitle: subtitle,
+                          iconAssetName: iconAssetName,
+                          iconColor: iconColor,
+                          onClose: onClose,
+                        ),
                       ),
-                      const SizedBox(height: 24),
-                      if (bodyExpanded) Expanded(child: body) else body,
-                      if (actions != null) ...[const SizedBox(height: 22), actions!],
+                      if (headerBodySpacing > 0)
+                        SizedBox(height: headerBodySpacing),
+                      if (bodyExpanded)
+                        Expanded(
+                          child: Padding(padding: bodyPadding, child: body),
+                        )
+                      else
+                        Padding(padding: bodyPadding, child: body),
+                      if (actions != null) ...[
+                        if (bodyActionsSpacing > 0)
+                          SizedBox(height: bodyActionsSpacing),
+                        Padding(padding: actionsPadding, child: actions!),
+                      ],
                     ],
                   ),
                 ),
