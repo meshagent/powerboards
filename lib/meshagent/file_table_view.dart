@@ -25,8 +25,8 @@ import 'package:meshagent_flutter_shadcn/chat/conversation_descriptor.dart' as m
 import 'package:meshagent_flutter_shadcn/chat/file_prompt_actions.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/code.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/file_preview.dart';
-import 'package:meshagent_flutter_shadcn/file_preview/image.dart';
 import 'package:meshagent_flutter_shadcn/file_preview/video.dart';
+import 'package:meshagent_flutter_shadcn/storage/file_browser.dart';
 import 'package:meshagent_flutter_shadcn/storage/pending_storage_deletes.dart';
 import 'package:meshagent_flutter_shadcn/storage/transcript_file_name.dart';
 import 'package:meshagent_flutter_shadcn/ui/ui.dart';
@@ -42,6 +42,7 @@ import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/document_pane.dart';
 import 'package:powerboards/meshagent/file_list_primitives.dart';
+import 'package:powerboards/meshagent/file_move_copy.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/file_preview_state.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
@@ -54,6 +55,8 @@ import 'package:powerboards/meshagent/share_remote_file.dart';
 import 'package:powerboards/meshagent/v1_file_preview_source.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_archive_extract.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_dialog_file_list.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_select_dialog.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
@@ -130,6 +133,14 @@ const Set<String> _websitePreviewAppProjectFileNames = <String>{
 };
 const Set<String> _websitePreviewAppProjectFolderNames = <String>{'node_modules', 'src'};
 
+class _V1MoveDestinationSelection {
+  const _V1MoveDestinationSelection({required this.roomName, required this.path, required this.copyFilesInstead});
+
+  final String roomName;
+  final String path;
+  final bool copyFilesInstead;
+}
+
 typedef PowerboardsV1FilePromptRequested =
     FutureOr<void> Function(
       ChatFilePromptAction action,
@@ -138,6 +149,11 @@ typedef PowerboardsV1FilePromptRequested =
       required bool responsiveHandoff,
       String? fileDisplayName,
     });
+
+@visibleForTesting
+bool powerboardsV1FilePromptShouldCleanupSurfaces({required bool isFolder, required bool responsiveHandoff}) {
+  return !isFolder && responsiveHandoff;
+}
 
 @visibleForTesting
 bool powerboardsV1IsCanonicalWebServerFolder({required bool usesDesktopV1FilesBrowser, required String fullPath, required bool isFolder}) {
@@ -2689,11 +2705,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     switch (item.fileType) {
       case PbAttachmentFileType.image:
-        return _v1StorageUrlPreview(
-          item,
-          path,
-          (url) => ImagePreview(key: ValueKey('v1-image-preview:$path'), url: url, fit: BoxFit.contain),
-        );
+        return PowerboardsV1StorageImagePreview(key: ValueKey('v1-image-preview:$path'), room: widget.client, path: path, file: file);
       case PbAttachmentFileType.video:
       case PbAttachmentFileType.mediaGeneric:
         return _v1StorageUrlPreview(item, path, powerboardsV1VideoPreview);
@@ -2724,11 +2736,7 @@ class _FileManagerViewState extends State<FileManagerView> {
 
     switch (kind) {
       case FileKind.image:
-        return _v1StorageUrlPreview(
-          item,
-          path,
-          (url) => ImagePreview(key: ValueKey('v1-image-preview:$path'), url: url, fit: BoxFit.contain),
-        );
+        return PowerboardsV1StorageImagePreview(key: ValueKey('v1-image-preview:$path'), room: widget.client, path: path, file: file);
       case FileKind.video:
         return _v1StorageUrlPreview(item, path, powerboardsV1VideoPreview);
       case FileKind.audio:
@@ -2963,7 +2971,7 @@ class _FileManagerViewState extends State<FileManagerView> {
       }
       _finishV1FilePromptHandoff(
         recentlyOpenedItem: isFolder ? null : recentlyOpenedItem,
-        cleanupSurfaces: isFolder || cleanupSurfacesAfterHandoff,
+        cleanupSurfaces: powerboardsV1FilePromptShouldCleanupSurfaces(isFolder: isFolder, responsiveHandoff: cleanupSurfacesAfterHandoff),
       );
       return;
     }
@@ -3975,6 +3983,346 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     _setEntries(entries);
+  }
+
+  bool _v1ItemCanMove(PbFilesItemData item) {
+    return _v1ItemIsSelectable(item);
+  }
+
+  Future<RoomClient> _connectV1MoveRoom(String roomName) async {
+    final projectId = widget.projectId;
+    if (projectId == null) {
+      throw StateError('The project context is not available.');
+    }
+
+    final connection = await powerboards_meshagent.getMeshagentClient().connectRoom(projectId: projectId, roomName: roomName);
+    final roomClient = RoomClient(
+      protocolFactory: meshagent_api.WebSocketClientProtocol.createFactory(url: connection.roomUrl, token: connection.jwt),
+    );
+    try {
+      await roomClient.start();
+      await roomClient.ready;
+      return roomClient;
+    } catch (_) {
+      roomClient.dispose();
+      rethrow;
+    }
+  }
+
+  Future<List<String>> _v1MoveRoomOptions(String currentRoomName) async {
+    final projectId = widget.projectId;
+    if (projectId == null) {
+      return [currentRoomName];
+    }
+
+    try {
+      final rooms = await powerboards_meshagent.listMeshagentRooms(projectId);
+      return {currentRoomName, ...rooms.map((room) => room.name).where((name) => name.trim().isNotEmpty)}.toList()
+        ..sort((left, right) => left.toLowerCase().compareTo(right.toLowerCase()));
+    } catch (_) {
+      return [currentRoomName];
+    }
+  }
+
+  Widget _buildV1MoveDestinationList(BuildContext context, List<FileBrowserRowViewModel> rows, {required Set<String> sourceItemPaths}) {
+    final rowsById = {for (final row in rows) row.fullPath: row};
+    return PbDialogFileList(
+      items: [
+        for (final row in rows)
+          PbDialogFileListItemData(
+            id: row.fullPath,
+            title: row.displayName,
+            iconAssetName: PbResolvedAttachmentMetadata.resolve(
+              title: row.entry.name,
+              explicitFileType: row.entry.isFolder ? PbAttachmentFileType.folder : null,
+            ).iconAssetName,
+            iconColor: row.entry.isFolder
+                ? PbColors.surfaceRailActive
+                : PbResolvedAttachmentMetadata.resolve(title: row.entry.name).iconColor,
+            enabled: row.canActivate && !sourceItemPaths.contains(powerboardsNormalizeStoragePath(row.fullPath)),
+            selectionEnabled: false,
+            visuallyDisabled: sourceItemPaths.contains(powerboardsNormalizeStoragePath(row.fullPath)),
+          ),
+      ],
+      showCheckboxes: false,
+      framed: false,
+      rowMargin: const EdgeInsets.symmetric(horizontal: 30, vertical: 1),
+      rowPadding: const EdgeInsets.all(11),
+      listPadding: const EdgeInsets.symmetric(vertical: 8),
+      clipBehavior: Clip.none,
+      onItemPressed: (item) => rowsById[item.id]?.onPressed(),
+    );
+  }
+
+  Widget _buildV1MoveDestinationBrowser({
+    required RoomClient room,
+    required String roomName,
+    required String initialPath,
+    required Set<String> sourceItemPaths,
+    required ValueChanged<String> onPathChanged,
+  }) {
+    return FileBrowser(
+      key: ValueKey('v1-move-browser:$roomName:${identityHashCode(room)}'),
+      room: room,
+      initialPath: initialPath,
+      selectionMode: FileBrowserSelectionMode.folders,
+      showFilesWhenSelectingFolders: true,
+      onPathChanged: onPathChanged,
+      headerBuilder: (context, model) =>
+          PbFileSelectBreadcrumb(currentPath: model.path, onRootPressed: model.onRootPressed, onSegmentPressed: model.onSegmentPressed),
+      listBuilder: (context, rows) => _buildV1MoveDestinationList(context, rows, sourceItemPaths: sourceItemPaths),
+      emptyBuilder: (context) => const PbFileSelectStatus.empty(message: 'Nothing here yet'),
+      loadingBuilder: (context) => const PbFileSelectStatus(message: 'Loading files...', loading: true),
+      errorBuilder: (context, error) => const PbFileSelectStatus(message: 'Unable to load files'),
+    );
+  }
+
+  Future<void> _showV1MoveDestinationDialog(List<PbFilesItemData> items, {required String initialPath}) async {
+    if (items.isEmpty) {
+      return;
+    }
+    if (items.any((item) => !_v1ItemCanMove(item))) {
+      ShadToaster.of(context).show(
+        powerboardsToast(
+          title: 'Unable to move selection',
+          description: 'One or more selected items cannot be moved.',
+          destructive: true,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
+    final sourceRoomName = widget.client.roomName?.trim() ?? '';
+    if (sourceRoomName.isEmpty) {
+      return;
+    }
+
+    final roomOptionsFuture = _v1MoveRoomOptions(sourceRoomName);
+
+    var roomOptions = <String>[sourceRoomName];
+    var roomOptionsLoadStarted = false;
+    var selectedRoomName = sourceRoomName;
+    var selectedRoomClient = widget.client;
+    var destinationPath = powerboardsNormalizeStoragePath(initialPath);
+    var resolvingRoom = false;
+    var roomResolveError = false;
+    var connectionGeneration = 0;
+    var dialogFinished = false;
+    final remoteClients = <RoomClient>{};
+    final sourceItemPaths = items.map(_v1PathForItem).map(powerboardsNormalizeStoragePath).toSet();
+    final sourceFolderPaths = items.where(_v1IsFolder).map(_v1PathForItem).toList(growable: false);
+
+    try {
+      final selection = await showDialog<_V1MoveDestinationSelection>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.transparent,
+        useSafeArea: false,
+        builder: (dialogContext) => Stack(
+          children: [
+            StatefulBuilder(
+              builder: (dialogContext, setDialogState) {
+                if (!roomOptionsLoadStarted) {
+                  roomOptionsLoadStarted = true;
+                  unawaited(
+                    roomOptionsFuture.then((options) {
+                      if (dialogFinished || !dialogContext.mounted) {
+                        return;
+                      }
+                      setDialogState(() => roomOptions = options);
+                    }),
+                  );
+                }
+                final canConfirm =
+                    !resolvingRoom &&
+                    !roomResolveError &&
+                    powerboardsV1CanUseMoveDestination(
+                      sourceRoom: sourceRoomName,
+                      destinationRoom: selectedRoomName,
+                      initialPath: initialPath,
+                      destinationPath: destinationPath,
+                      sourceFolderPaths: sourceFolderPaths,
+                    );
+                final browser = resolvingRoom
+                    ? const PbFileSelectStatus(message: 'Connecting to room...', loading: true)
+                    : roomResolveError
+                    ? const PbFileSelectStatus(message: 'Room failed to connect')
+                    : _buildV1MoveDestinationBrowser(
+                        room: selectedRoomClient,
+                        roomName: selectedRoomName,
+                        initialPath: selectedRoomName == sourceRoomName ? initialPath : '',
+                        sourceItemPaths: selectedRoomName == sourceRoomName ? sourceItemPaths : const <String>{},
+                        onPathChanged: (path) {
+                          final normalizedPath = powerboardsNormalizeStoragePath(path);
+                          if (!dialogContext.mounted || normalizedPath == destinationPath) {
+                            return;
+                          }
+                          setDialogState(() => destinationPath = normalizedPath);
+                        },
+                      );
+
+                return PbFilesMoveDestinationDialog(
+                  rooms: roomOptions,
+                  selectedRoom: selectedRoomName,
+                  fileBrowser: browser,
+                  itemCount: items.length,
+                  canConfirm: canConfirm,
+                  onClose: () => Navigator.of(dialogContext).pop(),
+                  onConfirm: (copyFilesInstead) => Navigator.of(
+                    dialogContext,
+                  ).pop(_V1MoveDestinationSelection(roomName: selectedRoomName, path: destinationPath, copyFilesInstead: copyFilesInstead)),
+                  onRoomSelected: (roomName) async {
+                    if (roomName == selectedRoomName || resolvingRoom) {
+                      return;
+                    }
+
+                    final generation = ++connectionGeneration;
+                    setDialogState(() {
+                      resolvingRoom = true;
+                      roomResolveError = false;
+                    });
+
+                    RoomClient? nextRoomClient;
+                    try {
+                      nextRoomClient = roomName == sourceRoomName ? widget.client : await _connectV1MoveRoom(roomName);
+                      if (!identical(nextRoomClient, widget.client)) {
+                        remoteClients.add(nextRoomClient);
+                      }
+                    } catch (_) {}
+
+                    if (dialogFinished || !dialogContext.mounted || generation != connectionGeneration) {
+                      if (nextRoomClient != null && !identical(nextRoomClient, widget.client)) {
+                        nextRoomClient.dispose();
+                        remoteClients.remove(nextRoomClient);
+                      }
+                      return;
+                    }
+
+                    if (nextRoomClient == null) {
+                      setDialogState(() {
+                        resolvingRoom = false;
+                        roomResolveError = true;
+                      });
+                      return;
+                    }
+
+                    setDialogState(() {
+                      selectedRoomName = roomName;
+                      selectedRoomClient = nextRoomClient!;
+                      destinationPath = roomName == sourceRoomName ? powerboardsNormalizeStoragePath(initialPath) : '';
+                      resolvingRoom = false;
+                    });
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+      );
+
+      if (selection == null || !mounted) {
+        return;
+      }
+
+      await _transferV1Items(
+        items,
+        destinationRoomName: selection.roomName,
+        destinationPath: selection.path,
+        destinationClient: selectedRoomClient,
+        move: !selection.copyFilesInstead,
+      );
+    } finally {
+      dialogFinished = true;
+      for (final remoteClient in remoteClients) {
+        remoteClient.dispose();
+      }
+    }
+  }
+
+  Future<void> _transferV1Items(
+    List<PbFilesItemData> items, {
+    required String destinationRoomName,
+    required String destinationPath,
+    required RoomClient destinationClient,
+    required bool move,
+  }) async {
+    final toaster = ShadToaster.of(context);
+    final verb = move ? 'move' : 'copy';
+    final presentParticiple = move ? 'Moving' : 'Copying';
+    final progressTimer = Timer(_v1LongActionToastDelay, () {
+      if (!mounted) {
+        return;
+      }
+      toaster.show(
+        powerboardsToast(
+          title: '$presentParticiple ${items.length == 1 ? 'item' : 'items'}',
+          description: destinationRoomName,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    });
+
+    var succeeded = 0;
+    Object? firstError;
+    try {
+      for (final item in items) {
+        final sourcePath = _v1PathForItem(item);
+        final folder = _v1IsFolder(item);
+        try {
+          final resolvedDestinationPath = await powerboardsTransferStoragePath(
+            sourceStorage: widget.client.storage,
+            destinationStorage: destinationClient.storage,
+            sourcePath: sourcePath,
+            destinationFolder: destinationPath,
+            folder: folder,
+            move: move,
+          );
+          succeeded += 1;
+          if (move && identical(widget.client, destinationClient)) {
+            _onFileMoved(sourcePath, resolvedDestinationPath);
+          } else if (move) {
+            _removePath(sourcePath, isFolder: folder);
+          }
+        } catch (error) {
+          firstError ??= error;
+        }
+      }
+    } finally {
+      progressTimer.cancel();
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (succeeded > 0) {
+      _clearSelected();
+      await _refreshCurrentFolder();
+      if (!mounted) {
+        return;
+      }
+    }
+
+    if (succeeded == items.length) {
+      toaster.show(
+        powerboardsToast(
+          title: move ? 'Files moved' : 'Files copied',
+          description: '${items.length} ${items.length == 1 ? 'item' : 'items'} ${move ? 'moved' : 'copied'} successfully.',
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    toaster.show(
+      powerboardsToast(
+        title: succeeded == 0 ? 'Unable to $verb files' : 'Some files could not be ${move ? 'moved' : 'copied'}',
+        description: succeeded == 0 ? '$firstError' : '$succeeded of ${items.length} completed. $firstError',
+        destructive: true,
+        duration: const Duration(seconds: 6),
+      ),
+    );
   }
 
   Future<void> _compressFolder(String folderPath) async {
@@ -5343,6 +5691,12 @@ class _FileManagerViewState extends State<FileManagerView> {
                     _clearV1KeyboardPreviewNavigation();
                     _clearSelected();
                   },
+                  onMoveSelection: () {
+                    final selectedItems = items
+                        .where((item) => selected.contains(item.id) && _v1ItemIsSelectable(item))
+                        .toList(growable: false);
+                    unawaited(_showV1MoveDestinationDialog(selectedItems, initialPath: currentFolder));
+                  },
                   onDeleteSelection: _confirmAndDeleteSelected,
                   onDownloadSelection: _downloadSelected,
                   onCreateFolder: () => unawaited(_addFolder(currentFolder)),
@@ -5407,6 +5761,7 @@ class _FileManagerViewState extends State<FileManagerView> {
                   ),
                   onExtract: (item) => unawaited(_showV1ArchiveExtractDialog(item)),
                   onDownload: (item) => unawaited(_downloadV1Item(item)),
+                  onMoveTo: (item) => unawaited(_showV1MoveDestinationDialog([item], initialPath: item.parentPath)),
                   onRename: (item) => unawaited(_renamePath(_v1PathForItem(item), isFolder: _v1IsFolder(item))),
                   onDelete: (item) => unawaited(_confirmAndDelete(_v1PathForItem(item), _v1IsFolder(item))),
                 ),

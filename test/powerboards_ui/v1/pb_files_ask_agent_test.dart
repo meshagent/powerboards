@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_menus.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
@@ -25,6 +26,19 @@ PbFilesItemData _folder(String id, String title) {
 }
 
 void main() {
+  test('folder Ask agent preserves open and closed side pane states', () {
+    for (final initialPaneOpen in [false, true]) {
+      for (final responsiveHandoff in [false, true]) {
+        var paneOpen = initialPaneOpen;
+        if (powerboardsV1FilePromptShouldCleanupSurfaces(isFolder: true, responsiveHandoff: responsiveHandoff)) {
+          paneOpen = false;
+        }
+
+        expect(paneOpen, initialPaneOpen, reason: 'responsiveHandoff: $responsiveHandoff');
+      }
+    }
+  });
+
   testWidgets('folder row menu places Ask agent between browse and download', (tester) async {
     final folder = _folder('design references/参考', 'Design references');
     var asks = 0;
@@ -48,6 +62,26 @@ void main() {
 
     await tester.tap(find.text('Ask agent'));
     expect(asks, 1);
+  });
+
+  testWidgets('folder row menu exposes Move to when it is wired', (tester) async {
+    final folder = _folder('design references', 'Design references');
+    var moves = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 280,
+            child: PbFilesRowMenu(item: folder, onBrowseFolder: () {}, onMoveTo: () => moves += 1, onDelete: () {}),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Move to...'), findsOneWidget);
+    await tester.tap(find.text('Move to...'));
+    expect(moves, 1);
   });
 
   testWidgets('single selected folder does not expose Ask agent in the selection toolbar', (tester) async {

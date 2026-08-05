@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
-import 'package:lapce_editor_flutter/lapce_editor_flutter.dart' as lapce;
 import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
@@ -1500,12 +1499,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
-    final editor = tester.widget<lapce.LapceEditor>(find.byType(lapce.LapceEditor));
-    expect(editor.theme.selection, const Color(0x665EA2FF));
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.enableInteractiveSelection, isTrue);
+    final selectionTheme = tester.widget<TextSelectionTheme>(find.byKey(const ValueKey('code-editor-selection-theme')));
+    expect(selectionTheme.data.selectionColor, const Color(0x665EA2FF));
+    final highlightedText = textField.controller!.buildTextSpan(
+      context: tester.element(find.byType(TextField)),
+      style: textField.style,
+      withComposing: false,
+    );
+    final tokenColors = highlightedText.children!.whereType<TextSpan>().map((span) => span.style?.color).toSet();
+    expect(tokenColors, contains(const Color(0xFFC084FC)));
+    expect(tokenColors, contains(const Color(0xFFA7F3D0)));
 
-    editor.controller.setText('final mode = "code";');
-    editor.controller.setSelection(lapce.Selection.caret(lapce.TextOffset(editor.controller.textLength)));
-    editor.focusNode!.requestFocus();
+    await tester.enterText(find.byType(EditableText), 'final mode = "code";');
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
@@ -1535,8 +1542,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('code-preview-surface')), findsOneWidget);
-    final editor = tester.widget<lapce.LapceEditor>(find.byType(lapce.LapceEditor));
-    expect(editor.placeholder, 'Type here');
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.decoration?.hintText, 'Type here');
+    expect(find.text('Type here'), findsOneWidget);
   });
 
   testWidgets('editable code preview keeps draft when fullscreen toggles', (tester) async {
@@ -1571,15 +1579,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final initialEditor = tester.widget<lapce.LapceEditor>(find.byType(lapce.LapceEditor));
-    initialEditor.controller.setText('final mode = "draft";');
+    await tester.enterText(find.byType(EditableText), 'final mode = "draft";');
     await tester.pump();
 
     rebuildParent(() => fullscreen = true);
     await tester.pumpAndSettle();
 
-    final editor = tester.widget<lapce.LapceEditor>(find.byType(lapce.LapceEditor));
-    expect(editor.controller.text, 'final mode = "draft";');
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    expect(textField.controller?.text, 'final mode = "draft";');
     expect(loadCount, 1);
   });
 
@@ -1604,11 +1611,96 @@ void main() {
     final frame = tester.getRect(find.byKey(const ValueKey('file-preview-content-frame')));
     final horizontalScrollbar = tester.getRect(find.byKey(const ValueKey('code-preview-horizontal-scrollbar')));
     final verticalScrollbar = tester.getRect(find.byKey(const ValueKey('code-preview-vertical-scrollbar')));
+    final footer = tester.getRect(find.byKey(const ValueKey('code-preview-footer')));
 
     expect((horizontalScrollbar.left - frame.left).abs(), lessThanOrEqualTo(1));
     expect((horizontalScrollbar.right - frame.right).abs(), lessThanOrEqualTo(1));
+    expect((horizontalScrollbar.bottom - footer.top).abs(), lessThanOrEqualTo(1));
     expect((verticalScrollbar.top - frame.top).abs(), lessThanOrEqualTo(1));
-    expect((verticalScrollbar.bottom - frame.bottom).abs(), lessThanOrEqualTo(1));
+    expect((verticalScrollbar.bottom - footer.top).abs(), lessThanOrEqualTo(1));
+    expect((footer.bottom - frame.bottom).abs(), lessThanOrEqualTo(1));
+  });
+
+  testWidgets('code preview pins line numbers during horizontal scroll', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'wide.dart'),
+              fullscreen: false,
+              loadText: () async => 'final value = "${'wide' * 80}";',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final gutterFinder = find.byKey(const ValueKey('code-preview-line-number-gutter'));
+    final codeFinder = find.byKey(const ValueKey('code-editor-selection-theme'));
+    final gutterLeftBefore = tester.getTopLeft(gutterFinder).dx;
+    final codeLeftBefore = tester.getTopLeft(codeFinder).dx;
+    final horizontalScrollbar = tester.widget<Scrollbar>(find.byKey(const ValueKey('code-preview-horizontal-scrollbar')));
+    final horizontalController = horizontalScrollbar.controller!;
+
+    expect(horizontalController.position.maxScrollExtent, greaterThan(0));
+    horizontalController.jumpTo(horizontalController.position.maxScrollExtent);
+    await tester.pump();
+
+    expect(tester.getTopLeft(gutterFinder).dx, gutterLeftBefore);
+    expect(tester.getTopLeft(codeFinder).dx, lessThan(codeLeftBefore));
+  });
+
+  testWidgets('code preview word wrap checkbox exposes both states and keeps wrapped line numbers aligned', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'wide.dart'),
+              fullscreen: false,
+              loadText: () async => '${List.filled(80, 'wrapped').join(' ')};\nconst nextLine = true;',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final controlFinder = find.byKey(const ValueKey('code-preview-word-wrap-control'));
+    final checkboxFinder = find.byKey(const ValueKey('code-preview-word-wrap-checkbox'));
+    final footerFinder = find.byKey(const ValueKey('code-preview-footer'));
+    final horizontalScrollbar = tester.widget<Scrollbar>(find.byKey(const ValueKey('code-preview-horizontal-scrollbar')));
+    final horizontalController = horizontalScrollbar.controller!;
+    final firstLineFinder = find.byKey(const ValueKey('code-preview-line-number-1'));
+    final firstLineHeightBefore = tester.getSize(firstLineFinder).height;
+
+    expect(tester.widget<Checkbox>(checkboxFinder).value, isFalse);
+    expect(find.text('Word wrap: Off'), findsOneWidget);
+    expect(find.text('Word wrap: On'), findsNothing);
+    expect(horizontalController.position.maxScrollExtent, greaterThan(0));
+
+    await tester.tap(checkboxFinder);
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Checkbox>(checkboxFinder).value, isTrue);
+    expect(find.text('Word wrap: On'), findsOneWidget);
+    expect(find.text('Word wrap: Off'), findsNothing);
+    expect(horizontalController.position.maxScrollExtent, 0);
+    expect(tester.getSize(firstLineFinder).height, greaterThan(firstLineHeightBefore));
+    expect(tester.getRect(footerFinder).contains(tester.getCenter(controlFinder)), isTrue);
+
+    await tester.tap(find.text('Word wrap: On'));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Checkbox>(checkboxFinder).value, isFalse);
+    expect(find.text('Word wrap: Off'), findsOneWidget);
+    expect(horizontalController.position.maxScrollExtent, greaterThan(0));
   });
 
   testWidgets('file preview hides share action for this scoped release', (tester) async {

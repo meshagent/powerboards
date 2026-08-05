@@ -334,13 +334,7 @@ Widget? powerboardsV1PreviewContentChild({
 
   switch (file.fileType) {
     case PbAttachmentFileType.image:
-      return _V1StorageUrlPreview(
-        room: room,
-        path: path,
-        file: file,
-        downloadUrl: downloadUrl,
-        builder: (url) => ImagePreview(key: ValueKey('v1-image-preview:$path'), url: url, fit: BoxFit.contain),
-      );
+      return PowerboardsV1StorageImagePreview(room: room, path: path, file: file);
     case PbAttachmentFileType.video:
     case PbAttachmentFileType.mediaGeneric:
       return _V1StorageUrlPreview(room: room, path: path, file: file, downloadUrl: downloadUrl, builder: powerboardsV1VideoPreview);
@@ -377,13 +371,7 @@ Widget? powerboardsV1PreviewContentChild({
 
   switch (kind) {
     case FileKind.image:
-      return _V1StorageUrlPreview(
-        room: room,
-        path: path,
-        file: file,
-        downloadUrl: downloadUrl,
-        builder: (url) => ImagePreview(key: ValueKey('v1-image-preview:$path'), url: url, fit: BoxFit.contain),
-      );
+      return PowerboardsV1StorageImagePreview(room: room, path: path, file: file);
     case FileKind.video:
       return _V1StorageUrlPreview(room: room, path: path, file: file, downloadUrl: downloadUrl, builder: powerboardsV1VideoPreview);
     case FileKind.audio:
@@ -1182,6 +1170,266 @@ class _V1StorageUrlPreviewState extends State<_V1StorageUrlPreview> {
       },
     );
   }
+}
+
+class PowerboardsV1StorageImagePreview extends StatefulWidget {
+  const PowerboardsV1StorageImagePreview({super.key, required this.room, required this.path, required this.file});
+
+  final RoomClient room;
+  final String path;
+  final PbAttachmentListItemData file;
+
+  @override
+  State<PowerboardsV1StorageImagePreview> createState() => _PowerboardsV1StorageImagePreviewState();
+}
+
+class _PowerboardsV1StorageImagePreviewState extends State<PowerboardsV1StorageImagePreview> {
+  late Future<({Uint8List data, String? mimeType})> _dataFuture = _loadData();
+
+  Future<({Uint8List data, String? mimeType})> _loadData() async {
+    final content = await widget.room.storage.download(widget.path);
+    return (data: Uint8List.fromList(content.data), mimeType: content.mimeType);
+  }
+
+  @override
+  void didUpdateWidget(covariant PowerboardsV1StorageImagePreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.room != widget.room || oldWidget.path != widget.path) {
+      _dataFuture = _loadData();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<({Uint8List data, String? mimeType})>(
+      future: _dataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _v1UnavailablePreview(context, widget.file, null);
+        }
+
+        final image = snapshot.data;
+        if (image == null) {
+          return const Center(child: CircularProgressIndicator(color: PbColors.textSubtle));
+        }
+
+        return PowerboardsV1ImageDataPreview(
+          key: ValueKey('v1-image-preview:${widget.path}'),
+          data: image.data,
+          path: powerboardsV1PreviewClassificationPath(file: widget.file, path: widget.path),
+          fit: BoxFit.contain,
+          mimeType: image.mimeType,
+          file: widget.file,
+        );
+      },
+    );
+  }
+}
+
+class PowerboardsV1ImageDataPreview extends StatefulWidget {
+  const PowerboardsV1ImageDataPreview({
+    super.key,
+    required this.data,
+    required this.path,
+    required this.fit,
+    required this.file,
+    this.mimeType,
+  });
+
+  final Uint8List data;
+  final String path;
+  final BoxFit fit;
+  final PbAttachmentListItemData file;
+  final String? mimeType;
+
+  @override
+  State<PowerboardsV1ImageDataPreview> createState() => _PowerboardsV1ImageDataPreviewState();
+}
+
+class _PowerboardsV1ImageDataPreviewState extends State<PowerboardsV1ImageDataPreview> {
+  bool? _reportedAvailable;
+
+  bool get _isSvg {
+    final normalizedMimeType = widget.mimeType?.trim().toLowerCase();
+    return normalizedMimeType == 'image/svg+xml' ||
+        normalizedMimeType == 'image/svg' ||
+        normalizedMimeType == 'public.svg-image' ||
+        const {'svg', 'svgz'}.contains(powerboardsV1ExtensionForPath(widget.path));
+  }
+
+  bool get _isJpeg {
+    final extension = powerboardsV1ExtensionForPath(widget.path);
+    if (extension.isNotEmpty) {
+      return const {'jpg', 'jpeg', 'jfif'}.contains(extension);
+    }
+    final normalizedMimeType = widget.mimeType?.trim().toLowerCase();
+    return normalizedMimeType == 'image/jpeg' || normalizedMimeType == 'image/jpg';
+  }
+
+  Widget _invalidImagePreview() {
+    return Center(
+      child: PbFilePreviewStateCard(file: widget.file, state: PbAttachmentPreviewState.unavailable),
+    );
+  }
+
+  void _reportAvailability(bool available) {
+    if (_reportedAvailable == available) {
+      return;
+    }
+    _reportedAvailable = available;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _reportedAvailable == available) {
+        PbImagePreviewAvailabilityNotification(available: available).dispatch(context);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant PowerboardsV1ImageDataPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path || oldWidget.data != widget.data || oldWidget.mimeType != widget.mimeType) {
+      _reportedAvailable = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isSvg) {
+      if (powerboardsV1SvgContainsUnsupportedPreviewFeature(widget.data)) {
+        _reportAvailability(false);
+        return _invalidImagePreview();
+      }
+      _reportAvailability(true);
+      return ImageDataPreview(data: widget.data, path: widget.path, fit: widget.fit, mimeType: widget.mimeType);
+    }
+    if (_isJpeg && !powerboardsV1JpegDataIsStructurallyValid(widget.data)) {
+      _reportAvailability(false);
+      return _invalidImagePreview();
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Image.memory(
+          widget.data,
+          fit: widget.fit,
+          width: constraints.hasBoundedWidth ? constraints.maxWidth : null,
+          height: constraints.hasBoundedHeight ? constraints.maxHeight : null,
+          filterQuality: FilterQuality.low,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded || frame != null) {
+              _reportAvailability(true);
+            }
+            return child;
+          },
+          errorBuilder: (context, error, stackTrace) {
+            _reportAvailability(false);
+            return _invalidImagePreview();
+          },
+        );
+      },
+    );
+  }
+}
+
+@visibleForTesting
+bool powerboardsV1SvgContainsSymbolSprite(Uint8List data) {
+  try {
+    return RegExp(r'<symbol\b', caseSensitive: false).hasMatch(utf8.decode(data));
+  } on FormatException {
+    return false;
+  }
+}
+
+/// Returns whether this SVG contains a construct that flutter_svg cannot
+/// render reliably in the Files pane.
+///
+/// `flutter_svg` logs an unsupported `<filter>` element but can keep its
+/// placeholder visible indefinitely instead of calling [SvgPicture]'s error
+/// builder. Detect it before handing the data to the renderer so the preview
+/// reaches the standard unavailable state instead of appearing to load forever.
+@visibleForTesting
+bool powerboardsV1SvgContainsUnsupportedPreviewFeature(Uint8List data) {
+  try {
+    final svg = utf8.decode(data);
+    return powerboardsV1SvgContainsSymbolSprite(data) || RegExp(r'<filter\b', caseSensitive: false).hasMatch(svg);
+  } on FormatException {
+    return false;
+  }
+}
+
+@visibleForTesting
+bool powerboardsV1JpegDataIsStructurallyValid(Uint8List data) {
+  if (data.length < 4 || data[0] != 0xff || data[1] != 0xd8) {
+    return false;
+  }
+
+  var offset = 2;
+  var foundFrame = false;
+  while (offset < data.length) {
+    if (data[offset] != 0xff) {
+      return false;
+    }
+    while (offset < data.length && data[offset] == 0xff) {
+      offset += 1;
+    }
+    if (offset >= data.length) {
+      return false;
+    }
+
+    final marker = data[offset];
+    offset += 1;
+    if (marker == 0x00) {
+      return false;
+    }
+    if (marker == 0xd9) {
+      return false;
+    }
+    if (marker == 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      continue;
+    }
+    if (offset + 2 > data.length) {
+      return false;
+    }
+
+    final segmentLength = (data[offset] << 8) | data[offset + 1];
+    if (segmentLength < 2 || offset + segmentLength > data.length) {
+      return false;
+    }
+
+    if (_powerboardsV1IsJpegFrameMarker(marker)) {
+      if (segmentLength < 8) {
+        return false;
+      }
+      final componentCount = data[offset + 7];
+      final expectedLength = 8 + (3 * componentCount);
+      final height = (data[offset + 3] << 8) | data[offset + 4];
+      final width = (data[offset + 5] << 8) | data[offset + 6];
+      if (componentCount == 0 || segmentLength != expectedLength || width == 0 || height == 0) {
+        return false;
+      }
+      foundFrame = true;
+    }
+
+    if (marker == 0xda) {
+      return foundFrame && _powerboardsV1JpegHasEndMarker(data, offset + segmentLength);
+    }
+    offset += segmentLength;
+  }
+
+  return false;
+}
+
+bool _powerboardsV1IsJpegFrameMarker(int marker) {
+  return marker >= 0xc0 && marker <= 0xcf && marker != 0xc4 && marker != 0xc8 && marker != 0xcc;
+}
+
+bool _powerboardsV1JpegHasEndMarker(Uint8List data, int offset) {
+  for (var index = offset; index + 1 < data.length; index += 1) {
+    if (data[index] == 0xff && data[index + 1] == 0xd9) {
+      return true;
+    }
+  }
+  return false;
 }
 
 class _V1TranscriptDocumentPreview extends StatelessWidget {

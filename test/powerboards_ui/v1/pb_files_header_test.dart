@@ -109,6 +109,7 @@ void main() {
     VoidCallback? onPreviewWebServer,
     bool hasSelection = false,
     int selectedCount = 0,
+    VoidCallback? onMoveSelection,
   }) async {
     tester.view.physicalSize = Size(width, 900);
     tester.view.devicePixelRatio = 1;
@@ -144,6 +145,7 @@ void main() {
                 webServerPreviewActive: webServerPreviewActive,
                 onPreviewWebServer: onPreviewWebServer,
                 onClearSelection: () {},
+                onMoveSelection: onMoveSelection,
                 onDeleteSelection: () {},
                 onDownloadSelection: () {},
               ),
@@ -436,6 +438,33 @@ void main() {
     );
 
     expect(find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent'), findsNothing);
+  });
+
+  testWidgets('files toolbar exposes Move to in Flutter spec order', (tester) async {
+    var moves = 0;
+    await pumpToolbar(
+      tester,
+      width: 900,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      hasSelection: true,
+      selectedCount: 2,
+      onMoveSelection: () => moves += 1,
+    );
+
+    final moveButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Move to');
+    expect(moveButton, findsOneWidget);
+    final deselectButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Deselect');
+    final downloadButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Download');
+    final deleteButton = find.text('Delete');
+    expect(tester.getTopLeft(deselectButton).dx, lessThan(tester.getTopLeft(moveButton).dx));
+    expect(tester.getTopLeft(moveButton).dx, lessThan(tester.getTopLeft(downloadButton).dx));
+    expect(tester.getTopLeft(downloadButton).dx, lessThan(tester.getTopLeft(deleteButton).dx));
+
+    await tester.tap(moveButton);
+    expect(moves, 1);
   });
 
   testWidgets('files toolbar exposes the website install action only at the Files root', (tester) async {

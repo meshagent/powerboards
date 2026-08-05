@@ -66,6 +66,7 @@ class PbFilesTable extends StatefulWidget {
     this.onShare,
     this.onExtract,
     this.onDownload,
+    this.onMoveTo,
     this.onRename,
     this.onDelete,
   });
@@ -92,6 +93,7 @@ class PbFilesTable extends StatefulWidget {
   final ValueChanged<PbFilesItemData>? onShare;
   final ValueChanged<PbFilesItemData>? onExtract;
   final ValueChanged<PbFilesItemData>? onDownload;
+  final ValueChanged<PbFilesItemData>? onMoveTo;
   final ValueChanged<PbFilesItemData>? onRename;
   final ValueChanged<PbFilesItemData>? onDelete;
 
@@ -207,6 +209,7 @@ class _FilesTableState extends State<PbFilesTable> {
                               onShare: widget.onShare == null ? null : () => widget.onShare!(item),
                               onExtract: widget.onExtract == null || extractDisabled ? null : () => widget.onExtract!(item),
                               onDownload: widget.onDownload == null ? null : () => widget.onDownload!(item),
+                              onMoveTo: widget.onMoveTo == null ? null : () => widget.onMoveTo!(item),
                               onRename: widget.onRename == null ? null : () => widget.onRename!(item),
                               onDelete: widget.onDelete == null ? null : () => widget.onDelete!(item),
                               onHoverChanged: (hovered) => setState(() {
@@ -710,6 +713,7 @@ class _PbFilesTableRow extends StatefulWidget {
     this.onShare,
     this.onExtract,
     this.onDownload,
+    this.onMoveTo,
     this.onRename,
     this.onDelete,
     required this.onHoverChanged,
@@ -741,6 +745,7 @@ class _PbFilesTableRow extends StatefulWidget {
   final VoidCallback? onShare;
   final VoidCallback? onExtract;
   final VoidCallback? onDownload;
+  final VoidCallback? onMoveTo;
   final VoidCallback? onRename;
   final VoidCallback? onDelete;
   final ValueChanged<bool> onHoverChanged;
@@ -861,6 +866,7 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
         if (widget.onAskAgent != null) 'Ask agent',
         if (widget.onDownload != null) 'Download as zip',
         if (widget.onRename != null) widget.item.renameActionLabelOverride ?? 'Rename',
+        if (widget.onMoveTo != null) 'Move to...',
         if (widget.onDelete != null) 'Delete',
       ],
       PbFilesItemKind.file => [
@@ -870,6 +876,7 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
         if (widget.showExtract) pbArchiveExtractMenuLabel,
         if (widget.onDownload != null) 'Download',
         if (widget.onRename != null) widget.item.renameActionLabelOverride ?? 'Rename',
+        if (widget.onMoveTo != null) 'Move to...',
         if (widget.onDelete != null) 'Delete',
       ],
     };
@@ -981,6 +988,9 @@ class _PbFilesTableRowState extends State<_PbFilesTableRow> {
                                 onExtract: widget.item.kind == PbFilesItemKind.file ? widget.onExtract : null,
                                 onDownload: widget.item.kind == PbFilesItemKind.file || widget.item.kind == PbFilesItemKind.folder
                                     ? widget.onDownload
+                                    : null,
+                                onMoveTo: widget.item.kind == PbFilesItemKind.file || widget.item.kind == PbFilesItemKind.folder
+                                    ? widget.onMoveTo
                                     : null,
                                 onRename: widget.onRename,
                                 onDelete: widget.onDelete,
