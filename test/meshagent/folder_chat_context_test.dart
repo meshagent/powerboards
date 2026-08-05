@@ -73,6 +73,25 @@ void main() {
       expect(instructions, contains('powerboards://files?path=content'));
     });
 
+    test('resolves a renamed folder context and preserves its direct-child snapshot', () {
+      final original = powerboardsFolderChatContextDataUrl(
+        'drafts/brief',
+        visibleDirectChildren: const [PowerboardsFolderChatEntry(storagePath: 'drafts/brief/notes.md', name: 'notes.md', isFolder: false)],
+      );
+      final resolved = powerboardsResolveFolderChatContextDataUrl(
+        original,
+        resolvePath: (path) => path == 'drafts/brief' ? 'drafts/final-brief' : path,
+      );
+      final context = powerboardsFolderChatContextFromDataUrl(resolved);
+      final document = jsonDecode(utf8.decode(base64Decode(resolved.substring('data:text/plain;base64,'.length)))) as Map<String, dynamic>;
+
+      expect(context?.storagePath, 'drafts/final-brief');
+      expect(context?.displayName, 'final-brief');
+      expect(document['workspace_path'], '/data/drafts/final-brief');
+      expect((document['visible_direct_children'] as List).single, containsPair('storage_path', 'drafts/final-brief/notes.md'));
+      expect((document['instructions'] as List).join('\n'), contains('powerboards://files?path=drafts%2Ffinal-brief'));
+    });
+
     test('rejects unrelated and malformed data URLs', () {
       expect(powerboardsFolderChatContextFromDataUrl('content'), isNull);
       expect(powerboardsFolderChatContextFromDataUrl('data:text/plain;base64,not-base64!'), isNull);

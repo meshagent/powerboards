@@ -166,6 +166,61 @@ PowerboardsFolderChatContext? powerboardsFolderChatContextFromDataUrl(String val
   return null;
 }
 
+String powerboardsResolveFolderChatContextDataUrl(String value, {required String Function(String storagePath) resolvePath}) {
+  for (final encodedPayload in _powerboardsFolderContextPayloadCandidates(value.trim())) {
+    try {
+      final document = jsonDecode(utf8.decode(base64Decode(encodedPayload)));
+      if (document is! Map<String, dynamic> ||
+          document['kind'] != powerboardsFolderChatContextKind ||
+          document['version'] != powerboardsFolderChatContextVersion) {
+        continue;
+      }
+
+      final originalPath = normalizePowerboardsFolderStoragePath(document['storage_path'] as String? ?? '');
+      final resolvedPath = normalizePowerboardsFolderStoragePath(resolvePath(originalPath));
+      if (resolvedPath.isEmpty || resolvedPath == originalPath) {
+        return value;
+      }
+
+      final updated = Map<String, dynamic>.from(document)
+        ..['storage_path'] = resolvedPath
+        ..['display_name'] = resolvedPath.split('/').last
+        ..['workspace_path'] = '/data/$resolvedPath';
+      if (document['visible_direct_children'] case final List children) {
+        updated['visible_direct_children'] = [
+          for (final child in children)
+            if (child is Map)
+              () {
+                final next = Map<String, dynamic>.from(child);
+                final childPath = normalizePowerboardsFolderStoragePath(next['storage_path'] as String? ?? '');
+                if (childPath == originalPath || childPath.startsWith('$originalPath/')) {
+                  next['storage_path'] = '$resolvedPath${childPath.substring(originalPath.length)}';
+                }
+                return next;
+              }(),
+        ];
+      }
+
+      final oldWorkspace = '/data/$originalPath';
+      final newWorkspace = '/data/$resolvedPath';
+      final oldLink = PowerboardsFolderChatContext(storagePath: originalPath, displayName: '').folderLink;
+      final newLink = PowerboardsFolderChatContext(storagePath: resolvedPath, displayName: '').folderLink;
+      if (document['instructions'] case final List instructions) {
+        updated['instructions'] = [
+          for (final entry in instructions)
+            if (entry is String) entry.replaceAll(oldWorkspace, newWorkspace).replaceAll(oldLink, newLink) else entry,
+        ];
+      }
+      return 'data:text/plain;base64,${base64Encode(utf8.encode(jsonEncode(updated)))}';
+    } on FormatException {
+      continue;
+    } on TypeError {
+      continue;
+    }
+  }
+  return value;
+}
+
 Iterable<String> _powerboardsFolderContextPayloadCandidates(String value) sync* {
   final forms = <String>{value};
   try {

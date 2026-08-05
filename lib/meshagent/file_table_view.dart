@@ -1093,6 +1093,7 @@ class FileManagerView extends StatefulWidget {
   final double desktopHeaderActionReserve;
   final bool showDesktopSidetrayToggle;
   final bool canInstallServices;
+  final bool v17WebsiteActionsEnabled;
   final bool? v1RoomPanelCollapsed;
   final ValueChanged<bool>? onV1RoomPanelCollapsedChanged;
   final double? v1RoomPanelWidth;
@@ -1115,6 +1116,7 @@ class FileManagerView extends StatefulWidget {
     this.desktopHeaderActionReserve = desktopPaneHeaderActionReserve,
     this.showDesktopSidetrayToggle = true,
     this.canInstallServices = false,
+    this.v17WebsiteActionsEnabled = false,
     this.v1RoomPanelCollapsed,
     this.onV1RoomPanelCollapsedChanged,
     this.v1RoomPanelWidth,
@@ -1178,6 +1180,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   final Map<String, Future<String>> _v1DownloadUrlFuturesByPath = <String, Future<String>>{};
   String? _v1LoadedFolderPath;
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
+  List<PowerboardsFileReference> _fileReferences = const <PowerboardsFileReference>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
   final Map<String, DateTime> _v1DownloadUrlExpiresAtByPath = <String, DateTime>{};
 
@@ -1583,7 +1586,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _onRoomEvent(RoomEvent event) {
     if (event is FileUpdatedEvent) {
       _rememberFileCreator(event.path, event.participantId);
-      if (normalizePowerboardsAttachmentPath(event.path) == powerboardsFileAttachmentIndexPath) {
+      final normalizedPath = normalizePowerboardsAttachmentPath(event.path);
+      if (normalizedPath == powerboardsFileAttachmentIndexPath || normalizedPath == powerboardsFileReferenceRegistryPath) {
         unawaited(_refreshFileAttachmentLinks());
       }
       _onFileUpdated(event.path);
@@ -1591,7 +1595,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (event is FileDeletedEvent) {
-      if (normalizePowerboardsAttachmentPath(event.path) == powerboardsFileAttachmentIndexPath) {
+      final normalizedPath = normalizePowerboardsAttachmentPath(event.path);
+      if (normalizedPath == powerboardsFileAttachmentIndexPath || normalizedPath == powerboardsFileReferenceRegistryPath) {
         unawaited(_refreshFileAttachmentLinks());
       }
       _onFileDeleted(event.path);
@@ -1803,12 +1808,14 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Future<void> _refreshFileAttachmentLinks() async {
     final links = await loadPowerboardsFileAttachmentLinks(widget.client);
+    final references = await loadPowerboardsFileReferences(widget.client);
     if (!_canUpdateUi) {
       return;
     }
 
     setState(() {
       _fileAttachmentLinks = links;
+      _fileReferences = references;
     });
   }
 
@@ -1854,12 +1861,24 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinksForPath(String path) {
     final normalizedPath = normalizePowerboardsAttachmentPath(path);
-    final links = _fileAttachmentLinks.where((link) => link.filePath == normalizedPath).toList()
-      ..sort((left, right) {
-        final rightCreatedAt = right.createdAt?.millisecondsSinceEpoch ?? 0;
-        final leftCreatedAt = left.createdAt?.millisecondsSinceEpoch ?? 0;
-        return rightCreatedAt.compareTo(leftCreatedAt);
-      });
+    final roomName = widget.client.roomName?.trim() ?? '';
+    final links =
+        _fileAttachmentLinks
+            .where(
+              (link) => powerboardsFileReferenceMatchesCurrentPath(
+                originalRoomName: roomName,
+                originalPath: link.filePath,
+                currentRoomName: roomName,
+                currentPath: normalizedPath,
+                references: _fileReferences,
+              ),
+            )
+            .toList()
+          ..sort((left, right) {
+            final rightCreatedAt = right.createdAt?.millisecondsSinceEpoch ?? 0;
+            final leftCreatedAt = left.createdAt?.millisecondsSinceEpoch ?? 0;
+            return rightCreatedAt.compareTo(leftCreatedAt);
+          });
     return links;
   }
 
@@ -4397,10 +4416,15 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   bool _v1SelectionContainsLinkedAttachments(Iterable<PbFilesItemData> items) {
+    final roomName = widget.client.roomName?.trim() ?? '';
     for (final item in items) {
       final sourcePath = powerboardsNormalizeStoragePath(_v1PathForItem(item));
       final folder = _v1IsFolder(item);
-      if (_fileAttachmentLinks.any((link) => link.filePath == sourcePath || (folder && link.filePath.startsWith('$sourcePath/')))) {
+      if (_fileAttachmentLinks.any((link) {
+        final resolution = powerboardsResolveFileReference(roomName: roomName, path: link.filePath, references: _fileReferences);
+        return resolution.roomName.trim().toLowerCase() == roomName.toLowerCase() &&
+            (resolution.path == sourcePath || (folder && resolution.path.startsWith('$sourcePath/')));
+      })) {
         return true;
       }
     }
@@ -5820,9 +5844,12 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onUpload: () => unawaited(_addFiles(currentFolder)),
                   onAskCurrentFolder: () =>
                       unawaited(_startDefaultFilePrompt(currentFolder, isFolder: true, cleanupSurfacesAfterHandoff: usesStackedRoomPanel)),
-                  showWebServerPreview: showWebServerPreview,
+                  v17WebsiteActionsEnabled: widget.v17WebsiteActionsEnabled,
+                  showWebServerPreview: widget.v17WebsiteActionsEnabled && showWebServerPreview,
                   webServerPreviewActive: webServerPreviewReady,
-                  onPreviewWebServer: webServerPreviewReady ? () => unawaited(_openV1WebsitePreview(entries: entries)) : null,
+                  onPreviewWebServer: widget.v17WebsiteActionsEnabled && webServerPreviewReady
+                      ? () => unawaited(_openV1WebsitePreview(entries: entries))
+                      : null,
                   onFilesDropped: (_) {},
                   onOpenRecentFiles: () {
                     if (!sidePaneAvailable) {

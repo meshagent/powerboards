@@ -106,6 +106,7 @@ void main() {
     required VoidCallback onUpload,
     VoidCallback? onAskCurrentFolder,
     PbFilesToolbarTrailingAction? trailingAction,
+    bool v17WebsiteActionsEnabled = false,
     bool showWebServerPreview = false,
     bool webServerPreviewActive = false,
     VoidCallback? onPreviewWebServer,
@@ -143,6 +144,7 @@ void main() {
                 onUpload: onUpload,
                 onAskCurrentFolder: onAskCurrentFolder,
                 trailingAction: trailingAction,
+                v17WebsiteActionsEnabled: v17WebsiteActionsEnabled,
                 showWebServerPreview: showWebServerPreview,
                 webServerPreviewActive: webServerPreviewActive,
                 onPreviewWebServer: onPreviewWebServer,
@@ -486,6 +488,7 @@ void main() {
       responsiveMode: PbFilesResponsiveMode.docked,
       onCreateFolder: () {},
       onInstallWebServer: () => installs += 1,
+      v17WebsiteActionsEnabled: true,
       onCreateTextFile: () {},
       onUpload: () {},
     );
@@ -500,6 +503,7 @@ void main() {
       currentPath: 'nested',
       onCreateFolder: () {},
       onInstallWebServer: () => installs += 1,
+      v17WebsiteActionsEnabled: true,
       onCreateTextFile: () {},
       onUpload: () {},
     );
@@ -516,6 +520,7 @@ void main() {
       onCreateFolder: () {},
       onCreateTextFile: () {},
       onUpload: () {},
+      v17WebsiteActionsEnabled: true,
       showWebServerPreview: true,
       webServerPreviewActive: true,
       onPreviewWebServer: () => previews += 1,
@@ -526,5 +531,22 @@ void main() {
     expect(previewButton.backgroundColor, PbColors.statusOnline);
     await tester.tap(previewFinder);
     expect(previews, 1);
+  });
+
+  testWidgets('website actions require the explicit V1.7 capability', (tester) async {
+    await pumpToolbar(
+      tester,
+      width: 1080,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onInstallWebServer: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      showWebServerPreview: true,
+      onPreviewWebServer: () {},
+    );
+
+    expect(find.text('New website'), findsNothing);
+    expect(find.text('Preview'), findsNothing);
   });
 }

@@ -295,6 +295,15 @@ class MeshagentRoomChatThreadController extends ChatThreadController {
   }
 }
 
+String powerboardsV1ActiveThreadSessionKey({required String? agentKey, required String documentPath, required String? selectedThreadPath}) {
+  final normalizedAgentKey = agentKey?.trim() ?? '';
+  final normalizedSelectedThreadPath = selectedThreadPath?.trim();
+  final activeThreadPath = normalizedSelectedThreadPath == null || normalizedSelectedThreadPath.isEmpty
+      ? documentPath.trim()
+      : normalizedSelectedThreadPath;
+  return '$normalizedAgentKey\n$activeThreadPath';
+}
+
 String? _agentThreadListPath(String? path) {
   final normalized = path?.trim();
   if (normalized == null || normalized.isEmpty) {
@@ -321,6 +330,7 @@ class MeshagentThreadView extends StatefulWidget {
     this.initialMessageAttachments,
     this.agentName,
     this.chatClient,
+    this.threadController,
     this.selectedThreadPath,
     this.selectedThreadDisplayName,
     this.onSelectedThreadPathChanged,
@@ -347,6 +357,7 @@ class MeshagentThreadView extends StatefulWidget {
   final String projectId;
   final String? agentName;
   final agent_sessions.BaseChatClient? chatClient;
+  final ChatThreadController? threadController;
   final ChatThreadDisplayMode threadDisplayMode;
   final String? threadListPath;
   final int newThreadResetVersion;
@@ -388,7 +399,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   static const String _threadEmptyDescription = "Connect with this agent and your team";
   static const double _mobileThreadEmptyStateWidthMax = 600;
 
-  late final ChatThreadController _chatController;
+  late ChatThreadController _chatController;
+  late bool _ownsChatController;
   String? _powerboardsClientToolkitSignature;
   String? _lastRestoredThreadScrollOffsetValue;
   final Set<String> _reportedAttachmentKeys = <String>{};
@@ -575,7 +587,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   void initState() {
     super.initState();
-    _chatController = MeshagentRoomChatThreadController(room: widget.client);
+    _ownsChatController = widget.threadController == null;
+    _chatController = widget.threadController ?? MeshagentRoomChatThreadController(room: widget.client);
     _chatController.addListener(_onChatControllerChanged);
     _scheduleComposerAttachmentSeed();
   }
@@ -600,6 +613,16 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   @override
   void didUpdateWidget(covariant MeshagentThreadView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.threadController != widget.threadController || (oldWidget.client != widget.client && widget.threadController == null)) {
+      _chatController.removeListener(_onChatControllerChanged);
+      if (_ownsChatController) {
+        _chatController.dispose();
+      }
+      _ownsChatController = widget.threadController == null;
+      _chatController = widget.threadController ?? MeshagentRoomChatThreadController(room: widget.client);
+      _chatController.addListener(_onChatControllerChanged);
+      _powerboardsClientToolkitSignature = null;
+    }
     if (oldWidget.client != widget.client) {
       _fileReferenceLoadGeneration += 1;
       _fileReferenceSubscription?.cancel();
@@ -620,7 +643,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     _fileReferenceSubscription?.cancel();
     _fileReferenceReadyLoad = null;
     _chatController.removeListener(_onChatControllerChanged);
-    _chatController.dispose();
+    if (_ownsChatController) {
+      _chatController.dispose();
+    }
     super.dispose();
   }
 
@@ -682,31 +707,19 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return;
     }
     setState(() => _fileReferences = references);
-    if (references.any((reference) => reference.operation == PowerboardsFileTransferOperation.move)) {
-      final roomName = widget.client.roomName?.trim() ?? '';
-      final threadPath = _currentThreadPathForAttachmentIndex();
-      if (roomName.isNotEmpty && threadPath.isNotEmpty) {
-        unawaited(
-          reconcilePowerboardsThreadAttachmentRows(
-            room: widget.client,
-            threadPath: threadPath,
-            resolvePath: (path) {
-              final resolution = powerboardsResolveFileReference(roomName: roomName, path: path, references: references);
-              return resolution.roomName.trim().toLowerCase() == roomName.toLowerCase() ? resolution.path : path;
-            },
-          ).catchError((Object error, StackTrace stackTrace) {
-            if (powerboardsIsExpectedRoomLifecycleClosure(error, stackTrace)) {
-              return;
-            }
-            debugPrint('Failed to reconcile moved thread attachments: $error');
-          }),
-        );
-      }
-    }
   }
 
   String _resolveThreadAttachmentPath(String path) {
     final roomName = widget.client.roomName?.trim() ?? '';
+    if (powerboardsFolderChatContextFromDataUrl(path) != null && roomName.isNotEmpty) {
+      return powerboardsResolveFolderChatContextDataUrl(
+        path,
+        resolvePath: (folderPath) {
+          final resolution = powerboardsResolveFileReference(roomName: roomName, path: folderPath, references: _fileReferences);
+          return resolution.roomName.trim().toLowerCase() == roomName.toLowerCase() ? resolution.path : folderPath;
+        },
+      );
+    }
     final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
     if (roomName.isEmpty || normalizedPath.isEmpty) {
       return normalizedPath;

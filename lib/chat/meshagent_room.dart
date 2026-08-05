@@ -2949,6 +2949,8 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   final Map<String, PowerboardsFileAttachmentLink> _localThreadAttachmentLinksByKey = <String, PowerboardsFileAttachmentLink>{};
   final Map<PowerboardsAgentChatClientCacheKey, agent_sessions.MessagingChatClient> _agentChatClients =
       <PowerboardsAgentChatClientCacheKey, agent_sessions.MessagingChatClient>{};
+  ChatThreadController? _desktopPreviewActiveThreadController;
+  String? _desktopPreviewActiveThreadSessionKey;
   static const Duration _roomResourceTimeout = Duration(seconds: 30);
 
   final MeshagentRoomController controller = MeshagentRoomController();
@@ -3023,6 +3025,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       unawaited(_loadRoomDisplayName());
     }
     if (oldWidget.room != widget.room) {
+      _releaseDesktopPreviewActiveThreadController();
       for (final chatClient in _agentChatClients.values) {
         unawaited(chatClient.stop());
       }
@@ -3041,6 +3044,38 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     _composerAttachmentDisplayNamesByAgentKey.clear();
     _composerAttachmentSeedVersionByAgentKey.clear();
     _newThreadResetVersion++;
+  }
+
+  ChatThreadController _activeDesktopPreviewThreadController({
+    required String? agentKey,
+    required String documentPath,
+    required String? selectedThreadPath,
+  }) {
+    final sessionKey = powerboardsV1ActiveThreadSessionKey(
+      agentKey: agentKey,
+      documentPath: documentPath,
+      selectedThreadPath: selectedThreadPath,
+    );
+    final existing = _desktopPreviewActiveThreadController;
+    if (existing != null && _desktopPreviewActiveThreadSessionKey == sessionKey) {
+      return existing;
+    }
+
+    _desktopPreviewActiveThreadController = MeshagentRoomChatThreadController(room: widget.room);
+    _desktopPreviewActiveThreadSessionKey = sessionKey;
+    if (existing != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => existing.dispose());
+    }
+    return _desktopPreviewActiveThreadController!;
+  }
+
+  void _releaseDesktopPreviewActiveThreadController() {
+    final controller = _desktopPreviewActiveThreadController;
+    _desktopPreviewActiveThreadController = null;
+    _desktopPreviewActiveThreadSessionKey = null;
+    if (controller != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    }
   }
 
   @override
@@ -3172,6 +3207,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       unawaited(chatClient.stop());
     }
     _agentChatClients.clear();
+    _desktopPreviewActiveThreadController?.dispose();
+    _desktopPreviewActiveThreadController = null;
+    _desktopPreviewActiveThreadSessionKey = null;
     _meetingSplitViewController.dispose();
     _roomStatusSubscription?.cancel();
     _roomStatusSubscription = null;
@@ -5203,6 +5241,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
           )
         : null;
     final agentChatClient = _agentChatClientFor(context, agentName);
+    final activeThreadController = !isMobile && powerboardsUsesDesktopUiPreview(context)
+        ? _activeDesktopPreviewThreadController(agentKey: agentKey, documentPath: documentPath, selectedThreadPath: selectedThreadPath)
+        : null;
     void handleSelectedThreadPathChanged(String? path) {
       if (deferDesktopPreviewNewThreadSelection && selectedThreadPath == null && path != null) {
         _deferDesktopPreviewNewThreadSelection(agentKey, path);
@@ -5226,6 +5267,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       child: MeshagentThreadView(
         agentName: agentName,
         chatClient: agentChatClient,
+        threadController: activeThreadController,
         threadDisplayMode: threadDisplayMode,
         threadListPath: resolvedThreadListPath,
         newThreadResetVersion: _newThreadResetVersion,

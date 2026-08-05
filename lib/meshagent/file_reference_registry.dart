@@ -7,6 +7,7 @@ import 'file_attachment_index.dart';
 
 const String powerboardsFileReferenceRegistryPath = '.powerboards/file-reference-registry.json';
 Future<void> _powerboardsFileReferenceWriteQueue = Future<void>.value();
+final Map<String, Future<void>> _powerboardsFileTransferRegistrations = <String, Future<void>>{};
 
 enum PowerboardsFileTransferOperation { move, copy }
 
@@ -167,6 +168,22 @@ bool powerboardsPathWasCreatedByCopy({
   return false;
 }
 
+bool powerboardsFileReferenceMatchesCurrentPath({
+  required String originalRoomName,
+  required String originalPath,
+  required String currentRoomName,
+  required String currentPath,
+  required Iterable<PowerboardsFileReference> references,
+}) {
+  final normalizedCurrentPath = normalizePowerboardsAttachmentPath(currentPath);
+  if (normalizedCurrentPath.isEmpty) {
+    return false;
+  }
+
+  final resolution = powerboardsResolveFileReference(roomName: originalRoomName, path: originalPath, references: references);
+  return _roomNamesMatch(resolution.roomName, currentRoomName) && resolution.path == normalizedCurrentPath;
+}
+
 Future<void> registerPowerboardsFileTransfer({
   required RoomClient sourceRoom,
   required RoomClient destinationRoom,
@@ -188,6 +205,22 @@ Future<void> registerPowerboardsFileTransfer({
     return;
   }
 
+  final registrationKey = [
+    identityHashCode(sourceRoom),
+    identityHashCode(destinationRoom),
+    normalizedSourceRoomName.toLowerCase(),
+    normalizedDestinationRoomName.toLowerCase(),
+    normalizedSourcePath,
+    normalizedDestinationPath,
+    folder,
+    move,
+  ].join('\n');
+  final pendingRegistration = _powerboardsFileTransferRegistrations[registrationKey];
+  if (pendingRegistration != null) {
+    await pendingRegistration;
+    return;
+  }
+
   final reference = PowerboardsFileReference(
     sourceRoomName: normalizedSourceRoomName,
     sourcePath: normalizedSourcePath,
@@ -203,18 +236,24 @@ Future<void> registerPowerboardsFileTransfer({
     if (!identical(sourceRoom, destinationRoom)) {
       await _recordPowerboardsFileReference(destinationRoom, reference);
     }
+    await registerPowerboardsFileAttachmentTransfer(
+      sourceRoom: sourceRoom,
+      destinationRoom: destinationRoom,
+      sourcePath: normalizedSourcePath,
+      destinationPath: normalizedDestinationPath,
+      folder: folder,
+      move: move,
+    );
   });
   _powerboardsFileReferenceWriteQueue = operation.catchError((_) {});
-  await operation;
-
-  await registerPowerboardsFileAttachmentTransfer(
-    sourceRoom: sourceRoom,
-    destinationRoom: destinationRoom,
-    sourcePath: normalizedSourcePath,
-    destinationPath: normalizedDestinationPath,
-    folder: folder,
-    move: move,
-  );
+  _powerboardsFileTransferRegistrations[registrationKey] = operation;
+  try {
+    await operation;
+  } finally {
+    if (identical(_powerboardsFileTransferRegistrations[registrationKey], operation)) {
+      _powerboardsFileTransferRegistrations.remove(registrationKey);
+    }
+  }
 }
 
 Future<void> _recordPowerboardsFileReference(RoomClient room, PowerboardsFileReference reference) async {

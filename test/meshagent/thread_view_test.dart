@@ -254,6 +254,27 @@ void main() {
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [nestedFolder]), isFalse);
   });
 
+  test('V1 active thread session identity survives Files navigation but changes with the active thread', () {
+    final beforeFiles = powerboardsV1ActiveThreadSessionKey(
+      agentKey: 'assistant',
+      documentPath: '.threads/main.thread',
+      selectedThreadPath: 'dataset://agents/assistant/threads/launch',
+    );
+    final afterFiles = powerboardsV1ActiveThreadSessionKey(
+      agentKey: 'assistant',
+      documentPath: '.threads/main.thread',
+      selectedThreadPath: 'dataset://agents/assistant/threads/launch',
+    );
+    final nextThread = powerboardsV1ActiveThreadSessionKey(
+      agentKey: 'assistant',
+      documentPath: '.threads/main.thread',
+      selectedThreadPath: 'dataset://agents/assistant/threads/follow-up',
+    );
+
+    expect(afterFiles, beforeFiles);
+    expect(nextThread, isNot(beforeFiles));
+  });
+
   testWidgets('V1 file reference loading waits for the room identity', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1200, 900);
