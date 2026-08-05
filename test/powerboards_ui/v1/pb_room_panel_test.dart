@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
+import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_reference_registry.dart';
@@ -14,8 +15,10 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.d
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_sidepane_item_menu.dart' as sidepane_menu;
 import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_transcript_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 
 class _NoopProtocolChannel extends ProtocolChannel {
   @override
@@ -545,15 +548,88 @@ void main() {
     expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.agents, filePreviewOpen: true), isTrue);
   });
 
-  test('files takeover keeps fullscreen chrome ownership through room route sync', () {
-    expect(
-      powerboardsDesktopPreviewRoomRouteSyncShouldReleaseFullscreen(routeTargetsFolder: true, roomFilePreviewFullscreen: false),
-      isFalse,
+  testWidgets('desktop preview keeps unavailable attachment state when files loader remounts', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    final showFiles = ValueNotifier<bool>(true);
+    final cachedUnavailablePaths = <String>{};
+    final delayedRecheck = Completer<StorageEntry?>();
+    var statCalls = 0;
+    addTearDown(() {
+      showFiles.dispose();
+      room.dispose();
+    });
+
+    Future<StorageEntry?> statAttachment(RoomClient _, String path) async {
+      expect(path, 'deleted/test-image.png');
+      statCalls += 1;
+      if (statCalls == 1) {
+        return null;
+      }
+      return delayedRecheck.future;
+    }
+
+    const threadPath = 'dataset://agents/assistant/threads/deleted-files';
+    const link = PowerboardsFileAttachmentLink(
+      filePath: 'deleted/test-image.png',
+      threadPath: threadPath,
+      threadName: 'Deleted Files',
+      createdBy: 'User',
+      createdAt: null,
     );
-    expect(
-      powerboardsDesktopPreviewRoomRouteSyncShouldReleaseFullscreen(routeTargetsFolder: true, roomFilePreviewFullscreen: true),
-      isTrue,
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<bool>(
+          valueListenable: showFiles,
+          builder: (context, filesVisible, _) {
+            if (!filesVisible) {
+              return const Text('agents');
+            }
+            return PowerboardsDesktopPreviewThreadAttachmentsHarness(
+              client: room,
+              enabled: true,
+              selectedThreadPath: threadPath,
+              selectedThreadName: 'Deleted Files',
+              localLinks: const [link],
+              attachmentStatLoader: statAttachment,
+              initialUnavailableAttachmentPaths: cachedUnavailablePaths,
+              onAttachmentAvailabilityChanged: (path, availability) {
+                if (availability == ThreadAttachmentAvailability.unavailable) {
+                  cachedUnavailablePaths.add(path);
+                } else if (availability == ThreadAttachmentAvailability.available) {
+                  cachedUnavailablePaths.remove(path);
+                }
+              },
+              builder: (context, attachments) {
+                if (attachments.isEmpty) {
+                  return const Text('empty');
+                }
+                final attachment = attachments.single;
+                return Text('${attachment.previewState.name}:${attachment.subtitle}');
+              },
+            );
+          },
+        ),
+      ),
     );
+    await tester.pumpAndSettle();
+
+    expect(find.text('unavailable:No longer available'), findsOneWidget);
+    expect(statCalls, 1);
+
+    showFiles.value = false;
+    await tester.pump();
+    expect(find.text('agents'), findsOneWidget);
+
+    showFiles.value = true;
+    await tester.pump();
+
+    expect(find.text('unavailable:No longer available'), findsOneWidget);
+    expect(statCalls, 2);
+
+    delayedRecheck.complete(null);
+    await tester.pumpAndSettle();
+    expect(find.text('unavailable:No longer available'), findsOneWidget);
   });
 
   test('chat files pane excludes inherited copy links but keeps direct attachments', () {
@@ -1109,6 +1185,183 @@ void main() {
 
     expect(find.text('Browse attachments by selected thread.'), findsOneWidget);
     expect(find.text('Browse attachments by selected agent.'), findsNothing);
+  });
+
+  testWidgets('generating artifact row shows a spinner without a menu and opens its ephemeral preview', (tester) async {
+    PbAttachmentListItemData? selectedFile;
+    const generatedArtifact = PbAttachmentListItemData(
+      title: 'Dinosaur chasing taxi',
+      subtitle: 'Generating image…',
+      fileType: PbAttachmentFileType.image,
+      sourceKey: 'generation:generation-1',
+      isLoading: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            height: 640,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              attachments: const [generatedArtifact],
+              onFilePreviewSelected: (file) => selectedFile = file,
+              threads: const [],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Dinosaur chasing taxi'), findsOneWidget);
+    expect(find.text('Generating image…'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(sidepane_menu.PbSidepaneItemMenu), findsNothing);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(find.text('Dinosaur chasing taxi')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(sidepane_menu.PbSidepaneItemMenu), findsNothing);
+
+    await tester.tap(find.text('Dinosaur chasing taxi'));
+    await tester.pump();
+    expect(selectedFile, same(generatedArtifact));
+  });
+
+  testWidgets('completed generated artifact row offers open, download, and save-copy actions', (tester) async {
+    PbAttachmentListItemData? selectedFile;
+    var downloadCount = 0;
+    var saveCopyCount = 0;
+    const generatedArtifact = PbAttachmentListItemData(
+      title: 'Dinosaur chasing taxi',
+      subtitle: 'Generated image · Preview and save a copy to Files',
+      fileType: PbAttachmentFileType.image,
+      sourceKey: 'generation:generation-1',
+      showAskAgentAction: false,
+      showSaveCopyAsAction: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            height: 640,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              attachments: const [generatedArtifact],
+              onFilePreviewSelected: (file) => selectedFile = file,
+              onAskFileAgent: (_) => fail('Generated artifacts must not offer Ask agent'),
+              onDownloadFile: (_) => downloadCount += 1,
+              onSaveFileCopyAs: (_) => saveCopyCount += 1,
+              threads: const [],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Generated image · Preview and save a copy to Files'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is PbSvgIcon && widget.assetName == generatedArtifact.iconAssetName && widget.color == generatedArtifact.iconColor,
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(sidepane_menu.PbSidepaneItemMenu), findsOneWidget);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(find.text('Dinosaur chasing taxi')));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byType(sidepane_menu.PbSidepaneItemMenu));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open'), findsOneWidget);
+    expect(find.text('Ask agent'), findsNothing);
+    expect(find.text('Download'), findsOneWidget);
+    expect(find.text('Save a copy as...'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Open')).dy, lessThan(tester.getTopLeft(find.text('Download')).dy));
+    expect(tester.getTopLeft(find.text('Download')).dy, lessThan(tester.getTopLeft(find.text('Save a copy as...')).dy));
+
+    await tester.tap(find.text('Download'));
+    await tester.pumpAndSettle();
+    expect(downloadCount, 1);
+
+    await tester.tap(find.byType(sidepane_menu.PbSidepaneItemMenu));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save a copy as...'));
+    await tester.pumpAndSettle();
+    expect(saveCopyCount, 1);
+
+    await tester.tap(find.text('Dinosaur chasing taxi'));
+    await tester.pump();
+    expect(selectedFile, same(generatedArtifact));
+  });
+
+  testWidgets('unavailable thread attachment list items stay muted and open the unavailable action', (tester) async {
+    var previewSelections = 0;
+    var unavailableSelections = 0;
+    final file = PbAttachmentListItemData.fromFileName(
+      title: 'deleted-notes.md',
+      subtitle: 'No longer available',
+      path: 'files/deleted-notes.md',
+      previewState: PbAttachmentPreviewState.unavailable,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            height: 640,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              attachments: [file],
+              onFilePreviewSelected: (_) => previewSelections += 1,
+              onUnavailableFileSelected: (_) => unavailableSelections += 1,
+              threads: const [],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('deleted-notes.md'), findsOneWidget);
+    expect(find.text('No longer available'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is PbSvgIcon && widget.assetName == file.iconAssetName && widget.color == PbColors.textSubtle,
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(sidepane_menu.PbSidepaneItemMenu), findsNothing);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: tester.getCenter(find.text('deleted-notes.md')));
+    await tester.pumpAndSettle();
+    expect(find.byWidgetPredicate((widget) => widget is Transform && widget.transform.getTranslation().y == -1), findsOneWidget);
+
+    await tester.tap(find.text('deleted-notes.md'));
+    await tester.pump();
+
+    expect(unavailableSelections, 1);
+    expect(previewSelections, 0);
+    expect(find.byKey(const ValueKey('file-preview-content-frame')), findsNothing);
   });
 
   testWidgets('hidden files tab keeps controlled files selection on agents panel', (tester) async {
@@ -1806,6 +2059,78 @@ void main() {
     expect(find.text('Ask agent'), findsOneWidget);
     expect(find.text('Download'), findsOneWidget);
     expect(find.text('Share'), findsNothing);
+  });
+
+  testWidgets('generating image preview hides file actions in pane and fullscreen layouts', (tester) async {
+    for (final fullscreen in [false, true]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 920,
+              height: 480,
+              child: PbFilePreviewPane(
+                file: PbAttachmentListItemData.fromFileName(title: 'Generating image…'),
+                fullscreen: fullscreen,
+                previewContentChild: const SizedBox.expand(),
+                hideToolbarActions: true,
+                onAskAgent: () {},
+                onDownload: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ask agent'), findsNothing);
+      expect(find.text('Download'), findsNothing);
+      expect(find.text('Save'), findsNothing);
+      expect(find.byType(sidepane_menu.PbSidepaneItemMenu), findsNothing);
+    }
+  });
+
+  testWidgets('ready ephemeral file preview reuses the active green header save action', (tester) async {
+    var saveCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 560,
+            height: 480,
+            child: PbFilePreviewPane(
+              file: PbAttachmentListItemData.fromFileName(title: 'Generated image', showAskAgentAction: false, showSaveCopyAsAction: true),
+              fullscreen: false,
+              previewContentChild: const SizedBox.expand(),
+              onAskAgent: () {},
+              onDownload: () {},
+              onSave: () async {
+                saveCount += 1;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final saveButtonFinder = find.widgetWithText(PbButton, 'Save');
+    expect(saveButtonFinder, findsOneWidget);
+    final saveButton = tester.widget<PbButton>(saveButtonFinder);
+    expect(saveButton.backgroundColor, PbColors.statusPositive);
+
+    await tester.tap(saveButtonFinder);
+    await tester.pumpAndSettle();
+    expect(saveCount, 1);
+
+    await tester.tap(find.byType(sidepane_menu.PbSidepaneItemMenu));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ask agent'), findsNothing);
+    expect(find.text('Download'), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+    expect(find.text('Save a copy as...'), findsNothing);
   });
 
   testWidgets('interim room panel overlay keeps file preview in sheet mode', (tester) async {

@@ -27,16 +27,19 @@ import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat_bot_view.dart';
+import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/chat_bubble_markdown_config.dart';
 import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
+import 'package:powerboards/meshagent/attachment_availability.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_reference_registry.dart';
 import 'package:powerboards/meshagent/file_preview_origin.dart';
 import 'package:powerboards/meshagent/folder_chat_context.dart';
+import 'package:powerboards/meshagent/generated_image_preview.dart';
 import 'package:powerboards/meshagent/install_agent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
@@ -48,6 +51,8 @@ import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/meshagent/tools/install_webserver_service.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_thread_message_options_menu.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_unavailable_thread_attachment.dart';
 
 typedef PowerboardsThreadAttachmentsChanged =
     void Function({
@@ -340,6 +345,8 @@ class MeshagentThreadView extends StatefulWidget {
     this.onComposerAttachmentOpen,
     this.onComposerAttachmentRemoved,
     this.onThreadAttachmentOpen,
+    this.onGeneratedImageOpen,
+    this.onGeneratedImageChanged,
     this.fileDropOverlayBuilder,
     this.onServiceChanged,
   });
@@ -377,6 +384,8 @@ class MeshagentThreadView extends StatefulWidget {
   final ValueChanged<String>? onComposerAttachmentOpen;
   final ValueChanged<String>? onComposerAttachmentRemoved;
   final ValueChanged<String>? onThreadAttachmentOpen;
+  final ValueChanged<PowerboardsV1GeneratedImagePreview>? onGeneratedImageOpen;
+  final ValueChanged<PowerboardsV1GeneratedImagePreview>? onGeneratedImageChanged;
   final FileDropOverlayBuilder? fileDropOverlayBuilder;
   final FutureOr<void> Function()? onServiceChanged;
 
@@ -412,6 +421,11 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     }
 
     return ResponsiveBreakpoints.of(context).isMobile || powerboardsIsLandscapePhoneViewport(context);
+  }
+
+  Future<void> _saveGeneratedImageCopy(BuildContext context, DatasetThreadImage image) async {
+    final preview = PowerboardsV1GeneratedImagePreview.fromDatasetThreadImage(image);
+    await showPowerboardsV1GeneratedImageSaveSurface(context: context, room: widget.client, preview: preview);
   }
 
   String _chatPlaceholderText(String? agentName) {
@@ -707,6 +721,15 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   String _resolveThreadAttachmentPath(String path) {
     final roomName = widget.client.roomName?.trim() ?? '';
+    if (powerboardsFolderChatContextFromDataUrl(path) != null && roomName.isNotEmpty) {
+      return powerboardsResolveFolderChatContextDataUrl(
+        path,
+        resolvePath: (folderPath) {
+          final resolution = powerboardsResolveFileReference(roomName: roomName, path: folderPath, references: _fileReferences);
+          return resolution.roomName.trim().toLowerCase() == roomName.toLowerCase() ? resolution.path : folderPath;
+        },
+      );
+    }
     final normalizedPath = powerboardsStorageAttachmentPathFromUrl(path);
     if (roomName.isEmpty || normalizedPath.isEmpty) {
       return normalizedPath;
@@ -716,6 +739,35 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return normalizedPath;
     }
     return resolution.path;
+  }
+
+  Future<ThreadAttachmentAvailability> _resolveThreadAttachmentAvailability(String path) async {
+    final folderContext = powerboardsFolderChatContextFromDataUrl(path);
+    final normalizedPath = folderContext?.storagePath ?? powerboardsStorageAttachmentPathFromUrl(path);
+    if (folderContext != null && normalizedPath.isEmpty) {
+      return ThreadAttachmentAvailability.available;
+    }
+    if (normalizedPath.isEmpty) {
+      return ThreadAttachmentAvailability.unknown;
+    }
+    try {
+      final entry = await widget.client.storage.stat(normalizedPath);
+      return powerboardsThreadAttachmentAvailabilityForStat(entry);
+    } catch (error) {
+      return powerboardsThreadAttachmentAvailabilityForError(error);
+    }
+  }
+
+  Widget _buildUnavailableThreadAttachment(BuildContext context, String path, String displayName, VoidCallback onPressed) {
+    return PbUnavailableThreadAttachment(
+      fileName: displayName,
+      fileType: powerboardsFolderChatContextFromDataUrl(path) == null ? null : PbAttachmentFileType.folder,
+      onPressed: onPressed,
+    );
+  }
+
+  Future<void> _showThreadAttachmentUnavailableDialog(BuildContext dialogContext, String path, String displayName) {
+    return showPbUnavailableAttachmentDialog(dialogContext);
   }
 
   void _configurePowerboardsClientToolkit() {
@@ -1134,6 +1186,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       fileInThreadBuilder: _fileInThreadBuilder,
       pendingFileInThreadBuilder: _pendingFolderInThreadBuilder,
       attachmentPathResolver: usesDesktopUiPreview ? _resolveThreadAttachmentPath : null,
+      attachmentAvailabilityResolver: usesDesktopUiPreview ? _resolveThreadAttachmentAvailability : null,
+      attachmentUnavailableBuilder: usesDesktopUiPreview ? _buildUnavailableThreadAttachment : null,
+      onAttachmentUnavailable: usesDesktopUiPreview ? _showThreadAttachmentUnavailableDialog : null,
       datasetInlineAttachmentViewerPredicate: (path) => powerboardsFolderChatContextFromDataUrl(path) == null,
       openFile: _openThreadAttachment,
       fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
@@ -1159,7 +1214,11 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             )
           : powerboardsAdaptiveInputContextMenuBuilder,
       inputOnPressedOutside: powerboardsAdaptiveInputOnPressedOutside(),
-      mobileStorageSaveSurfacePresenter: usesMobileLayout ? showPowerboardsThreadStorageSaveSurface : null,
+      mobileStorageSaveSurfacePresenter: usesDesktopUiPreview && !usesMobileLayout
+          ? showPowerboardsV1ThreadSaveCopySurface
+          : usesMobileLayout
+          ? showPowerboardsThreadStorageSaveSurface
+          : null,
       mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
       centerComposer: usesCenteredDesktopPreviewComposer,
       showCenteredComposerTitle: !usesCenteredDesktopPreviewComposer,
@@ -1171,6 +1230,13 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       datasetNewThreadWrapperBuilder: usesDesktopUiPreview
           ? (context, newThread, modelController) => PowerboardsV1ModelControllerScope(controller: modelController, child: newThread)
           : null,
+      onGeneratedImageOpen: usesDesktopUiPreview && !usesMobileLayout && widget.onGeneratedImageOpen != null
+          ? (image) => widget.onGeneratedImageOpen!(PowerboardsV1GeneratedImagePreview.fromDatasetThreadImage(image))
+          : null,
+      onGeneratedImageChanged: usesDesktopUiPreview && !usesMobileLayout && widget.onGeneratedImageChanged != null
+          ? (image) => widget.onGeneratedImageChanged!(PowerboardsV1GeneratedImagePreview.fromDatasetThreadImage(image))
+          : null,
+      onGeneratedImageSave: usesDesktopUiPreview && !usesMobileLayout ? _saveGeneratedImageCopy : null,
     );
 
     final scopedChatBotView = usesDesktopUiPreview
@@ -1226,6 +1292,23 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             markdownHeadingStyleResolver: _desktopV1ThreadMarkdownHeadingStyle,
             markdownTextTransformer: powerboardsCanonicalizeMalformedPreviewMarkdownLinks,
             markdownLinkHandler: _handleMarkdownLink,
+            messageOptionsBuilder: (context, {required text, required onCopy, required onSaveCopyAs, required onMenuOpenChanged}) =>
+                PbThreadMessageOptionsMenu(
+                  onCopy: onCopy,
+                  onSaveCopyAs: () =>
+                      unawaited(showPowerboardsV1ThreadCommentSaveCopySurfaceForText(context, room: widget.client, text: text)),
+                  onMenuOpenChanged: onMenuOpenChanged,
+                ),
+            attachmentOptionsBuilder: usesMobileLayout
+                ? null
+                : (context, {required mine, required onOpen, required onDownload, required onSaveCopyAs, required onMenuOpenChanged}) =>
+                      PbThreadAttachmentOptionsMenu(
+                        mine: mine,
+                        onOpen: onOpen,
+                        onDownload: onDownload,
+                        onSaveCopyAs: onSaveCopyAs,
+                        onMenuOpenChanged: onMenuOpenChanged,
+                      ),
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(
