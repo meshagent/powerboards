@@ -101,6 +101,7 @@ Widget _buildSendHarness({
   required ChatThreadController controller,
   required Future<void> Function(String, List<FileAttachment>) onSend,
   bool sendEnabled = true,
+  bool readOnly = false,
   VoidCallback? onCancelSend,
 }) {
   return ShadApp(
@@ -115,7 +116,7 @@ Widget _buildSendHarness({
           placeholder: const Text('Ask Assistant...'),
           sendEnabled: sendEnabled,
           sendDisabledReason: null,
-          readOnly: false,
+          readOnly: readOnly,
           onSend: onSend,
           onCancelSend: onCancelSend,
           sendPendingText: 'Waiting for Assistant to be ready.',
@@ -127,6 +128,24 @@ Widget _buildSendHarness({
 }
 
 void main() {
+  testWidgets('v1 composer locks editing and attachments for terminal thread recovery', (tester) async {
+    final room = _roomClientWithAdminGrant(isAdmin: true);
+    addTearDown(room.dispose);
+    final controller = ChatThreadController(room: room);
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _buildSendHarness(room: room, controller: controller, sendEnabled: false, readOnly: true, onSend: (text, attachments) async {}),
+    );
+    await tester.pump();
+
+    expect(tester.widget<EditableText>(find.byType(EditableText)).readOnly, isTrue);
+    final attachGesture = tester.widget<GestureDetector>(
+      find.descendant(of: find.byTooltip('Attach files'), matching: find.byType(GestureDetector)).first,
+    );
+    expect(attachGesture.onTapUp, isNull);
+  });
+
   testWidgets('v1 composer clears draft and shows pending send while send is unresolved', (tester) async {
     final room = _roomClientWithAdminGrant(isAdmin: true);
     addTearDown(room.dispose);

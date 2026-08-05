@@ -69,15 +69,23 @@ class PbThreadAttachmentLoadingPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: borderRadius,
-      child: ColoredBox(
-        key: const ValueKey('pb-thread-attachment-loading-placeholder'),
-        color: surfaceColor,
-        child: Center(
-          child: Semantics(
-            label: 'Loading attachment',
-            child: const SizedBox.square(dimension: 28, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PbShimmer(
+            key: const ValueKey('pb-thread-attachment-loading-shimmer'),
+            idleColor: surfaceColor,
+            sweepColor: Color.lerp(surfaceColor, PbColors.surfaceAccentSoft, 0.6)!,
+            peakColor: Color.lerp(surfaceColor, Colors.white, 0.5)!,
+            child: const ColoredBox(color: Colors.white),
           ),
-        ),
+          Center(
+            child: Semantics(
+              label: 'Loading attachment',
+              child: const SizedBox.square(dimension: 28, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)),
+            ),
+          ),
+        ],
       ),
     );
   }

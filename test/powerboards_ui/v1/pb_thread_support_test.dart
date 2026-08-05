@@ -1,0 +1,55 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/thread_typography.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_thread_recovery_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_shimmer.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
+
+void main() {
+  testWidgets('normal uploaded image shows the V1 attachment shimmer before rendering', (tester) async {
+    const imageDataUrl =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: ThreadTypographyOverride(
+          attachmentLoadingPlaceholderBuilder: (context, {required borderRadius}) =>
+              PbThreadAttachmentLoadingPlaceholder(borderRadius: borderRadius),
+          child: const Scaffold(body: ChatThreadImageAttachment(imageId: null, imageUri: imageDataUrl)),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('pb-thread-attachment-loading-shimmer')), findsOneWidget);
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  test('poisoned attachment matching is narrow and excludes moved attachment state', () {
+    expect(
+      powerboardsV1IsPoisonedAttachmentError('Unsupported image input format. Supported formats are PNG, JPEG, WEBP, and GIF.'),
+      isTrue,
+    );
+    expect(powerboardsV1IsPoisonedAttachmentError('SVG image input is not supported by this provider.'), isTrue);
+    expect(powerboardsV1IsPoisonedAttachmentError('Attachment moved to media/archive/image.png'), isFalse);
+    expect(powerboardsV1IsPoisonedAttachmentError('Attachment is unavailable because it was deleted.'), isFalse);
+  });
+
+  testWidgets('poisoned attachment recovery offers a working new-thread action', (tester) async {
+    var starts = 0;
+    await tester.pumpWidget(
+      ShadApp(
+        home: Scaffold(body: PbThreadPoisonedAttachmentRecoveryCard(onStartNewThread: () => starts += 1)),
+      ),
+    );
+
+    expect(find.text('This thread can’t continue because an attachment format was rejected.'), findsOneWidget);
+    expect(find.text('Start a new thread to keep chatting.'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('pb-thread-start-new-after-attachment-error')));
+    expect(starts, 1);
+  });
+}
