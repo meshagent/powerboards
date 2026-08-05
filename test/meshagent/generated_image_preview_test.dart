@@ -19,6 +19,26 @@ class _NoopProtocolChannel extends ProtocolChannel {
 }
 
 void main() {
+  testWidgets('V1 generated image completion actions expose save and copy prompt', (tester) async {
+    var saves = 0;
+    var copies = 0;
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: Scaffold(
+          body: PowerboardsV1GeneratedImageCompletionActions(onSaveCopy: () => saves += 1, onCopyPrompt: () => copies += 1),
+        ),
+      ),
+    );
+
+    expect(find.text('Save a copy'), findsOneWidget);
+    expect(find.text('Copy prompt'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('generated-image-save-copy-action')));
+    await tester.tap(find.byKey(const ValueKey('generated-image-copy-prompt-action')));
+    expect(saves, 1);
+    expect(copies, 1);
+  });
+
   test('partial and completed frames retain one preview identity while changing content revisions', () {
     const partial = PowerboardsV1GeneratedImagePreview(
       generationId: 'generation-1',

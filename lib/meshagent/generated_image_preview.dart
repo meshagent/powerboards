@@ -7,8 +7,65 @@ import 'package:powerboards/meshagent/v1_file_preview_source.dart';
 import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+
+class PowerboardsV1GeneratedImageCompletionActions extends StatelessWidget {
+  const PowerboardsV1GeneratedImageCompletionActions({super.key, required this.onSaveCopy, required this.onCopyPrompt});
+
+  final VoidCallback onSaveCopy;
+  final VoidCallback onCopyPrompt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _PowerboardsV1GeneratedImageAction(
+            key: const ValueKey('generated-image-save-copy-action'),
+            iconAssetName: 'save',
+            label: 'Save a copy',
+            onPressed: onSaveCopy,
+          ),
+          _PowerboardsV1GeneratedImageAction(
+            key: const ValueKey('generated-image-copy-prompt-action'),
+            iconAssetName: 'clipboard-copy',
+            label: 'Copy prompt',
+            onPressed: onCopyPrompt,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PowerboardsV1GeneratedImageAction extends StatelessWidget {
+  const _PowerboardsV1GeneratedImageAction({super.key, required this.iconAssetName, required this.label, required this.onPressed});
+
+  final String iconAssetName;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      style: TextButton.styleFrom(
+        foregroundColor: PbColors.surfaceRailSelected,
+        minimumSize: const Size(0, 32),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+      onPressed: onPressed,
+      icon: PbSvgIcon(assetName: iconAssetName, size: 16, color: PbColors.surfaceRailSelected),
+      label: Text(label),
+    );
+  }
+}
 
 class PowerboardsV1GeneratedImagePreview {
   const PowerboardsV1GeneratedImagePreview({

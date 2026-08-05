@@ -1309,6 +1309,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                         onSaveCopyAs: onSaveCopyAs,
                         onMenuOpenChanged: onMenuOpenChanged,
                       ),
+            generatedImageActionsBuilder: usesMobileLayout
+                ? null
+                : (context, {required onSaveCopy, required onCopyPrompt}) =>
+                      PowerboardsV1GeneratedImageCompletionActions(onSaveCopy: onSaveCopy, onCopyPrompt: onCopyPrompt),
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(
