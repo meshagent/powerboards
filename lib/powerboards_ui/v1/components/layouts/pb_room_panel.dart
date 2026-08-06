@@ -55,6 +55,7 @@ class PbRoomPanel extends StatefulWidget {
     this.onFilePreviewOpenChanged,
     this.onFilePreviewFullscreenChanged,
     this.onFilePreviewSelected,
+    this.onUnavailableFileSelected,
     this.initialPreviewFile,
     this.initialFilePreviewOpen = false,
     this.agents,
@@ -100,6 +101,7 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<bool>? onFilePreviewOpenChanged;
   final ValueChanged<bool>? onFilePreviewFullscreenChanged;
   final ValueChanged<PbAttachmentListItemData>? onFilePreviewSelected;
+  final ValueChanged<PbAttachmentListItemData>? onUnavailableFileSelected;
   final PbAttachmentListItemData? initialPreviewFile;
   final bool initialFilePreviewOpen;
   final List<PbAgentListItemData>? agents;
@@ -239,6 +241,10 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
   }
 
   void _openFilePreview(PbAttachmentListItemData file) {
+    if (file.previewState == PbAttachmentPreviewState.unavailable) {
+      widget.onUnavailableFileSelected?.call(file);
+      return;
+    }
     setState(() {
       if (_previewTextSourceChanged(_previewFile, file, null, null)) {
         _clearFilePreviewDraft();

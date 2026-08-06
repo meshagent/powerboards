@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_agents/meshagent_agents.dart' as agent_sessions;
+import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_reference_registry.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_unavailable_thread_attachment.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
@@ -16,6 +18,8 @@ import 'package:powerboards/powerboards_ui/v1/components/menus/pb_sidepane_item_
 import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_transcript_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 class _NoopProtocolChannel extends ProtocolChannel {
   @override
@@ -543,6 +547,90 @@ void main() {
     expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.agents, filePreviewOpen: false), isFalse);
     expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.files, filePreviewOpen: false), isTrue);
     expect(powerboardsDesktopPreviewShouldLoadThreadAttachments(selectedTab: PbRoomPanelTab.agents, filePreviewOpen: true), isTrue);
+  });
+
+  testWidgets('desktop preview keeps unavailable attachment state when files loader remounts', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    final showFiles = ValueNotifier<bool>(true);
+    final cachedUnavailablePaths = <String>{};
+    final delayedRecheck = Completer<StorageEntry?>();
+    var statCalls = 0;
+    addTearDown(() {
+      showFiles.dispose();
+      room.dispose();
+    });
+
+    Future<StorageEntry?> statAttachment(RoomClient _, String path) async {
+      expect(path, 'deleted/test-image.png');
+      statCalls += 1;
+      if (statCalls == 1) {
+        return null;
+      }
+      return delayedRecheck.future;
+    }
+
+    const threadPath = 'dataset://agents/assistant/threads/deleted-files';
+    const link = PowerboardsFileAttachmentLink(
+      filePath: 'deleted/test-image.png',
+      threadPath: threadPath,
+      threadName: 'Deleted Files',
+      createdBy: 'User',
+      createdAt: null,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<bool>(
+          valueListenable: showFiles,
+          builder: (context, filesVisible, _) {
+            if (!filesVisible) {
+              return const Text('agents');
+            }
+            return PowerboardsDesktopPreviewThreadAttachmentsHarness(
+              client: room,
+              enabled: true,
+              selectedThreadPath: threadPath,
+              selectedThreadName: 'Deleted Files',
+              localLinks: const [link],
+              attachmentStatLoader: statAttachment,
+              initialUnavailableAttachmentPaths: cachedUnavailablePaths,
+              onAttachmentAvailabilityChanged: (path, availability) {
+                if (availability == ThreadAttachmentAvailability.unavailable) {
+                  cachedUnavailablePaths.add(path);
+                } else if (availability == ThreadAttachmentAvailability.available) {
+                  cachedUnavailablePaths.remove(path);
+                }
+              },
+              builder: (context, attachments) {
+                if (attachments.isEmpty) {
+                  return const Text('empty');
+                }
+                final attachment = attachments.single;
+                return Text('${attachment.previewState.name}:${attachment.subtitle}');
+              },
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('unavailable:No longer available'), findsOneWidget);
+    expect(statCalls, 1);
+
+    showFiles.value = false;
+    await tester.pump();
+    expect(find.text('agents'), findsOneWidget);
+
+    showFiles.value = true;
+    await tester.pump();
+
+    expect(find.text('unavailable:No longer available'), findsOneWidget);
+    expect(statCalls, 2);
+
+    delayedRecheck.complete(null);
+    await tester.pumpAndSettle();
+    expect(find.text('unavailable:No longer available'), findsOneWidget);
   });
 
   test('files takeover keeps fullscreen chrome ownership through room route sync', () {
@@ -1109,6 +1197,77 @@ void main() {
 
     expect(find.text('Browse attachments by selected thread.'), findsOneWidget);
     expect(find.text('Browse attachments by selected agent.'), findsNothing);
+  });
+
+  testWidgets('unavailable thread attachment list items stay muted and open the unavailable action', (tester) async {
+    var previewSelections = 0;
+    var unavailableSelections = 0;
+    final file = PbAttachmentListItemData.fromFileName(
+      title: 'deleted-notes.md',
+      subtitle: 'No longer available',
+      path: 'files/deleted-notes.md',
+      previewState: PbAttachmentPreviewState.unavailable,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            height: 640,
+            child: PbRoomPanel(
+              selectedTab: PbRoomPanelTab.files,
+              attachments: [file],
+              onFilePreviewSelected: (_) => previewSelections += 1,
+              onUnavailableFileSelected: (_) => unavailableSelections += 1,
+              threads: const [],
+              selectedThreadTitle: null,
+              onThreadSelected: (_) {},
+              onCreateThread: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('deleted-notes.md'), findsOneWidget);
+    expect(find.text('No longer available'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is PbSvgIcon && widget.assetName == file.iconAssetName && widget.color == PbColors.textSubtle,
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(sidepane_menu.PbSidepaneItemMenu), findsNothing);
+
+    await tester.tap(find.text('deleted-notes.md'));
+    await tester.pump();
+
+    expect(unavailableSelections, 1);
+    expect(previewSelections, 0);
+    expect(find.byKey(const ValueKey('file-preview-content-frame')), findsNothing);
+  });
+
+  testWidgets('standard unavailable dialog omits file actions', (tester) async {
+    await tester.pumpWidget(
+      ShadApp(
+        home: Builder(
+          builder: (context) =>
+              TextButton(onPressed: () => unawaited(showPbUnavailableAttachmentDialog(context)), child: const Text('Show unavailable')),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Show unavailable'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No longer available'), findsOneWidget);
+    expect(find.text('This attachment was deleted or you no longer have permission to access it.'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+    expect(find.text('Open'), findsNothing);
+    expect(find.text('Ask agent'), findsNothing);
+    expect(find.text('Download'), findsNothing);
   });
 
   testWidgets('hidden files tab keeps controlled files selection on agents panel', (tester) async {

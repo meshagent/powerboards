@@ -206,10 +206,11 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
 
   @override
   Widget build(BuildContext context) {
+    final unavailable = widget.data.previewState == PbAttachmentPreviewState.unavailable;
     final lifted = !widget.emptyState && _hovered && !_pressed && !_menuOpen;
-    final showAction = !widget.emptyState && (_hovered || _pressed || _menuOpen);
+    final showAction = !widget.emptyState && !unavailable && (_hovered || _pressed || _menuOpen);
     final iconAssetName = widget.emptyState ? widget.emptyIconAssetName : widget.data.iconAssetName;
-    final iconColor = widget.emptyState ? widget.emptyIconColor : widget.data.iconColor;
+    final iconColor = widget.emptyState || unavailable ? PbColors.textSubtle : widget.data.iconColor;
 
     return MouseRegion(
       cursor: widget.emptyState ? SystemMouseCursors.basic : SystemMouseCursors.click,
@@ -310,7 +311,7 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                       ],
                     ),
                   ),
-                  if (!widget.emptyState) ...[
+                  if (!widget.emptyState && !unavailable) ...[
                     const SizedBox(width: 12),
                     SizedBox(
                       width: 38,

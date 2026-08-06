@@ -32,6 +32,7 @@ import 'package:meshagent_flutter_shadcn/meshagent_flutter_shadcn.dart' as ma;
 
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
+import 'package:powerboards/meshagent/attachment_availability.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_reference_registry.dart';
@@ -48,6 +49,7 @@ import 'package:powerboards/meshagent/thread_storage_save_surface.dart';
 import 'package:powerboards/meshagent/tools/install_webserver_service.dart';
 import 'package:powerboards/meshagent/upload_foldername_service.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_unavailable_thread_attachment.dart';
 
 typedef PowerboardsThreadAttachmentsChanged =
     void Function({
@@ -731,6 +733,35 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     return resolution.path;
   }
 
+  Future<ThreadAttachmentAvailability> _resolveThreadAttachmentAvailability(String path) async {
+    final folderContext = powerboardsFolderChatContextFromDataUrl(path);
+    final normalizedPath = folderContext?.storagePath ?? powerboardsStorageAttachmentPathFromUrl(path);
+    if (folderContext != null && normalizedPath.isEmpty) {
+      return ThreadAttachmentAvailability.available;
+    }
+    if (normalizedPath.isEmpty) {
+      return ThreadAttachmentAvailability.unknown;
+    }
+    try {
+      final entry = await widget.client.storage.stat(normalizedPath);
+      return powerboardsThreadAttachmentAvailabilityForStat(entry);
+    } catch (error) {
+      return powerboardsThreadAttachmentAvailabilityForError(error);
+    }
+  }
+
+  Widget _buildUnavailableThreadAttachment(BuildContext context, String path, String displayName, VoidCallback onPressed) {
+    return PbUnavailableThreadAttachment(
+      fileName: displayName,
+      fileType: powerboardsFolderChatContextFromDataUrl(path) == null ? null : PbAttachmentFileType.folder,
+      onPressed: onPressed,
+    );
+  }
+
+  Future<void> _showThreadAttachmentUnavailableDialog(BuildContext dialogContext, String path, String displayName) {
+    return showPbUnavailableAttachmentDialog(dialogContext);
+  }
+
   void _configurePowerboardsClientToolkit() {
     final projectId = widget.projectId.trim();
     final roomName = widget.client.roomName?.trim();
@@ -1147,6 +1178,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       fileInThreadBuilder: _fileInThreadBuilder,
       pendingFileInThreadBuilder: _pendingFolderInThreadBuilder,
       attachmentPathResolver: usesDesktopUiPreview ? _resolveThreadAttachmentPath : null,
+      attachmentAvailabilityResolver: usesDesktopUiPreview ? _resolveThreadAttachmentAvailability : null,
+      attachmentUnavailableBuilder: usesDesktopUiPreview ? _buildUnavailableThreadAttachment : null,
+      onAttachmentUnavailable: usesDesktopUiPreview ? _showThreadAttachmentUnavailableDialog : null,
       datasetInlineAttachmentViewerPredicate: (path) => powerboardsFolderChatContextFromDataUrl(path) == null,
       openFile: _openThreadAttachment,
       fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
@@ -1215,6 +1249,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             alignAttachmentEdgesWithBubbles: true,
             attachmentIconBuilder: _buildDesktopV1ThreadAttachmentIcon,
             attachmentActionIconBuilder: _buildDesktopV1ThreadAttachmentActionIcon,
+            showAttachmentReplayWhileLoading: true,
             codeBlockSurfaceColor: PbColors.customCodeSurface,
             codeBlockHeaderSurfaceColor: PbColors.customCodeSurface,
             codeBlockBorderColor: PbColors.customCodeSurface,
