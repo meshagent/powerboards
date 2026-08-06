@@ -74,6 +74,13 @@ const Color _desktopV1ThreadCodeCommentColor = Color(0xFF6B7280);
 const Color _desktopV1ThreadCodeCommandColor = Color(0xFFFDE68A);
 const Color _desktopV1ThreadSelectionColor = Color(0x665EA2FF);
 const Color _desktopV1ThreadSelectionHandleColor = Color(0xFF5EA2FF);
+const String _desktopV1GeneratedImageReadyText = '''
+Your image is ready. You can:
+
+- [Save a copy] to your files,
+- [Copy prompt] used.
+
+Or continue to refine it.''';
 const Map<String, TextStyle> _desktopV1ThreadCodeHighlightTheme = {
   'root': TextStyle(backgroundColor: PbColors.customCodeSurface, color: _desktopV1ThreadCodePlainColor),
   'tag': TextStyle(color: _desktopV1ThreadCodePlainColor),
@@ -1237,6 +1244,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
           ? (image) => widget.onGeneratedImageChanged!(PowerboardsV1GeneratedImagePreview.fromDatasetThreadImage(image))
           : null,
       onGeneratedImageSave: usesDesktopUiPreview && !usesMobileLayout ? _saveGeneratedImageCopy : null,
+      generatedImageReadyText: usesDesktopUiPreview && !usesMobileLayout ? _desktopV1GeneratedImageReadyText : null,
+      replaceGeneratedImageTurnFinalAnswer: usesDesktopUiPreview && !usesMobileLayout,
     );
 
     final scopedChatBotView = usesDesktopUiPreview
@@ -1309,10 +1318,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
                         onSaveCopyAs: onSaveCopyAs,
                         onMenuOpenChanged: onMenuOpenChanged,
                       ),
-            generatedImageActionsBuilder: usesMobileLayout
-                ? null
-                : (context, {required onSaveCopy, required onCopyPrompt}) =>
-                      PowerboardsV1GeneratedImageCompletionActions(onSaveCopy: onSaveCopy, onCopyPrompt: onCopyPrompt),
             child: ShadTheme.merge(
               data: ShadThemeData(textTheme: ma.threadTypographyShadTextTheme(shadTheme.textTheme, 'Inter')),
               child: Theme(

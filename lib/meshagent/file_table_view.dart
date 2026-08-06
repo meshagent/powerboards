@@ -118,6 +118,7 @@ const String _webServerServiceId = powerboardsWebServerServiceId;
 const String _webServerFolderIconAssetName = 'folder-code';
 const String _webServerUrlVariableName = 'url';
 const String _webServerPreviewQueryParameter = 'webserver_preview';
+const bool _v1AttachmentsFilesShowWebsiteInstallAction = false;
 const String _v1DownloadArchiveStagingFolder = '.powerboards-downloads';
 const Set<String> _websitePreviewIgnoredDirectoryNames = <String>{'.cache', '.git', '.npm', '.pnpm-store', 'node_modules'};
 const Set<String> _websitePreviewAppProjectFileNames = <String>{
@@ -5813,7 +5814,11 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onDeleteSelection: _confirmAndDeleteSelected,
                   onDownloadSelection: _downloadSelected,
                   onCreateFolder: () => unawaited(_addFolder(currentFolder)),
-                  onInstallWebServer: currentFolder.isEmpty && _canInstallWebServerFromFiles && !_isWebServerInstalled()
+                  onInstallWebServer:
+                      _v1AttachmentsFilesShowWebsiteInstallAction &&
+                          currentFolder.isEmpty &&
+                          _canInstallWebServerFromFiles &&
+                          !_isWebServerInstalled()
                       ? () => unawaited(_openWebServerInstallDialog())
                       : null,
                   onCreateTextFile: _showNewTextFileDialog,
