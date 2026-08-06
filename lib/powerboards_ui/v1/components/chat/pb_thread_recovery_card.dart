@@ -5,6 +5,11 @@ import '../primitives/pb_svg_icon.dart';
 
 bool powerboardsV1IsPoisonedAttachmentError(String message) {
   final normalized = message.toLowerCase();
+  if (normalized.contains('the image data you provided does not represent a valid image') ||
+      normalized.contains('no tool output found for function call') ||
+      (normalized.contains('unknown parameter') && RegExp(r'input\[\d+\]\.output').hasMatch(normalized))) {
+    return true;
+  }
   final rejectsInput =
       normalized.contains('unsupported') ||
       normalized.contains('not supported') ||

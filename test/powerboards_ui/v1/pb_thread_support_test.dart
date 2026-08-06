@@ -35,6 +35,23 @@ void main() {
       isTrue,
     );
     expect(powerboardsV1IsPoisonedAttachmentError('SVG image input is not supported by this provider.'), isTrue);
+    expect(
+      powerboardsV1IsPoisonedAttachmentError(
+        'The image data you provided does not represent a valid image. Please check your input and try again.',
+      ),
+      isTrue,
+    );
+    expect(
+      powerboardsV1IsPoisonedAttachmentError('Error from OpenAI websocket: No tool output found for function call call_example.'),
+      isTrue,
+    );
+    expect(
+      powerboardsV1IsPoisonedAttachmentError(
+        "Error from OpenAI websocket: [ObjectParam] [input[4].output] [unknown_parameter] Unknown parameter: 'input[4].output'.",
+      ),
+      isTrue,
+    );
+    expect(powerboardsV1IsPoisonedAttachmentError("Unknown parameter: 'temperature'."), isFalse);
     expect(powerboardsV1IsPoisonedAttachmentError('Attachment moved to media/archive/image.png'), isFalse);
     expect(powerboardsV1IsPoisonedAttachmentError('Attachment is unavailable because it was deleted.'), isFalse);
   });
