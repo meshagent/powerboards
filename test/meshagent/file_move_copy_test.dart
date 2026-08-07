@@ -62,18 +62,9 @@ void main() {
   });
 
   test('copy conflict names preserve file extensions and folder names', () {
-    expect(
-      powerboardsV1ConflictCopyName('brief.pdf', folder: false, copyNumber: 1),
-      'Copy of brief.pdf',
-    );
-    expect(
-      powerboardsV1ConflictCopyName('brief.pdf', folder: false, copyNumber: 2),
-      'Copy 2 of brief.pdf',
-    );
-    expect(
-      powerboardsV1ConflictCopyName('Research', folder: true, copyNumber: 1),
-      'Copy of Research',
-    );
+    expect(powerboardsV1ConflictCopyName('brief.pdf', folder: false, copyNumber: 1), 'Copy of brief.pdf');
+    expect(powerboardsV1ConflictCopyName('brief.pdf', folder: false, copyNumber: 2), 'Copy 2 of brief.pdf');
+    expect(powerboardsV1ConflictCopyName('Research', folder: true, copyNumber: 1), 'Copy of Research');
   });
 
   test('linked cross-room moves require confirmation but copies and local moves do not', () {
