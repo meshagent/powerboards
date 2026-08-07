@@ -268,6 +268,21 @@ bool powerboardsHandleChatLink({
 }
 
 @visibleForTesting
+String powerboardsResolveChatLinkCurrentPath({
+  required String roomName,
+  required String path,
+  required Iterable<PowerboardsFileReference> references,
+}) {
+  final normalizedRoomName = roomName.trim();
+  final normalizedPath = normalizePowerboardsFolderStoragePath(path);
+  if (normalizedRoomName.isEmpty || normalizedPath.isEmpty) {
+    return normalizedPath;
+  }
+  final resolution = powerboardsResolveFileReference(roomName: normalizedRoomName, path: normalizedPath, references: references);
+  return resolution.roomName.trim().toLowerCase() == normalizedRoomName.toLowerCase() ? resolution.path : normalizedPath;
+}
+
+@visibleForTesting
 Widget? powerboardsFolderThreadAttachmentBuilder(BuildContext context, String path) {
   final folderContext = powerboardsFolderChatContextFromDataUrl(path);
   if (folderContext == null) {
@@ -411,7 +426,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   List<PowerboardsFileReference> _fileReferences = const <PowerboardsFileReference>[];
   int _fileReferenceLoadGeneration = 0;
   int _lastAppliedComposerAttachmentSeedVersion = 0;
-  String? _activeFolderContextStoragePath;
 
   bool _usesCompactMobileThreadEmptyState(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -440,9 +454,8 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   bool _handleMarkdownLink(BuildContext context, String url) {
     if (powerboardsHandleChatLink(
       url: url,
-      onOpenFolder: _openFolderContext,
-      onOpenFilePreview: (path) =>
-          _openThreadAttachment(powerboardsResolveChatFilePreviewPath(path, activeFolderStoragePath: _activeFolderContextStoragePath)),
+      onOpenFolder: (path) => unawaited(_openChatFolderLink(path)),
+      onOpenFilePreview: (path) => unawaited(_openChatFileLink(path)),
     )) {
       return true;
     }
@@ -478,6 +491,48 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       return true;
     }
     return false;
+  }
+
+  String _resolveChatLinkPath(String path) {
+    return powerboardsResolveChatLinkCurrentPath(roomName: widget.client.roomName?.trim() ?? '', path: path, references: _fileReferences);
+  }
+
+  Future<void> _openChatFolderLink(String path) async {
+    final resolvedPath = _resolveChatLinkPath(path);
+    if (resolvedPath.isEmpty) {
+      _openFolderContext(resolvedPath);
+      return;
+    }
+    final availability = await _resolveThreadAttachmentAvailability(resolvedPath);
+    if (!mounted) {
+      return;
+    }
+    if (availability == ThreadAttachmentAvailability.unavailable) {
+      await _showThreadAttachmentUnavailableDialog(context, resolvedPath, resolvedPath.split('/').last);
+      return;
+    }
+    _openFolderContext(resolvedPath);
+  }
+
+  Future<void> _openChatFileLink(String path) async {
+    final resolvedPath = _resolveChatLinkPath(path);
+    final availability = await _resolveThreadAttachmentAvailability(resolvedPath);
+    if (!mounted) {
+      return;
+    }
+    if (availability == ThreadAttachmentAvailability.unavailable) {
+      await _showThreadAttachmentUnavailableDialog(context, resolvedPath, resolvedPath.split('/').last);
+      return;
+    }
+    _openThreadAttachment(resolvedPath);
+  }
+
+  String _transformAgentMarkdown(String markdown, List<String> contextAttachmentPaths) {
+    return powerboardsLinkAssistantFolderReferencesInMarkdown(
+      markdown,
+      contextAttachmentPaths: contextAttachmentPaths,
+      resolveAttachmentPath: _resolveThreadAttachmentPath,
+    );
   }
 
   void _openWebServerFolder(BuildContext context, {String? storagePath}) {
@@ -1017,7 +1072,6 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     if (folderContext == null) {
       return null;
     }
-    _activeFolderContextStoragePath = folderContext.storagePath;
     return PbFolderThreadAttachmentCard(title: folderContext.displayName);
   }
 
@@ -1182,6 +1236,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       attachmentUnavailableBuilder: usesDesktopUiPreview ? _buildUnavailableThreadAttachment : null,
       onAttachmentUnavailable: usesDesktopUiPreview ? _showThreadAttachmentUnavailableDialog : null,
       datasetInlineAttachmentViewerPredicate: (path) => powerboardsFolderChatContextFromDataUrl(path) == null,
+      datasetAgentMessageTextTransformer: _transformAgentMarkdown,
       openFile: _openThreadAttachment,
       fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
       chatInputBoxBuilder: usesMobileLayout ? (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox) : null,

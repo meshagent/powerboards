@@ -13,10 +13,15 @@ class PowerboardsChatLinkTarget {
 }
 
 class PowerboardsFolderChatContext {
-  const PowerboardsFolderChatContext({required this.storagePath, required this.displayName});
+  const PowerboardsFolderChatContext({
+    required this.storagePath,
+    required this.displayName,
+    this.visibleDirectChildren = const <PowerboardsFolderChatEntry>[],
+  });
 
   final String storagePath;
   final String displayName;
+  final List<PowerboardsFolderChatEntry> visibleDirectChildren;
 
   String get workspacePath => storagePath.isEmpty ? '/data' : '/data/$storagePath';
 
@@ -137,6 +142,74 @@ String powerboardsCanonicalizeMalformedPreviewMarkdownLinks(String markdown) {
   });
 }
 
+String powerboardsLinkPlainFolderReferencesInMarkdown(String markdown, PowerboardsFolderChatContext folderContext) {
+  final references = <({String label, String destination})>[
+    (label: folderContext.displayName, destination: folderContext.folderLink),
+    for (final child in folderContext.visibleDirectChildren)
+      (
+        label: child.name,
+        destination: child.isFolder
+            ? PowerboardsFolderChatContext(storagePath: child.storagePath, displayName: child.name).folderLink
+            : folderContext.fileLink(child.storagePath),
+      ),
+  ];
+  references.sort((left, right) => right.label.length.compareTo(left.label.length));
+  if (references.isEmpty) {
+    return markdown;
+  }
+
+  final protectedMarkdown = RegExp(
+    r'```[\s\S]*?```|`[^`\r\n]*`|\[[^\]\r\n]*\]\([^\)\r\n]*\)|(?:https?|powerboards)://[^\s<>]+',
+    caseSensitive: false,
+  );
+  final result = StringBuffer();
+  var offset = 0;
+  for (final match in protectedMarkdown.allMatches(markdown)) {
+    result.write(_powerboardsLinkPlainReferenceSegment(markdown.substring(offset, match.start), references));
+    result.write(match.group(0));
+    offset = match.end;
+  }
+  result.write(_powerboardsLinkPlainReferenceSegment(markdown.substring(offset), references));
+  return result.toString();
+}
+
+String powerboardsLinkAssistantFolderReferencesInMarkdown(
+  String markdown, {
+  required Iterable<String> contextAttachmentPaths,
+  String Function(String path)? resolveAttachmentPath,
+}) {
+  var transformed = markdown;
+  for (final path in contextAttachmentPaths) {
+    final resolvedPath = resolveAttachmentPath?.call(path) ?? path;
+    final folderContext = powerboardsFolderChatContextFromDataUrl(resolvedPath);
+    if (folderContext != null) {
+      transformed = powerboardsLinkPlainFolderReferencesInMarkdown(transformed, folderContext);
+    }
+  }
+  return transformed;
+}
+
+String _powerboardsLinkPlainReferenceSegment(String segment, List<({String label, String destination})> references) {
+  final referencesByLabel = <String, ({String label, String destination})>{
+    for (final reference in references)
+      if (reference.label.trim().isNotEmpty) reference.label.trim().toLowerCase(): reference,
+  };
+  if (referencesByLabel.isEmpty) {
+    return segment;
+  }
+  final labels = referencesByLabel.values.map((reference) => RegExp.escape(reference.label.trim())).join('|');
+  final pattern = RegExp('(?<![A-Za-z0-9_./-])(?:$labels)(?![A-Za-z0-9_./-])', caseSensitive: false);
+  return segment.replaceAllMapped(pattern, (match) {
+    final label = match.group(0)!;
+    final reference = referencesByLabel[label.toLowerCase()]!;
+    return '[${_powerboardsEscapeMarkdownLinkLabel(label)}](${reference.destination})';
+  });
+}
+
+String _powerboardsEscapeMarkdownLinkLabel(String label) {
+  return label.replaceAll(r'\', r'\\').replaceAll('[', r'\[').replaceAll(']', r'\]');
+}
+
 PowerboardsFolderChatContext? powerboardsFolderChatContextFromDataUrl(String value) {
   final normalized = value.trim();
   for (final encodedPayload in _powerboardsFolderContextPayloadCandidates(normalized)) {
@@ -156,6 +229,7 @@ PowerboardsFolderChatContext? powerboardsFolderChatContextFromDataUrl(String val
         displayName: displayName.isEmpty
             ? storagePath.split('/').where((segment) => segment.isNotEmpty).lastOrNull ?? 'Files'
             : displayName,
+        visibleDirectChildren: _powerboardsFolderEntriesFromDocument(json),
       );
     } on FormatException {
       continue;
@@ -164,6 +238,30 @@ PowerboardsFolderChatContext? powerboardsFolderChatContextFromDataUrl(String val
     }
   }
   return null;
+}
+
+List<PowerboardsFolderChatEntry> _powerboardsFolderEntriesFromDocument(Map<String, dynamic> document) {
+  final rawChildren = document['visible_direct_children'];
+  if (rawChildren is! List) {
+    return const <PowerboardsFolderChatEntry>[];
+  }
+
+  return [
+    for (final rawChild in rawChildren)
+      if (rawChild is Map)
+        () {
+          final child = Map<String, dynamic>.from(rawChild);
+          final storagePath = normalizePowerboardsFolderStoragePath(child['storage_path'] as String? ?? '');
+          final name = (child['name'] as String? ?? '').trim();
+          final sizeBytes = child['size_bytes'];
+          return PowerboardsFolderChatEntry(
+            storagePath: storagePath,
+            name: name,
+            isFolder: child['type'] == 'folder',
+            sizeBytes: sizeBytes is int ? sizeBytes : null,
+          );
+        }(),
+  ].where((entry) => entry.storagePath.isNotEmpty && entry.name.isNotEmpty).toList(growable: false);
 }
 
 String powerboardsResolveFolderChatContextDataUrl(String value, {required String Function(String storagePath) resolvePath}) {

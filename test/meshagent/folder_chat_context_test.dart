@@ -42,6 +42,7 @@ void main() {
         final context = powerboardsFolderChatContextFromDataUrl(variant);
         expect(context?.storagePath, 'content', reason: variant.length > 60 ? variant.substring(0, 60) : variant);
         expect(context?.displayName, 'content');
+        expect(context?.visibleDirectChildren, isEmpty);
       }
     });
 
@@ -62,6 +63,11 @@ void main() {
       expect(directChildren.first, containsPair('storage_path', 'content/notes.md'));
       expect(directChildren.first, containsPair('type', 'file'));
       expect(directChildren.last, containsPair('type', 'folder'));
+      final context = powerboardsFolderChatContextFromDataUrl(dataUrl);
+      expect(context?.visibleDirectChildren, hasLength(2));
+      expect(context?.visibleDirectChildren.first.name, 'notes.md');
+      expect(context?.visibleDirectChildren.first.storagePath, 'content/notes.md');
+      expect(context?.visibleDirectChildren.last.isFolder, isTrue);
       expect(instructions, contains('authoritative snapshot'));
       expect(instructions, contains('direct children exactly as files or folders'));
       expect(instructions, contains('Do not collapse recursive descendants'));
@@ -150,6 +156,74 @@ void main() {
         expect(canonicalized, isNot(contains(RegExp(r'%(?![0-9A-Fa-f]{2})'))));
         expect(canonicalized, isNot(contains(' ')));
       }
+    });
+
+    test('links only known plain folder references with the approved product destinations', () {
+      const context = PowerboardsFolderChatContext(
+        storagePath: 'test/folder',
+        displayName: 'folder',
+        visibleDirectChildren: <PowerboardsFolderChatEntry>[
+          PowerboardsFolderChatEntry(storagePath: 'test/folder/overview.md', name: 'overview.md', isFolder: false),
+          PowerboardsFolderChatEntry(storagePath: 'test/folder/nested', name: 'nested', isFolder: true),
+        ],
+      );
+      const markdown = '''The folder contains overview.md, nested, and unknown.txt.
+
+Keep `overview.md`, https://example.com/overview.md, and [overview.md](https://example.com/existing) unchanged.''';
+
+      final transformed = powerboardsLinkPlainFolderReferencesInMarkdown(markdown, context);
+
+      expect(transformed, contains('[folder](powerboards://files?path=test%2Ffolder)'));
+      expect(transformed, contains('[overview.md](powerboards://preview?path=test%2Ffolder%2Foverview.md)'));
+      expect(transformed, contains('[nested](powerboards://files?path=test%2Ffolder%2Fnested)'));
+      expect(transformed, contains('unknown.txt'));
+      expect(transformed, contains('`overview.md`'));
+      expect(transformed, contains('https://example.com/overview.md'));
+      expect(transformed, contains('[overview.md](https://example.com/existing)'));
+    });
+
+    test('leaves unrelated Assistant prose untouched without known references', () {
+      const context = PowerboardsFolderChatContext(
+        storagePath: 'test/folder',
+        displayName: 'folder',
+        visibleDirectChildren: <PowerboardsFolderChatEntry>[
+          PowerboardsFolderChatEntry(storagePath: 'test/folder/overview.md', name: 'overview.md', isFolder: false),
+        ],
+      );
+      const markdown = 'The requested notes.txt and another-folder are not attached.';
+
+      expect(powerboardsLinkPlainFolderReferencesInMarkdown(markdown, context), markdown);
+    });
+
+    test('scopes historical Assistant references to the folder attached in their own turn', () {
+      final firstFolder = powerboardsFolderChatContextDataUrl(
+        'first',
+        visibleDirectChildren: const <PowerboardsFolderChatEntry>[
+          PowerboardsFolderChatEntry(storagePath: 'first/first.md', name: 'first.md', isFolder: false),
+        ],
+      );
+      final secondFolder = powerboardsFolderChatContextDataUrl(
+        'second',
+        visibleDirectChildren: const <PowerboardsFolderChatEntry>[
+          PowerboardsFolderChatEntry(storagePath: 'second/second.md', name: 'second.md', isFolder: false),
+        ],
+      );
+
+      final firstResponse = powerboardsLinkAssistantFolderReferencesInMarkdown(
+        'first contains first.md; second.md is unrelated prose.',
+        contextAttachmentPaths: <String>[firstFolder],
+      );
+      final secondResponse = powerboardsLinkAssistantFolderReferencesInMarkdown(
+        'second contains second.md; first.md is unrelated prose.',
+        contextAttachmentPaths: <String>[secondFolder],
+      );
+
+      expect(firstResponse, contains('[first.md](powerboards://preview?path=first%2Ffirst.md)'));
+      expect(firstResponse, contains('second.md is unrelated prose'));
+      expect(firstResponse, isNot(contains('path=second%2Fsecond.md')));
+      expect(secondResponse, contains('[second.md](powerboards://preview?path=second%2Fsecond.md)'));
+      expect(secondResponse, contains('first.md is unrelated prose'));
+      expect(secondResponse, isNot(contains('path=first%2Ffirst.md')));
     });
 
     test('folder routes remain folders and basename file links resolve inside the active folder', () {

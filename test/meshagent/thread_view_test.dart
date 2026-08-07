@@ -14,6 +14,7 @@ import 'package:meshagent_flutter_shadcn/thread_typography.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/folder_chat_context.dart';
+import 'package:powerboards/meshagent/file_reference_registry.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_select_dialog.dart';
@@ -369,6 +370,26 @@ void main() {
         onOpenFilePreview: (path) => previewedFile = path,
       ),
       isFalse,
+    );
+  });
+
+  test('Assistant response links resolve moved folder and file identities in the current room', () {
+    final references = <PowerboardsFileReference>[
+      PowerboardsFileReference(
+        sourceRoomName: 'room',
+        sourcePath: 'drafts',
+        destinationRoomName: 'room',
+        destinationPath: 'published',
+        operation: PowerboardsFileTransferOperation.move,
+        folder: true,
+        updatedAt: DateTime.utc(2026, 8, 6),
+      ),
+    ];
+
+    expect(powerboardsResolveChatLinkCurrentPath(roomName: 'room', path: 'drafts', references: references), 'published');
+    expect(
+      powerboardsResolveChatLinkCurrentPath(roomName: 'room', path: 'drafts/overview.md', references: references),
+      'published/overview.md',
     );
   });
 
