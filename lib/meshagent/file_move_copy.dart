@@ -28,22 +28,17 @@ bool powerboardsV1CanUseMoveDestination({
   }
 
   final normalizedInitialPath = powerboardsNormalizeStoragePath(initialPath);
-  final normalizedDestinationPath = powerboardsNormalizeStoragePath(
-    destinationPath,
-  );
+  final normalizedDestinationPath = powerboardsNormalizeStoragePath(destinationPath);
   if (normalizedDestinationPath == normalizedInitialPath) {
     return false;
   }
 
   for (final sourceFolderPath in sourceFolderPaths) {
-    final normalizedSourceFolder = powerboardsNormalizeStoragePath(
-      sourceFolderPath,
-    );
+    final normalizedSourceFolder = powerboardsNormalizeStoragePath(sourceFolderPath);
     if (normalizedSourceFolder.isEmpty) {
       continue;
     }
-    if (normalizedDestinationPath == normalizedSourceFolder ||
-        normalizedDestinationPath.startsWith('$normalizedSourceFolder/')) {
+    if (normalizedDestinationPath == normalizedSourceFolder || normalizedDestinationPath.startsWith('$normalizedSourceFolder/')) {
       return false;
     }
   }
@@ -61,11 +56,7 @@ bool powerboardsV1ShouldConfirmCrossRoomLinkedMove({
 }
 
 @visibleForTesting
-String powerboardsV1ConflictCopyName(
-  String originalName, {
-  required bool folder,
-  required int copyNumber,
-}) {
+String powerboardsV1ConflictCopyName(String originalName, {required bool folder, required int copyNumber}) {
   assert(copyNumber > 0);
   final prefix = copyNumber == 1 ? 'Copy of ' : 'Copy $copyNumber of ';
   if (folder) {
@@ -74,9 +65,7 @@ String powerboardsV1ConflictCopyName(
 
   final dotIndex = originalName.lastIndexOf('.');
   final hasExtension = dotIndex > 0;
-  final stem = hasExtension
-      ? originalName.substring(0, dotIndex)
-      : originalName;
+  final stem = hasExtension ? originalName.substring(0, dotIndex) : originalName;
   final extension = hasExtension ? originalName.substring(dotIndex) : '';
   return '$prefix$stem$extension';
 }
@@ -87,19 +76,11 @@ Future<String> powerboardsResolveStorageDestinationPath({
   required String sourcePath,
   required bool folder,
 }) async {
-  final sourceName = p.posix.basename(
-    powerboardsNormalizeStoragePath(sourcePath),
-  );
+  final sourceName = p.posix.basename(powerboardsNormalizeStoragePath(sourcePath));
   var copyNumber = 0;
 
   while (true) {
-    final candidateName = copyNumber == 0
-        ? sourceName
-        : powerboardsV1ConflictCopyName(
-            sourceName,
-            folder: folder,
-            copyNumber: copyNumber,
-          );
+    final candidateName = copyNumber == 0 ? sourceName : powerboardsV1ConflictCopyName(sourceName, folder: folder, copyNumber: copyNumber);
     final candidatePath = _joinStoragePath(destinationFolder, candidateName);
     if (!await storage.exists(candidatePath)) {
       return candidatePath;
@@ -144,11 +125,7 @@ Future<String> powerboardsTransferStoragePath({
     }
   } catch (_) {
     if (!copied) {
-      await _deletePartialCopy(
-        destinationStorage,
-        destinationPath,
-        folder: folder,
-      );
+      await _deletePartialCopy(destinationStorage, destinationPath, folder: folder);
     }
     rethrow;
   }
@@ -201,9 +178,7 @@ Future<void> _copyStorageFile({
   required String sourcePath,
   required String destinationPath,
 }) async {
-  final iterator = StreamIterator<BinaryContent>(
-    await sourceStorage.downloadStream(sourcePath),
-  );
+  final iterator = StreamIterator<BinaryContent>(await sourceStorage.downloadStream(sourcePath));
   try {
     if (!await iterator.moveNext()) {
       throw StateError('The source file did not provide download metadata.');
@@ -218,18 +193,14 @@ Future<void> _copyStorageFile({
     final name = metadata.headers['name'];
     final mimeType = metadata.headers['mime_type'];
     if (size is! int || size < 0 || name is! String || mimeType is! String) {
-      throw StateError(
-        'The source file provided incomplete download metadata.',
-      );
+      throw StateError('The source file provided incomplete download metadata.');
     }
 
     Stream<Uint8List> chunks() async* {
       while (await iterator.moveNext()) {
         final chunk = iterator.current;
         if (chunk.headers['kind'] != 'data') {
-          throw StateError(
-            'The source file provided an invalid download chunk.',
-          );
+          throw StateError('The source file provided an invalid download chunk.');
         }
         yield chunk.data;
       }
@@ -248,11 +219,7 @@ Future<void> _copyStorageFile({
   }
 }
 
-Future<void> _deletePartialCopy(
-  StorageClient storage,
-  String path, {
-  required bool folder,
-}) async {
+Future<void> _deletePartialCopy(StorageClient storage, String path, {required bool folder}) async {
   try {
     if (await storage.exists(path)) {
       await storage.delete(path, recursive: folder ? true : null);

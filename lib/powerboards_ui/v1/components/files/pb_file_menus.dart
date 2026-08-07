@@ -140,8 +140,7 @@ class PbFilesRowMenu extends StatelessWidget {
               singleLine: true,
               onPressed: () => _runMenuAction(onDownload, onDismiss),
             ),
-          if (onRename != null || onMoveTo != null || onDelete != null)
-            const PbMenuDivider(),
+          if (onRename != null || onMoveTo != null || onDelete != null) const PbMenuDivider(),
           if (onRename != null)
             PbMenuOption(
               title: item.renameActionLabelOverride ?? 'Rename',
@@ -204,8 +203,7 @@ class PbFilesRowMenu extends StatelessWidget {
               singleLine: true,
               onPressed: () => _runMenuAction(onDownload, onDismiss),
             ),
-          if (onRename != null || onMoveTo != null || onDelete != null)
-            const PbMenuDivider(),
+          if (onRename != null || onMoveTo != null || onDelete != null) const PbMenuDivider(),
           if (onRename != null)
             PbMenuOption(
               title: 'Rename',
