@@ -67,52 +67,30 @@ class PbDialogShell extends StatelessWidget {
                 ? blurBackdrop
                       ? BackdropFilter(
                           filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                          child: Container(
-                            color: PbColors.surfaceRailActive.withValues(
-                              alpha: 0.52,
-                            ),
-                          ),
+                          child: Container(color: PbColors.surfaceRailActive.withValues(alpha: 0.52)),
                         )
-                      : Container(
-                          color: PbColors.surfaceRailActive.withValues(
-                            alpha: 0.52,
-                          ),
-                        )
+                      : Container(color: PbColors.surfaceRailActive.withValues(alpha: 0.52))
                 : const SizedBox.expand(),
           ),
           Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: maxWidth,
-                  maxHeight: dialogMaxHeight,
-                ),
+                constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: dialogMaxHeight),
                 child: Container(
                   padding: surfacePadding,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(color: PbColors.borderSoft),
                     gradient: const LinearGradient(
-                      colors: [
-                        PbColors.surfacePanel,
-                        PbColors.surfacePanelSoft,
-                      ],
+                      colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color.fromRGBO(15, 23, 42, 0.12),
-                        blurRadius: 80,
-                        offset: Offset(0, 30),
-                      ),
-                    ],
+                    boxShadow: const [BoxShadow(color: Color.fromRGBO(15, 23, 42, 0.12), blurRadius: 80, offset: Offset(0, 30))],
                   ),
                   child: Column(
-                    mainAxisSize: bodyExpanded
-                        ? MainAxisSize.max
-                        : MainAxisSize.min,
+                    mainAxisSize: bodyExpanded ? MainAxisSize.max : MainAxisSize.min,
                     children: [
                       Padding(
                         padding: headerPadding,
@@ -124,8 +102,7 @@ class PbDialogShell extends StatelessWidget {
                           onClose: onClose,
                         ),
                       ),
-                      if (headerBodySpacing > 0)
-                        SizedBox(height: headerBodySpacing),
+                      if (headerBodySpacing > 0) SizedBox(height: headerBodySpacing),
                       if (bodyExpanded)
                         Expanded(
                           child: Padding(padding: bodyPadding, child: body),
@@ -133,8 +110,7 @@ class PbDialogShell extends StatelessWidget {
                       else
                         Padding(padding: bodyPadding, child: body),
                       if (actions != null) ...[
-                        if (bodyActionsSpacing > 0)
-                          SizedBox(height: bodyActionsSpacing),
+                        if (bodyActionsSpacing > 0) SizedBox(height: bodyActionsSpacing),
                         Padding(padding: actionsPadding, child: actions!),
                       ],
                     ],
