@@ -1,11 +1,12 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/thread_typography.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_thread_recovery_card.dart';
-import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_shimmer.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 void main() {
@@ -66,11 +67,22 @@ void main() {
       ),
     );
 
-    expect(find.text('This thread can’t continue because an attachment format was rejected.'), findsOneWidget);
-    expect(find.text('Start a new thread to keep chatting.'), findsOneWidget);
-    expect(find.byType(PbButton), findsOneWidget);
+    expect(find.text('There was an error. To continue please create a new thread.'), findsOneWidget);
+    expect(find.byType(Icon), findsNothing);
+    expect(find.byType(ElevatedButton), findsNothing);
     expect(find.byType(OutlinedButton), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('pb-thread-start-new-after-attachment-error')));
+    final recovery = tester.widget<Container>(find.byKey(const ValueKey('pb-thread-poisoned-attachment-recovery')));
+    final decoration = recovery.decoration! as BoxDecoration;
+    expect(decoration.color, PbColors.alertSoft);
+    expect(decoration.border, isNull);
+
+    final recoveryText = tester.widget<Text>(
+      find.descendant(of: find.byKey(const ValueKey('pb-thread-poisoned-attachment-recovery')), matching: find.byType(Text)),
+    );
+    final link = (recoveryText.textSpan! as TextSpan).children![1] as TextSpan;
+    expect(link.text, 'create a new thread');
+    expect(link.style!.color, PbColors.alert);
+    (link.recognizer! as TapGestureRecognizer).onTap!();
     expect(starts, 1);
   });
 
