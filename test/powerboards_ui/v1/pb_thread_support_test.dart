@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/thread_typography.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_thread_recovery_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_shimmer.dart';
@@ -68,5 +69,43 @@ void main() {
     expect(find.text('Start a new thread to keep chatting.'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('pb-thread-start-new-after-attachment-error')));
     expect(starts, 1);
+  });
+
+  testWidgets('turn-ended attachment rejection uses the V1 recovery card', (tester) async {
+    const runtimeError = "This thread can't continue because an attachment format was rejected during post-processing.";
+    final rows = <Map<String, Object?>>[
+      {
+        'item_id': 'turn-ended-1',
+        'turn_id': 'turn-1',
+        'sequence': 1,
+        'timestamp': '2026-08-07T12:00:00Z',
+        'data': {
+          'type': 'meshagent.agent.turn.ended',
+          'thread_id': 'dataset://threads/svg-attachment',
+          'turn_id': 'turn-1',
+          'error': {'message': runtimeError, 'code': 'invalid_attachment_format'},
+        },
+      },
+    ];
+
+    await tester.pumpWidget(
+      ShadApp(
+        home: ThreadTypographyOverride(
+          poisonedErrorPredicate: powerboardsV1IsPoisonedAttachmentError,
+          poisonedErrorBuilder: (context, {required error, required onStartNewThread}) =>
+              PbThreadPoisonedAttachmentRecoveryCard(onStartNewThread: onStartNewThread),
+          child: Scaffold(
+            body: DatasetChatThread(
+              path: 'dataset://threads/svg-attachment',
+              rowsLoader: ({required namespace, required table}) => Stream.value(rows),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(runtimeError), findsNothing);
+    expect(find.byKey(const ValueKey('pb-thread-poisoned-attachment-recovery')), findsOneWidget);
   });
 }

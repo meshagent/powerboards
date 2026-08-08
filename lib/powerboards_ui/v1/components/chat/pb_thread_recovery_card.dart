@@ -4,8 +4,9 @@ import '../../theme/pb_colors.dart';
 import '../primitives/pb_svg_icon.dart';
 
 bool powerboardsV1IsPoisonedAttachmentError(String message) {
-  final normalized = message.toLowerCase();
-  if (normalized.contains('the image data you provided does not represent a valid image') ||
+  final normalized = message.toLowerCase().replaceAll('’', "'");
+  if (normalized.contains("this thread can't continue because an attachment format was rejected") ||
+      normalized.contains('the image data you provided does not represent a valid image') ||
       normalized.contains('no tool output found for function call') ||
       (normalized.contains('unknown parameter') && RegExp(r'input\[\d+\]\.output').hasMatch(normalized))) {
     return true;
