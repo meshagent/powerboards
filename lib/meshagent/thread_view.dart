@@ -283,6 +283,12 @@ String powerboardsResolveChatLinkCurrentPath({
 }
 
 @visibleForTesting
+String powerboardsV1ThreadAttachmentDisplayName(String path, {required String fallback}) {
+  final folderContext = powerboardsFolderChatContextFromDataUrl(path);
+  return folderContext?.displayName ?? fallback;
+}
+
+@visibleForTesting
 Widget? powerboardsFolderThreadAttachmentBuilder(BuildContext context, String path) {
   final folderContext = powerboardsFolderChatContextFromDataUrl(path);
   if (folderContext == null) {
@@ -510,6 +516,17 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
     if (availability == ThreadAttachmentAvailability.unavailable) {
       await _showThreadAttachmentUnavailableDialog(context, resolvedPath, resolvedPath.split('/').last);
       return;
+    }
+    final originalPath = normalizePowerboardsFolderStoragePath(path);
+    if (originalPath.isNotEmpty && originalPath != resolvedPath) {
+      final confirmed = await showPbRenamedFolderLinkDialog(
+        context,
+        previousName: originalPath.split('/').last,
+        currentName: resolvedPath.split('/').last,
+      );
+      if (!mounted || !confirmed) {
+        return;
+      }
     }
     _openFolderContext(resolvedPath);
   }
@@ -806,9 +823,10 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
   }
 
   Widget _buildUnavailableThreadAttachment(BuildContext context, String path, String displayName, VoidCallback onPressed) {
+    final folderContext = powerboardsFolderChatContextFromDataUrl(path);
     return PbUnavailableThreadAttachment(
-      fileName: displayName,
-      fileType: powerboardsFolderChatContextFromDataUrl(path) == null ? null : PbAttachmentFileType.folder,
+      fileName: powerboardsV1ThreadAttachmentDisplayName(path, fallback: displayName),
+      fileType: folderContext == null ? null : PbAttachmentFileType.folder,
       onPressed: onPressed,
     );
   }

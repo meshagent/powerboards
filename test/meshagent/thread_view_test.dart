@@ -20,6 +20,7 @@ import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_select_dialog.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_unavailable_thread_attachment.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -391,6 +392,41 @@ void main() {
       powerboardsResolveChatLinkCurrentPath(roomName: 'room', path: 'drafts/overview.md', references: references),
       'published/overview.md',
     );
+  });
+
+  test('deleted folder attachments retain their captured display name', () {
+    final folderAttachment = powerboardsFolderChatContextDataUrl('content/old-name', displayName: 'Project Atlas');
+
+    expect(powerboardsV1ThreadAttachmentDisplayName(folderAttachment, fallback: 'Inline attachment (text/plain)'), 'Project Atlas');
+  });
+
+  testWidgets('renamed folder notice uses the V1 dialog and confirms navigation', (tester) async {
+    bool? confirmed;
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        child: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                confirmed = await showPbRenamedFolderLinkDialog(context, previousName: 'drafts', currentName: 'published');
+              },
+              child: const Text('Open folder'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open folder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Folder renamed'), findsOneWidget);
+    expect(find.text('“drafts” is now “published”. Select OK to open the renamed folder.'), findsOneWidget);
+    expect(find.text('OK'), findsOneWidget);
+
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(confirmed, isTrue);
   });
 
   testWidgets('rendered folder file links preserve spaced filenames for preview dispatch', (tester) async {

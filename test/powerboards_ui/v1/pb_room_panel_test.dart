@@ -16,6 +16,7 @@ import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.d
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
 import 'package:powerboards/powerboards_ui/v1/components/menus/pb_sidepane_item_menu.dart' as sidepane_menu;
 import 'package:powerboards/powerboards_ui/v1/components/meet/pb_meet_transcript_panel.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
@@ -1265,6 +1266,8 @@ void main() {
     expect(find.text('No longer available'), findsOneWidget);
     expect(find.text('This attachment was deleted or you no longer have permission to access it.'), findsOneWidget);
     expect(find.text('Close'), findsOneWidget);
+    expect(find.byType(PbButton), findsOneWidget);
+    expect(find.byType(ShadButton), findsNothing);
     expect(find.text('Open'), findsNothing);
     expect(find.text('Ask agent'), findsNothing);
     expect(find.text('Download'), findsNothing);
