@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/pb_colors.dart';
+import '../../theme/pb_tokens.dart';
+import '../../theme/pb_typography.dart';
+import '../primitives/pb_button.dart';
 import '../primitives/pb_svg_icon.dart';
 
 bool powerboardsV1IsPoisonedAttachmentError(String message) {
@@ -38,34 +41,60 @@ class PbThreadPoisonedAttachmentRecoveryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-      child: Container(
-        key: const ValueKey('pb-thread-poisoned-attachment-recovery'),
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: PbColors.customAlertSoft,
-          border: Border.all(color: PbColors.borderSoft),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'This thread can’t continue because an attachment format was rejected.',
-              style: TextStyle(color: Color.lerp(PbColors.customAlert, PbColors.textBody, 0.18), fontWeight: FontWeight.w600),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          key: const ValueKey('pb-thread-poisoned-attachment-recovery'),
+          constraints: const BoxConstraints(maxWidth: 560),
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            border: Border.all(color: PbColors.borderSoft),
+            borderRadius: BorderRadius.circular(PbRadii.medium),
+            gradient: const LinearGradient(
+              colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
             ),
-            const SizedBox(height: 6),
-            const Text('Start a new thread to keep chatting.', style: TextStyle(color: PbColors.textBody)),
-            if (onStartNewThread != null) ...[
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                key: const ValueKey('pb-thread-start-new-after-attachment-error'),
-                onPressed: onStartNewThread,
-                icon: const PbSvgIcon(assetName: 'plus', size: 16, color: PbColors.customBrandInk),
-                label: const Text('Start new thread'),
+            boxShadow: PbShadows.card,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(color: PbColors.alertSoft, borderRadius: BorderRadius.circular(PbRadii.small)),
+                alignment: Alignment.center,
+                child: const PbSvgIcon(assetName: 'triangle-alert', size: 21, color: PbColors.alert),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'This thread can’t continue because an attachment format was rejected.',
+                      style: PowerboardsTypography.smallStrong.copyWith(color: PbColors.textPrimary),
+                    ),
+                    const SizedBox(height: 7),
+                    Text('Start a new thread to keep chatting.', style: PowerboardsTypography.p.copyWith(color: PbColors.textMuted)),
+                    if (onStartNewThread != null) ...[
+                      const SizedBox(height: 18),
+                      KeyedSubtree(
+                        key: const ValueKey('pb-thread-start-new-after-attachment-error'),
+                        child: PbButton(
+                          label: 'Start new thread',
+                          iconAssetName: 'plus',
+                          variant: PbButtonVariant.primary,
+                          onPressed: onStartNewThread,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
-          ],
+          ),
         ),
       ),
     );

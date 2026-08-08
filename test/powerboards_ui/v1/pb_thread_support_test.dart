@@ -4,6 +4,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/thread_typography.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_thread_recovery_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_shimmer.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
@@ -67,6 +68,8 @@ void main() {
 
     expect(find.text('This thread can’t continue because an attachment format was rejected.'), findsOneWidget);
     expect(find.text('Start a new thread to keep chatting.'), findsOneWidget);
+    expect(find.byType(PbButton), findsOneWidget);
+    expect(find.byType(OutlinedButton), findsNothing);
     await tester.tap(find.byKey(const ValueKey('pb-thread-start-new-after-attachment-error')));
     expect(starts, 1);
   });
