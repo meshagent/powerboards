@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -279,6 +280,25 @@ void main() {
     expect(powerboardsV1LiveFolderEntriesMatchRoute(routeFolder: 'website', activeFolder: 'website', loadedFolderPath: 'website'), isTrue);
     expect(powerboardsV1LiveFolderEntriesMatchRoute(routeFolder: '', activeFolder: '', loadedFolderPath: 'website'), isFalse);
     expect(powerboardsV1LiveFolderEntriesMatchRoute(routeFolder: 'website', activeFolder: '', loadedFolderPath: 'website'), isFalse);
+  });
+
+  test('fresh-room Files waits for room readiness before loading the root folder', () async {
+    final ready = Completer<void>();
+    var loads = 0;
+    final result = powerboardsLoadFolderAfterRoomReady<String>(
+      roomReady: ready.future,
+      load: () async {
+        loads += 1;
+        return const <String>[];
+      },
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    expect(loads, 0);
+
+    ready.complete();
+    expect(await result, isEmpty);
+    expect(loads, 1);
   });
 }
 

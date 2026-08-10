@@ -9,6 +9,7 @@ import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_tokens.dart';
+import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/ui/adaptive_shad_context_menu.dart';
@@ -1282,7 +1283,9 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       mobileStorageSaveSurfacePresenter: usesMobileLayout ? showPowerboardsThreadStorageSaveSurface : null,
       mobileUnderHeaderContentPadding: mobileUnderHeaderContentPadding,
       centerComposer: usesCenteredDesktopPreviewComposer,
-      showCenteredComposerTitle: !usesCenteredDesktopPreviewComposer,
+      showCenteredComposerTitle: true,
+      centeredComposerTitle: usesCenteredDesktopPreviewComposer ? "How can I help you?" : "Start a new thread",
+      centeredComposerTitleStyle: usesCenteredDesktopPreviewComposer ? PowerboardsTypography.customEmptyStateTitle : null,
       hideChatInput: widget.hideChatInput,
       showThreadList: false,
       datasetThreadWrapperBuilder: usesDesktopUiPreview

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:http/http.dart' as http;
 import 'package:meshagent/meshagent.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 
@@ -87,6 +88,24 @@ class ServiceDirectoryPage {
 
   static Future<ServiceDirectoryPage> parse(String jsonString) =>
       ServiceDirectoryPage.fromJson(json.decode(jsonString) as Map<String, dynamic>);
+}
+
+Future<ServiceDirectoryPage> loadPowerboardsServiceDirectory({http.Client? client}) async {
+  final serverUrl = MeshagentConfig.current?.serverUrl;
+  if (serverUrl == null) {
+    throw StateError('MeshagentConfig.current.serverUrl is not set');
+  }
+
+  final response = client == null ? await http.get(serverUrl.resolve('/directory')) : await client.get(serverUrl.resolve('/directory'));
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw StateError('Failed to load service directory: ${response.statusCode}');
+  }
+
+  final decoded = jsonDecode(response.body);
+  if (decoded is! Map<String, dynamic>) {
+    throw StateError('Service directory response is invalid');
+  }
+  return ServiceDirectoryPage.fromJson(decoded);
 }
 
 class ServiceDirectoryEntry {

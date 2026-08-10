@@ -852,6 +852,12 @@ bool powerboardsV1LiveFolderEntriesMatchRoute({
 }
 
 @visibleForTesting
+Future<List<T>> powerboardsLoadFolderAfterRoomReady<T>({required Future<void> roomReady, required Future<List<T>> Function() load}) async {
+  await roomReady;
+  return load();
+}
+
+@visibleForTesting
 bool powerboardsV1FileItemIsSelectable(PbFilesItemData item) {
   return item.kind == PbFilesItemKind.file || item.kind == PbFilesItemKind.folder;
 }
@@ -3321,7 +3327,10 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _nextFile() => _cycleFile(1);
 
   Future<List<StorageEntry>> _getChildren(String folderPath) async {
-    final entries = await widget.client.storage.list(folderPath);
+    final entries = await powerboardsLoadFolderAfterRoomReady(
+      roomReady: widget.client.ready,
+      load: () => widget.client.storage.list(folderPath),
+    );
     _saveV1FolderEntries(folderPath, entries);
     if (_folderSig.value == folderPath) {
       _v1LoadedFolderPath = folderPath;

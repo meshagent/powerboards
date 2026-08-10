@@ -34,9 +34,11 @@ import 'package:meshagent_flutter_shadcn/voice/voice.dart';
 import 'package:powerboards/chat/hangup_button.dart';
 import 'package:powerboards/meshagent/archive_extract.dart';
 import 'package:powerboards/meshagent/archive_extract_toast.dart';
+import 'package:powerboards/meshagent/assistant_quick_start.dart';
 import 'package:powerboards/livekit/room.dart' as room;
 import 'package:powerboards/livekit/voice_meeting_controls.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
+import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
 import 'package:powerboards/meshagent/agents_dropdown.dart';
 import 'package:powerboards/meshagent/attachment_availability.dart';
@@ -71,6 +73,7 @@ import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_voice_session_empty_state.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_unavailable_thread_attachment.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_agent_email_setup_wizard.dart';
 import 'package:powerboards/powerboards_ui/v1/components/dialogs/pb_dialog_shell.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_drop_target.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_archive_extract.dart';
@@ -2382,10 +2385,43 @@ Color _mobileRoomSurfaceColor(BuildContext context) {
   return ShadTheme.of(context).colorScheme.card;
 }
 
-class _BlankDesktopPreviewRoomWorkspace extends StatelessWidget {
-  const _BlankDesktopPreviewRoomWorkspace({this.onInstallAgent});
+@visibleForTesting
+bool powerboardsShouldUseAssistantEmailQuickStart({
+  required bool usesDesktopV1,
+  required bool isMobile,
+  required bool hasVisibleAgents,
+  required bool canInstallAgent,
+}) {
+  return usesDesktopV1 && !isMobile && !hasVisibleAgents && canInstallAgent;
+}
 
-  final VoidCallback? onInstallAgent;
+@visibleForTesting
+bool powerboardsShouldHoldAssistantQuickStartWorkspace({required bool hasVisibleAgents, required bool quickStartActive}) {
+  return !hasVisibleAgents || quickStartActive;
+}
+
+@visibleForTesting
+PbAgentEmailSetupProcessing? powerboardsAssistantSetupProcessingForServiceOperation({
+  required String serviceKindId,
+  required PowerboardsServiceOperation operation,
+}) {
+  if (serviceKindId.trim() != powerboardsAssistantServiceId) {
+    return null;
+  }
+  return switch (operation) {
+    PowerboardsServiceOperation.install => PbAgentEmailSetupProcessing.installing,
+    PowerboardsServiceOperation.uninstall => PbAgentEmailSetupProcessing.uninstalling,
+    PowerboardsServiceOperation.update => null,
+  };
+}
+
+@visibleForTesting
+class PowerboardsBlankDesktopPreviewRoomWorkspace extends StatelessWidget {
+  const PowerboardsBlankDesktopPreviewRoomWorkspace({super.key, required this.mailDomain, this.onInstallAssistant, this.processing});
+
+  final String mailDomain;
+  final PbAgentEmailInstaller? onInstallAssistant;
+  final PbAgentEmailSetupProcessing? processing;
 
   @override
   Widget build(BuildContext context) {
@@ -2398,17 +2434,22 @@ class _BlankDesktopPreviewRoomWorkspace extends StatelessWidget {
         children: [
           const PbThreadHeader(blankRoom: true),
           Expanded(
-            child: PbEmptyState(
-              iconAssetName: 'messages-square',
-              title: 'Start with an agent',
-              subtitle: 'Add an agent to help keep conversations, files, and follow-ups moving.',
-              topFactor: sourceTopFactor,
-              topOffset: -sourceThreadHeaderHeight * (1 - sourceTopFactor),
-              actionTopGap: 30,
-              action: onInstallAgent == null
-                  ? null
-                  : PbButton(label: 'Install an Agent', variant: PbButtonVariant.primary, height: 42, onPressed: onInstallAgent),
-            ),
+            child: onInstallAssistant == null
+                ? const PbEmptyState(
+                    iconAssetName: 'messages-square',
+                    title: 'Start with an agent',
+                    subtitle: 'Add an agent to help keep conversations, files, and follow-ups moving.',
+                    topFactor: sourceTopFactor,
+                    topOffset: -sourceThreadHeaderHeight * (1 - sourceTopFactor),
+                    actionTopGap: 30,
+                  )
+                : PbAgentEmailSetupWizard(
+                    domain: mailDomain,
+                    onInstall: onInstallAssistant!,
+                    processing: processing,
+                    topFactor: sourceTopFactor,
+                    topOffset: -sourceThreadHeaderHeight * (1 - sourceTopFactor),
+                  ),
           ),
         ],
       ),
@@ -3111,6 +3152,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   PbAttachmentListItemData? _desktopPreviewMeetTranscriptPreviewFile;
   bool _desktopPreviewMeetingFullscreen = false;
   bool _desktopPreviewAgentsExpanded = true;
+  bool _desktopAssistantQuickStartActive = false;
+  PbAgentEmailSetupProcessing? _desktopAssistantManagedProcessing;
+  bool _desktopAssistantManagedReconciliationRunning = false;
   bool _didNormalizeInitialDesktopPane = false;
   bool _pendingPreviewRailVoiceSessionDisconnect = false;
   _MobileMeetingOrigin? _mobileMeetingOrigin;
@@ -3155,6 +3199,9 @@ class MeshagentRoomState extends State<MeshagentRoom> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.projectId != widget.projectId || oldWidget.room.roomName != widget.room.roomName) {
+      _desktopAssistantQuickStartActive = false;
+      _desktopAssistantManagedProcessing = null;
+      _desktopAssistantManagedReconciliationRunning = false;
       _resolvedRoomDisplayName = null;
       _clearRoomScopedThreadSelectionState();
       unawaited(_loadRoomDisplayName());
@@ -3329,6 +3376,189 @@ class MeshagentRoomState extends State<MeshagentRoom> {
 
   Future<void> _refreshServiceResourcesAndWait() async {
     await Future.wait<void>([services.refresh(), fileManagerServices.refresh()]);
+    if (!mounted) {
+      return;
+    }
+
+    final supported = _supportedServices(services.state.asReady?.value ?? const <ServiceSpec>[]);
+    final activeAgentNames = <String>{
+      for (final service in supported)
+        if (_serviceAgentName(service) case final String name) name,
+      for (final participant in _developmentParticipants(supported))
+        if (participantDisplayName(participant) case final String name) name,
+    };
+    final staleKeys = _agentChatClients.keys.where((key) => !activeAgentNames.contains(key.agentName)).toList(growable: false);
+    for (final key in staleKeys) {
+      final chatClient = _agentChatClients.remove(key);
+      if (chatClient != null) {
+        unawaited(chatClient.stop());
+      }
+    }
+
+    if (activeAgentNames.isEmpty) {
+      _releaseDesktopPreviewActiveThreadController();
+      _clearRoomScopedThreadSelectionState();
+    }
+  }
+
+  Future<void> _installDesktopAssistantQuickStart(String? email) async {
+    final projectId = widget.projectId;
+    final room = widget.room;
+    final roomName = room.roomName?.trim();
+    if (roomName == null || roomName.isEmpty) {
+      throw StateError('Assistant room context is not available.');
+    }
+
+    setState(() {
+      _desktopAssistantQuickStartActive = true;
+      _desktopAssistantManagedProcessing = PbAgentEmailSetupProcessing.installing;
+    });
+
+    try {
+      await installPowerboardsAssistantQuickStart(
+        projectId: projectId,
+        roomName: roomName,
+        email: email,
+        isAvailable: (service) {
+          return _desktopAssistantIsAvailable(service, room);
+        },
+      );
+    } catch (_) {
+      if (mounted && widget.projectId == projectId && widget.room == room && widget.room.roomName?.trim() == roomName) {
+        setState(() => _desktopAssistantManagedProcessing = null);
+      }
+      rethrow;
+    }
+    if (!mounted || widget.projectId != projectId || widget.room != room || widget.room.roomName?.trim() != roomName) {
+      return;
+    }
+    await _refreshServiceResourcesAndWait();
+    if (!mounted || widget.projectId != projectId || widget.room != room || widget.room.roomName?.trim() != roomName) {
+      return;
+    }
+    _completeDesktopAssistantSetupTransition();
+  }
+
+  bool _desktopAssistantIsAvailable(ServiceSpec service, RoomClient room) {
+    if (!hasMessagingParticipant(service)) {
+      return true;
+    }
+    final identity = _serviceAgentName(service);
+    return identity != null && room.messaging.remoteParticipants.any((participant) => participant.getAttribute('name') == identity);
+  }
+
+  bool _desktopAssistantServiceIsPresent() {
+    return (services.state.asReady?.value ?? const <ServiceSpec>[]).any(
+      (service) => service.metadata.annotations['meshagent.service.id']?.trim() == powerboardsAssistantServiceId,
+    );
+  }
+
+  void _completeDesktopAssistantSetupTransition() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _desktopAssistantQuickStartActive = false;
+      _desktopAssistantManagedProcessing = null;
+      _desktopPreviewRoomPanelTab = PbRoomPanelTab.agents;
+      _desktopPreviewRoomPanelCollapsed = false;
+      _desktopPreviewRoomPanelOverlayOpen = true;
+    });
+  }
+
+  void _handleDesktopAssistantServiceOperationStarted(String serviceKindId, PowerboardsServiceOperation operation) {
+    if (!powerboardsUsesDesktopUiPreview(context) || _usesMobileRoomLayout(context)) {
+      return;
+    }
+
+    final processing = powerboardsAssistantSetupProcessingForServiceOperation(serviceKindId: serviceKindId, operation: operation);
+    if (processing == null) {
+      return;
+    }
+
+    final supported = _supportedServices(services.state.asReady?.value ?? const <ServiceSpec>[]);
+    final isSetupOperation = switch (processing) {
+      PbAgentEmailSetupProcessing.installing => !_hasVisibleAgents(supported),
+      PbAgentEmailSetupProcessing.uninstalling =>
+        supported.length == 1 &&
+            supported.single.metadata.annotations['meshagent.service.id']?.trim() == powerboardsAssistantServiceId &&
+            _developmentParticipants(supported).isEmpty,
+    };
+    if (!isSetupOperation) {
+      return;
+    }
+
+    setState(() {
+      _desktopAssistantQuickStartActive = true;
+      _desktopAssistantManagedProcessing = processing;
+    });
+  }
+
+  Future<void> _reconcileDesktopAssistantManagedOperation() async {
+    if (_desktopAssistantManagedReconciliationRunning) {
+      return;
+    }
+    final processing = _desktopAssistantManagedProcessing;
+    if (processing == null) {
+      await _refreshServiceResourcesAndWait();
+      return;
+    }
+
+    _desktopAssistantManagedReconciliationRunning = true;
+    final projectId = widget.projectId;
+    final room = widget.room;
+    final roomName = room.roomName?.trim();
+    try {
+      await _refreshServiceResourcesAndWait();
+      if (!mounted || widget.projectId != projectId || widget.room != room || roomName == null || roomName.isEmpty) {
+        return;
+      }
+
+      if (processing == PbAgentEmailSetupProcessing.uninstalling) {
+        await WidgetsBinding.instance.endOfFrame;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        if (!mounted || widget.projectId != projectId || widget.room != room || widget.room.roomName?.trim() != roomName) {
+          return;
+        }
+        setState(() {
+          _desktopAssistantQuickStartActive = false;
+          _desktopAssistantManagedProcessing = null;
+        });
+        return;
+      }
+
+      if (!_desktopAssistantServiceIsPresent()) {
+        setState(() {
+          _desktopAssistantQuickStartActive = false;
+          _desktopAssistantManagedProcessing = null;
+        });
+        return;
+      }
+
+      await installPowerboardsAssistantQuickStart(
+        projectId: projectId,
+        roomName: roomName,
+        isAvailable: (service) => _desktopAssistantIsAvailable(service, room),
+        availabilityAttempts: 240,
+      );
+      if (!mounted || widget.projectId != projectId || widget.room != room || widget.room.roomName?.trim() != roomName) {
+        return;
+      }
+      await _refreshServiceResourcesAndWait();
+      if (!mounted || widget.projectId != projectId || widget.room != room || widget.room.roomName?.trim() != roomName) {
+        return;
+      }
+      _completeDesktopAssistantSetupTransition();
+    } catch (_) {
+      if (mounted && processing == PbAgentEmailSetupProcessing.uninstalling) {
+        setState(() {
+          _desktopAssistantQuickStartActive = false;
+          _desktopAssistantManagedProcessing = null;
+        });
+      }
+    } finally {
+      _desktopAssistantManagedReconciliationRunning = false;
+    }
   }
 
   @override
@@ -4352,9 +4582,20 @@ class MeshagentRoomState extends State<MeshagentRoom> {
   }
 
   Future<void> showManageAgents() async {
-    await showManageAgentsSurface(context: context, projectId: widget.projectId, room: widget.room);
+    final trackDesktopAssistantSetup = powerboardsUsesDesktopUiPreview(context) && !_usesMobileRoomLayout(context);
+    await showManageAgentsSurface(
+      context: context,
+      projectId: widget.projectId,
+      room: widget.room,
+      onServiceChanged: null,
+      onServiceOperationStarted: trackDesktopAssistantSetup ? _handleDesktopAssistantServiceOperationStarted : null,
+    );
     if (!mounted) return;
-    _refreshServiceResources();
+    if (trackDesktopAssistantSetup) {
+      await _reconcileDesktopAssistantManagedOperation();
+    } else {
+      _refreshServiceResources();
+    }
   }
 
   ShadToasterState? _rootOrRoomToaster() {
@@ -5776,6 +6017,7 @@ class MeshagentRoomState extends State<MeshagentRoom> {
             child: Padding(
               padding: EdgeInsets.fromLTRB(horizontalInset, topInset, horizontalInset, bottomInset),
               child: FileManagerView(
+                key: ValueKey('room-files:${widget.projectId}:${widget.room.roomName}'),
                 client: widget.room,
                 projectId: widget.projectId,
                 services: fileManagerServices,
@@ -6604,12 +6846,43 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       return _buildFilesArea(context, const [], showDesktopSidetrayToggle: false);
     }
 
+    final hasVisibleAgents = _hasVisibleAgents(supported);
+    if (powerboardsShouldHoldAssistantQuickStartWorkspace(
+      hasVisibleAgents: hasVisibleAgents,
+      quickStartActive: _desktopAssistantQuickStartActive,
+    )) {
+      return SignalBuilder(
+        builder: (context, _) {
+          final ownerResolved = isOwner.state.isReady || isOwner.state.hasError;
+          final canInstallAgent = isOwner.state.value == true;
+
+          if (!ownerResolved) {
+            return _buildRoomLoading(context, title: 'Loading room permissions');
+          }
+
+          final useAssistantQuickStart =
+              _desktopAssistantQuickStartActive ||
+              powerboardsShouldUseAssistantEmailQuickStart(
+                usesDesktopV1: powerboardsUsesDesktopUiPreview(context),
+                isMobile: _usesMobileRoomLayout(context),
+                hasVisibleAgents: hasVisibleAgents,
+                canInstallAgent: canInstallAgent,
+              );
+          return PowerboardsBlankDesktopPreviewRoomWorkspace(
+            key: ValueKey('assistant-quick-start:${widget.projectId}:${widget.room.roomName}'),
+            mailDomain: MeshagentConfig.current?.meshagentMailDomain ?? '',
+            onInstallAssistant: useAssistantQuickStart ? _installDesktopAssistantQuickStart : null,
+            processing: _desktopAssistantManagedProcessing,
+          );
+        },
+      );
+    }
+
     final rawChatContext = _resolveMobileChatHeaderContext(supported, selected);
     final threadListPath = rawChatContext?.threadListPath;
     final enableV1ChatSessionGuards = powerboardsUsesDesktopUiPreview(context);
     final threadListChatClient = _agentChatClientFor(context, rawChatContext?.agentName);
     final agentItems = _desktopPreviewAgentItems(supported, selected);
-    final hasVisibleAgents = _hasVisibleAgents(supported);
     final voiceOnlyAgent = rawChatContext?.isVoiceOnly == true;
 
     return _DesktopPreviewThreadList(
@@ -6689,19 +6962,16 @@ class MeshagentRoomState extends State<MeshagentRoom> {
                     return _buildRoomLoading(context, title: "Loading room permissions");
                   }
 
-                  return _BlankDesktopPreviewRoomWorkspace(
-                    onInstallAgent: !canInstallAgent
-                        ? null
-                        : () {
-                            unawaited(
-                              showManageAgentsSurface(
-                                context: context,
-                                room: widget.room,
-                                projectId: widget.projectId,
-                                onServiceChanged: _refreshServiceResources,
-                              ),
-                            );
-                          },
+                  final useAssistantQuickStart = powerboardsShouldUseAssistantEmailQuickStart(
+                    usesDesktopV1: powerboardsUsesDesktopUiPreview(context),
+                    isMobile: _usesMobileRoomLayout(context),
+                    hasVisibleAgents: hasVisibleAgents,
+                    canInstallAgent: canInstallAgent,
+                  );
+                  return PowerboardsBlankDesktopPreviewRoomWorkspace(
+                    key: ValueKey('assistant-quick-start:${widget.projectId}:${widget.room.roomName}'),
+                    mailDomain: MeshagentConfig.current?.meshagentMailDomain ?? '',
+                    onInstallAssistant: useAssistantQuickStart ? _installDesktopAssistantQuickStart : null,
                   );
                 },
               );
