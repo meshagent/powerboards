@@ -63,7 +63,17 @@ void main() {
     var starts = 0;
     await tester.pumpWidget(
       ShadApp(
-        home: Scaffold(body: PbThreadPoisonedAttachmentRecoveryCard(onStartNewThread: () => starts += 1)),
+        home: Scaffold(
+          body: SizedBox(
+            width: 700,
+            child: ThreadTypographyOverride(
+              threadParagraphBaseFontSize: 14,
+              threadParagraphLineHeight: 1.46,
+              bubbleContentPadding: const EdgeInsets.only(left: 18, right: 18, top: 8, bottom: 8),
+              child: PbThreadPoisonedAttachmentRecoveryCard(onStartNewThread: () => starts += 1),
+            ),
+          ),
+        ),
       ),
     );
 
@@ -75,10 +85,17 @@ void main() {
     final decoration = recovery.decoration! as BoxDecoration;
     expect(decoration.color, PbColors.alertSoft);
     expect(decoration.border, isNull);
+    expect(decoration.borderRadius, BorderRadius.circular(16));
+    expect(recovery.padding, const EdgeInsets.only(left: 18, right: 18, top: 8, bottom: 8));
+    expect(tester.getSize(find.byKey(const ValueKey('pb-thread-poisoned-attachment-recovery'))).width, 700);
 
     final recoveryText = tester.widget<Text>(
       find.descendant(of: find.byKey(const ValueKey('pb-thread-poisoned-attachment-recovery')), matching: find.byType(Text)),
     );
+    final rootStyle = recoveryText.textSpan!.style!;
+    expect(rootStyle.fontSize, 14);
+    expect(rootStyle.height, 1.46);
+    expect(rootStyle.color, PbColors.textBody);
     final link = (recoveryText.textSpan! as TextSpan).children![1] as TextSpan;
     expect(link.text, 'create a new thread');
     expect(link.style!.color, PbColors.alert);

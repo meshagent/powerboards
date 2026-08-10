@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:meshagent_flutter_shadcn/thread_typography.dart';
 
 import '../../theme/pb_colors.dart';
-import '../../theme/pb_tokens.dart';
 import '../../theme/pb_typography.dart';
 
 bool powerboardsV1IsPoisonedAttachmentError(String message) {
@@ -63,28 +63,33 @@ class _PbThreadPoisonedAttachmentRecoveryCardState extends State<PbThreadPoisone
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Container(
-          key: const ValueKey('pb-thread-poisoned-attachment-recovery'),
-          constraints: const BoxConstraints(maxWidth: 560),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          decoration: BoxDecoration(color: PbColors.alertSoft, borderRadius: BorderRadius.circular(PbRadii.medium)),
-          child: Text.rich(
-            TextSpan(
-              style: PowerboardsTypography.p.copyWith(color: PbColors.textBody),
-              children: [
-                const TextSpan(text: 'There was an error. To continue please '),
-                TextSpan(
-                  text: 'create a new thread',
-                  style: PowerboardsTypography.p.copyWith(color: PbColors.alert, fontWeight: FontWeight.w600),
-                  recognizer: widget.onStartNewThread == null ? null : _startNewThreadRecognizer,
-                ),
-                const TextSpan(text: '.'),
-              ],
-            ),
+    final contentPadding =
+        ThreadTypographyOverride.maybeAgentBubbleContentPaddingOf(context) ??
+        ThreadTypographyOverride.maybeBubbleContentPaddingOf(context) ??
+        const EdgeInsets.symmetric(horizontal: 18, vertical: 8);
+    final textStyle = threadTypographyTextStyle(context, PowerboardsTypography.p).copyWith(
+      color: PbColors.textBody,
+      fontSize: ThreadTypographyOverride.maybeThreadParagraphBaseFontSizeOf(context) ?? PowerboardsTypography.p.fontSize,
+      height: ThreadTypographyOverride.maybeThreadParagraphLineHeightOf(context) ?? PowerboardsTypography.p.height,
+    );
+    return SizedBox(
+      width: double.infinity,
+      child: Container(
+        key: const ValueKey('pb-thread-poisoned-attachment-recovery'),
+        padding: contentPadding,
+        decoration: BoxDecoration(color: PbColors.alertSoft, borderRadius: BorderRadius.circular(16)),
+        child: Text.rich(
+          TextSpan(
+            style: textStyle,
+            children: [
+              const TextSpan(text: 'There was an error. To continue please '),
+              TextSpan(
+                text: 'create a new thread',
+                style: textStyle.copyWith(color: PbColors.alert, fontWeight: FontWeight.w600),
+                recognizer: widget.onStartNewThread == null ? null : _startNewThreadRecognizer,
+              ),
+              const TextSpan(text: '.'),
+            ],
           ),
         ),
       ),
