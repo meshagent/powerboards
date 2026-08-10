@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent/runtime.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat_bot_view.dart';
 import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/chat/new_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
@@ -198,6 +200,42 @@ Widget _buildResponsiveTestApp({required Widget child, MediaQueryData? mediaQuer
   );
 }
 
+Future<ChatBotView> _pumpThreadViewForUiIsolation(
+  WidgetTester tester, {
+  required PowerboardsUiMode uiMode,
+  required TargetPlatform platform,
+  required Size size,
+}) async {
+  final previousMode = powerboardsUiModeSignal.value;
+  powerboardsUiModeSignal.value = uiMode;
+  addTearDown(() => powerboardsUiModeSignal.value = previousMode);
+
+  final previousPlatform = debugDefaultTargetPlatformOverride;
+  debugDefaultTargetPlatformOverride = platform;
+  try {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = size;
+    addTearDown(tester.view.reset);
+
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        mediaQueryData: MediaQueryData(size: size),
+        child: Scaffold(
+          body: SizedBox.expand(child: _ThreadViewHarness(room: room)),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    return tester.widget<ChatBotView>(find.byType(ChatBotView));
+  } finally {
+    debugDefaultTargetPlatformOverride = previousPlatform;
+  }
+}
+
 void main() {
   final previousRuntime = DocumentRuntime.instance;
 
@@ -254,6 +292,39 @@ void main() {
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [nestedFolder], attachmentPaths: [nestedFolder]), isTrue);
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [rootFolder]), isTrue);
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [nestedFolder]), isFalse);
+  });
+
+  testWidgets('desktop V1 enables the assistant markdown transformer', (tester) async {
+    final chatBotView = await _pumpThreadViewForUiIsolation(
+      tester,
+      uiMode: PowerboardsUiMode.v1,
+      platform: TargetPlatform.macOS,
+      size: const Size(1200, 900),
+    );
+
+    expect(chatBotView.datasetAgentMessageTextTransformer, isNotNull);
+  });
+
+  testWidgets('legacy UI does not enable the assistant markdown transformer', (tester) async {
+    final chatBotView = await _pumpThreadViewForUiIsolation(
+      tester,
+      uiMode: PowerboardsUiMode.legacy,
+      platform: TargetPlatform.macOS,
+      size: const Size(1200, 900),
+    );
+
+    expect(chatBotView.datasetAgentMessageTextTransformer, isNull);
+  });
+
+  testWidgets('adaptive mobile V1 does not enable the assistant markdown transformer', (tester) async {
+    final chatBotView = await _pumpThreadViewForUiIsolation(
+      tester,
+      uiMode: PowerboardsUiMode.v1,
+      platform: TargetPlatform.iOS,
+      size: const Size(390, 844),
+    );
+
+    expect(chatBotView.datasetAgentMessageTextTransformer, isNull);
   });
 
   test('V1 active thread session identity survives Files navigation but changes with the active thread', () {

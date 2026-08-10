@@ -1254,7 +1254,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       attachmentUnavailableBuilder: usesDesktopUiPreview ? _buildUnavailableThreadAttachment : null,
       onAttachmentUnavailable: usesDesktopUiPreview ? _showThreadAttachmentUnavailableDialog : null,
       datasetInlineAttachmentViewerPredicate: (path) => powerboardsFolderChatContextFromDataUrl(path) == null,
-      datasetAgentMessageTextTransformer: _transformAgentMarkdown,
+      datasetAgentMessageTextTransformer: usesDesktopUiPreview ? _transformAgentMarkdown : null,
       openFile: _openThreadAttachment,
       fileDropOverlayBuilder: widget.fileDropOverlayBuilder,
       chatInputBoxBuilder: usesMobileLayout ? (context, chatBox) => _buildAdaptiveMobileChatInputBox(context, chatBox) : null,
