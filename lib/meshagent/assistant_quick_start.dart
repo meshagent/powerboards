@@ -33,6 +33,24 @@ ServiceSpec? _assistantService(Iterable<ServiceSpec> services) {
   return null;
 }
 
+ServiceDirectoryEntry? powerboardsAssistantDirectoryEntry(ServiceDirectoryPage directory) {
+  for (final entry in directory.templates) {
+    if (entry.parsed.metadata.annotations['meshagent.service.id']?.trim() == powerboardsAssistantServiceId) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+bool powerboardsAssistantParticipantIsAvailable({required String? agentName, required Iterable<String?> remoteParticipantNames}) {
+  final normalizedAgentName = agentName?.trim();
+  if (normalizedAgentName == null || normalizedAgentName.isEmpty) {
+    return false;
+  }
+
+  return remoteParticipantNames.any((name) => name?.trim() == normalizedAgentName);
+}
+
 Future<PowerboardsAssistantInstallOutcome> installPowerboardsAssistantQuickStart({
   required String projectId,
   required String roomName,
@@ -79,13 +97,7 @@ Future<PowerboardsAssistantInstallOutcome> installPowerboardsAssistantQuickStart
 
   if (assistant == null) {
     final directory = await effectiveLoadDirectory();
-    ServiceDirectoryEntry? assistantTemplate;
-    for (final entry in directory.templates) {
-      if (entry.parsed.metadata.annotations['meshagent.service.id']?.trim() == powerboardsAssistantServiceId) {
-        assistantTemplate = entry;
-        break;
-      }
-    }
+    final assistantTemplate = powerboardsAssistantDirectoryEntry(directory);
     if (assistantTemplate == null) {
       throw StateError('Assistant is not available in the service directory.');
     }

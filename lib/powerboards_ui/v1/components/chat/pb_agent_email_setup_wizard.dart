@@ -38,6 +38,8 @@ class PbAgentEmailSetupWizard extends StatefulWidget {
     this.topFactor = pbEmptyStateReferenceTopFactor,
     this.topOffset = pbEmptyStateReferenceTopOffset,
     this.processing,
+    this.managedRecoveryMessage,
+    this.onManagedRecovery,
   });
 
   final String domain;
@@ -45,6 +47,8 @@ class PbAgentEmailSetupWizard extends StatefulWidget {
   final double topFactor;
   final double topOffset;
   final PbAgentEmailSetupProcessing? processing;
+  final String? managedRecoveryMessage;
+  final VoidCallback? onManagedRecovery;
 
   @override
   State<PbAgentEmailSetupWizard> createState() => _PbAgentEmailSetupWizardState();
@@ -131,50 +135,63 @@ class _PbAgentEmailSetupWizardState extends State<PbAgentEmailSetupWizard> {
 
   @override
   Widget build(BuildContext context) {
-    final step = widget.processing == null ? _step : PbAgentEmailSetupStep.initializing;
+    final managedRecovery = widget.processing != null && widget.managedRecoveryMessage != null;
+    final step = widget.processing == null
+        ? _step
+        : managedRecovery
+        ? PbAgentEmailSetupStep.error
+        : PbAgentEmailSetupStep.initializing;
     final bodyTopGap = step == PbAgentEmailSetupStep.emailEntry ? 18.0 : 12.0;
-    final presentation = switch (widget.processing) {
-      PbAgentEmailSetupProcessing.installing => const _WizardPresentation(
-        iconAssetName: 'loader-circle-empty-state',
-        title: 'Initializing your agent',
-        subtitle: 'Installing…',
-        spinning: true,
-      ),
-      PbAgentEmailSetupProcessing.uninstalling => const _WizardPresentation(
-        iconAssetName: 'loader-circle-empty-state',
-        title: 'Uninstalling your agent',
-        subtitle: 'Uninstalling…',
-        spinning: true,
-      ),
-      null => switch (step) {
-        PbAgentEmailSetupStep.introduction => const _WizardPresentation(
-          iconAssetName: 'messages-square',
-          title: 'Give your agent an email',
-          subtitle: 'Set up an address so you can send requests and continue conversations from your inbox too.',
-        ),
-        PbAgentEmailSetupStep.emailEntry => const _WizardPresentation(
-          iconAssetName: 'at-sign',
-          title: 'Set up your agent email',
-          subtitle: '',
-        ),
-        PbAgentEmailSetupStep.initializing => const _WizardPresentation(
-          iconAssetName: 'loader-circle-empty-state',
-          title: 'Initializing your agent',
-          subtitle: 'Initializing…',
-          spinning: true,
-        ),
-        PbAgentEmailSetupStep.connected => const _WizardPresentation(
-          iconAssetName: 'loader-circle-empty-state',
-          title: 'Initializing your agent',
-          subtitle: 'Connected',
-        ),
-        PbAgentEmailSetupStep.error => _WizardPresentation(
-          iconAssetName: 'triangle-alert',
-          title: 'Unable to initialize your agent',
-          subtitle: _installError ?? 'Try again.',
-        ),
-      },
-    };
+    final presentation = managedRecovery
+        ? _WizardPresentation(
+            iconAssetName: 'loader-circle-empty-state',
+            title: widget.processing == PbAgentEmailSetupProcessing.installing
+                ? 'Assistant is still initializing'
+                : 'Assistant removal is still syncing',
+            subtitle: widget.managedRecoveryMessage!,
+          )
+        : switch (widget.processing) {
+            PbAgentEmailSetupProcessing.installing => const _WizardPresentation(
+              iconAssetName: 'loader-circle-empty-state',
+              title: 'Initializing your agent',
+              subtitle: 'Installing…',
+              spinning: true,
+            ),
+            PbAgentEmailSetupProcessing.uninstalling => const _WizardPresentation(
+              iconAssetName: 'loader-circle-empty-state',
+              title: 'Uninstalling your agent',
+              subtitle: 'Uninstalling…',
+              spinning: true,
+            ),
+            null => switch (step) {
+              PbAgentEmailSetupStep.introduction => const _WizardPresentation(
+                iconAssetName: 'messages-square',
+                title: 'Give your agent an email',
+                subtitle: 'Set up an address so you can send requests and continue conversations from your inbox too.',
+              ),
+              PbAgentEmailSetupStep.emailEntry => const _WizardPresentation(
+                iconAssetName: 'at-sign',
+                title: 'Set up your agent email',
+                subtitle: '',
+              ),
+              PbAgentEmailSetupStep.initializing => const _WizardPresentation(
+                iconAssetName: 'loader-circle-empty-state',
+                title: 'Initializing your agent',
+                subtitle: 'Initializing…',
+                spinning: true,
+              ),
+              PbAgentEmailSetupStep.connected => const _WizardPresentation(
+                iconAssetName: 'loader-circle-empty-state',
+                title: 'Initializing your agent',
+                subtitle: 'Connected',
+              ),
+              PbAgentEmailSetupStep.error => _WizardPresentation(
+                iconAssetName: 'triangle-alert',
+                title: 'Unable to initialize your agent',
+                subtitle: _installError ?? 'Try again.',
+              ),
+            },
+          };
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -239,7 +256,9 @@ class _PbAgentEmailSetupWizardState extends State<PbAgentEmailSetupWizard> {
                                 presentation.subtitle,
                                 textAlign: TextAlign.center,
                                 style: PowerboardsTypography.p.copyWith(
-                                  color: step == PbAgentEmailSetupStep.error ? PbColors.customAlert : PbColors.textMuted,
+                                  color: step == PbAgentEmailSetupStep.error && !managedRecovery
+                                      ? PbColors.customAlert
+                                      : PbColors.textMuted,
                                 ),
                               ),
                             ),
@@ -262,6 +281,17 @@ class _PbAgentEmailSetupWizardState extends State<PbAgentEmailSetupWizard> {
                           _WizardTextButton(
                             label: step == PbAgentEmailSetupStep.introduction ? 'Skip to start chatting' : 'Skip for now',
                             onPressed: () => unawaited(_install(null)),
+                          ),
+                        ] else if (managedRecovery) ...[
+                          const SizedBox(height: 30),
+                          SizedBox(
+                            width: 196,
+                            child: PbButton(
+                              label: widget.processing == PbAgentEmailSetupProcessing.installing ? 'Retry' : 'Refresh',
+                              variant: PbButtonVariant.primary,
+                              height: 44,
+                              onPressed: widget.onManagedRecovery,
+                            ),
                           ),
                         ] else if (step == PbAgentEmailSetupStep.error) ...[
                           const SizedBox(height: 30),

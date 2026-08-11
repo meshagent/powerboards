@@ -6,13 +6,24 @@ import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/agent_containers.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_agent_email_setup_wizard.dart';
 
-Widget _harness(PbAgentEmailInstaller onInstall, {PbAgentEmailSetupProcessing? processing}) {
+Widget _harness(
+  PbAgentEmailInstaller onInstall, {
+  PbAgentEmailSetupProcessing? processing,
+  String? managedRecoveryMessage,
+  VoidCallback? onManagedRecovery,
+}) {
   return MaterialApp(
     home: Scaffold(
       body: SizedBox(
         width: 900,
         height: 700,
-        child: PbAgentEmailSetupWizard(domain: 'mail.example.test', onInstall: onInstall, processing: processing),
+        child: PbAgentEmailSetupWizard(
+          domain: 'mail.example.test',
+          onInstall: onInstall,
+          processing: processing,
+          managedRecoveryMessage: managedRecoveryMessage,
+          onManagedRecovery: onManagedRecovery,
+        ),
       ),
     ),
   );
@@ -124,6 +135,37 @@ void main() {
     expect(find.text('Skip to start chatting'), findsNothing);
   });
 
+  testWidgets('managed install and uninstall failures expose contextual recovery actions', (tester) async {
+    var recoveries = 0;
+    await tester.pumpWidget(
+      _harness(
+        (_) async {},
+        processing: PbAgentEmailSetupProcessing.installing,
+        managedRecoveryMessage: 'Assistant is not connected yet.',
+        onManagedRecovery: () => recoveries += 1,
+      ),
+    );
+
+    expect(find.text('Assistant is still initializing'), findsOneWidget);
+    expect(find.text('Assistant is not connected yet.'), findsOneWidget);
+    await tester.tap(find.text('Retry'));
+    expect(recoveries, 1);
+
+    await tester.pumpWidget(
+      _harness(
+        (_) async {},
+        processing: PbAgentEmailSetupProcessing.uninstalling,
+        managedRecoveryMessage: 'Assistant is still being removed.',
+        onManagedRecovery: () => recoveries += 1,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Assistant removal is still syncing'), findsOneWidget);
+    await tester.tap(find.text('Refresh'));
+    expect(recoveries, 2);
+  });
+
   testWidgets('non-permitted blank room preserves its non-actionable empty state', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -196,5 +238,85 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  test('Assistant reconciliation converges only at operation-specific terminal state', () {
+    expect(
+      powerboardsAssistantReconciliationHasConverged(
+        processing: PbAgentEmailSetupProcessing.installing,
+        assistantServicePresent: true,
+        assistantParticipantAvailable: true,
+      ),
+      isTrue,
+    );
+    expect(
+      powerboardsAssistantReconciliationHasConverged(
+        processing: PbAgentEmailSetupProcessing.installing,
+        assistantServicePresent: true,
+        assistantParticipantAvailable: false,
+      ),
+      isFalse,
+    );
+    expect(
+      powerboardsAssistantReconciliationHasConverged(
+        processing: PbAgentEmailSetupProcessing.uninstalling,
+        assistantServicePresent: false,
+        assistantParticipantAvailable: true,
+      ),
+      isTrue,
+    );
+  });
+
+  test('Assistant reconciliation releases only after route and runtime state agree', () {
+    expect(
+      powerboardsAssistantReconciliationCanRelease(
+        processing: PbAgentEmailSetupProcessing.installing,
+        assistantServicePresent: true,
+        assistantParticipantAvailable: true,
+        selectedRouteId: 'meshagent.assistant',
+      ),
+      isTrue,
+    );
+    expect(
+      powerboardsAssistantReconciliationCanRelease(
+        processing: PbAgentEmailSetupProcessing.installing,
+        assistantServicePresent: true,
+        assistantParticipantAvailable: true,
+        selectedRouteId: null,
+      ),
+      isFalse,
+    );
+    expect(
+      powerboardsAssistantReconciliationCanRelease(
+        processing: PbAgentEmailSetupProcessing.installing,
+        assistantServicePresent: true,
+        assistantParticipantAvailable: false,
+        selectedRouteId: 'meshagent.assistant',
+      ),
+      isFalse,
+    );
+    expect(
+      powerboardsAssistantReconciliationCanRelease(
+        processing: PbAgentEmailSetupProcessing.uninstalling,
+        assistantServicePresent: false,
+        assistantParticipantAvailable: false,
+        selectedRouteId: null,
+      ),
+      isTrue,
+    );
+    expect(
+      powerboardsAssistantReconciliationCanRelease(
+        processing: PbAgentEmailSetupProcessing.uninstalling,
+        assistantServicePresent: false,
+        assistantParticipantAvailable: false,
+        selectedRouteId: 'meshagent.assistant',
+      ),
+      isFalse,
+    );
+  });
+
+  test('Assistant reconciliation normalizes install and uninstall routes', () {
+    expect(powerboardsAssistantRouteAfterReconciliation(PbAgentEmailSetupProcessing.installing), 'meshagent.assistant');
+    expect(powerboardsAssistantRouteAfterReconciliation(PbAgentEmailSetupProcessing.uninstalling), isEmpty);
   });
 }

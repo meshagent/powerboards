@@ -282,11 +282,25 @@ void main() {
     expect(powerboardsV1LiveFolderEntriesMatchRoute(routeFolder: 'website', activeFolder: '', loadedFolderPath: 'website'), isFalse);
   });
 
-  test('fresh-room Files waits for room readiness before loading the root folder', () async {
+  test('desktop v1 root Files renders while the first live folder request is pending', () {
+    expect(powerboardsV1FolderEntriesForLoadingSurface<String>(routeFolder: '', cachedEntries: null), isEmpty);
+    expect(powerboardsV1FolderEntriesForLoadingSurface<String>(routeFolder: '/', cachedEntries: null), isEmpty);
+    expect(powerboardsV1FolderEntriesForLoadingSurface<String>(routeFolder: 'docs', cachedEntries: null), isNull);
+    expect(powerboardsV1FolderEntriesForLoadingSurface(routeFolder: '', cachedEntries: const ['cached.txt']), ['cached.txt']);
+  });
+
+  test('existing-room Files can load before full participant readiness', () async {
     final ready = Completer<void>();
+    final connected = Completer<void>();
+    var connectionChecks = 0;
     var loads = 0;
     final result = powerboardsLoadFolderAfterRoomReady<String>(
       roomReady: ready.future,
+      isConnected: () => true,
+      waitUntilConnected: () {
+        connectionChecks += 1;
+        return connected.future;
+      },
       load: () async {
         loads += 1;
         return const <String>[];
@@ -297,8 +311,40 @@ void main() {
     expect(loads, 0);
 
     ready.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(connectionChecks, 0);
     expect(await result, isEmpty);
     expect(loads, 1);
+
+    connected.complete();
+  });
+
+  test('fresh-room Files retries after full connectivity when the early storage request stalls', () async {
+    final ready = Completer<void>();
+    final connected = Completer<void>();
+    final earlyLoad = Completer<List<String>>();
+    var loads = 0;
+    final result = powerboardsLoadFolderAfterRoomReady<String>(
+      roomReady: ready.future,
+      isConnected: () => false,
+      waitUntilConnected: () => connected.future,
+      load: () {
+        loads += 1;
+        if (loads == 1) {
+          return earlyLoad.future;
+        }
+        return Future.value(const <String>[]);
+      },
+    );
+
+    ready.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(loads, 1);
+
+    connected.complete();
+    expect(await result, isEmpty);
+    expect(loads, 2);
+    earlyLoad.complete(const <String>[]);
   });
 }
 

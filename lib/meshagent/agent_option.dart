@@ -316,6 +316,21 @@ class _NoTransitionPageRoute<T> extends PageRouteBuilder<T> {
   }
 }
 
+Future<bool> showPowerboardsInstallAgentTemplateSurface({
+  required BuildContext context,
+  required String projectId,
+  required String roomName,
+  required String template,
+  PowerboardsServiceOperationStarted? onOperationStarted,
+}) async {
+  final changed = await showPowerboardsFlowDialog<bool>(
+    context: context,
+    builder: (_) =>
+        _InstallAgentDialog(template: template, projectId: projectId, roomName: roomName, onOperationStarted: onOperationStarted),
+  );
+  return changed == true;
+}
+
 Future<void> showManageAgentsSurface({
   required BuildContext context,
   required String projectId,
@@ -378,6 +393,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
   static const double _mobileManageAgentsScrollBottomInset = 148.0;
 
   Timer? _pollTimer;
+  bool _serviceRefreshInFlight = false;
 
   String? _error;
 
@@ -396,11 +412,30 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
   void _scheduleNextPoll() {
     _pollTimer?.cancel();
     if (!mounted) return;
-    _pollTimer = Timer(Duration(seconds: 1), () {
+    _pollTimer = Timer(const Duration(seconds: 1), () {
       if (!mounted) return;
-      setState(() {});
-      _scheduleNextPoll();
+      unawaited(_refreshServicesForPoll());
     });
+  }
+
+  Future<void> _refreshServicesForPoll() async {
+    if (_serviceRefreshInFlight) {
+      _scheduleNextPoll();
+      return;
+    }
+
+    _serviceRefreshInFlight = true;
+    try {
+      await services.refresh();
+    } catch (_) {
+      // Resource exposes the refresh error in its state; keep polling so a transient stale snapshot can recover.
+    } finally {
+      _serviceRefreshInFlight = false;
+      if (mounted) {
+        setState(() {});
+        _scheduleNextPoll();
+      }
+    }
   }
 
   Future<void> _load() async {

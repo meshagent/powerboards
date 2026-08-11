@@ -19,6 +19,34 @@ ServiceDirectoryEntry _directoryEntry({required String template, required String
 }
 
 void main() {
+  test('Assistant directory lookup uses the exact service id instead of display name', () {
+    final matching = _directoryEntry(
+      template: 'assistant-template',
+      serviceId: powerboardsAssistantServiceId,
+      name: 'Different display name',
+    );
+    final directory = ServiceDirectoryPage(
+      templates: [
+        _directoryEntry(template: 'wrong-template', serviceId: 'meshagent.other', name: 'Assistant'),
+        matching,
+      ],
+    );
+
+    expect(powerboardsAssistantDirectoryEntry(directory), same(matching));
+  });
+
+  test('Assistant availability requires its named remote participant', () {
+    expect(powerboardsAssistantParticipantIsAvailable(agentName: null, remoteParticipantNames: const ['assistant-agent']), isFalse);
+    expect(
+      powerboardsAssistantParticipantIsAvailable(agentName: 'assistant-agent', remoteParticipantNames: const ['other-agent']),
+      isFalse,
+    );
+    expect(
+      powerboardsAssistantParticipantIsAvailable(agentName: ' assistant-agent ', remoteParticipantNames: const ['assistant-agent']),
+      isTrue,
+    );
+  });
+
   test('quick start preserves Assistant defaults and omits email when skipped', () async {
     var serviceLoads = 0;
     String? savedTemplate;
