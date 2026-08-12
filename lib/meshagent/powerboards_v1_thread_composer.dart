@@ -197,6 +197,7 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
             controller: widget.config.controller.textFieldController,
             focusNode: _focusNode,
             placeholder: _placeholderText,
+            readOnly: widget.config.readOnly,
             attachmentChips: <Widget>[for (final attachment in attachments) _buildAttachmentChip(attachment)],
             leadingControls: <Widget>[
               PowerboardsDesktopChatAttachButton(
@@ -219,7 +220,7 @@ class _PowerboardsV1ThreadComposerState extends State<PowerboardsV1ThreadCompose
                     : null,
                 triggerBuilder: (context, onPressed) => PbComposerIconButton(
                   tooltip: 'Attach files',
-                  onPressed: onPressed,
+                  onPressed: widget.config.readOnly ? null : onPressed,
                   child: const PbSvgIcon(assetName: 'plus', size: 18, color: PbColors.customBrandInk),
                 ),
               ),

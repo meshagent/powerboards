@@ -54,6 +54,8 @@ import 'package:powerboards/meshagent/upload_foldername_service.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_thread_message_options_menu.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_unavailable_thread_attachment.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_thread_recovery_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_shimmer.dart';
 
 typedef PowerboardsThreadAttachmentsChanged =
     void Function({
@@ -439,6 +441,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   late ChatThreadController _chatController;
   late bool _ownsChatController;
+  final ma.ThreadAttachmentImageCache _threadAttachmentImageCache = ma.ThreadAttachmentImageCache();
   String? _powerboardsClientToolkitSignature;
   String? _lastRestoredThreadScrollOffsetValue;
   final Set<String> _reportedAttachmentKeys = <String>{};
@@ -718,6 +721,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
       _powerboardsClientToolkitSignature = null;
     }
     if (oldWidget.client != widget.client) {
+      _threadAttachmentImageCache.clear();
       _fileReferenceLoadGeneration += 1;
       _fileReferenceSubscription?.cancel();
       _fileReferenceSubscription = null;
@@ -733,6 +737,7 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
 
   @override
   void dispose() {
+    _threadAttachmentImageCache.clear();
     _fileReferenceLoadGeneration += 1;
     _fileReferenceSubscription?.cancel();
     _fileReferenceReadyLoad = null;
@@ -1378,7 +1383,23 @@ class _MeshagentThreadViewState extends State<MeshagentThreadView> {
             alignAttachmentEdgesWithBubbles: true,
             attachmentIconBuilder: _buildDesktopV1ThreadAttachmentIcon,
             attachmentActionIconBuilder: _buildDesktopV1ThreadAttachmentActionIcon,
-            showAttachmentReplayWhileLoading: true,
+            attachmentLoadingPlaceholderBuilder: usesMobileLayout
+                ? null
+                : (context, {required borderRadius}) => PbThreadAttachmentLoadingPlaceholder(borderRadius: borderRadius),
+            imageGenerationLoadingPlaceholderBuilder: usesMobileLayout
+                ? null
+                : (context, {required borderRadius}) => PbThreadImageGenerationLoadingPlaceholder(borderRadius: borderRadius),
+            attachmentLoadTimeout: usesMobileLayout ? null : const Duration(seconds: 10),
+            attachmentImageCache: usesMobileLayout ? null : _threadAttachmentImageCache,
+            poisonedErrorPredicate: usesMobileLayout ? null : powerboardsV1IsPoisonedAttachmentError,
+            poisonedErrorBuilder: usesMobileLayout
+                ? null
+                : (context, {required error, required onStartNewThread}) =>
+                      PbThreadPoisonedAttachmentRecoveryCard(onStartNewThread: onStartNewThread),
+            onStartNewThread: usesMobileLayout || widget.onSelectedThreadPathChanged == null
+                ? null
+                : () => widget.onSelectedThreadPathChanged!(null),
+            showAttachmentReplayWhileLoading: !usesMobileLayout,
             codeBlockSurfaceColor: PbColors.customCodeSurface,
             codeBlockHeaderSurfaceColor: PbColors.customCodeSurface,
             codeBlockBorderColor: PbColors.customCodeSurface,
