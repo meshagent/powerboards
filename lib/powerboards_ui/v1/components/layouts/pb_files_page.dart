@@ -953,6 +953,7 @@ class PbFilesMainPanel extends StatelessWidget {
     required this.onUpload,
     this.onAskCurrentFolder,
     this.toolbarTrailingAction,
+    this.v17WebsiteActionsEnabled = false,
     this.showWebServerPreview = false,
     this.webServerPreviewActive = false,
     this.onPreviewWebServer,
@@ -1005,6 +1006,7 @@ class PbFilesMainPanel extends StatelessWidget {
   final VoidCallback onUpload;
   final VoidCallback? onAskCurrentFolder;
   final PbFilesToolbarTrailingAction? toolbarTrailingAction;
+  final bool v17WebsiteActionsEnabled;
   final bool showWebServerPreview;
   final bool webServerPreviewActive;
   final VoidCallback? onPreviewWebServer;
@@ -1035,7 +1037,8 @@ class PbFilesMainPanel extends StatelessWidget {
         ? const PbFilesPanelPadding(left: 30, right: 28)
         : const PbFilesPanelPadding(left: 20, right: 20);
     final dropTargetTop = responsiveMode == PbFilesResponsiveMode.mobile ? 202.0 : 142.0;
-    final showWebsiteLandingEmptyState = (showWebServerPreview || _isWebsiteRoot) && !hasActiveFilter && items.isEmpty;
+    final showWebsiteLandingEmptyState =
+        v17WebsiteActionsEnabled && (showWebServerPreview || _isWebsiteRoot) && !hasActiveFilter && items.isEmpty;
 
     final panel = Container(
       color: PbColors.surfacePanelWash,
@@ -1067,6 +1070,7 @@ class PbFilesMainPanel extends StatelessWidget {
             onUpload: onUpload,
             onAskCurrentFolder: onAskCurrentFolder,
             trailingAction: toolbarTrailingAction,
+            v17WebsiteActionsEnabled: v17WebsiteActionsEnabled,
             showWebServerPreview: showWebServerPreview,
             webServerPreviewActive: webServerPreviewActive,
             onPreviewWebServer: onPreviewWebServer,

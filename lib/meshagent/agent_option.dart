@@ -274,11 +274,12 @@ AgentRuntimeStatus parseStatus(dynamic raw) {
 }
 
 class _InstallAgentDialog extends StatelessWidget {
-  const _InstallAgentDialog({this.template, required this.projectId, required this.roomName});
+  const _InstallAgentDialog({this.template, required this.projectId, required this.roomName, this.onOperationStarted});
 
   final String? template;
   final String projectId;
   final String? roomName;
+  final PowerboardsServiceOperationStarted? onOperationStarted;
 
   @override
   Widget build(BuildContext context) {
@@ -286,6 +287,7 @@ class _InstallAgentDialog extends StatelessWidget {
       template: template,
       projectId: projectId,
       roomName: roomName,
+      onOperationStarted: onOperationStarted,
       onInstalled: (ctx, projectId, roomName, serviceId) {
         Navigator.of(ctx).pop(true);
         if (serviceId == powerboardsWebServerServiceId && context.mounted && powerboardsUsesDesktopUiPreview(context)) {
@@ -314,11 +316,27 @@ class _NoTransitionPageRoute<T> extends PageRouteBuilder<T> {
   }
 }
 
+Future<bool> showPowerboardsInstallAgentTemplateSurface({
+  required BuildContext context,
+  required String projectId,
+  required String roomName,
+  required String template,
+  PowerboardsServiceOperationStarted? onOperationStarted,
+}) async {
+  final changed = await showPowerboardsFlowDialog<bool>(
+    context: context,
+    builder: (_) =>
+        _InstallAgentDialog(template: template, projectId: projectId, roomName: roomName, onOperationStarted: onOperationStarted),
+  );
+  return changed == true;
+}
+
 Future<void> showManageAgentsSurface({
   required BuildContext context,
   required String projectId,
   required RoomClient room,
   void Function()? onServiceChanged,
+  void Function(String serviceKindId, PowerboardsServiceOperation operation)? onServiceOperationStarted,
 }) async {
   if (powerboardsUsesNativeMobileDialogLayout(context)) {
     await dismissBackgroundKeyboardBeforeAdaptiveSurface(context);
@@ -328,7 +346,13 @@ Future<void> showManageAgentsSurface({
 
     await Navigator.of(context).push<void>(
       _NoTransitionPageRoute(
-        builder: (_) => ManageAgentsDialog(projectId: projectId, room: room, onServiceChanged: onServiceChanged, asScreen: true),
+        builder: (_) => ManageAgentsDialog(
+          projectId: projectId,
+          room: room,
+          onServiceChanged: onServiceChanged,
+          onServiceOperationStarted: onServiceOperationStarted,
+          asScreen: true,
+        ),
       ),
     );
     return;
@@ -336,7 +360,12 @@ Future<void> showManageAgentsSurface({
 
   await showPowerboardsFlowDialog<void>(
     context: context,
-    builder: (_) => ManageAgentsDialog(projectId: projectId, room: room, onServiceChanged: onServiceChanged),
+    builder: (_) => ManageAgentsDialog(
+      projectId: projectId,
+      room: room,
+      onServiceChanged: onServiceChanged,
+      onServiceOperationStarted: onServiceOperationStarted,
+    ),
   );
 }
 
@@ -344,9 +373,17 @@ class ManageAgentsDialog extends StatefulWidget {
   final RoomClient room;
   final String projectId;
   final void Function()? onServiceChanged;
+  final void Function(String serviceKindId, PowerboardsServiceOperation operation)? onServiceOperationStarted;
   final bool asScreen;
 
-  const ManageAgentsDialog({super.key, required this.room, required this.projectId, this.onServiceChanged, this.asScreen = false});
+  const ManageAgentsDialog({
+    super.key,
+    required this.room,
+    required this.projectId,
+    this.onServiceChanged,
+    this.onServiceOperationStarted,
+    this.asScreen = false,
+  });
 
   @override
   State<ManageAgentsDialog> createState() => _ManageAgentsDialogState();
@@ -356,6 +393,7 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
   static const double _mobileManageAgentsScrollBottomInset = 148.0;
 
   Timer? _pollTimer;
+  bool _serviceRefreshInFlight = false;
 
   String? _error;
 
@@ -374,11 +412,30 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
   void _scheduleNextPoll() {
     _pollTimer?.cancel();
     if (!mounted) return;
-    _pollTimer = Timer(Duration(seconds: 1), () {
+    _pollTimer = Timer(const Duration(seconds: 1), () {
       if (!mounted) return;
-      setState(() {});
-      _scheduleNextPoll();
+      unawaited(_refreshServicesForPoll());
     });
+  }
+
+  Future<void> _refreshServicesForPoll() async {
+    if (_serviceRefreshInFlight) {
+      _scheduleNextPoll();
+      return;
+    }
+
+    _serviceRefreshInFlight = true;
+    try {
+      await services.refresh();
+    } catch (_) {
+      // Resource exposes the refresh error in its state; keep polling so a transient stale snapshot can recover.
+    } finally {
+      _serviceRefreshInFlight = false;
+      if (mounted) {
+        setState(() {});
+        _scheduleNextPoll();
+      }
+    }
   }
 
   Future<void> _load() async {
@@ -493,8 +550,14 @@ class _ManageAgentsDialogState extends State<ManageAgentsDialog> {
                   ServiceTemplateSpec(
                     metadata: ServiceTemplateMetadata(name: existing.metadata.name, description: existing.metadata.description),
                   ),
+              onOperationStarted: (operation) => widget.onServiceOperationStarted?.call(option.id, operation),
             )
-          : _InstallAgentDialog(template: option.template, projectId: widget.projectId, roomName: widget.room.roomName),
+          : _InstallAgentDialog(
+              template: option.template,
+              projectId: widget.projectId,
+              roomName: widget.room.roomName,
+              onOperationStarted: (operation) => widget.onServiceOperationStarted?.call(option.id, operation),
+            ),
     );
 
     if (widget.onServiceChanged != null) {

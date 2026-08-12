@@ -119,6 +119,7 @@ class PbFilesToolbar extends StatelessWidget {
     required this.onUpload,
     this.onAskCurrentFolder,
     this.trailingAction,
+    this.v17WebsiteActionsEnabled = false,
     this.showWebServerPreview = false,
     this.webServerPreviewActive = false,
     this.onPreviewWebServer,
@@ -142,6 +143,7 @@ class PbFilesToolbar extends StatelessWidget {
   final VoidCallback onUpload;
   final VoidCallback? onAskCurrentFolder;
   final PbFilesToolbarTrailingAction? trailingAction;
+  final bool v17WebsiteActionsEnabled;
   final bool showWebServerPreview;
   final bool webServerPreviewActive;
   final VoidCallback? onPreviewWebServer;
@@ -157,7 +159,7 @@ class PbFilesToolbar extends StatelessWidget {
         final stackedActions =
             responsiveMode == PbFilesResponsiveMode.mobile ||
             responsiveMode == PbFilesResponsiveMode.overlay && constraints.maxWidth <= PbBreakpoints.shellMobile;
-        final webServerTrailingAction = showWebServerPreview
+        final webServerTrailingAction = v17WebsiteActionsEnabled && showWebServerPreview
             ? PbFilesToolbarTrailingAction(
                 label: 'Preview',
                 iconAssetName: 'globe',
@@ -169,7 +171,7 @@ class PbFilesToolbar extends StatelessWidget {
                 pressedBorderColor: webServerPreviewActive ? PbColors.statusOnline : PbColors.borderSoft,
                 foregroundColor: webServerPreviewActive ? PbColors.textInverse : PbColors.textMuted,
               )
-            : currentPath.isEmpty && onInstallWebServer != null
+            : v17WebsiteActionsEnabled && currentPath.isEmpty && onInstallWebServer != null
             ? PbFilesToolbarTrailingAction(label: 'New website', iconAssetName: 'folder-code', onPressed: onInstallWebServer, width: 164)
             : null;
         final resolvedTrailingAction = trailingAction ?? webServerTrailingAction;

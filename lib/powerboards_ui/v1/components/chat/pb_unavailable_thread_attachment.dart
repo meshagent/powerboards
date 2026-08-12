@@ -1,23 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
+import 'package:powerboards/powerboards_ui/v1/components/dialogs/pb_dialog_shell.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_typography.dart';
-import 'package:powerboards/ui/powerboards_shad_dialog.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 
 Future<void> showPbUnavailableAttachmentDialog(BuildContext context) {
-  return showPowerboardsAlertDialog<void>(
+  return showDialog<void>(
     context: context,
-    builder: (dialogContext) => PowerboardsShadDialog.compactAlert(
-      title: const Text('No longer available'),
-      description: const Padding(
-        padding: EdgeInsets.only(bottom: 8),
-        child: Text('This attachment was deleted or you no longer have permission to access it.'),
-      ),
-      actions: [ShadButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Close'))],
+    barrierDismissible: false,
+    barrierColor: Colors.transparent,
+    useSafeArea: false,
+    builder: (dialogContext) => Stack(
+      children: [
+        PbDialogShell(
+          title: 'No longer available',
+          description: 'This attachment was deleted or you no longer have permission to access it.',
+          onClose: () => Navigator.of(dialogContext).pop(),
+          actions: [PbButton(label: 'Close', variant: PbButtonVariant.primary, onPressed: () => Navigator.of(dialogContext).pop())],
+          child: const SizedBox.shrink(),
+        ),
+      ],
     ),
   );
+}
+
+Future<bool> showPbRenamedFolderLinkDialog(BuildContext context, {required String previousName, required String currentName}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: Colors.transparent,
+    useSafeArea: false,
+    builder: (dialogContext) => Stack(
+      children: [
+        PbDialogShell(
+          title: 'Folder renamed',
+          description: '“$previousName” is now “$currentName”. Select OK to open the renamed folder.',
+          onClose: () => Navigator.of(dialogContext).pop(false),
+          actions: [PbButton(label: 'OK', variant: PbButtonVariant.primary, onPressed: () => Navigator.of(dialogContext).pop(true))],
+          child: const SizedBox.shrink(),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
 }
 
 class PbUnavailableThreadAttachment extends StatelessWidget {

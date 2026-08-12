@@ -104,6 +104,34 @@ void main() {
     expect(resolution.path, 'approved/brief.pdf');
   });
 
+  test('historical attachment provenance matches the current same-room path at read time', () {
+    final references = [
+      reference(sourceRoom: 'Product', sourcePath: 'drafts/brief.pdf', destinationRoom: 'Product', destinationPath: 'review/brief.pdf'),
+      reference(sourceRoom: 'Product', sourcePath: 'review/brief.pdf', destinationRoom: 'Product', destinationPath: 'approved/brief.pdf'),
+    ];
+
+    expect(
+      powerboardsFileReferenceMatchesCurrentPath(
+        originalRoomName: 'Product',
+        originalPath: 'drafts/brief.pdf',
+        currentRoomName: 'Product',
+        currentPath: 'approved/brief.pdf',
+        references: references,
+      ),
+      isTrue,
+    );
+    expect(
+      powerboardsFileReferenceMatchesCurrentPath(
+        originalRoomName: 'Product',
+        originalPath: 'drafts/brief.pdf',
+        currentRoomName: 'Product',
+        currentPath: 'drafts/brief.pdf',
+        references: references,
+      ),
+      isFalse,
+    );
+  });
+
   test('cross-room moves retain the destination room identity', () {
     final resolution = powerboardsResolveFileReference(
       roomName: 'Product',

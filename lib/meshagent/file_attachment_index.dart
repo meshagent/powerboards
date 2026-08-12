@@ -270,7 +270,13 @@ Future<void> _registerPowerboardsFileAttachmentTransfer({
                     : link,
               )
               .toList(growable: false)
-        : <PowerboardsFileAttachmentLink>[...sourceLinks, ...transferredLinks];
+        : powerboardsFileAttachmentLinksAfterSameRoomTransfer(
+            links: sourceLinks,
+            sourcePath: normalizedSourcePath,
+            destinationPath: normalizedDestinationPath,
+            folder: folder,
+            move: false,
+          );
     Object? rowRewriteError;
     StackTrace? rowRewriteStackTrace;
     if (move) {
@@ -518,6 +524,39 @@ String _powerboardsTransferredAttachmentUrl(String originalUrl, String destinati
   }
   final encodedPath = destinationPath.split('/').map(Uri.encodeComponent).join('/');
   return 'room:///$encodedPath';
+}
+
+List<PowerboardsFileAttachmentLink> powerboardsFileAttachmentLinksAfterSameRoomTransfer({
+  required Iterable<PowerboardsFileAttachmentLink> links,
+  required String sourcePath,
+  required String destinationPath,
+  required bool folder,
+  required bool move,
+}) {
+  final existing = links.toList(growable: false);
+  if (move) {
+    return existing;
+  }
+
+  final normalizedSourcePath = normalizePowerboardsAttachmentPath(sourcePath);
+  final normalizedDestinationPath = normalizePowerboardsAttachmentPath(destinationPath);
+  if (normalizedSourcePath.isEmpty || normalizedDestinationPath.isEmpty) {
+    return existing;
+  }
+  return <PowerboardsFileAttachmentLink>[
+    ...existing,
+    for (final link in existing)
+      if (_powerboardsAttachmentPathIsTransferred(link.filePath, normalizedSourcePath, folder: folder))
+        link.copyWith(
+          filePath: powerboardsTransferredAttachmentPath(
+            path: link.filePath,
+            sourcePath: normalizedSourcePath,
+            destinationPath: normalizedDestinationPath,
+            folder: folder,
+          ),
+          inheritedFromCopy: true,
+        ),
+  ];
 }
 
 bool _powerboardsAttachmentPathIsTransferred(String path, String sourcePath, {required bool folder}) {

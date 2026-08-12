@@ -296,4 +296,35 @@ void main() {
       },
     ]);
   });
+
+  test('same-room moves preserve provenance links and are idempotent', () {
+    const original = PowerboardsFileAttachmentLink(
+      filePath: 'drafts/brief.pdf',
+      threadPath: 'dataset://agents/assistant/threads/brief',
+      threadName: 'Brief',
+      createdBy: 'User',
+      createdAt: null,
+    );
+
+    final first = powerboardsFileAttachmentLinksAfterSameRoomTransfer(
+      links: const [original],
+      sourcePath: 'drafts/brief.pdf',
+      destinationPath: 'approved/brief.pdf',
+      folder: false,
+      move: true,
+    );
+    final second = powerboardsFileAttachmentLinksAfterSameRoomTransfer(
+      links: first,
+      sourcePath: 'drafts/brief.pdf',
+      destinationPath: 'approved/brief.pdf',
+      folder: false,
+      move: true,
+    );
+
+    expect(first, hasLength(1));
+    expect(first.single.filePath, 'drafts/brief.pdf');
+    expect(second, hasLength(1));
+    expect(second.single.filePath, 'drafts/brief.pdf');
+    expect(second.single.threadPath, original.threadPath);
+  });
 }

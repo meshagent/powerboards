@@ -123,6 +123,7 @@ class InstallServiceDialog extends StatefulWidget {
     required this.projectId,
     required this.roomName,
     this.onInstalled,
+    this.onOperationStarted,
   });
 
   final String? template;
@@ -132,6 +133,7 @@ class InstallServiceDialog extends StatefulWidget {
   final String projectId;
   final String? roomName;
   final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
+  final PowerboardsServiceOperationStarted? onOperationStarted;
 
   @override
   State<InstallServiceDialog> createState() => _InstallServiceDialogState();
@@ -161,6 +163,7 @@ class _InstallServiceDialogState extends State<InstallServiceDialog> {
             projectId: widget.projectId,
             roomName: widget.roomName,
             onInstalled: widget.onInstalled,
+            onOperationStarted: widget.onOperationStarted,
           );
         }
 
@@ -172,6 +175,7 @@ class _InstallServiceDialogState extends State<InstallServiceDialog> {
           initialProjectId: widget.projectId,
           initialRoomName: widget.roomName,
           onInstalled: widget.onInstalled,
+          onOperationStarted: widget.onOperationStarted,
           mobileDialogChrome: _mobileChrome,
         );
 
@@ -220,6 +224,7 @@ class AgentInstaller extends StatefulWidget {
     this.initialRoomName,
     this.onInstalled,
     this.mobileDialogChrome,
+    this.onOperationStarted,
   });
 
   final Uri? initialUrl;
@@ -230,6 +235,7 @@ class AgentInstaller extends StatefulWidget {
   final String? initialRoomName;
   final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
   final ValueNotifier<PowerboardsDialogChrome>? mobileDialogChrome;
+  final PowerboardsServiceOperationStarted? onOperationStarted;
 
   @override
   State createState() => _AgentInstaller();
@@ -974,6 +980,7 @@ class _AgentInstaller extends State<AgentInstaller> {
             prefilledVars: prefill,
             onDone: _handleInstalled,
             mobileDialogChrome: widget.mobileDialogChrome,
+            onOperationStarted: widget.onOperationStarted,
             mobileOnBack: () {
               if (widget.initialRoomName != null) {
                 setState(() {
@@ -999,6 +1006,7 @@ class _AgentInstaller extends State<AgentInstaller> {
               prefilledVars: prefill,
               onDone: _handleInstalled,
               mobileDialogChrome: widget.mobileDialogChrome,
+              onOperationStarted: widget.onOperationStarted,
               dialogChromeSignaturePrefix:
                   'confirm:${Uri.encodeComponent((_roomDisplayName?.trim().isNotEmpty ?? false) ? _roomDisplayName!.trim() : (_roomName ?? '').trim())}|',
               customActions: [
@@ -1065,12 +1073,19 @@ class _AgentInstaller extends State<AgentInstaller> {
 }
 
 class _InstallServiceUrlDialog extends StatefulWidget {
-  const _InstallServiceUrlDialog({required this.type, required this.projectId, required this.roomName, this.onInstalled});
+  const _InstallServiceUrlDialog({
+    required this.type,
+    required this.projectId,
+    required this.roomName,
+    this.onInstalled,
+    this.onOperationStarted,
+  });
 
   final ServiceType type;
   final String projectId;
   final String? roomName;
   final void Function(BuildContext context, String projectId, String roomName, String serviceId)? onInstalled;
+  final PowerboardsServiceOperationStarted? onOperationStarted;
 
   @override
   State<_InstallServiceUrlDialog> createState() => _InstallServiceUrlDialogState();
@@ -1118,6 +1133,7 @@ class _InstallServiceUrlDialogState extends State<_InstallServiceUrlDialog> {
         projectId: widget.projectId,
         roomName: widget.roomName,
         onInstalled: widget.onInstalled,
+        onOperationStarted: widget.onOperationStarted,
       ),
     );
 

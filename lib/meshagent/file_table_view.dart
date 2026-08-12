@@ -37,6 +37,7 @@ import 'package:powerboards/meshagent/archive_extract.dart';
 import 'package:powerboards/meshagent/archive_extract_toast.dart';
 import 'package:powerboards/meshagent/agent_config.dart';
 import 'package:powerboards/meshagent/agent_containers.dart';
+import 'package:powerboards/meshagent/assistant_quick_start.dart';
 import 'package:powerboards/meshagent/file_breadcrumb_layout.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/agent_option.dart';
@@ -151,6 +152,17 @@ typedef PowerboardsV1FilePromptRequested =
       required bool responsiveHandoff,
       String? fileDisplayName,
     });
+
+@visibleForTesting
+bool powerboardsShouldOpenAssistantInstallForMissingFilePrompt({
+  required bool servicesLoaded,
+  required Iterable<ServiceSpec> services,
+  required bool canInstallAssistant,
+}) {
+  return servicesLoaded &&
+      canInstallAssistant &&
+      !services.any((service) => service.metadata.annotations['meshagent.service.id']?.trim() == powerboardsAssistantServiceId);
+}
 
 @visibleForTesting
 bool powerboardsV1FilePromptShouldCleanupSurfaces({required bool isFolder, required bool responsiveHandoff}) {
@@ -853,6 +865,55 @@ bool powerboardsV1LiveFolderEntriesMatchRoute({
 }
 
 @visibleForTesting
+List<T>? powerboardsV1FolderEntriesForLoadingSurface<T>({required String routeFolder, required List<T>? cachedEntries}) {
+  if (cachedEntries != null) {
+    return cachedEntries;
+  }
+
+  return PendingStorageDeletes.normalizePath(routeFolder).isEmpty ? <T>[] : null;
+}
+
+@visibleForTesting
+Future<List<T>> powerboardsLoadFolderAfterRoomReady<T>({
+  required Future<void> roomReady,
+  bool Function()? isConnected,
+  Future<void> Function()? waitUntilConnected,
+  required Future<List<T>> Function() load,
+}) async {
+  await roomReady;
+  if (waitUntilConnected == null || isConnected?.call() == true) {
+    return load();
+  }
+
+  final earlyLoad = load().then<Object>(
+    (entries) => _PowerboardsEarlyFolderLoad<T>(entries),
+    onError: (Object _, StackTrace _) => const _PowerboardsEarlyFolderLoadFailure(),
+  );
+  final connected = waitUntilConnected().then<Object>((_) => const _PowerboardsRoomConnected());
+  final first = await Future.any<Object>([earlyLoad, connected]);
+  if (first is _PowerboardsEarlyFolderLoad<T>) {
+    return first.entries;
+  }
+
+  await connected;
+  return load();
+}
+
+class _PowerboardsEarlyFolderLoad<T> {
+  const _PowerboardsEarlyFolderLoad(this.entries);
+
+  final List<T> entries;
+}
+
+class _PowerboardsEarlyFolderLoadFailure {
+  const _PowerboardsEarlyFolderLoadFailure();
+}
+
+class _PowerboardsRoomConnected {
+  const _PowerboardsRoomConnected();
+}
+
+@visibleForTesting
 bool powerboardsV1FileItemIsSelectable(PbFilesItemData item) {
   return item.kind == PbFilesItemKind.file || item.kind == PbFilesItemKind.folder;
 }
@@ -1094,12 +1155,14 @@ class FileManagerView extends StatefulWidget {
   final double desktopHeaderActionReserve;
   final bool showDesktopSidetrayToggle;
   final bool canInstallServices;
+  final bool v17WebsiteActionsEnabled;
   final bool? v1RoomPanelCollapsed;
   final ValueChanged<bool>? onV1RoomPanelCollapsedChanged;
   final double? v1RoomPanelWidth;
   final ValueChanged<double>? onV1RoomPanelWidthChanged;
   final PowerboardsV1FilePromptRequested? onV1FilePromptRequested;
   final VoidCallback? onServiceChanged;
+  final Future<void> Function()? onInstallAssistantForFilePrompt;
 
   const FileManagerView({
     super.key,
@@ -1116,12 +1179,14 @@ class FileManagerView extends StatefulWidget {
     this.desktopHeaderActionReserve = desktopPaneHeaderActionReserve,
     this.showDesktopSidetrayToggle = true,
     this.canInstallServices = false,
+    this.v17WebsiteActionsEnabled = false,
     this.v1RoomPanelCollapsed,
     this.onV1RoomPanelCollapsedChanged,
     this.v1RoomPanelWidth,
     this.onV1RoomPanelWidthChanged,
     this.onV1FilePromptRequested,
     this.onServiceChanged,
+    this.onInstallAssistantForFilePrompt,
   });
 
   @override
@@ -1179,6 +1244,7 @@ class _FileManagerViewState extends State<FileManagerView> {
   final Map<String, Future<String>> _v1DownloadUrlFuturesByPath = <String, Future<String>>{};
   String? _v1LoadedFolderPath;
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinks = const <PowerboardsFileAttachmentLink>[];
+  List<PowerboardsFileReference> _fileReferences = const <PowerboardsFileReference>[];
   final Map<String, String> _fileCreatorNamesByPath = <String, String>{};
   final Map<String, DateTime> _v1DownloadUrlExpiresAtByPath = <String, DateTime>{};
 
@@ -1378,7 +1444,6 @@ class _FileManagerViewState extends State<FileManagerView> {
     roomSub = widget.client.listen(_onRoomEvent);
     _bindController(widget.controller);
     unawaited(_rebindThreadIndexDocument());
-    unawaited(_refreshFileAttachmentLinks());
   }
 
   @override
@@ -1584,7 +1649,8 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _onRoomEvent(RoomEvent event) {
     if (event is FileUpdatedEvent) {
       _rememberFileCreator(event.path, event.participantId);
-      if (normalizePowerboardsAttachmentPath(event.path) == powerboardsFileAttachmentIndexPath) {
+      final normalizedPath = normalizePowerboardsAttachmentPath(event.path);
+      if (normalizedPath == powerboardsFileAttachmentIndexPath || normalizedPath == powerboardsFileReferenceRegistryPath) {
         unawaited(_refreshFileAttachmentLinks());
       }
       _onFileUpdated(event.path);
@@ -1592,7 +1658,8 @@ class _FileManagerViewState extends State<FileManagerView> {
     }
 
     if (event is FileDeletedEvent) {
-      if (normalizePowerboardsAttachmentPath(event.path) == powerboardsFileAttachmentIndexPath) {
+      final normalizedPath = normalizePowerboardsAttachmentPath(event.path);
+      if (normalizedPath == powerboardsFileAttachmentIndexPath || normalizedPath == powerboardsFileReferenceRegistryPath) {
         unawaited(_refreshFileAttachmentLinks());
       }
       _onFileDeleted(event.path);
@@ -1804,12 +1871,14 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   Future<void> _refreshFileAttachmentLinks() async {
     final links = await loadPowerboardsFileAttachmentLinks(widget.client);
+    final references = await loadPowerboardsFileReferences(widget.client);
     if (!_canUpdateUi) {
       return;
     }
 
     setState(() {
       _fileAttachmentLinks = links;
+      _fileReferences = references;
     });
   }
 
@@ -1855,12 +1924,24 @@ class _FileManagerViewState extends State<FileManagerView> {
 
   List<PowerboardsFileAttachmentLink> _fileAttachmentLinksForPath(String path) {
     final normalizedPath = normalizePowerboardsAttachmentPath(path);
-    final links = _fileAttachmentLinks.where((link) => link.filePath == normalizedPath).toList()
-      ..sort((left, right) {
-        final rightCreatedAt = right.createdAt?.millisecondsSinceEpoch ?? 0;
-        final leftCreatedAt = left.createdAt?.millisecondsSinceEpoch ?? 0;
-        return rightCreatedAt.compareTo(leftCreatedAt);
-      });
+    final roomName = widget.client.roomName?.trim() ?? '';
+    final links =
+        _fileAttachmentLinks
+            .where(
+              (link) => powerboardsFileReferenceMatchesCurrentPath(
+                originalRoomName: roomName,
+                originalPath: link.filePath,
+                currentRoomName: roomName,
+                currentPath: normalizedPath,
+                references: _fileReferences,
+              ),
+            )
+            .toList()
+          ..sort((left, right) {
+            final rightCreatedAt = right.createdAt?.millisecondsSinceEpoch ?? 0;
+            final leftCreatedAt = left.createdAt?.millisecondsSinceEpoch ?? 0;
+            return rightCreatedAt.compareTo(leftCreatedAt);
+          });
     return links;
   }
 
@@ -2955,6 +3036,17 @@ class _FileManagerViewState extends State<FileManagerView> {
   }) async {
     final action = _filePromptActionsForPath(fullPath, isFolder: isFolder, allowFolder: true).firstOrNull;
     if (action == null) {
+      final servicesState = widget.services?.state;
+      final installAssistant = widget.onInstallAssistantForFilePrompt;
+      if (installAssistant != null &&
+          powerboardsShouldOpenAssistantInstallForMissingFilePrompt(
+            servicesLoaded: servicesState?.isReady == true,
+            services: servicesState?.asReady?.value ?? const <ServiceSpec>[],
+            canInstallAssistant: widget.canInstallServices,
+          )) {
+        await installAssistant();
+        return;
+      }
       await _openManageAgentsForFilePrompt(isFolder: isFolder);
       return;
     }
@@ -3303,10 +3395,18 @@ class _FileManagerViewState extends State<FileManagerView> {
   void _nextFile() => _cycleFile(1);
 
   Future<List<StorageEntry>> _getChildren(String folderPath) async {
-    final entries = await widget.client.storage.list(folderPath);
+    final entries = await powerboardsLoadFolderAfterRoomReady(
+      roomReady: widget.client.ready,
+      isConnected: () => widget.client.isConnected,
+      waitUntilConnected: widget.client.waitUntilConnected,
+      load: () => widget.client.storage.list(folderPath),
+    );
     _saveV1FolderEntries(folderPath, entries);
     if (_folderSig.value == folderPath) {
       _v1LoadedFolderPath = folderPath;
+    }
+    if (_canUpdateUi && widget.client.isConnected) {
+      unawaited(_refreshFileAttachmentLinks());
     }
     return entries;
   }
@@ -4398,10 +4498,15 @@ class _FileManagerViewState extends State<FileManagerView> {
   }
 
   bool _v1SelectionContainsLinkedAttachments(Iterable<PbFilesItemData> items) {
+    final roomName = widget.client.roomName?.trim() ?? '';
     for (final item in items) {
       final sourcePath = powerboardsNormalizeStoragePath(_v1PathForItem(item));
       final folder = _v1IsFolder(item);
-      if (_fileAttachmentLinks.any((link) => link.filePath == sourcePath || (folder && link.filePath.startsWith('$sourcePath/')))) {
+      if (_fileAttachmentLinks.any((link) {
+        final resolution = powerboardsResolveFileReference(roomName: roomName, path: link.filePath, references: _fileReferences);
+        return resolution.roomName.trim().toLowerCase() == roomName.toLowerCase() &&
+            (resolution.path == sourcePath || (folder && resolution.path.startsWith('$sourcePath/')));
+      })) {
         return true;
       }
     }
@@ -5825,9 +5930,12 @@ class _FileManagerViewState extends State<FileManagerView> {
                   onUpload: () => unawaited(_addFiles(currentFolder)),
                   onAskCurrentFolder: () =>
                       unawaited(_startDefaultFilePrompt(currentFolder, isFolder: true, cleanupSurfacesAfterHandoff: usesStackedRoomPanel)),
-                  showWebServerPreview: showWebServerPreview,
+                  v17WebsiteActionsEnabled: widget.v17WebsiteActionsEnabled,
+                  showWebServerPreview: widget.v17WebsiteActionsEnabled && showWebServerPreview,
                   webServerPreviewActive: webServerPreviewReady,
-                  onPreviewWebServer: webServerPreviewReady ? () => unawaited(_openV1WebsitePreview(entries: entries)) : null,
+                  onPreviewWebServer: widget.v17WebsiteActionsEnabled && webServerPreviewReady
+                      ? () => unawaited(_openV1WebsitePreview(entries: entries))
+                      : null,
                   onFilesDropped: (_) {},
                   onOpenRecentFiles: () {
                     if (!sidePaneAvailable) {
@@ -7205,8 +7313,12 @@ class _FileManagerViewState extends State<FileManagerView> {
 
                       return storageEntries.state.when(
                         loading: () {
-                          if (cachedEntries != null) {
-                            return _buildDesktopV1FilesBrowser(context, entries: cachedEntries, folderPath: routeFolder);
+                          final loadingEntries = powerboardsV1FolderEntriesForLoadingSurface(
+                            routeFolder: routeFolder,
+                            cachedEntries: cachedEntries,
+                          );
+                          if (loadingEntries != null) {
+                            return _buildDesktopV1FilesBrowser(context, entries: loadingEntries, folderPath: routeFolder);
                           }
                           return _buildDesktopV1FilesLoading();
                         },

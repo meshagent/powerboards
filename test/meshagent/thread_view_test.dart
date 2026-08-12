@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent/runtime.dart';
 import 'package:meshagent_flutter_shadcn/chat/chat.dart';
+import 'package:meshagent_flutter_shadcn/chat/chat_bot_view.dart';
 import 'package:meshagent_flutter_shadcn/chat/dataset_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/chat/new_chat_thread.dart';
 import 'package:meshagent_flutter_shadcn/markdown_viewer.dart';
@@ -14,11 +16,13 @@ import 'package:meshagent_flutter_shadcn/thread_typography.dart';
 import 'package:powerboards/meshagent/agent_participants.dart';
 import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/folder_chat_context.dart';
+import 'package:powerboards/meshagent/file_reference_registry.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_select_dialog.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_unavailable_thread_attachment.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/ui/powerboards_breakpoints.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -196,6 +200,42 @@ Widget _buildResponsiveTestApp({required Widget child, MediaQueryData? mediaQuer
   );
 }
 
+Future<ChatBotView> _pumpThreadViewForUiIsolation(
+  WidgetTester tester, {
+  required PowerboardsUiMode uiMode,
+  required TargetPlatform platform,
+  required Size size,
+}) async {
+  final previousMode = powerboardsUiModeSignal.value;
+  powerboardsUiModeSignal.value = uiMode;
+  addTearDown(() => powerboardsUiModeSignal.value = previousMode);
+
+  final previousPlatform = debugDefaultTargetPlatformOverride;
+  debugDefaultTargetPlatformOverride = platform;
+  try {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = size;
+    addTearDown(tester.view.reset);
+
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        mediaQueryData: MediaQueryData(size: size),
+        child: Scaffold(
+          body: SizedBox.expand(child: _ThreadViewHarness(room: room)),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    return tester.widget<ChatBotView>(find.byType(ChatBotView));
+  } finally {
+    debugDefaultTargetPlatformOverride = previousPlatform;
+  }
+}
+
 void main() {
   final previousRuntime = DocumentRuntime.instance;
 
@@ -252,6 +292,60 @@ void main() {
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [nestedFolder], attachmentPaths: [nestedFolder]), isTrue);
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [rootFolder]), isTrue);
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [nestedFolder]), isFalse);
+  });
+
+  testWidgets('desktop V1 enables the assistant markdown transformer', (tester) async {
+    final chatBotView = await _pumpThreadViewForUiIsolation(
+      tester,
+      uiMode: PowerboardsUiMode.v1,
+      platform: TargetPlatform.macOS,
+      size: const Size(1200, 900),
+    );
+
+    expect(chatBotView.datasetAgentMessageTextTransformer, isNotNull);
+  });
+
+  testWidgets('legacy UI does not enable the assistant markdown transformer', (tester) async {
+    final chatBotView = await _pumpThreadViewForUiIsolation(
+      tester,
+      uiMode: PowerboardsUiMode.legacy,
+      platform: TargetPlatform.macOS,
+      size: const Size(1200, 900),
+    );
+
+    expect(chatBotView.datasetAgentMessageTextTransformer, isNull);
+  });
+
+  testWidgets('adaptive mobile V1 does not enable the assistant markdown transformer', (tester) async {
+    final chatBotView = await _pumpThreadViewForUiIsolation(
+      tester,
+      uiMode: PowerboardsUiMode.v1,
+      platform: TargetPlatform.iOS,
+      size: const Size(390, 844),
+    );
+
+    expect(chatBotView.datasetAgentMessageTextTransformer, isNull);
+  });
+
+  test('V1 active thread session identity survives Files navigation but changes with the active thread', () {
+    final beforeFiles = powerboardsV1ActiveThreadSessionKey(
+      agentKey: 'assistant',
+      documentPath: '.threads/main.thread',
+      selectedThreadPath: 'dataset://agents/assistant/threads/launch',
+    );
+    final afterFiles = powerboardsV1ActiveThreadSessionKey(
+      agentKey: 'assistant',
+      documentPath: '.threads/main.thread',
+      selectedThreadPath: 'dataset://agents/assistant/threads/launch',
+    );
+    final nextThread = powerboardsV1ActiveThreadSessionKey(
+      agentKey: 'assistant',
+      documentPath: '.threads/main.thread',
+      selectedThreadPath: 'dataset://agents/assistant/threads/follow-up',
+    );
+
+    expect(afterFiles, beforeFiles);
+    expect(nextThread, isNot(beforeFiles));
   });
 
   testWidgets('V1 file reference loading waits for the room identity', (tester) async {
@@ -349,6 +443,61 @@ void main() {
       ),
       isFalse,
     );
+  });
+
+  test('Assistant response links resolve moved folder and file identities in the current room', () {
+    final references = <PowerboardsFileReference>[
+      PowerboardsFileReference(
+        sourceRoomName: 'room',
+        sourcePath: 'drafts',
+        destinationRoomName: 'room',
+        destinationPath: 'published',
+        operation: PowerboardsFileTransferOperation.move,
+        folder: true,
+        updatedAt: DateTime.utc(2026, 8, 6),
+      ),
+    ];
+
+    expect(powerboardsResolveChatLinkCurrentPath(roomName: 'room', path: 'drafts', references: references), 'published');
+    expect(
+      powerboardsResolveChatLinkCurrentPath(roomName: 'room', path: 'drafts/overview.md', references: references),
+      'published/overview.md',
+    );
+  });
+
+  test('deleted folder attachments retain their captured display name', () {
+    final folderAttachment = powerboardsFolderChatContextDataUrl('content/old-name', displayName: 'Project Atlas');
+
+    expect(powerboardsV1ThreadAttachmentDisplayName(folderAttachment, fallback: 'Inline attachment (text/plain)'), 'Project Atlas');
+  });
+
+  testWidgets('renamed folder notice uses the V1 dialog and confirms navigation', (tester) async {
+    bool? confirmed;
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        child: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                confirmed = await showPbRenamedFolderLinkDialog(context, previousName: 'drafts', currentName: 'published');
+              },
+              child: const Text('Open folder'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open folder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Folder renamed'), findsOneWidget);
+    expect(find.text('“drafts” is now “published”. Select OK to open the renamed folder.'), findsOneWidget);
+    expect(find.text('OK'), findsOneWidget);
+
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(confirmed, isTrue);
   });
 
   testWidgets('rendered folder file links preserve spaced filenames for preview dispatch', (tester) async {

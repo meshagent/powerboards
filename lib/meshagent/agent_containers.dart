@@ -19,6 +19,10 @@ import 'package:powerboards/meshagent/meshagent.dart';
 
 typedef ConfigureServiceTemplateDone = void Function(BuildContext context, String serviceId);
 
+enum PowerboardsServiceOperation { install, update, uninstall }
+
+typedef PowerboardsServiceOperationStarted = void Function(PowerboardsServiceOperation operation);
+
 const double _mobileConfigureFlowSectionGap = powerboardsMobileFlowDialogContentSectionGap * 3;
 const String powerboardsWebServerServiceId = 'meshagent.webserver';
 const String powerboardsPublishedWebsiteServiceId = 'meshagent.published-website';
@@ -421,6 +425,27 @@ Future<T> powerboardsSaveServiceAfterPreparingWebServerFolder<T>({
   return saveService();
 }
 
+Future<ServiceSpec> powerboardsSaveRoomServiceFromTemplate({
+  required meshagent_client.Meshagent client,
+  required String projectId,
+  required String roomName,
+  required String template,
+  required Map<String, String> values,
+  String? serviceId,
+}) {
+  if (serviceId != null) {
+    return client.updateRoomServiceFromTemplate(
+      projectId: projectId,
+      serviceId: serviceId,
+      template: template,
+      values: values,
+      roomName: roomName,
+    );
+  }
+
+  return client.createRoomServiceFromTemplate(projectId: projectId, template: template, values: values, roomName: roomName);
+}
+
 Future<void> powerboardsEnsureWebServerFolderExists({
   required meshagent_client.Meshagent client,
   required String projectId,
@@ -625,6 +650,7 @@ class ConfigureServiceTemplateDialog extends StatefulWidget {
     this.showUninstallAction = true,
     this.primaryActionLabel,
     this.primaryProgressLabel,
+    this.onOperationStarted,
   });
 
   final String template;
@@ -639,6 +665,7 @@ class ConfigureServiceTemplateDialog extends StatefulWidget {
   final bool showUninstallAction;
   final String? primaryActionLabel;
   final String? primaryProgressLabel;
+  final PowerboardsServiceOperationStarted? onOperationStarted;
 
   @override
   State<ConfigureServiceTemplateDialog> createState() => _ConfigureServiceTemplateDialogState();
@@ -686,6 +713,7 @@ class _ConfigureServiceTemplateDialogState extends State<ConfigureServiceTemplat
           showUninstallAction: widget.showUninstallAction,
           primaryActionLabel: widget.primaryActionLabel,
           primaryProgressLabel: widget.primaryProgressLabel,
+          onOperationStarted: widget.onOperationStarted,
           onDone: (context, _) {
             Navigator.of(context).pop(true);
           },
@@ -737,6 +765,7 @@ class ConfigureServiceTemplate extends StatefulWidget {
     this.showUninstallAction = true,
     this.primaryActionLabel,
     this.primaryProgressLabel,
+    this.onOperationStarted,
   });
 
   final ServiceTemplateSpec manifest;
@@ -754,6 +783,7 @@ class ConfigureServiceTemplate extends StatefulWidget {
   final bool showUninstallAction;
   final String? primaryActionLabel;
   final String? primaryProgressLabel;
+  final PowerboardsServiceOperationStarted? onOperationStarted;
 
   @override
   State<ConfigureServiceTemplate> createState() => _ConfigureServiceTemplateState();
@@ -817,6 +847,8 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
       return;
     }
     final enableV1WebServerFlow = powerboardsUsesDesktopUiPreview(context);
+
+    widget.onOperationStarted?.call(widget.serviceId == null ? PowerboardsServiceOperation.install : PowerboardsServiceOperation.update);
 
     setState(() {
       _error = null;
@@ -929,15 +961,14 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
           // Restore archived files before the container can create a fresh empty website folder.
           await powerboardsPrepareWebServerFolderForDomain(client: client, projectId: projectId, roomName: roomName, domain: domain);
         },
-        saveService: () => widget.serviceId != null
-            ? client.updateRoomServiceFromTemplate(
-                projectId: projectId,
-                serviceId: widget.serviceId!,
-                template: widget.template,
-                values: vars,
-                roomName: roomName,
-              )
-            : client.createRoomServiceFromTemplate(projectId: projectId, template: widget.template, values: vars, roomName: roomName),
+        saveService: () => powerboardsSaveRoomServiceFromTemplate(
+          client: client,
+          projectId: projectId,
+          roomName: roomName,
+          template: widget.template,
+          values: vars,
+          serviceId: widget.serviceId,
+        ),
       );
 
       for (final route in existingServiceRoutes) {
@@ -1049,6 +1080,7 @@ class _ConfigureServiceTemplateState extends State<ConfigureServiceTemplate> wit
   }
 
   Future<void> _uninstall() async {
+    widget.onOperationStarted?.call(PowerboardsServiceOperation.uninstall);
     setState(() {
       _error = null;
       _removing = true;

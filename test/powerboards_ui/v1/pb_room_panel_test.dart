@@ -10,6 +10,7 @@ import 'package:meshagent_flutter_shadcn/chat/chat.dart';
 import 'package:powerboards/chat/meshagent_room.dart';
 import 'package:powerboards/meshagent/file_attachment_index.dart';
 import 'package:powerboards/meshagent/file_reference_registry.dart';
+import 'package:powerboards/powerboards_ui/v1/components/chat/pb_unavailable_thread_attachment.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_preview_state_card.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel.dart';
 import 'package:powerboards/powerboards_ui/v1/components/layouts/pb_room_panel_mount.dart';
@@ -19,6 +20,7 @@ import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.da
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/models/pb_attachment_file_metadata.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 class _NoopProtocolChannel extends ProtocolChannel {
   @override
@@ -630,6 +632,17 @@ void main() {
     delayedRecheck.complete(null);
     await tester.pumpAndSettle();
     expect(find.text('unavailable:No longer available'), findsOneWidget);
+  });
+
+  test('files takeover keeps fullscreen chrome ownership through room route sync', () {
+    expect(
+      powerboardsDesktopPreviewRoomRouteSyncShouldReleaseFullscreen(routeTargetsFolder: true, roomFilePreviewFullscreen: false),
+      isFalse,
+    );
+    expect(
+      powerboardsDesktopPreviewRoomRouteSyncShouldReleaseFullscreen(routeTargetsFolder: true, roomFilePreviewFullscreen: true),
+      isTrue,
+    );
   });
 
   test('chat files pane excludes inherited copy links but keeps direct attachments', () {
@@ -1362,6 +1375,29 @@ void main() {
     expect(unavailableSelections, 1);
     expect(previewSelections, 0);
     expect(find.byKey(const ValueKey('file-preview-content-frame')), findsNothing);
+  });
+
+  testWidgets('standard unavailable dialog omits file actions', (tester) async {
+    await tester.pumpWidget(
+      ShadApp(
+        home: Builder(
+          builder: (context) =>
+              TextButton(onPressed: () => unawaited(showPbUnavailableAttachmentDialog(context)), child: const Text('Show unavailable')),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Show unavailable'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No longer available'), findsOneWidget);
+    expect(find.text('This attachment was deleted or you no longer have permission to access it.'), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+    expect(find.byType(PbButton), findsOneWidget);
+    expect(find.byType(ShadButton), findsNothing);
+    expect(find.text('Open'), findsNothing);
+    expect(find.text('Ask agent'), findsNothing);
+    expect(find.text('Download'), findsNothing);
   });
 
   testWidgets('hidden files tab keeps controlled files selection on agents panel', (tester) async {

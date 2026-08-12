@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meshagent/meshagent.dart';
+import 'package:powerboards/meshagent/assistant_quick_start.dart';
 import 'package:powerboards/meshagent/file_table_view.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_menus.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_data.dart';
@@ -28,7 +30,40 @@ PbFilesItemData _folder(String id, String title) {
   );
 }
 
+ServiceSpec _service(String serviceId) {
+  return ServiceSpec(
+    metadata: ServiceMetadata(name: serviceId, annotations: {'meshagent.service.id': serviceId}),
+  );
+}
+
 void main() {
+  test('missing Files prompt opens Assistant install only when Assistant is absent and installation is permitted', () {
+    expect(
+      powerboardsShouldOpenAssistantInstallForMissingFilePrompt(
+        servicesLoaded: true,
+        services: [_service('meshagent.other')],
+        canInstallAssistant: true,
+      ),
+      isTrue,
+    );
+    expect(
+      powerboardsShouldOpenAssistantInstallForMissingFilePrompt(servicesLoaded: false, services: const [], canInstallAssistant: true),
+      isFalse,
+    );
+    expect(
+      powerboardsShouldOpenAssistantInstallForMissingFilePrompt(servicesLoaded: true, services: const [], canInstallAssistant: false),
+      isFalse,
+    );
+    expect(
+      powerboardsShouldOpenAssistantInstallForMissingFilePrompt(
+        servicesLoaded: true,
+        services: [_service(powerboardsAssistantServiceId)],
+        canInstallAssistant: true,
+      ),
+      isFalse,
+    );
+  });
+
   test('folder Ask agent preserves open and closed side pane states', () {
     for (final initialPaneOpen in [false, true]) {
       for (final responsiveHandoff in [false, true]) {
