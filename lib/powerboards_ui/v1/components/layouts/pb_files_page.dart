@@ -944,6 +944,7 @@ class PbFilesMainPanel extends StatelessWidget {
     required this.onToggleSelection,
     required this.onToggleVisibleSelection,
     required this.onClearSelection,
+    this.onMoveSelection,
     required this.onDeleteSelection,
     required this.onDownloadSelection,
     required this.onCreateFolder,
@@ -968,6 +969,7 @@ class PbFilesMainPanel extends StatelessWidget {
     this.onShare,
     this.onExtract,
     this.onDownload,
+    this.onMoveTo,
     this.onRename,
     this.onDelete,
   });
@@ -994,6 +996,7 @@ class PbFilesMainPanel extends StatelessWidget {
   final ValueChanged<String> onToggleSelection;
   final VoidCallback onToggleVisibleSelection;
   final VoidCallback onClearSelection;
+  final VoidCallback? onMoveSelection;
   final VoidCallback onDeleteSelection;
   final VoidCallback onDownloadSelection;
   final VoidCallback onCreateFolder;
@@ -1018,6 +1021,7 @@ class PbFilesMainPanel extends StatelessWidget {
   final ValueChanged<PbFilesItemData>? onShare;
   final ValueChanged<PbFilesItemData>? onExtract;
   final ValueChanged<PbFilesItemData>? onDownload;
+  final ValueChanged<PbFilesItemData>? onMoveTo;
   final ValueChanged<PbFilesItemData>? onRename;
   final ValueChanged<PbFilesItemData>? onDelete;
 
@@ -1067,6 +1071,7 @@ class PbFilesMainPanel extends StatelessWidget {
             webServerPreviewActive: webServerPreviewActive,
             onPreviewWebServer: onPreviewWebServer,
             onClearSelection: onClearSelection,
+            onMoveSelection: onMoveSelection,
             onDeleteSelection: onDeleteSelection,
             onDownloadSelection: onDownloadSelection,
           ),
@@ -1097,6 +1102,7 @@ class PbFilesMainPanel extends StatelessWidget {
                     onShare: onShare,
                     onExtract: onExtract,
                     onDownload: onDownload,
+                    onMoveTo: onMoveTo,
                     onRename: onRename,
                     onDelete: onDelete,
                   ),

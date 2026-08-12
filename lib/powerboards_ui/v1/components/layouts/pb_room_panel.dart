@@ -3,7 +3,6 @@ import 'dart:ui' show ImageFilter, PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lapce_editor_flutter/lapce_editor_flutter.dart' as lapce;
 
 import '../../models/pb_attachment_file_metadata.dart';
 import '../../models/pb_agent_display.dart';
@@ -56,6 +55,7 @@ class PbRoomPanel extends StatefulWidget {
     this.onFilePreviewOpenChanged,
     this.onFilePreviewFullscreenChanged,
     this.onFilePreviewSelected,
+    this.onUnavailableFileSelected,
     this.initialPreviewFile,
     this.initialFilePreviewOpen = false,
     this.agents,
@@ -69,7 +69,7 @@ class PbRoomPanel extends StatefulWidget {
     this.showThreadsSection = true,
     this.showFilesTab = true,
     this.filesTabLabel = 'Files',
-    this.filesPanelDescription = 'Browse attachments by selected agent.',
+    this.filesPanelDescription = 'Browse attachments by selected thread.',
     this.filesEmptyState = const PbSidepaneFileEmptyStateData(title: 'No files here yet', subtitle: 'Files attached will show up here.'),
     this.attachments,
     this.filePreviewBuilder,
@@ -78,6 +78,7 @@ class PbRoomPanel extends StatefulWidget {
     this.onShareFile,
     this.onExtractArchiveFile,
     this.onDownloadFile,
+    this.onSaveFileCopyAs,
     required this.threads,
     this.threadItems,
     this.selectedThreadId,
@@ -101,6 +102,7 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<bool>? onFilePreviewOpenChanged;
   final ValueChanged<bool>? onFilePreviewFullscreenChanged;
   final ValueChanged<PbAttachmentListItemData>? onFilePreviewSelected;
+  final ValueChanged<PbAttachmentListItemData>? onUnavailableFileSelected;
   final PbAttachmentListItemData? initialPreviewFile;
   final bool initialFilePreviewOpen;
   final List<PbAgentListItemData>? agents;
@@ -123,6 +125,7 @@ class PbRoomPanel extends StatefulWidget {
   final ValueChanged<PbAttachmentListItemData>? onShareFile;
   final ValueChanged<PbAttachmentListItemData>? onExtractArchiveFile;
   final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
+  final ValueChanged<PbAttachmentListItemData>? onSaveFileCopyAs;
   final List<String> threads;
   final List<PbThreadListItemData>? threadItems;
   final String? selectedThreadId;
@@ -240,6 +243,10 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
   }
 
   void _openFilePreview(PbAttachmentListItemData file) {
+    if (file.previewState == PbAttachmentPreviewState.unavailable) {
+      widget.onUnavailableFileSelected?.call(file);
+      return;
+    }
     setState(() {
       if (_previewTextSourceChanged(_previewFile, file, null, null)) {
         _clearFilePreviewDraft();
@@ -364,6 +371,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
                       onShareFile: widget.onShareFile,
                       onExtractArchiveFile: widget.onExtractArchiveFile,
                       onDownloadFile: widget.onDownloadFile,
+                      onSaveFileCopyAs: widget.onSaveFileCopyAs,
                     ),
             ),
           ),
@@ -387,7 +395,7 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
       borderOnTop: widget.borderOnTop,
       showInlineBorder: showInlineBorder,
       hideFullscreenToggle: widget.responsiveOverlay,
-      onAskAgent: widget.onAskFileAgent == null ? null : () => widget.onAskFileAgent!(_previewFile),
+      onAskAgent: !(_previewFile.showAskAgentAction) || widget.onAskFileAgent == null ? null : () => widget.onAskFileAgent!(_previewFile),
       onShare: widget.onShareFile == null ? null : () => widget.onShareFile!(_previewFile),
       onExtractArchive: widget.onExtractArchiveFile == null || !pbCanExtractArchive(_previewFile)
           ? null
@@ -397,6 +405,9 @@ class _PbRoomPanelState extends State<PbRoomPanel> {
       onClose: _closeFilePreview,
       previewContentChild: previewContentChild,
       loadText: previewSource?.loadText,
+      headerLeading: previewSource?.headerLeading,
+      hideToolbarActions: previewSource?.hideToolbarActions ?? false,
+      onSave: previewSource?.onSave,
       onSaveTextRequested: previewSource?.saveText,
       sourceKey: previewSource?.sourceKey,
       draftText: _filePreviewDraftTextFor(draftKey),
@@ -1664,6 +1675,7 @@ class _FilesPanel extends StatelessWidget {
     this.onShareFile,
     this.onExtractArchiveFile,
     this.onDownloadFile,
+    this.onSaveFileCopyAs,
   });
 
   final List<PbAttachmentListItemData> attachments;
@@ -1674,6 +1686,7 @@ class _FilesPanel extends StatelessWidget {
   final ValueChanged<PbAttachmentListItemData>? onShareFile;
   final ValueChanged<PbAttachmentListItemData>? onExtractArchiveFile;
   final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
+  final ValueChanged<PbAttachmentListItemData>? onSaveFileCopyAs;
 
   @override
   Widget build(BuildContext context) {
@@ -1690,6 +1703,7 @@ class _FilesPanel extends StatelessWidget {
           onShareFile: onShareFile,
           onExtractArchiveFile: onExtractArchiveFile,
           onDownloadFile: onDownloadFile,
+          onSaveFileCopyAs: onSaveFileCopyAs,
         ),
       ],
     );
@@ -1705,6 +1719,7 @@ class _AttachmentList extends StatelessWidget {
     this.onShareFile,
     this.onExtractArchiveFile,
     this.onDownloadFile,
+    this.onSaveFileCopyAs,
   });
 
   final List<PbAttachmentListItemData> attachments;
@@ -1714,6 +1729,7 @@ class _AttachmentList extends StatelessWidget {
   final ValueChanged<PbAttachmentListItemData>? onShareFile;
   final ValueChanged<PbAttachmentListItemData>? onExtractArchiveFile;
   final ValueChanged<PbAttachmentListItemData>? onDownloadFile;
+  final ValueChanged<PbAttachmentListItemData>? onSaveFileCopyAs;
 
   @override
   Widget build(BuildContext context) {
@@ -1723,10 +1739,11 @@ class _AttachmentList extends StatelessWidget {
           PbSidepaneFileListItem(
             data: attachment,
             onPressed: () => onPreviewFile(attachment),
-            onAskAgent: onAskFileAgent == null ? null : () => onAskFileAgent!(attachment),
+            onAskAgent: !attachment.showAskAgentAction || onAskFileAgent == null ? null : () => onAskFileAgent!(attachment),
             onShare: onShareFile == null ? null : () => onShareFile!(attachment),
             onExtract: onExtractArchiveFile == null || !pbCanExtractArchive(attachment) ? null : () => onExtractArchiveFile!(attachment),
             onDownload: onDownloadFile == null ? null : () => onDownloadFile!(attachment),
+            onSaveCopyAs: !attachment.showSaveCopyAsAction || onSaveFileCopyAs == null ? null : () => onSaveFileCopyAs!(attachment),
           ),
       ],
       emptyState: emptyState,
@@ -1905,7 +1922,7 @@ class _PbAttachmentCardState extends State<PbAttachmentCard> {
                       children: [
                         Text(
                           widget.data.title,
-                          style: PowerboardsTypography.button.copyWith(color: widget.emptyState ? PbColors.textMuted : null),
+                          style: widget.emptyState ? PowerboardsTypography.listEmptyState : PowerboardsTypography.button,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -2006,12 +2023,24 @@ enum _FilePreviewContentMode {
 }
 
 class PbFilePreviewSource {
-  const PbFilePreviewSource({this.child, this.childBuilder, this.loadText, this.saveText, this.sourceKey});
+  const PbFilePreviewSource({
+    this.child,
+    this.childBuilder,
+    this.loadText,
+    this.saveText,
+    this.headerLeading,
+    this.hideToolbarActions = false,
+    this.onSave,
+    this.sourceKey,
+  });
 
   final Widget? child;
   final Widget Function(bool fullscreen)? childBuilder;
   final Future<String> Function()? loadText;
   final Future<void> Function(String text)? saveText;
+  final Widget? headerLeading;
+  final bool hideToolbarActions;
+  final Future<void> Function()? onSave;
   final Object? sourceKey;
 
   Widget? buildChild(bool fullscreen) {
@@ -2031,12 +2060,15 @@ class PbFilePreviewPane extends StatefulWidget {
     this.child,
     this.previewContentChild,
     this.loadText,
+    this.headerLeading,
+    this.hideToolbarActions = false,
     this.onAskAgent,
     this.onShare,
     this.showExtractArchive = false,
     this.extractArchiveDisabled = false,
     this.onExtractArchive,
     this.onDownload,
+    this.onSave,
     this.onToggleFullscreen,
     this.onClose,
     this.onSaveRequested,
@@ -2057,12 +2089,15 @@ class PbFilePreviewPane extends StatefulWidget {
   final Widget? child;
   final Widget? previewContentChild;
   final Future<String> Function()? loadText;
+  final Widget? headerLeading;
+  final bool hideToolbarActions;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
   final bool showExtractArchive;
   final bool extractArchiveDisabled;
   final VoidCallback? onExtractArchive;
   final VoidCallback? onDownload;
+  final Future<void> Function()? onSave;
   final VoidCallback? onToggleFullscreen;
   final VoidCallback? onClose;
   final Future<void> Function()? onSaveRequested;
@@ -2154,6 +2189,24 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
     widget.onDraftSaved?.call();
   }
 
+  Future<void> _saveSource() async {
+    final save = widget.onSave;
+    if (save == null || _saving) {
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await save();
+    } catch (_) {
+      // The source owns any user-facing save error state.
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final file = widget.file;
@@ -2161,8 +2214,10 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
     final previewState = file.previewState;
     final hasPreviewState = previewState != PbAttachmentPreviewState.none;
     final contentMode = _FilePreviewContentMode.fromFile(file);
-    final showHeaderSaveAction =
+    final showEditorHeaderSaveAction =
         widget.child == null && widget.previewContentChild == null && !hasPreviewState && contentMode.hasHeaderSaveAction;
+    final showSourceHeaderSaveAction = widget.onSave != null;
+    final showHeaderSaveAction = showEditorHeaderSaveAction || showSourceHeaderSaveAction;
     final edgeToEdgeSurface =
         !hasPreviewState && (widget.child != null || widget.previewContentChild != null || contentMode.usesEdgeToEdgeSurface);
     final effectiveDirty = _effectiveDirty;
@@ -2200,7 +2255,7 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
                     : null,
                 child: Row(
                   children: [
-                    PbSvgIcon(assetName: file.iconAssetName, size: 24, color: file.iconColor),
+                    widget.headerLeading ?? PbSvgIcon(assetName: file.iconAssetName, size: 24, color: file.iconColor),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -2212,17 +2267,23 @@ class _PbFilePreviewPaneState extends State<PbFilePreviewPane> {
                     ),
                     const SizedBox(width: 7),
                     if (showHeaderSaveAction) ...[
-                      _FilePreviewHeaderSaveAction(enabled: effectiveDirty, saving: _saving, onPressed: _saveEdits),
+                      _FilePreviewHeaderSaveAction(
+                        enabled: showSourceHeaderSaveAction || effectiveDirty,
+                        saving: _saving,
+                        onPressed: showSourceHeaderSaveAction ? _saveSource : _saveEdits,
+                      ),
                       const SizedBox(width: 6),
                     ],
-                    _FilePreviewToolbar(
-                      state: toolbarState,
-                      onAskAgent: widget.onAskAgent,
-                      showExtractArchive: widget.showExtractArchive || widget.onExtractArchive != null,
-                      extractArchiveDisabled: widget.extractArchiveDisabled,
-                      onExtractArchive: widget.onExtractArchive,
-                      onDownload: widget.onDownload,
-                    ),
+                    if (!widget.hideToolbarActions)
+                      _FilePreviewToolbar(
+                        state: toolbarState,
+                        showAskAgent: file.showAskAgentAction,
+                        onAskAgent: widget.onAskAgent,
+                        showExtractArchive: widget.showExtractArchive || widget.onExtractArchive != null,
+                        extractArchiveDisabled: widget.extractArchiveDisabled,
+                        onExtractArchive: widget.onExtractArchive,
+                        onDownload: widget.onDownload,
+                      ),
                     if (!widget.hideFullscreenToggle)
                       _GhostIcon(assetName: fullscreen ? 'minimize-2' : 'maximize-2', size: 40, onPressed: widget.onToggleFullscreen),
                     _GhostIcon(assetName: 'x', size: 40, onPressed: widget.onClose),
@@ -2509,23 +2570,6 @@ void _setEditorTextPreservingSelection(TextEditingController controller, String 
   }
 
   controller.value = TextEditingValue(text: text, selection: nextSelection, composing: TextRange.empty);
-}
-
-void _setLapceEditorTextPreservingSelection(lapce.LapceEditorController controller, String text) {
-  if (controller.text == text) {
-    return;
-  }
-
-  final region = controller.selection.lastInserted;
-  controller.setText(text);
-  controller.setSelection(
-    region == null
-        ? lapce.Selection.caret(lapce.TextOffset(text.length))
-        : lapce.Selection.region(
-            lapce.TextOffset(region.start.value.clamp(0, text.length)),
-            lapce.TextOffset(region.end.value.clamp(0, text.length)),
-          ),
-  );
 }
 
 int _lineStartForOffset(String text, int offset) {
@@ -2958,45 +3002,66 @@ class _CodeFilePreview extends StatefulWidget {
 
 class _CodeFilePreviewState extends State<_CodeFilePreview> {
   static const _codePreviewSurfaceKey = ValueKey('code-preview-surface');
+  static const _codeGutterWidth = 28.0;
+  static const _codeGutterGap = 12.0;
+  static const _averageCodeGlyphWidth = 9.0;
 
-  late final lapce.LapceEditorController _controller;
-  late final lapce.TreeSitterSyntaxHighlighter _syntaxHighlighter;
+  late final _CodeTextEditingController _controller;
   final FocusNode _focusNode = FocusNode();
   final ScrollController _verticalController = ScrollController();
   final ScrollController _horizontalController = ScrollController();
   bool _loading = false;
   bool _hovered = false;
-  bool _settingSourceText = false;
+  bool _wordWrap = false;
   Object? _loadError;
   int _loadGeneration = 0;
+
+  int get _lineCount => _controller.text.split('\n').length;
+
+  int get _longestLineLength {
+    return _controller.text.split('\n').fold(0, (longest, line) => math.max(longest, line.length));
+  }
+
+  List<double> _lineHeights({
+    required TextStyle style,
+    required double lineHeight,
+    required double codeWidth,
+    required TextDirection textDirection,
+    required TextScaler textScaler,
+  }) {
+    if (!_wordWrap) {
+      return List<double>.filled(_lineCount, lineHeight);
+    }
+
+    return _controller.text
+        .split('\n')
+        .map((line) {
+          if (line.isEmpty) {
+            return lineHeight;
+          }
+
+          final painter = TextPainter(
+            text: TextSpan(text: line, style: style),
+            textDirection: textDirection,
+            textScaler: textScaler,
+          )..layout(maxWidth: codeWidth);
+          final height = math.max(lineHeight, painter.height);
+          painter.dispose();
+          return height;
+        })
+        .toList(growable: false);
+  }
 
   @override
   void initState() {
     super.initState();
-    _controller = lapce.LapceEditorController()..addListener(_handleChanged);
-    _controller.buffer.indentStyle = const lapce.IndentStyle.spaces(2);
-    _syntaxHighlighter = lapce.TreeSitterSyntaxHighlighter(
-      controller: _controller,
-      language: lapce.LapceLanguage.fromPath(widget.file.path ?? widget.file.title),
-      theme: const lapce.SyntaxHighlightTheme({
-        'attribute': TextStyle(color: Color(0xFF93C5FD)),
-        'boolean': TextStyle(color: Color(0xFFFDBA74)),
-        'comment': TextStyle(color: Color(0xFF6B7280)),
-        'constant': TextStyle(color: Color(0xFFFDBA74)),
-        'constructor': TextStyle(color: Color(0xFF7DD3FC)),
-        'function': TextStyle(color: Color(0xFFFDE68A)),
-        'keyword': TextStyle(color: Color(0xFFC084FC)),
-        'number': TextStyle(color: Color(0xFFF0ABFC)),
-        'property': TextStyle(color: Color(0xFF93C5FD)),
-        'string': TextStyle(color: Color(0xFFA7F3D0)),
-        'type': TextStyle(color: Color(0xFF7DD3FC)),
-      }),
-    );
+    _controller = _CodeTextEditingController(text: '');
+    _focusNode.onKeyEvent = _handleKeyEvent;
     final draftText = widget.draftText;
     if (draftText == null) {
       _loadText();
     } else {
-      _replaceSourceText(draftText);
+      _controller.text = draftText;
     }
   }
 
@@ -3005,14 +3070,13 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
     super.didUpdateWidget(oldWidget);
 
     if (_previewTextSourceChanged(oldWidget.file, widget.file, oldWidget.sourceKey, widget.sourceKey)) {
-      _syntaxHighlighter.language = lapce.LapceLanguage.fromPath(widget.file.path ?? widget.file.title);
       _loadText();
       return;
     }
 
     final draftText = widget.draftText;
     if (draftText != null && draftText != oldWidget.draftText) {
-      _replaceSourceText(draftText);
+      _setEditorTextPreservingSelection(_controller, draftText);
     }
   }
 
@@ -3024,7 +3088,7 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
       setState(() {
         _loading = false;
         _loadError = null;
-        _replaceSourceText(_CodeFilePreview._plainTextFor(widget.file.title));
+        _setEditorTextPreservingSelection(_controller, _CodeFilePreview._plainTextFor(widget.file.title));
       });
       return;
     }
@@ -3041,7 +3105,7 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
       }
       setState(() {
         _loading = false;
-        _replaceSourceText(text);
+        _setEditorTextPreservingSelection(_controller, text);
       });
     } catch (error) {
       if (!mounted || generation != _loadGeneration) {
@@ -3056,8 +3120,6 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
 
   @override
   void dispose() {
-    _syntaxHighlighter.dispose();
-    _controller.removeListener(_handleChanged);
     _horizontalController.dispose();
     _verticalController.dispose();
     _focusNode.dispose();
@@ -3065,27 +3127,75 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
     super.dispose();
   }
 
-  void _replaceSourceText(String text) {
-    _settingSourceText = true;
-    try {
-      _setLapceEditorTextPreservingSelection(_controller, text);
-      _controller.buffer.indentStyle = const lapce.IndentStyle.spaces(2);
-    } finally {
-      _settingSourceText = false;
-    }
+  void _handleChanged(String value) {
+    widget.onEdited(value);
+    setState(() {});
   }
 
-  void _handleChanged() {
-    if (_settingSourceText) {
-      return;
+  void _setWordWrap(bool enabled) {
+    if (enabled && _horizontalController.hasClients) {
+      _horizontalController.jumpTo(0);
     }
-    widget.onEdited(_controller.text);
+    setState(() => _wordWrap = enabled);
+  }
+
+  Widget _buildWordWrapControl() {
+    return MergeSemantics(
+      key: const ValueKey('code-preview-word-wrap-control'),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: Checkbox(
+              key: const ValueKey('code-preview-word-wrap-checkbox'),
+              value: _wordWrap,
+              onChanged: (value) => _setWordWrap(value ?? false),
+              activeColor: PbColors.customBlue,
+              checkColor: PbColors.textInverse,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+              side: BorderSide(color: _wordWrap ? PbColors.customBlue : _CodeTokenTone.comment.color, width: 1.5),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            mouseCursor: SystemMouseCursors.click,
+            onTap: () => _setWordWrap(!_wordWrap),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                _wordWrap ? 'Word wrap: On' : 'Word wrap: Off',
+                style: PowerboardsTypography.button.copyWith(color: _CodeTokenTone.plain.color),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (!_isEditorTabEvent(event)) {
+      return KeyEventResult.ignored;
+    }
+
+    final nextValue = HardwareKeyboard.instance.isShiftPressed
+        ? _outdentSelectedLines(_controller.value)
+        : _insertEditorIndent(_controller.value);
+    _controller.value = nextValue;
+    widget.onEdited(nextValue.text);
+    setState(() {});
+    return KeyEventResult.handled;
   }
 
   @override
   Widget build(BuildContext context) {
-    final padding = widget.fullscreen ? const EdgeInsets.fromLTRB(22, 40, 22, 36) : const EdgeInsets.fromLTRB(10, 24, 10, 22);
+    final codePadding = widget.fullscreen ? const EdgeInsets.fromLTRB(22, 40, 22, 36) : const EdgeInsets.fromLTRB(10, 24, 10, 22);
     final codeStyle = PowerboardsTypography.customCodeDisplay.copyWith(color: _CodeTokenTone.plain.color);
+    final lineHeight = (codeStyle.fontSize ?? 15) * (codeStyle.height ?? (22 / 15));
 
     return MouseRegion(
       cursor: SystemMouseCursors.text,
@@ -3107,42 +3217,126 @@ class _CodeFilePreviewState extends State<_CodeFilePreview> {
                   ),
                 ),
               )
-            : ScrollConfiguration(
-                behavior: _editorScrollBehavior,
-                child: Scrollbar(
-                  key: const ValueKey('code-preview-horizontal-scrollbar'),
-                  controller: _horizontalController,
-                  thumbVisibility: _hovered,
-                  interactive: true,
-                  notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
-                  child: Scrollbar(
-                    key: const ValueKey('code-preview-vertical-scrollbar'),
-                    controller: _verticalController,
-                    thumbVisibility: _hovered,
-                    interactive: true,
-                    notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
-                    child: lapce.LapceEditor(
-                      key: const ValueKey('code-editor-selection-theme'),
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      scrollController: _verticalController,
-                      horizontalScrollController: _horizontalController,
-                      showGutter: true,
-                      placeholder: 'Type here',
-                      syntaxHighlightProvider: _syntaxHighlighter,
-                      theme: lapce.LapceEditorTheme(
-                        background: PbColors.customCodeSurface,
-                        foreground: _CodeTokenTone.plain.color,
-                        caret: PbColors.textInverse,
-                        selection: _codeEditorSelectionColor,
-                        currentLine: const Color(0x142563EB),
-                        placeholder: _CodeTokenTone.comment.color,
-                        padding: padding,
-                        textStyle: codeStyle,
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableCodeWidth = math.max(
+                    1.0,
+                    constraints.maxWidth - codePadding.horizontal - _codeGutterWidth - _codeGutterGap,
+                  );
+                  final codeWidth = _wordWrap
+                      ? availableCodeWidth
+                      : math.max(math.max(availableCodeWidth, 320.0), (_longestLineLength * _averageCodeGlyphWidth) + 22.0);
+                  final lineHeights = _lineHeights(
+                    style: codeStyle,
+                    lineHeight: lineHeight,
+                    codeWidth: codeWidth,
+                    textDirection: Directionality.of(context),
+                    textScaler: MediaQuery.textScalerOf(context),
+                  );
+
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: ScrollConfiguration(
+                          behavior: _editorScrollBehavior,
+                          child: Scrollbar(
+                            key: const ValueKey('code-preview-horizontal-scrollbar'),
+                            controller: _horizontalController,
+                            thumbVisibility: _hovered && !_wordWrap,
+                            interactive: true,
+                            notificationPredicate: (notification) => notification.metrics.axis == Axis.horizontal,
+                            child: Scrollbar(
+                              key: const ValueKey('code-preview-vertical-scrollbar'),
+                              controller: _verticalController,
+                              thumbVisibility: _hovered,
+                              interactive: true,
+                              notificationPredicate: (notification) => notification.metrics.axis == Axis.vertical,
+                              child: SingleChildScrollView(
+                                controller: _verticalController,
+                                child: Padding(
+                                  padding: codePadding,
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      SizedBox(
+                                        key: const ValueKey('code-preview-line-number-gutter'),
+                                        width: _codeGutterWidth,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            for (var index = 0; index < _lineCount; index++)
+                                              SizedBox(
+                                                key: ValueKey('code-preview-line-number-${index + 1}'),
+                                                height: lineHeights[index],
+                                                child: Text(
+                                                  '${index + 1}',
+                                                  textAlign: TextAlign.right,
+                                                  style: codeStyle.copyWith(color: _CodeTokenTone.comment.color),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: _codeGutterGap),
+                                      Expanded(
+                                        child: SingleChildScrollView(
+                                          controller: _horizontalController,
+                                          scrollDirection: Axis.horizontal,
+                                          physics: _wordWrap ? const NeverScrollableScrollPhysics() : null,
+                                          child: TextSelectionTheme(
+                                            key: const ValueKey('code-editor-selection-theme'),
+                                            data: const TextSelectionThemeData(
+                                              cursorColor: PbColors.textInverse,
+                                              selectionColor: _codeEditorSelectionColor,
+                                              selectionHandleColor: Color(0xFF5EA2FF),
+                                            ),
+                                            child: SizedBox(
+                                              width: codeWidth,
+                                              child: TextField(
+                                                controller: _controller,
+                                                focusNode: _focusNode,
+                                                cursorColor: PbColors.textInverse,
+                                                enableInteractiveSelection: true,
+                                                keyboardType: TextInputType.multiline,
+                                                minLines: _lineCount,
+                                                maxLines: null,
+                                                onChanged: _handleChanged,
+                                                style: codeStyle,
+                                                decoration: InputDecoration(
+                                                  border: InputBorder.none,
+                                                  contentPadding: EdgeInsets.zero,
+                                                  hintText: 'Type here',
+                                                  hintStyle: codeStyle.copyWith(color: _CodeTokenTone.comment.color),
+                                                  isCollapsed: true,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
+                      Container(
+                        key: const ValueKey('code-preview-footer'),
+                        width: double.infinity,
+                        height: 48,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        alignment: Alignment.centerLeft,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF111827),
+                          border: Border(top: BorderSide(color: Color(0xFF334155))),
+                        ),
+                        child: _buildWordWrapControl(),
+                      ),
+                    ],
+                  );
+                },
               ),
       ),
     );
@@ -3260,6 +3454,12 @@ enum _ImagePreviewFitMode {
   final String label;
 }
 
+class PbImagePreviewAvailabilityNotification extends Notification {
+  const PbImagePreviewAvailabilityNotification({required this.available});
+
+  final bool available;
+}
+
 class _ImageFilePreview extends StatefulWidget {
   const _ImageFilePreview({this.child});
 
@@ -3281,6 +3481,7 @@ class _ImageFilePreviewState extends State<_ImageFilePreview> {
   int _zoomIndex = _defaultZoomIndex;
   bool _menuOpen = false;
   bool _spacePanActive = false;
+  bool _contentAvailable = true;
   Offset _panOffset = Offset.zero;
   final FocusNode _focusNode = FocusNode(debugLabel: 'Image preview pan');
   final GlobalKey _viewportMeasureKey = GlobalKey();
@@ -3393,90 +3594,105 @@ class _ImageFilePreviewState extends State<_ImageFilePreview> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: Container(
-            color: PbColors.surfacePanel,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final available = Size(constraints.maxWidth, constraints.maxHeight);
-                final imageSize = _contentSize(available);
-                final canPan = _canPan(available, imageSize);
-                final panOffset = _clampPanOffset(canPan ? _panOffset : Offset.zero, available, imageSize);
-                _syncStoredPanOffset(panOffset);
+    return NotificationListener<PbImagePreviewAvailabilityNotification>(
+      onNotification: (notification) {
+        if (_contentAvailable != notification.available) {
+          setState(() {
+            _contentAvailable = notification.available;
+            if (!_contentAvailable) {
+              _menuOpen = false;
+              _panOffset = Offset.zero;
+            }
+          });
+        }
+        return true;
+      },
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              color: PbColors.surfacePanel,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final available = Size(constraints.maxWidth, constraints.maxHeight);
+                  final imageSize = _contentSize(available);
+                  final canPan = _contentAvailable && _canPan(available, imageSize);
+                  final panOffset = _clampPanOffset(canPan ? _panOffset : Offset.zero, available, imageSize);
+                  _syncStoredPanOffset(panOffset);
 
-                return Focus(
-                  focusNode: _focusNode,
-                  onKeyEvent: _handleKeyEvent,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapDown: (_) => _focusNode.requestFocus(),
-                    onPanStart: canPan ? (_) => _focusNode.requestFocus() : null,
-                    onPanUpdate: canPan
-                        ? (details) {
-                            final viewportSize = _measuredViewportSize(available);
-                            setState(() {
-                              _panOffset = _clampPanOffset(_panOffset + details.delta, viewportSize, imageSize);
-                            });
-                          }
-                        : null,
-                    child: MouseRegion(
-                      cursor: canPan ? (_spacePanActive ? SystemMouseCursors.grabbing : SystemMouseCursors.grab) : MouseCursor.defer,
-                      child: SizedBox(
-                        key: _imageViewportKey,
-                        width: available.width,
-                        height: available.height,
-                        child: ClipRect(
-                          key: _viewportMeasureKey,
-                          child: OverflowBox(
-                            minWidth: 0,
-                            minHeight: 0,
-                            maxWidth: double.infinity,
-                            maxHeight: double.infinity,
-                            alignment: Alignment.center,
-                            child: Transform.translate(
-                              key: _imagePanTransformKey,
-                              offset: panOffset,
-                              child: SizedBox(
-                                width: imageSize.width,
-                                height: imageSize.height,
-                                child: widget.child == null
-                                    ? CustomPaint(key: _imageSurfaceKey, painter: _SampleImagePainter())
-                                    : DecoratedBox(
-                                        key: _imageSurfaceKey,
-                                        decoration: const BoxDecoration(color: PbColors.surfacePanel),
-                                        child: widget.child,
-                                      ),
+                  return Focus(
+                    focusNode: _focusNode,
+                    onKeyEvent: _contentAvailable ? _handleKeyEvent : null,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapDown: _contentAvailable ? (_) => _focusNode.requestFocus() : null,
+                      onPanStart: canPan ? (_) => _focusNode.requestFocus() : null,
+                      onPanUpdate: canPan
+                          ? (details) {
+                              final viewportSize = _measuredViewportSize(available);
+                              setState(() {
+                                _panOffset = _clampPanOffset(_panOffset + details.delta, viewportSize, imageSize);
+                              });
+                            }
+                          : null,
+                      child: MouseRegion(
+                        cursor: canPan ? (_spacePanActive ? SystemMouseCursors.grabbing : SystemMouseCursors.grab) : MouseCursor.defer,
+                        child: SizedBox(
+                          key: _imageViewportKey,
+                          width: available.width,
+                          height: available.height,
+                          child: ClipRect(
+                            key: _viewportMeasureKey,
+                            child: OverflowBox(
+                              minWidth: 0,
+                              minHeight: 0,
+                              maxWidth: double.infinity,
+                              maxHeight: double.infinity,
+                              alignment: Alignment.center,
+                              child: Transform.translate(
+                                key: _imagePanTransformKey,
+                                offset: panOffset,
+                                child: SizedBox(
+                                  width: imageSize.width,
+                                  height: imageSize.height,
+                                  child: widget.child == null
+                                      ? CustomPaint(key: _imageSurfaceKey, painter: _SampleImagePainter())
+                                      : DecoratedBox(
+                                          key: _imageSurfaceKey,
+                                          decoration: const BoxDecoration(color: PbColors.surfacePanel),
+                                          child: widget.child,
+                                        ),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
-        ),
-        Positioned(
-          left: 18,
-          right: 18,
-          bottom: 18,
-          child: _ImagePreviewControlBar(
-            fitMode: _fitMode,
-            label: _controlLabel,
-            menuOpen: _menuOpen,
-            canZoomOut: _canZoomOut,
-            canZoomIn: _canZoomIn,
-            onZoomOut: _zoomOut,
-            onZoomIn: _zoomIn,
-            onMenuOpenChanged: (open) => setState(() => _menuOpen = open),
-            onFitModeSelected: _setFitMode,
-          ),
-        ),
-      ],
+          if (_contentAvailable)
+            Positioned(
+              left: 18,
+              right: 18,
+              bottom: 18,
+              child: _ImagePreviewControlBar(
+                fitMode: _fitMode,
+                label: _controlLabel,
+                menuOpen: _menuOpen,
+                canZoomOut: _canZoomOut,
+                canZoomIn: _canZoomIn,
+                onZoomOut: _zoomOut,
+                onZoomIn: _zoomIn,
+                onMenuOpenChanged: (open) => setState(() => _menuOpen = open),
+                onFitModeSelected: _setFitMode,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -4561,6 +4777,7 @@ class _FilePreviewToolbarState {
 class _FilePreviewToolbar extends StatelessWidget {
   const _FilePreviewToolbar({
     required this.state,
+    this.showAskAgent = true,
     this.onAskAgent,
     this.showExtractArchive = false,
     this.extractArchiveDisabled = false,
@@ -4569,6 +4786,7 @@ class _FilePreviewToolbar extends StatelessWidget {
   });
 
   final _FilePreviewToolbarState state;
+  final bool showAskAgent;
   final VoidCallback? onAskAgent;
   final bool showExtractArchive;
   final bool extractArchiveDisabled;
@@ -4586,7 +4804,7 @@ class _FilePreviewToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final availableActions = [
-      _FilePreviewAction.askAgent,
+      if (showAskAgent) _FilePreviewAction.askAgent,
       if (showExtractArchive || onExtractArchive != null) _FilePreviewAction.extract,
       _FilePreviewAction.download,
     ];
@@ -4612,7 +4830,7 @@ class _FilePreviewToolbar extends StatelessWidget {
             PbSidepaneItemMenu(
               size: 40,
               panelBuilder: (closeMenu) => PbFilePreviewPaneOptionsMenu(
-                showAskAgent: state.isInMenu(_FilePreviewAction.askAgent),
+                showAskAgent: showAskAgent && state.isInMenu(_FilePreviewAction.askAgent),
                 showShare: false,
                 showExtract: (showExtractArchive || onExtractArchive != null) && state.isInMenu(_FilePreviewAction.extract),
                 showDownload: state.isInMenu(_FilePreviewAction.download),

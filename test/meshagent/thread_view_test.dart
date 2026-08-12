@@ -16,6 +16,7 @@ import 'package:powerboards/meshagent/desktop_chat_attach_button.dart';
 import 'package:powerboards/meshagent/folder_chat_context.dart';
 import 'package:powerboards/meshagent/mobile_chat_attach_button.dart';
 import 'package:powerboards/meshagent/thread_view.dart';
+import 'package:powerboards/powerboards_ui/v1/components/files/pb_file_select_dialog.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/components/chat/pb_folder_thread_attachment_card.dart';
 import 'package:powerboards/settings/ui_mode.dart';
@@ -251,6 +252,60 @@ void main() {
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [nestedFolder], attachmentPaths: [nestedFolder]), isTrue);
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [rootFolder]), isTrue);
     expect(powerboardsComposerAttachmentSeedMatchesAttachmentPaths(seedPaths: [rootFolder], attachmentPaths: [nestedFolder]), isFalse);
+  });
+
+  testWidgets('V1 file reference loading waits for the room identity', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.reset);
+    final previousMode = powerboardsUiModeSignal.value;
+    powerboardsUiModeSignal.value = PowerboardsUiMode.v1;
+    addTearDown(() => powerboardsUiModeSignal.value = previousMode);
+
+    final pair = _ProtocolPair();
+    var registryDownloadRequested = false;
+    pair.serverProtocol.start(
+      onMessage: (protocol, messageId, type, data) async {
+        if (type != 'room.invoke_tool') {
+          return;
+        }
+        final request = unpackMessage(data).header;
+        if (request['toolkit'] != 'storage' || request['tool'] != 'download') {
+          return;
+        }
+        registryDownloadRequested = true;
+        await protocol.send('__response__', ErrorContent(text: 'registry not found', code: 404).pack(), id: messageId);
+      },
+    );
+
+    final room = RoomClient(protocolFactory: pair.clientProtocolFactory);
+    final startFuture = room.start();
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      room.dispose();
+      await pair.dispose();
+    });
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        child: Scaffold(
+          body: SizedBox.expand(child: _ThreadViewHarness(room: room)),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(registryDownloadRequested, isFalse);
+
+    await _sendRoomReady(pair.serverProtocol);
+    await startFuture;
+    for (var attempt = 0; attempt < 20 && !registryDownloadRequested; attempt += 1) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+
+    expect(registryDownloadRequested, isTrue);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
   });
 
   test('folder and file chat links dispatch to Files navigation and file preview', () {
@@ -635,6 +690,44 @@ void main() {
     expect(find.text('Upload a file...'), findsOneWidget);
     expect(find.text('Add from room...'), findsOneWidget);
     expect(find.text('MCP'), findsNothing);
+  });
+
+  testWidgets('v1 desktop Add from room opens the migrated file select dialog', (tester) async {
+    final room = RoomClient(protocolFactory: () => Protocol(channel: _NoopProtocolChannel()));
+    addTearDown(room.dispose);
+
+    final controller = ChatThreadController(room: room);
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _buildResponsiveTestApp(
+        mediaQueryData: const MediaQueryData(size: Size(1024, 768)),
+        child: Scaffold(
+          body: Center(
+            child: PowerboardsDesktopChatAttachButton(
+              controller: controller,
+              useV1Menu: true,
+              triggerBuilder: (context, onPressed) => TextButton(onPressed: onPressed, child: const Text('Open attach menu')),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open attach menu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.text('Add from room...'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.byType(PbFileSelectDialog), findsOneWidget);
+    expect(find.text('Select files'), findsOneWidget);
+    expect(find.text('Attach files from this room'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(PbFileSelectDialog), findsNothing);
   });
 
   testWidgets('mobile thread empty state shows the mobile action pill row when keyboard is down', (tester) async {

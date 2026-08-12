@@ -7,13 +7,23 @@ import 'pb_archive_extract.dart';
 import 'pb_files_data.dart';
 
 class PbFileItemMenu extends StatelessWidget {
-  const PbFileItemMenu({super.key, this.onOpen, this.onAskAgent, this.onShare, this.onExtract, this.onDownload, this.onDismiss});
+  const PbFileItemMenu({
+    super.key,
+    this.onOpen,
+    this.onAskAgent,
+    this.onShare,
+    this.onExtract,
+    this.onDownload,
+    this.onSaveCopyAs,
+    this.onDismiss,
+  });
 
   final VoidCallback? onOpen;
   final VoidCallback? onAskAgent;
   final VoidCallback? onShare;
   final VoidCallback? onExtract;
   final VoidCallback? onDownload;
+  final VoidCallback? onSaveCopyAs;
   final VoidCallback? onDismiss;
 
   @override
@@ -55,6 +65,13 @@ class PbFileItemMenu extends StatelessWidget {
             singleLine: true,
             onPressed: () => _runMenuAction(onDownload, onDismiss),
           ),
+        if (onSaveCopyAs != null)
+          PbMenuOption(
+            title: 'Save a copy as...',
+            leadingIconAssetName: 'folder-symlink',
+            singleLine: true,
+            onPressed: () => _runMenuAction(onSaveCopyAs, onDismiss),
+          ),
       ],
     );
   }
@@ -72,6 +89,7 @@ class PbFilesRowMenu extends StatelessWidget {
     this.showExtract,
     this.onExtract,
     this.onDownload,
+    this.onMoveTo,
     this.onRename,
     this.onDelete,
     this.onDismiss,
@@ -86,6 +104,7 @@ class PbFilesRowMenu extends StatelessWidget {
   final bool? showExtract;
   final VoidCallback? onExtract;
   final VoidCallback? onDownload;
+  final VoidCallback? onMoveTo;
   final VoidCallback? onRename;
   final VoidCallback? onDelete;
   final VoidCallback? onDismiss;
@@ -138,13 +157,20 @@ class PbFilesRowMenu extends StatelessWidget {
               singleLine: true,
               onPressed: () => _runMenuAction(onDownload, onDismiss),
             ),
-          if (onRename != null || onDelete != null) const PbMenuDivider(),
+          if (onRename != null || onMoveTo != null || onDelete != null) const PbMenuDivider(),
           if (onRename != null)
             PbMenuOption(
               title: item.renameActionLabelOverride ?? 'Rename',
               leadingIconAssetName: 'text-cursor',
               singleLine: true,
               onPressed: () => _runMenuAction(onRename, onDismiss),
+            ),
+          if (onMoveTo != null)
+            PbMenuOption(
+              title: 'Move to...',
+              leadingIconAssetName: 'folder-symlink',
+              singleLine: true,
+              onPressed: () => _runMenuAction(onMoveTo, onDismiss),
             ),
           if (onDelete != null)
             PbMenuOption(
@@ -194,13 +220,20 @@ class PbFilesRowMenu extends StatelessWidget {
               singleLine: true,
               onPressed: () => _runMenuAction(onDownload, onDismiss),
             ),
-          if (onRename != null || onDelete != null) const PbMenuDivider(),
+          if (onRename != null || onMoveTo != null || onDelete != null) const PbMenuDivider(),
           if (onRename != null)
             PbMenuOption(
               title: 'Rename',
               leadingIconAssetName: 'text-cursor',
               singleLine: true,
               onPressed: () => _runMenuAction(onRename, onDismiss),
+            ),
+          if (onMoveTo != null)
+            PbMenuOption(
+              title: 'Move to...',
+              leadingIconAssetName: 'folder-symlink',
+              singleLine: true,
+              onPressed: () => _runMenuAction(onMoveTo, onDismiss),
             ),
           if (onDelete != null)
             PbMenuOption(

@@ -15,6 +15,7 @@ class PbDialogFileListItemData {
     this.depth = 1,
     this.enabled = true,
     this.selectionEnabled = true,
+    this.visuallyDisabled = false,
   });
 
   final String id;
@@ -24,6 +25,7 @@ class PbDialogFileListItemData {
   final int depth;
   final bool enabled;
   final bool selectionEnabled;
+  final bool visuallyDisabled;
 }
 
 class PbDialogFileList extends StatefulWidget {
@@ -135,7 +137,7 @@ class _PbDialogFileListState extends State<PbDialogFileList> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: PbColors.borderSoft),
-        color: PbColors.surfacePanel,
+        color: PbColors.dynamicSurfacePanel,
       ),
       child: ClipRRect(borderRadius: BorderRadius.circular(11), child: list),
     );
@@ -201,16 +203,16 @@ class _PbDialogFileListRow extends StatelessWidget {
     final stateful = selected || pressed;
     final effectiveHovered = hovered && interactive;
     final hideDivider = last || stateful || effectiveHovered || beforeActiveRow;
-    final backgroundColor = selected || pressed ? PbColors.customStateSelectedSurface : null;
+    final backgroundColor = selected || pressed ? PbColors.dynamicCustomStateSelectedSurface : null;
     final gradient = effectiveHovered && !stateful
-        ? const LinearGradient(
-            colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+        ? LinearGradient(
+            colors: [PbColors.dynamicSurfacePanel, PbColors.dynamicSurfacePanelSoft],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           )
         : null;
     final borderColor = pressed || selected
-        ? PbColors.customStateSelectedBorder
+        ? PbColors.dynamicCustomStateSelectedBorder
         : effectiveHovered
         ? PbColors.borderSoft
         : Colors.transparent;
@@ -249,24 +251,27 @@ class _PbDialogFileListRow extends StatelessWidget {
             foregroundDecoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: hideDivider ? Colors.transparent : PbColors.borderFaint)),
             ),
-            child: Row(
-              children: [
-                if (showCheckbox) ...[
-                  SizedBox(
-                    width: 28,
-                    child: Center(
-                      child: PbFileSelectionCheckbox(checked: selected, enabled: checkboxEnabled, onPressed: onToggleSelection ?? () {}),
+            child: Opacity(
+              opacity: item.visuallyDisabled ? 0.42 : 1,
+              child: Row(
+                children: [
+                  if (showCheckbox) ...[
+                    SizedBox(
+                      width: 28,
+                      child: Center(
+                        child: PbFileSelectionCheckbox(checked: selected, enabled: checkboxEnabled, onPressed: onToggleSelection ?? () {}),
+                      ),
                     ),
+                    const SizedBox(width: 10),
+                  ],
+                  SizedBox(width: ((item.depth - 1).clamp(0, 6)) * 18.0),
+                  PbSvgIcon(assetName: item.iconAssetName, size: 26, color: item.iconColor),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: PowerboardsTypography.button),
                   ),
-                  const SizedBox(width: 10),
                 ],
-                SizedBox(width: ((item.depth - 1).clamp(0, 6)) * 18.0),
-                PbSvgIcon(assetName: item.iconAssetName, size: 26, color: item.iconColor),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: PowerboardsTypography.button),
-                ),
-              ],
+              ),
             ),
           ),
         ),

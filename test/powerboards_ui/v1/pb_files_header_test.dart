@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_header.dart';
 import 'package:powerboards/powerboards_ui/v1/components/files/pb_files_layout_values.dart';
 import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_button.dart';
+import 'package:powerboards/powerboards_ui/v1/components/primitives/pb_svg_icon.dart';
 import 'package:powerboards/powerboards_ui/v1/theme/pb_colors.dart';
 
 void main() {
@@ -109,6 +111,7 @@ void main() {
     VoidCallback? onPreviewWebServer,
     bool hasSelection = false,
     int selectedCount = 0,
+    VoidCallback? onMoveSelection,
   }) async {
     tester.view.physicalSize = Size(width, 900);
     tester.view.devicePixelRatio = 1;
@@ -144,6 +147,7 @@ void main() {
                 webServerPreviewActive: webServerPreviewActive,
                 onPreviewWebServer: onPreviewWebServer,
                 onClearSelection: () {},
+                onMoveSelection: onMoveSelection,
                 onDeleteSelection: () {},
                 onDownloadSelection: () {},
               ),
@@ -436,6 +440,42 @@ void main() {
     );
 
     expect(find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Ask agent'), findsNothing);
+  });
+
+  testWidgets('files toolbar exposes Move to in Flutter spec order', (tester) async {
+    var moves = 0;
+    await pumpToolbar(
+      tester,
+      width: 900,
+      responsiveMode: PbFilesResponsiveMode.docked,
+      onCreateFolder: () {},
+      onCreateTextFile: () {},
+      onUpload: () {},
+      hasSelection: true,
+      selectedCount: 2,
+      onMoveSelection: () => moves += 1,
+    );
+
+    final moveButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Move to');
+    expect(moveButton, findsOneWidget);
+    expect(tester.widget<PbButton>(moveButton).iconAssetName, 'folder-symlink');
+    expect(
+      find.descendant(
+        of: moveButton,
+        matching: find.byWidgetPredicate((widget) => widget is PbSvgIcon && widget.assetName == 'folder-symlink'),
+      ),
+      findsOneWidget,
+    );
+    await rootBundle.load('lib/powerboards_ui/v1/assets/icons/folder-symlink.svg');
+    final deselectButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Deselect');
+    final downloadButton = find.byWidgetPredicate((widget) => widget is PbButton && widget.label == 'Download');
+    final deleteButton = find.text('Delete');
+    expect(tester.getTopLeft(deselectButton).dx, lessThan(tester.getTopLeft(moveButton).dx));
+    expect(tester.getTopLeft(moveButton).dx, lessThan(tester.getTopLeft(downloadButton).dx));
+    expect(tester.getTopLeft(downloadButton).dx, lessThan(tester.getTopLeft(deleteButton).dx));
+
+    await tester.tap(moveButton);
+    expect(moves, 1);
   });
 
   testWidgets('files toolbar exposes the website install action only at the Files root', (tester) async {

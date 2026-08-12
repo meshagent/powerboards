@@ -64,6 +64,10 @@ class PbResolvedAttachmentMetadata {
     String? path,
     PbAttachmentPreviewState previewState = PbAttachmentPreviewState.none,
     String sizeLabel = '',
+    Object? sourceKey,
+    bool isLoading = false,
+    bool showAskAgentAction = true,
+    bool showSaveCopyAsAction = false,
   }) {
     return PbAttachmentListItemData(
       title: displayTitle,
@@ -72,6 +76,10 @@ class PbResolvedAttachmentMetadata {
       path: path,
       previewState: previewState,
       sizeLabel: sizeLabel,
+      sourceKey: sourceKey,
+      isLoading: isLoading,
+      showAskAgentAction: showAskAgentAction,
+      showSaveCopyAsAction: showSaveCopyAsAction,
     );
   }
 }
@@ -393,6 +401,10 @@ class PbAttachmentListItemData {
     this.path,
     this.previewState = PbAttachmentPreviewState.none,
     this.sizeLabel = '',
+    this.sourceKey,
+    this.isLoading = false,
+    this.showAskAgentAction = true,
+    this.showSaveCopyAsAction = false,
   });
 
   factory PbAttachmentListItemData.fromFileName({
@@ -403,13 +415,25 @@ class PbAttachmentListItemData {
     String? fileTypeKey,
     PbAttachmentPreviewState previewState = PbAttachmentPreviewState.none,
     String sizeLabel = '',
+    Object? sourceKey,
+    bool isLoading = false,
+    bool showAskAgentAction = true,
+    bool showSaveCopyAsAction = false,
   }) {
     return PbResolvedAttachmentMetadata.resolve(
       title: title,
       descriptor: subtitle,
       explicitFileType: fileType,
       explicitFileTypeKey: fileTypeKey,
-    ).toListItemData(path: path, previewState: previewState, sizeLabel: sizeLabel);
+    ).toListItemData(
+      path: path,
+      previewState: previewState,
+      sizeLabel: sizeLabel,
+      sourceKey: sourceKey,
+      isLoading: isLoading,
+      showAskAgentAction: showAskAgentAction,
+      showSaveCopyAsAction: showSaveCopyAsAction,
+    );
   }
 
   final String title;
@@ -418,6 +442,10 @@ class PbAttachmentListItemData {
   final String? path;
   final PbAttachmentPreviewState previewState;
   final String sizeLabel;
+  final Object? sourceKey;
+  final bool isLoading;
+  final bool showAskAgentAction;
+  final bool showSaveCopyAsAction;
 
   PbAttachmentCategory get category => fileType.category;
 

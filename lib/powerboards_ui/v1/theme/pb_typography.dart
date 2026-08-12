@@ -89,6 +89,8 @@ abstract final class PowerboardsTypography {
     color: PbColors.textPrimary,
   );
 
+  static final TextStyle listEmptyState = button.copyWith(color: PbColors.textMuted);
+
   static const TextStyle p = TextStyle(
     fontFamily: fontFamily,
     fontSize: 15,

@@ -49,7 +49,7 @@ class PbFilePreviewStateCard extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 360),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
-        color: PbColors.surfacePanel,
+        color: PbColors.dynamicSurfacePanel,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [BoxShadow(color: Color.fromRGBO(17, 24, 39, 0.03), blurRadius: 16, offset: Offset(0, 8))],
       ),
@@ -122,13 +122,13 @@ class _ArchiveExtractStateCardState extends State<_ArchiveExtractStateCard> {
                 constraints: const BoxConstraints(maxWidth: 360, minHeight: 68),
                 padding: const EdgeInsets.fromLTRB(21, 11, 24, 11),
                 decoration: BoxDecoration(
-                  color: _pressed ? PbColors.customStateSelectedSurface : null,
+                  color: _pressed ? PbColors.dynamicCustomStateSelectedSurface : null,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: _pressed ? PbColors.customStateSelectedBorder : PbColors.borderSoft),
+                  border: Border.all(color: _pressed ? PbColors.dynamicCustomStateSelectedBorder : PbColors.borderSoft),
                   gradient: _pressed
                       ? null
-                      : const LinearGradient(
-                          colors: [PbColors.surfacePanel, PbColors.surfacePanelSoft],
+                      : LinearGradient(
+                          colors: [PbColors.dynamicSurfacePanel, PbColors.dynamicSurfacePanelSoft],
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                         ),
