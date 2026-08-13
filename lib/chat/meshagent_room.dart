@@ -3179,6 +3179,7 @@ class _ResolvedAgentSelection {
 
 class MeshagentRoomState extends State<MeshagentRoom> {
   static const Duration _voiceSessionInstructionToastDuration = Duration(seconds: 5);
+  static const String _turnLlmDelegationBudget = '5';
 
   final ResizableSplitViewController _meetingSplitViewController = ResizableSplitViewController();
   final FileManagerViewController _filesHeaderController = FileManagerViewController();
@@ -3838,12 +3839,45 @@ class MeshagentRoomState extends State<MeshagentRoom> {
       final chatClient = agent_sessions.MessagingChatClient(
         room: widget.room,
         agentName: cacheKey.agentName,
+        llmAuthorizationProvider: (request) => _provideLlmAuthorization(agentName: cacheKey.agentName, request: request),
         threadCreatedPendingStartMatcher: cacheKey.usesV1SessionGuards ? powerboardsV1ThreadCreatedPendingStartMatcher : null,
         deduplicateClientToolRequests: cacheKey.usesV1SessionGuards,
       );
       unawaited(chatClient.start());
       return chatClient;
     });
+  }
+
+  Future<agent_sessions.LlmAuthorization?> _provideLlmAuthorization({
+    required String agentName,
+    required agent_sessions.LlmAuthorizationRequest request,
+  }) async {
+    var availableServices = services.state.value;
+    if (availableServices == null) {
+      await services.refresh();
+      availableServices = services.state.value;
+    }
+    final service = availableServices?.firstWhereOrNull((candidate) => _serviceAgentName(candidate) == agentName);
+    final email = service?.container?.runAs?.email.trim().toLowerCase();
+    if (email == null || email.isEmpty) {
+      return null;
+    }
+
+    final providerName = request.provider?.trim().toLowerCase();
+    final provider = switch (providerName) {
+      'openai' => LlmProvider.openai,
+      'anthropic' => LlmProvider.anthropic,
+      _ => null,
+    };
+    final model = request.model?.trim();
+    final delegation = await getMeshagentClient().connectLlm(
+      projectId: widget.projectId,
+      subject: AccessSubject(type: 'service_account', email: email),
+      maxBudget: _turnLlmDelegationBudget,
+      providers: provider == null ? null : [provider],
+      models: provider == null || model == null || model.isEmpty ? null : ['$providerName/$model'],
+    );
+    return agent_sessions.LlmAuthorization(token: delegation.token, expiresAt: delegation.expiresAt);
   }
 
   String _serviceId(ServiceSpec s) => s.metadata.annotations["meshagent.service.id"] ?? "";
