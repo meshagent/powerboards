@@ -210,6 +210,18 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
     );
   }
 
+  Widget _roomDisabledCard() {
+    return _roomSafeAreaShell(
+      _loadingBody(
+        RoomEndedCard(
+          title: "Room disabled",
+          description: "This room is disabled. An administrator or developer must enable it before anyone can connect.",
+          onReconnect: _reconnect,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ShadToaster(
@@ -230,6 +242,9 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
         retryingBuilder: (context, error) => _withReservedRoomHeader(_connectionProgress(fallbackStatusText: "waiting to retry")),
         connectingBuilder: (context, client) => _withReservedRoomHeader(_connectionProgress(room: client)),
         doneBuilder: (context, error) {
+          if (error is RoomDisabledException || (error is RoomServerException && error.statusCode == 423)) {
+            return _roomDisabledCard();
+          }
           if (_roomWasConnected || error == null) {
             return _roomDisconnectedCard();
           }
