@@ -38,6 +38,9 @@ String? serviceAgentTypeIconAssetName(String? type) {
 }
 
 bool isSupportedServiceType(ServiceSpec service) {
+  if (!service.enabled) {
+    return false;
+  }
   final type = serviceAgentType(service);
   return type == "ChatBot" || type == "VoiceBot" || type == "MeetingTranscriber" || type == "Shell";
 }
