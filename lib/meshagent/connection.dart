@@ -7,6 +7,7 @@ import 'package:powerboards/ui/powerboards_breakpoints.dart';
 
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter/meshagent_flutter.dart';
+import 'package:meshagent_flutter_shadcn/room_idle_disconnect.dart';
 
 import 'package:powerboards/meshagent/loader.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
@@ -20,6 +21,7 @@ import 'package:powerboards/nav/nav.dart';
 import 'package:powerboards/ui/powerboards_back_icon_button.dart';
 import 'package:powerboards/ui/sweep_status_text.dart';
 import 'package:powerboards/ui/main_wrapper.dart';
+import 'package:powerboards/ui/meeting_view.dart';
 
 class MeshagentConnectionResponse {
   MeshagentConnectionResponse({required this.url, required this.token, required this.roomType});
@@ -63,6 +65,8 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   Object _roomConnectionScopeIdentity = Object();
   String _lastConnectionStatusText = _defaultConnectionStatusText;
   bool _roomWasConnected = false;
+  bool _disconnectedForInactivity = false;
+  Duration _roomIdleTimeout = defaultRoomClientIdleTimeout;
 
   @override
   void didUpdateWidget(covariant MeshagentConnectionBuilder oldWidget) {
@@ -72,6 +76,8 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
       _roomConnectionScopeIdentity = Object();
       _lastConnectionStatusText = _defaultConnectionStatusText;
       _roomWasConnected = false;
+      _disconnectedForInactivity = false;
+      _roomIdleTimeout = defaultRoomClientIdleTimeout;
     }
   }
 
@@ -194,13 +200,20 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
   void _reconnect() {
     setState(() {
       _roomWasConnected = false;
+      _disconnectedForInactivity = false;
       _roomConnectionScopeIdentity = Object();
     });
   }
 
   Widget _roomDisconnectedCard() {
     return _roomSafeAreaShell(
-      _loadingBody(RoomEndedCard(title: "Disconnected from room", description: "The room connection has ended.", onReconnect: _reconnect)),
+      _loadingBody(
+        RoomEndedCard(
+          title: _disconnectedForInactivity ? "Disconnected due to inactivity" : "Disconnected from room",
+          description: _disconnectedForInactivity ? "Reconnect when you are ready to continue." : "The room connection has ended.",
+          onReconnect: _reconnect,
+        ),
+      ),
     );
   }
 
@@ -227,10 +240,19 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
     return ShadToaster(
       child: RoomConnectionScope(
         key: _RoomConnectionScopeGlobalKey(_roomConnectionScopeIdentity),
-        authorization: () {
+        authorization: () async {
           _lastConnectionStatusText = _defaultConnectionStatusText;
           _roomWasConnected = false;
+          _disconnectedForInactivity = false;
+          _roomIdleTimeout = defaultRoomClientIdleTimeout;
           final client = getMeshagentClient();
+
+          try {
+            final room = await client.getRoom(projectId: widget.projectId, name: widget.roomName);
+            _roomIdleTimeout = roomClientIdleTimeoutFromAnnotations(room.annotations);
+          } catch (_) {
+            // Connecting can still succeed when room metadata lookup is unavailable.
+          }
 
           return client.connectRoom(projectId: widget.projectId, roomName: widget.roomName);
         },
@@ -251,7 +273,16 @@ class _MeshagentConnectionBuilderState extends State<MeshagentConnectionBuilder>
 
           return _roomConnectionFailedCard();
         },
-        builder: (context, client) => widget.builder(context, client),
+        builder: (context, client) => RoomIdleDisconnectGuard(
+          idleTimeout: _roomIdleTimeout,
+          isMeetingActive: () => Controller.maybeOfType<MeetingViewController>(context)?.state == MeetingViewState.joined,
+          onIdleDisconnect: () {
+            if (!mounted) return;
+            setState(() => _disconnectedForInactivity = true);
+            client.dispose();
+          },
+          child: widget.builder(context, client),
+        ),
       ),
     );
   }
