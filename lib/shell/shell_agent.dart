@@ -88,6 +88,9 @@ class _ShellAgent extends State<ShellAgent> {
         throw StateError("room token unavailable");
       }
       env["OPENAI_API_KEY"] = roomToken;
+      env["ANTHROPIC_API_KEY"] = roomToken;
+      env["GROK_API_KEY"] = roomToken;
+      env["XAI_API_KEY"] = roomToken;
       env["MESHAGENT_TOKEN"] = roomToken;
     }
     return await widget.room.containers.runService(serviceId: widget.service.id!, env: env);
