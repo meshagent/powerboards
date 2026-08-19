@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import 'package:powerboards/ui/adaptive_text_selection_toolbar.dart';
@@ -38,7 +37,7 @@ bool powerboardsUsesMobileFieldLabelStyle(BuildContext context) {
 }
 
 TextStyle powerboardsMobileFieldLabelTextStyle(Color color, {TextStyle? baseStyle}) {
-  return GoogleFonts.inter(textStyle: baseStyle, color: color, fontWeight: FontWeight.w600);
+  return (baseStyle ?? const TextStyle()).copyWith(fontFamily: 'Inter', color: color, fontWeight: FontWeight.w600);
 }
 
 TextStyle powerboardsFieldLabelTextStyle(BuildContext context) {

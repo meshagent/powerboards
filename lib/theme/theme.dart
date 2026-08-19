@@ -1,6 +1,5 @@
 import "package:flutter/foundation.dart";
 import "package:flutter/material.dart";
-import "package:google_fonts/google_fonts.dart";
 import "package:responsive_framework/responsive_framework.dart";
 import "package:shadcn_ui/shadcn_ui.dart";
 
@@ -197,7 +196,7 @@ ShadColorScheme powerboardsShadDarkColorScheme() {
 }
 
 ShadTextTheme powerboardsShadTextTheme() {
-  final base = ShadTextTheme.fromGoogleFont(GoogleFonts.inter);
+  final base = ShadTextTheme(family: 'Inter');
 
   return base.copyWith(
     h1Large: base.h1Large.copyWith(color: shadForeground),
@@ -224,8 +223,8 @@ TextStyle powerboardsInterTextStyle({
   double? height,
   double? letterSpacing,
 }) {
-  return GoogleFonts.inter(
-    textStyle: textStyle,
+  return (textStyle ?? const TextStyle()).copyWith(
+    fontFamily: 'Inter',
     color: color,
     fontWeight: fontWeight,
     fontSize: fontSize,

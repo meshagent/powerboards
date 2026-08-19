@@ -44,7 +44,6 @@ dependencies:
   flutter_spinkit: ^5.2.0
   flutter_web_auth_2: ^5.0.3
   fullscreen_window: ^1.1.0
-  google_fonts: ^6.2.1
   http: ^1.1.0
   image_picker: ^1.0.7
   intl: ^0.20.2
@@ -108,7 +107,6 @@ dependency_overrides:
   flutter_secure_storage_web: ^2.0.0-beta.1
   js: ^0.7.0
   extended_image: ^9.1.0
-  google_fonts: ^6.2.1
   flutter_native_image:
     git: 
       url: https://github.com/brandon-bethke-timu/flutter_native_image
