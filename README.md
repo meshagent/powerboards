@@ -207,8 +207,8 @@ Before building, replace the `--dart-define` values for:
 ARG FLUTTER_IMAGE_PLATFORM=linux/amd64
 FROM --platform=${FLUTTER_IMAGE_PLATFORM} ubuntu:24.04 AS flutter
 
-ARG FLUTTER_VERSION=3.44.6
-ARG FLUTTER_SHA256=a6320fd72e9a2690c08e2a6a70874a30cb120dee7c78f49d2c628bd7c9e20525
+ARG FLUTTER_VERSION=3.47.0
+ARG FLUTTER_SHA256=26cd99d3d94b1367e6b50535a18aeef0282c10a535bbe3ec493534dcdab75296
 ENV PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:${PATH}"
 
 RUN apt-get update \

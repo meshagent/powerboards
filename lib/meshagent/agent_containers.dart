@@ -323,7 +323,7 @@ Future<String?> powerboardsPreserveFormerWebServerFolder({
   try {
     roomClient.start();
     await roomClient.ready;
-    return powerboardsPreserveFormerWebServerFolderInStorage(roomClient.storage, preferredName: baseName);
+    return await powerboardsPreserveFormerWebServerFolderInStorage(roomClient.storage, preferredName: baseName);
   } finally {
     roomClient.dispose();
   }
