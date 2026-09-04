@@ -37,13 +37,12 @@ Middleware corsControlMiddleware() {
 Middleware handleRedirects() {
   return (Handler inner) {
     return (Request request) async {
-      final host = request.headers['host'];
-
-      if (host == null) {
+      if (request.headers['host'] == null) {
         return inner(request);
       }
 
-      if (host == 'localhost' || host.startsWith('localhost:')) {
+      final host = request.requestedUri.host;
+      if (host == 'localhost' || !host.contains('.')) {
         return inner(request);
       }
 

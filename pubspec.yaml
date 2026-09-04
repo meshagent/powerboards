@@ -207,6 +207,14 @@ flutter:
       fonts:
         - asset: lib/powerboards_ui/v1/assets/fonts/DMMono-Regular.ttf
           weight: 400
+    - family: SourceCodePro
+      fonts:
+        - asset: packages/meshagent_flutter_dev/fonts/SourceCodePro-Regular.ttf
+          weight: 400
+        - asset: packages/meshagent_flutter_dev/fonts/SourceCodePro-Medium.ttf
+          weight: 500
+        - asset: packages/meshagent_flutter_dev/fonts/SourceCodePro-Bold.ttf
+          weight: 700
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
