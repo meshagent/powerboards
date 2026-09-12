@@ -30,14 +30,16 @@ enum GrantRole {
     }
   }
 
-  static GrantRole fromGrant(ProjectRoomGrant grant) {
-    if (grant.directRoles.contains('admin')) {
+  static GrantRole fromGrant(ProjectRoomGrant grant) => fromRoles(grant.directRoles);
+
+  static GrantRole fromRoles(Iterable<String> roles) {
+    if (roles.contains('admin')) {
       return GrantRole.owner;
     }
-    if (grant.directRoles.any((role) => role == 'viewer' || role == 'operator' || role == 'developer')) {
+    if (roles.any((role) => role == 'viewer' || role == 'operator' || role == 'developer')) {
       return GrantRole.nonOwner;
     }
-    return grant.directRoles.contains('site_user') ? GrantRole.siteUser : GrantRole.nonOwner;
+    return roles.contains('site_user') ? GrantRole.siteUser : GrantRole.nonOwner;
   }
 }
 
@@ -71,7 +73,19 @@ Future<bool> amIOwnerOfRoom({required RoomClient room}) async {
 
 Future<Map<String, GrantSummary>> roomGrantSummaries({required String projectId, required String roomId}) async {
   final grants = await listRoomGrants(projectId: projectId, roomId: roomId);
-  return {for (final g in grants.where((grant) => grant.subject.type == 'user')) g.subject.id: GrantSummary.fromGrant(g)};
+  return summarizeRoomGrants(grants);
+}
+
+// Policy entries can contain separate relations for the same user, including
+// across pages. Merge them before choosing a display role so a list-only entry
+// cannot overwrite an admin or site-user grant.
+Map<String, GrantSummary> summarizeRoomGrants(Iterable<ProjectRoomGrant> grants) {
+  final rolesByUser = <String, Set<String>>{};
+  for (final grant in grants) {
+    if (grant.subject.type != 'user') continue;
+    rolesByUser.putIfAbsent(grant.subject.id, () => <String>{}).addAll(grant.directRoles);
+  }
+  return {for (final entry in rolesByUser.entries) entry.key: GrantSummary(userId: entry.key, role: GrantRole.fromRoles(entry.value))};
 }
 
 Future<bool> canViewDeveloperLogs({required RoomClient room}) async {
