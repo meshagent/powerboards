@@ -60,9 +60,11 @@ void main() {
               ],
             }),
           );
-        } else if (request.method == 'GET' && request.uri.path == '/accounts/profiles/user-me') {
+        } else if (request.method == 'GET' && request.uri.path == '/accounts/projects/project-1/users/user-me/profile') {
+          expect(request.uri.queryParameters['view'], 'merged');
           request.response.write(jsonEncode({'id': 'user-me', 'email': 'me@example.test', 'first_name': 'Current', 'last_name': 'User'}));
-        } else if (request.method == 'GET' && request.uri.path == '/accounts/profiles/user-other') {
+        } else if (request.method == 'GET' && request.uri.path == '/accounts/projects/project-1/users/user-other/profile') {
+          expect(request.uri.queryParameters['view'], 'merged');
           request.response.write(
             jsonEncode({'id': 'user-other', 'email': 'ada@example.test', 'first_name': 'Ada', 'last_name': 'Lovelace'}),
           );
@@ -130,6 +132,8 @@ void main() {
     expect(find.text('Owner'), findsOneWidget);
     expect(find.text('Member'), findsOneWidget);
     expect(requests, contains('GET /accounts/projects/project-1/iam/room/room-1/policy'));
+    expect(requests, contains('GET /accounts/projects/project-1/users/user-other/profile'));
+    expect(requests.any((request) => request.contains('/accounts/profiles/')), isFalse);
 
     await tester.tap(find.byIcon(LucideIcons.settings));
     await tester.pumpAndSettle();
@@ -245,7 +249,7 @@ void main() {
     await tester.pump();
 
     expect(grantBody, {
-      'subject': {'type': 'user', 'id': '', 'email': 'ada@example.test'},
+      'subject': {'type': 'user', 'email': 'ada@example.test'},
       'roles': ['site_user', 'list'],
       'invite_redirect_url': 'http://app.example.test',
     });

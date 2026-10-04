@@ -49,8 +49,9 @@ class User {
 enum LoadingState { idle, loading, loaded, error }
 
 class UserBuilder extends StatefulWidget {
-  const UserBuilder({super.key, required this.userId, required this.builder});
+  const UserBuilder({super.key, required this.projectId, required this.userId, required this.builder});
 
+  final String projectId;
   final String userId;
   final Widget Function(BuildContext context, User? user, LoadingState state) builder;
 
@@ -65,13 +66,28 @@ class _UserName extends State<UserBuilder> {
   @override
   void initState() {
     super.initState();
+    _load();
+  }
 
+  @override
+  void didUpdateWidget(covariant UserBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.projectId != oldWidget.projectId || widget.userId != oldWidget.userId) {
+      _load();
+    }
+  }
+
+  void _load() {
+    final projectId = widget.projectId;
+    final userId = widget.userId;
+    state = LoadingState.loading;
+    user = null;
     final client = getMeshagentClient();
 
     client
-        .getUserProfile(widget.userId)
+        .getUserProfile(userId, projectId: projectId)
         .then((json) {
-          if (mounted) {
+          if (mounted && projectId == widget.projectId && userId == widget.userId) {
             setState(() {
               state = LoadingState.loaded;
               user = User.fromJson(json);
@@ -79,7 +95,7 @@ class _UserName extends State<UserBuilder> {
           }
         })
         .catchError((error) {
-          if (mounted) {
+          if (mounted && projectId == widget.projectId && userId == widget.userId) {
             setState(() {
               state = LoadingState.error;
             });

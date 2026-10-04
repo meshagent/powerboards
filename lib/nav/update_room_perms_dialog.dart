@@ -264,7 +264,7 @@ class _PermissionDialogState extends State<_PermissionDialog> {
 
   Future<User> _fetchUser(String userId) async {
     final client = getMeshagentClient();
-    final profileJson = await client.getUserProfile(userId);
+    final profileJson = await client.getUserProfile(userId, projectId: widget.projectId);
 
     return User.fromJson(profileJson);
   }
