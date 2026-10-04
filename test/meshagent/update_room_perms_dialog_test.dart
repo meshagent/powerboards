@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meshagent/meshagent.dart';
 import 'package:meshagent_flutter_auth/meshagent_flutter_auth.dart';
+import 'package:meshagent_flutter_shadcn/forms/select_users.dart';
 import 'package:powerboards/meshagent/meshagent.dart';
 import 'package:powerboards/nav/update_room_perms_dialog.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
@@ -28,6 +29,17 @@ class _FakeMeshagentAuth extends MeshagentAuth {
   Map<String, dynamic>? getUser() => user;
 }
 
+Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
+  final stopwatch = Stopwatch()..start();
+  while (!condition()) {
+    if (stopwatch.elapsed > const Duration(seconds: 10)) {
+      fail('The dialog did not finish its request within 10 seconds');
+    }
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.pump();
+  }
+}
+
 void main() {
   LiveTestWidgetsFlutterBinding.ensureInitialized();
   HttpOverrides.global = null;
@@ -35,6 +47,8 @@ void main() {
   testWidgets('room permissions dialog loads direct IAM policy rows and revokes through IAM', (tester) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final requests = <String>[];
+    final profileQueries = <String, Map<String, String>>{};
+    Map<String, dynamic>? revokeBody;
     addTearDown(server.close);
 
     unawaited(
@@ -43,6 +57,7 @@ void main() {
         request.response.headers.contentType = ContentType.json;
 
         if (request.method == 'GET' && request.uri.path == '/accounts/projects/project-1/iam/room/room-1/policy') {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
           request.response.write(
             jsonEncode({
               'resource': {'type': 'room', 'id': 'room-1', 'name': 'demo'},
@@ -61,18 +76,16 @@ void main() {
             }),
           );
         } else if (request.method == 'GET' && request.uri.path == '/accounts/projects/project-1/users/user-me/profile') {
-          expect(request.uri.queryParameters['view'], 'merged');
+          profileQueries['user-me'] = request.uri.queryParameters;
           request.response.write(jsonEncode({'id': 'user-me', 'email': 'me@example.test', 'first_name': 'Current', 'last_name': 'User'}));
         } else if (request.method == 'GET' && request.uri.path == '/accounts/projects/project-1/users/user-other/profile') {
-          expect(request.uri.queryParameters['view'], 'merged');
+          profileQueries['user-other'] = request.uri.queryParameters;
           request.response.write(
             jsonEncode({'id': 'user-other', 'email': 'ada@example.test', 'first_name': 'Ada', 'last_name': 'Lovelace'}),
           );
         } else if (request.method == 'POST' && request.uri.path == '/accounts/projects/project-1/iam/room/room-1/policy:revoke') {
           final body = await utf8.decoder.bind(request).join();
-          expect(jsonDecode(body), {
-            'subject': {'type': 'user', 'id': 'user-other'},
-          });
+          revokeBody = jsonDecode(body) as Map<String, dynamic>;
           request.response.write(jsonEncode({}));
         } else {
           request.response.statusCode = 404;
@@ -122,10 +135,7 @@ void main() {
 
     await tester.tap(find.text('Open'));
     await tester.pump();
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    });
-    await tester.pump();
+    await _pumpUntil(tester, () => find.text('ada@example.test').evaluate().isNotEmpty);
 
     expect(find.text('me@example.test'), findsOneWidget);
     expect(find.text('ada@example.test'), findsOneWidget);
@@ -134,22 +144,28 @@ void main() {
     expect(requests, contains('GET /accounts/projects/project-1/iam/room/room-1/policy'));
     expect(requests, contains('GET /accounts/projects/project-1/users/user-other/profile'));
     expect(requests.any((request) => request.contains('/accounts/profiles/')), isFalse);
+    expect(profileQueries, {
+      'user-me': {'view': 'merged'},
+      'user-other': {'view': 'merged'},
+    });
 
     await tester.tap(find.byIcon(LucideIcons.settings));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Remove'));
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    });
-    await tester.pump();
+    await _pumpUntil(tester, () => find.text('ada@example.test').evaluate().isEmpty);
 
     expect(requests, contains('POST /accounts/projects/project-1/iam/room/room-1/policy:revoke'));
+    expect(revokeBody, {
+      'subject': {'type': 'user', 'id': 'user-other'},
+    });
+    expect(find.text('me@example.test'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('add user dialog grants the selected room role with list permission', (tester) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     Map<String, dynamic>? grantBody;
+    final completedResponses = <String>[];
     addTearDown(server.close);
 
     unawaited(
@@ -189,6 +205,7 @@ void main() {
         }
 
         await request.response.close();
+        completedResponses.add('${request.method} ${request.uri.path}');
       }),
     );
 
@@ -231,10 +248,13 @@ void main() {
 
     await tester.tap(find.text('Open'));
     await tester.pump();
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    });
-    await tester.pump();
+    await _pumpUntil(
+      tester,
+      () =>
+          completedResponses.contains('GET /accounts/projects/project-1/users') &&
+          completedResponses.contains('GET /accounts/projects/project-1/iam/room/room-1/policy') &&
+          tester.widget<SelectUsers>(find.byType(SelectUsers)).projectEmails.contains('ada@example.test'),
+    );
 
     await tester.enterText(find.byType(EditableText).last, 'ada@example.test,');
     await tester.pump();
@@ -243,10 +263,7 @@ void main() {
     await tester.tap(find.text('Site User').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    });
-    await tester.pump();
+    await _pumpUntil(tester, () => find.byType(AddUserDialog).evaluate().isEmpty);
 
     expect(grantBody, {
       'subject': {'type': 'user', 'email': 'ada@example.test'},
