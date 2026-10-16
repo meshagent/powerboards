@@ -1,10 +1,2 @@
-import 'package:flutter/widgets.dart';
-
-class PbFilePreviewMenuScope extends InheritedNotifier<ValueNotifier<bool>> {
-  const PbFilePreviewMenuScope({super.key, required ValueNotifier<bool> notifier, required super.child}) : super(notifier: notifier);
-
-  static bool menuOpen(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<PbFilePreviewMenuScope>();
-    return scope?.notifier?.value ?? false;
-  }
-}
+// Shared with Studio; keep file widgets in the SDK.
+export 'package:meshagent_flutter_shadcn/storage/powerboards/components/files/pb_file_preview_menu_scope.dart';

@@ -1,12 +1,2 @@
-import 'package:flutter/foundation.dart';
-
-class PbNativeFilesDropBinding {
-  PbNativeFilesDropBinding({
-    required bool Function(double x, double y) hitTest,
-    required VoidCallback onEntered,
-    required VoidCallback onExited,
-    required ValueChanged<List<String>> onDropped,
-  });
-
-  void dispose() {}
-}
+// Shared with Studio; keep file widgets in the SDK.
+export 'package:meshagent_flutter_shadcn/storage/powerboards/components/layouts/pb_files_native_drop_stub.dart';

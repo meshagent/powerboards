@@ -1,1 +1,2 @@
-export 'pb_website_preview_frame_stub.dart' if (dart.library.js_interop) 'pb_website_preview_frame_web.dart';
+// Shared with Studio; keep file widgets in the SDK.
+export 'package:meshagent_flutter_shadcn/storage/powerboards/components/files/pb_website_preview_frame.dart';
