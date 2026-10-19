@@ -1,8 +1,2 @@
-class PbFilesPanelPadding {
-  const PbFilesPanelPadding({required this.left, required this.right});
-
-  final double left;
-  final double right;
-}
-
-enum PbFilesResponsiveMode { docked, overlay, mobile }
+// Shared with Studio; keep file widgets in the SDK.
+export 'package:meshagent_flutter_shadcn/storage/powerboards/components/files/pb_files_layout_values.dart';
