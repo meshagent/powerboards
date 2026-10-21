@@ -25,6 +25,8 @@ import 'package:powerboards/powerboards_router/powerboards_router.dart';
 import 'package:powerboards/powerboards_short_id/powerboards_short_id.dart';
 import 'package:powerboards/settings/mobile_room_list_intent.dart';
 import 'package:powerboards/settings/selected_room.dart';
+import 'package:powerboards/settings/shared_profiles.dart';
+import 'package:powerboards/settings/shared_profiles_dialog.dart';
 import 'package:powerboards/settings/ui_mode.dart';
 import 'package:powerboards/theme/theme.dart';
 import 'package:powerboards/powerboards_ui/v1/components/dialogs/pb_project_select_dialog.dart';
@@ -781,6 +783,9 @@ class _NavState extends State<Nav> with SingleTickerProviderStateMixin {
       email: avatarEmail,
       projectLabel: 'Browsing project: ${currentProject?.name ?? 'No project selected'}',
       onSelectProjectPressed: () => _closePreviewRailMenusAndRun(_openPreviewProjectDialog),
+      onSwitchProfilePressed: isSharedProfilesSupported
+          ? () => _closePreviewRailMenusAndRun(() => showPowerboardsSharedProfilesDialog(context))
+          : null,
       onManageAccountPressed: kIsWeb && userRole == ProjectRole.admin
           ? () => _closePreviewRailMenusAndRun(_goToAccountsFromPreviewHeader)
           : null,
